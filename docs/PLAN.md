@@ -1,0 +1,625 @@
+# studio-linux — Plan
+
+> **Status:** draft for discussion (2026-10-13).
+>
+> **studio-linux** is a desktop for creative work, music production and
+> programming: niri + our own Quickshell shell, a macOS-inspired Liquid Glass
+> design language, fully themeable at runtime. It's a standalone flake (you
+> can `nix run` it) that the NixOS fleet (`~/.flake`, Codys-Wright/nix-config)
+> consumes as an input. Themes live in a separate repo, **studio-linux-themes**.
+>
+> The fleet's [`docs/desktop-design.md`](https://github.com/Codys-Wright/nix-config/blob/main/docs/desktop-design.md)
+> holds Cody's personal workflow: workspaces, monitors, per-app placement.
+
+---
+
+## 1. Goal
+
+A desktop we own end to end, macOS-inspired in look and feel, built on niri and
+our own Quickshell shell:
+
+1. **Our own shell.** A Quickshell (QML) shell living in this repo with a menu
+   bar, dock, control center, notifications, OSD, a Dynamic Island and an app
+   switcher. It replaces Noctalia once it reaches parity, then keeps growing
+   into the system we need.
+2. **Runtime-flexible everything.** NixOS sets the *defaults* (theme, shell
+   settings, niri config). Anything can be changed at runtime without a
+   rebuild. A **save-back tool** promotes runtime changes into the repo once
+   we decide we like them.
+3. **Mac-like design language, fully themeable.** The *components* are
+   macOS-inspired in shape and behavior: Liquid Glass surfaces, menu bar,
+   dock, Control Center, Dynamic Island. *Themes* are not limited to a mac
+   look. A theme can be anything: anime, pixel art, e-ink, Nier. It drives
+   every token the components expose, including colors, wallpaper, fonts,
+   radii, glass tint/opacity/blur, and optionally a whole lock/greeter
+   design.
+4. **Runtime theming across the whole desktop**, the way
+   [Cozytile](https://github.com/Darkkal44/Cozytile) does it. A theme is one
+   switch that recolors the shell, niri, terminals, GTK, launcher, lock screen,
+   greeter and wallpaper. We also build our own theme selector.
+5. **A theme manager, outside the NixOS build.** Themes are packs you
+   *install* at runtime (`studio theme install …`), author yourself, and share
+   (a git repo or tarball). The NixOS build ships only the engine and a small
+   default set. Adding all 39 qylock themes must never be needed to build a
+   machine.
+6. **Uses niri 26.04's native blur** (`ext-background-effect`) for the glass
+   surfaces.
+7. **A matched launcher:** [walker](https://github.com/abenz1267/walker) with
+   our own Spotlight-style layout, styled by the active theme.
+8. **A Quickshell login and lock screen** in
+   [qylock](https://github.com/Darkkal44/qylock)'s format: one QML design that
+   serves as both the SDDM greeter and the lock screen. **All qylock themes
+   can be installed** through the theme manager.
+9. **macOS keyboard parity.** Cody switches between this desktop and voyager
+   (macOS) all day, so the same physical keys must do the same things on both.
+10. **Testable without rebooting.** Develop and run everything in a nested niri
+   window inside the current KDE session.
+
+### Non-goals (for now)
+- No greetd and no second display manager. SDDM stays, with our theme.
+- Not a general distro. We serve the use cases in `desktop-design.md`.
+- vorssaint-utils is not installed anywhere (see §3).
+
+---
+
+## 1a. Repository boundary and flake
+
+### What lives where
+
+| studio-linux (this repo, public) | studio-linux-themes (public) | nix-config fleet (`~/.flake`) |
+|---|---|---|
+| Shell (QML), `studio` CLI (theme engine, manager, importers, save-back), lock/greeter loaders + vendored qylock shim, walker Spotlight layout, nirimod package | Our authored theme packs + `index.json` (packs + `qylock:*` / `cozytile:*` importer entries) | Host and personal layer: monitors/outputs, named workspaces + app rules (`desktop-design.md`), REAPER/Dante rules, xremap keyboard (until shared, see §5), which hosts/users get studio-linux, *personal* default settings and theme |
+| **Base niri config**: layout, animations, blur rules, mac-like binds, startup of studio services. Shipped as KDL fragments for the consumer to `include` | | `niri/_config/config.kdl` `include`s the studio base, then adds host fragments |
+| Built-in themes: the default + a couple of basics (a build needs only these) | Everything else, installed at runtime | |
+| NixOS + home-manager modules | | den aspect `fleet.desktop._.studio` wraps those modules (input declared inline, the dendritic idiom) |
+
+Open boundary question: should the creative-workflow *opinions* (semantic
+workspaces music/code/video, workflow profiles such as music mode with fixed
+FPS or gaming mode with no effects) become studio-linux features with
+defaults? Or stay personal in the fleet? *Leaning:* the **mechanisms**
+(profiles, per-workspace wallpaper, run-or-raise) go in studio-linux, and the
+**specific assignments** stay in the fleet.
+
+### Flake outputs
+
+```
+packages.<sys>.default          # session launcher (below)
+packages.<sys>.studio-shell     # QML + quickshell wrapper with all runtime deps
+packages.<sys>.studio           # CLI: theme engine/manager/importers, diff/save, greeter helper
+packages.<sys>.studio-lock      # loader lock + loader SDDM theme + qylock shim
+packages.<sys>.studio-themes-builtin
+packages.<sys>.nirimod
+apps.<sys>.default              # nix run github:Codys-Wright/studio-linux
+apps.<sys>.dev                  # nix run .#dev — from a checkout, hot-reload from ./src
+nixosModules.default            # programs.studio-linux: niri, SDDM loader theme, polkit helper, gstreamer, portals
+homeManagerModules.default      # programs.studio-linux: shell service, walker/elephant, theme state + consumers, settings
+templates.theme                 # nix flake init -t …#theme → a new theme pack
+checks.<sys>.*                  # qmllint, theme render golden tests, a NixOS VM test that boots to the shell
+```
+
+**`nix run github:Codys-Wright/studio-linux`**
+- Inside a Wayland or X session, it opens a **nested niri window**.
+- On a bare TTY, it starts a full session.
+- Either way it runs studio's base niri config, the shell, walker and the
+  default theme, all from the store. State goes to a throwaway
+  `$XDG_STATE_HOME/studio-linux-run`, so trying it never touches your real
+  setup. Inside the nested window, Mod = Alt.
+
+**`nix run .#dev`** (from a checkout)
+- Same, but QML is loaded from `./src`, niri fragments from `./niri`, and
+  themes from `./themes`.
+- Quickshell and niri both hot-reload on save, so this is the inner dev loop.
+- The SDDM greeter has its own preview: `nix run .#greeter-preview`
+  (`sddm-greeter-qt6 --test-mode`).
+
+### Module options sketch (home-manager)
+
+```nix
+programs.studio-linux = {
+  enable = true;
+  theme = "tokyonight";                 # default theme (built-in or a pack path)
+  extraThemes = [ ];                    # optional: pin packs into the build if you WANT to
+  settings = lib.importJSON ./studio.json;   # consumer defaults (save-back target, §4.1)
+  saveTarget = "${config.home.homeDirectory}/.flake/users/cody/_data/studio.json";  # null = no save-back
+  dev.source = null;                    # e.g. "~/Development/studio-linux" → live symlinks (cody)
+  niri.includeBase = true;              # write the base fragments for the consumer's config to include
+};
+```
+
+## 2. Starting point (today, in the fleet)
+
+| Area | Today | Notes |
+|---|---|---|
+| Compositor | niri **26.04** (nixpkgs) | Blur and optional `include` are already available. No bump needed |
+| niri config | Plain KDL tree `modules/desktop/environment/niri/_config/`, out-of-store symlinked to `~/.config/niri` | Live-editable. `config.kdl` is already split by `include` |
+| Stale config | `_niri-settings.nix` + `niri-wrapper.nix` (wrapper-modules) | Drifted from the KDL tree. **Delete in Phase 0** |
+| Shell | Noctalia (`spawn-at-startup "noctalia-shell"`) | Mutable `noctalia/colors.json`; Mod+Space opens its launcher |
+| Theme | Stylix (build-time, tokyonight) + MacTahoe GTK/icons/cursor | Changing colors needs a rebuild |
+| Display manager | SDDM + MacTahoe-Dark theme | `modules/desktop/display-manager/sddm.nix` |
+| Lock / idle | swaylock + swayidle | |
+| Keyboard | xremap + `_mac-keybindings.nix`: **Super = Cmd** (app shortcuts); **Caps-hold / Esc-hold / Right Ctrl = niri Mod (Mod5)** | Linux only. voyager has no keyboard or WM config in the flake |
+| Quickshell | nixpkgs `quickshell` 0.3.1 | HM has `programs.quickshell` |
+| Session | Cody is on KDE Wayland | niri can run nested as a window |
+
+**Fleet-side bug to fix along the way:** `niri.nix`'s `provides.to-users` points
+*every* user's `~/.config/niri` at `~/.flake/...`, which only exists for cody.
+bri, joshua and the other users on THEBATTLESHIP get a dangling symlink. The
+live-symlink model must be cody-only, with a store copy for everyone else (§5).
+
+---
+
+## 3. Upstream references: what we take from each
+
+| Project | What it is | License | How we use it |
+|---|---|---|---|
+| [javiiervm/dotfiles](https://github.com/javiiervm/dotfiles) | Hyprland + Quickshell "Liquid Glass" macOS shell: Dynamic Island, Control Center, dock, launcher, Alt-Tab, lock | No LICENSE file, but **the author has given permission to use the designs as a starting point** | **Our starting point.** Port its components (glass surfaces, island, control center, dock, switcher) into `src/`, credited in `CREDITS.md` with a link to the permission. TODO: record that link. The port still needs real rework for niri and for theming (below) |
+| [Cozytile](https://github.com/Darkkal44/Cozytile) | Qtile/X11 rice with one-key theme switching; themes **Cozy, Sakura, Natura, Everforest, Carbon** | **None** | **The theming pattern** (theme = per-app fragments + one apply script + picker + per-app reload hooks), **and all five themes as installable packs.** A `cozytile` importer in the theme manager fetches each theme's palette, wallpaper and SDDM art from upstream at install time and converts it to our format. Nothing is committed here, so the unlicensed assets never enter this public repo. We do *not* copy its `cp -r ~/Themes/X ~` mechanism, which fights home-manager's read-only symlinks |
+| [walker](https://github.com/abenz1267/walker) + elephant | GTK4 launcher frontend + provider backend (apps, calc, files, clipboard, symbols, **niri actions**, websearch, …) | GPL-3.0 | Consume from **nixpkgs** (walker 2.17, elephant 2.22) + HM `services.walker` / `services.elephant`. Write our own theme |
+| [qylock](https://github.com/Darkkal44/qylock) | 39 themes that each run as **both** an SDDM greeter and a Quickshell `WlSessionLock` lock screen, through an SDDM-API shim | GPL-3.0 | **Vendor the small shim** into our lock/greeter loader. **Every qylock theme is installable** via a `qylock` importer in the theme manager: a sparse checkout of just that theme's directory, since the repo is ~1.2 GB of mostly `bg.mp4`. Never a flake input and never part of a machine build |
+| [vorssaint-utils](https://github.com/vorssaint/vorssaint-utils) | Native macOS (Swift) all-in-one menu-bar utility | GPL-3.0+ | **Not installed. A feature checklist for our shell** (§6.4) |
+| [nirimod](https://github.com/srinivasr/nirimod) | GTK4 niri config editor: monitor layout, keybind heat map and conflict check, curve editor, `niri validate` before writes | MIT | **Package it** (Python/GTK4; not in nixpkgs, to verify). It follows our symlinks and writes to the real file, so its edits land in the repo. It resolves `include`s and writes each change only to the file it came from. Later, possibly our own settings UI that covers the same ground |
+| niri 26.04 | Blur (normal + efficient **xray**), `layer` matcher, optional `include` with `~` expansion | GPL-3.0 | Blur rules in a theme-owned `include` (§4.3) |
+
+### Porting notes for the javiiervm shell (what the port has to change)
+- It is Hyprland-only: 9 files import `Quickshell.Hyprland`
+  (`focusedWorkspace`, `dispatch`, `HyprlandFocusGrab`, `GlobalShortcut`), and
+  it shells out to `hyprctl` for gaps, sunset and window focus.
+  → Use a niri adapter: one `niri msg --json event-stream` service parsed in
+  QML, with actions via `niri msg action …`. Use `IpcHandler` + niri `binds`
+  instead of `GlobalShortcut`.
+- Its own Python notification daemon, bash FIFO daemon and fake `swaync-client`
+  bins → replace with Quickshell's built-in `Services.Notifications`,
+  `Services.Pipewire`, `Services.UPower`, `Services.Mpris` and `SystemTray`.
+- Hardcoded `/home/javier` paths and a OneDark `Theme.qml` singleton, plus
+  132 raw hex literals → every color must go through our `Theme` singleton
+  from day one.
+- Its "Liquid Glass" relies on Hyprland layer blur. niri 26.04 provides it
+  natively (§4.3).
+
+---
+
+## 4. Architecture
+
+### 4.1 The layering model: defaults → runtime overrides → save-back
+
+This is the core of "NixOS sets the defaults, runtime can change anything".
+There are three layers, and the later layers win:
+
+```
+ 1. product defaults          2. consumer defaults             3. runtime overrides
+    (studio-linux repo)          (fleet: module options/JSON)     (~/.local/state/studio-linux/overrides)
+    shell/defaults.json   ⊕      settings = importJSON …    ⊕     shell.json, theme-<name>.json
+    built-in themes              theme = "…"                       (settings UI, theme selector, CLI)
+           ▲                            ▲                                   │
+           │  studio save --upstream    │  studio save (default)            │
+           └────────────────────────────┴───────────────────────────────────┘
+```
+
+- **Defaults are JSON data, not Nix code**, both in studio-linux (product
+  defaults) and in the consumer (`settings = lib.importJSON ./studio.json`).
+  That makes save-back a *data* merge (JSON → JSON plus a `git diff`), never
+  Nix code generation.
+- **Effective value = product ⊕ consumer ⊕ overrides.** The home-manager
+  module writes the first two merged into one store file. The shell reads
+  that plus the overrides through `FileView` + `JsonAdapter` with
+  `watchChanges`, so a write to an override file applies live. The settings
+  UI and the theme selector only ever write to `overrides/`.
+- **`studio diff` / `studio save`** (the save-back tool):
+  - `studio diff` shows runtime overrides against the effective defaults.
+  - `studio save [--shell] [--theme <name>]` merges overrides into
+    **`saveTarget`** (the consumer's JSON, e.g. a file in `~/.flake`), then
+    clears what it promoted. This is the normal path: *my* preferences go to
+    *my* config.
+  - `studio save --upstream` writes to a studio-linux checkout instead, which
+    changes the product defaults.
+  - `studio save --as-theme <new>` snapshots the tweaked theme as a new
+    **pack**. That pack can stay local, be exported, or be PR'd to
+    studio-linux-themes.
+  - It refuses when the target file has uncommitted changes, and prints the
+    `git diff` for review. It never commits on its own.
+- **niri config.** The consumer's own KDL (the fleet's `_config/`) is already
+  live-symlinked, so nirimod and hand edits change the repo directly, and
+  save-back there is just `git diff`. studio's base fragments are
+  read-only defaults the consumer overrides *after* its `include`. Only the
+  theme-owned fragment (colors, blur, radii) goes through the theme pipeline.
+- **Machines and users without a checkout** (`saveTarget = null`) get the same
+  layering and can change things at runtime. There is just nowhere to save
+  back to.
+
+### 4.2 Theme system: engine, packs, manager (`studio-linux` theme engine)
+
+**Design language vs theme.** The *design language* (component shapes,
+layout, glass treatment, animation) belongs to the shell and is mac-like. A
+*theme* is mainly **the color palette and the glass/blur state that every
+component reads.** Nothing else is required. A theme can look like anything.
+
+**Theme core** (`theme.json`, the only required file):
+- `palette`: base16/24 colors + semantic roles (`bg`, `surface`, `overlay`,
+  `text`, `subtext`, `accent`, `accent2`, `urgent`, `ok`, `warn`), and
+  `polarity` (dark/light).
+- `glass`: `blur` on/off, `xray` on/off, tint color, surface opacity, noise,
+  saturation.
+
+**Optional pack extras** (each falls back to the default theme's when absent):
+- `wallpaper` (image or video), `fonts`, `radii`, a `lock/` QML design
+  (qylock format), `greeter/` art, and per-app overrides
+  (`apps/<consumer>.*`) for when generated output isn't good enough.
+
+**Theme pack** = a directory (`manifest.json` with name, author, version,
+license, source + the files above). Packs are shared as a git repo, a tarball,
+or a subdirectory of either.
+
+**One renderer, runtime-first.** Themes can arrive after the build, so
+rendering can't live only in Nix. `studio theme render` is a runtime program,
+and the per-consumer templates ship with it in the store:
+
+| Consumer | Generated from the theme | Live reload |
+|---|---|---|
+| Shell (Quickshell) | `theme.json` as-is | `FileView watchChanges` (instant) |
+| niri | `niri.kdl`: focus ring, borders, shadows, **blur rules on/off + xray**, radii | `include optional=true "~/.local/state/studio-linux/current/niri.kdl"`; niri reloads config on change (*verify it watches included files*) |
+| kitty | `kitty.conf` (colors, `background_blur`) | `include` + `kill -SIGUSR1` |
+| Ghostty | `ghostty.conf` | `config-file` + reload (*verify*) |
+| GTK 3/4 | `gtk.css` (`@define-color`), color-scheme | `@import` + `gsettings set … color-scheme` |
+| walker | `walker/style.css` | CSS is re-read on every open (confirmed in source) |
+| Lock / greeter | pack `lock/` or the default design + palette | Read at lock time; greeter, see §4.5 |
+| Wallpaper | path | swww/awww transition (feeds xray blur) |
+| Noctalia (transition period only) | `colors.json` | its own watcher |
+
+Nix calls the *same* renderer at build time for the built-in packs, so
+"default theme from Nix" and "installed theme" produce identical output.
+
+**Where themes live:**
+
+| Location | Contents | Written by |
+|---|---|---|
+| store: `pkgs.studio themes-builtin` | A small built-in set: the default + a couple of light/dark basics | NixOS build (the only themes a build needs) |
+| `~/.local/share/studio themes/<name>/` | Installed and user-authored packs | `studio theme install/new/import` |
+| `/var/lib/studio-linux/themes/<name>/` | Packs promoted for the **greeter** (sddm must read them) | polkit-allowed helper (§4.5) |
+| `~/.local/state/studio-linux/current` | Symlink to the active rendered theme | `studio theme apply` |
+
+**Theme manager CLI** (`studio theme`; the shell's selector is a GUI over the same commands):
+
+```
+studio theme list [--installed|--available]      # local packs + index entries
+studio theme apply <name>                        # render (cached) → swap current → reload hooks
+studio theme install <git-url|tarball|path>      # any pack
+studio theme install qylock:<theme> | qylock:all # importer: sparse-checkout that theme dir
+studio theme install cozytile:<theme> | cozytile:all
+studio theme new <name> [--from <theme>]         # scaffold a pack to author
+studio theme edit <name>                         # live token editing (selector does this too)
+studio theme export <name> [-o pack.tar.zst]     # share
+studio theme remove <name>
+```
+
+**Importers** convert upstream themes into packs at install time. Nothing
+third-party is committed here or built into a machine:
+- `qylock:<theme>`: brings its lock/greeter QML + assets as the pack's
+  `lock/`. Palette: from the theme's `theme.conf` colors when present,
+  otherwise extracted from `bg` (matugen/wallust), with an editable result.
+  Video backgrounds need gstreamer, which the engine module installs (cheap).
+  The theme's own fonts go in the pack.
+- `cozytile:<name>` (Cozy, Sakura, Natura, Everforest, Carbon): palette from
+  its qtile/rofi/dunst colors (Carbon: its `e-ink.json`), wallpaper, SDDM art
+  → `greeter/`.
+
+**Index for sharing:** `studio theme` reads one or more index URLs (JSON:
+name → source, preview image). The default index is a repo of ours listing
+our own packs plus the qylock/cozytile importer entries. Anyone can host one.
+
+**Overrides and save-back** (§4.1): per-token tweaks go to
+`overrides/theme-<name>.json`. `studio save --as-theme <new>` writes
+a new **pack**. That pack can either stay installed locally, be exported for
+sharing, or, with `--builtin`, be copied into this repo's `themes/` so Nix
+ships it as a default.
+
+**Stylix's role shrinks** to build-time fonts, cursor and the boot default.
+Runtime themes own colors and glass. Set Stylix targets to *off* for anything
+the runtime layer drives, so the two don't fight.
+
+### 4.3 Glass: niri blur
+
+- The shell requests blur through `ext-background-effect`. Whether Quickshell
+  0.3.1 exposes this needs **verification**. If not, use niri `layer-rule`
+  matches on our layer namespaces (`studio:bar`, `studio:dock`, …)
+  with `background-effect { blur true }` plus the correct
+  `geometry-corner-radius`.
+- Use the default **xray** blur for the bar, dock and background-ish layers
+  (cheap: computed once per wallpaper). Use **normal** blur for top/overlay
+  layers (Control Center, Spotlight, notifications) via the `layer` matcher.
+- Window blur: kitty `background_blur 1`; Ghostty gets it in v1.4. Add per-app
+  `window-rule` blur only where an app can't request it itself.
+- A per-theme `glass` block decides intensity and can turn blur off entirely.
+  The gaming and focus workflow profiles in `desktop-design.md` should force it
+  off.
+
+### 4.4 Shell (`studio-shell`)
+
+**Source:** `src/` in this repo (QML), packaged as `studio-shell`, a
+`quickshell` wrapper with every runtime dependency on PATH.
+
+**Runs as** a systemd user service bound to `graphical-session.target`, not a
+niri `spawn-at-startup`, so it can be restarted, logs to the journal, and is
+replaced cleanly during the Noctalia cut-over.
+
+**Dev vs installed:** `nix run .#dev` (and the HM option `dev.source`, which
+cody sets in the fleet) points Quickshell at the live checkout, so it
+hot-reloads on save. Everyone else runs the store copy.
+
+**Structure** (each component reads colors and metrics only from `Theme`):
+
+```
+src/
+  shell.qml                 # thin: instantiates per-screen windows only
+  services/                 # singletons: Niri (event-stream adapter), Theme,
+                            #   Settings (defaults ⊕ overrides), Audio, Network,
+                            #   Bluetooth, Power, Media, Notifications, Clipboard
+  bar/                      # macOS menu bar: app menu/title, workspaces, tray, clock, status
+  dock/                     # magnifying dock, pinned + running apps (niri windows)
+  controlcenter/            # Wi-Fi, BT, audio devices/mixer, brightness, focus, night light
+  island/                   # Dynamic Island: media, timers, recording, notifications
+  switcher/                 # Cmd+Tab app switcher (niri windows grouped by app-id)
+  osd/                      # volume / brightness / mic toasts
+  settings/                 # settings app: writes overrides, shows "differs from default"
+  theme-selector/
+```
+
+### 4.5 Lock screen and greeter (`studio-lock`)
+
+- **One static loader, runtime designs.** NixOS installs a single SDDM theme
+  and a single Quickshell lock, both thin *loaders*, plus qylock's vendored
+  SDDM-API shim (GPL-3.0, kept in its own directory with its license). The
+  loader `Loader`s the active theme's `lock/Main.qml` (a qylock-format
+  design) and falls back to our default design (mac-style: big clock, glass
+  card over the blurred wallpaper, avatar, password pill) colored by the
+  palette. Through the shim, the *same* design runs as the **SDDM greeter**
+  and as the **Quickshell lock screen** (`WlSessionLock` + PAM).
+  - Installing or switching lock designs never needs a rebuild, and SDDM's
+    configured theme name never changes.
+  - qylock themes (`studio theme install qylock:…`) drop straight in, because
+    they are already in this format.
+- **Lock** follows the user's current theme from
+  `~/.local/state/studio-linux/current`.
+- **Greeter** runs as `sddm` before login, so it reads
+  `/var/lib/studio-linux/greeter` (a symlink to a pack under
+  `/var/lib/studio-linux/themes/`). `studio theme apply --greeter` (or a
+  "use for login screen too" toggle in the selector) copies the pack there
+  through a narrow polkit-allowed helper, not Cozytile's blanket `sudo tee`.
+  The Nix default theme is used until then. *Multi-user note:* the greeter
+  theme is machine-wide, and the lock theme is per user.
+- Integration: replace `theme = "MacTahoe-Dark"` in `sddm.nix` (otherwise a
+  conflicting definition). Add qt6 multimedia/svg/5compat + gstreamer to the
+  greeter's `extraPackages` so video backgrounds work. Drop swaylock and
+  route swayidle → `studio-lock`. Don't use qylock's `lock.sh` (it
+  `killall -9`s other lockers) or its flake module.
+
+### 4.6 Launcher (walker)
+
+- walker + elephant from nixpkgs via HM `services.walker` /
+  `services.elephant` (service mode, `--gapplication-service`). Don't also
+  import upstream's flake module, because both define the same units.
+- Our theme: a Spotlight look (centered pill, large input, grouped results).
+  Its `style.css` `@import`s the active theme's `walker/style.css`, so it
+  recolors with no restart.
+- Providers to enable: apps, calc, files, clipboard, symbols, runner,
+  websearch, **niri actions/sessions**, windows, bluetooth, wireplumber.
+- Binds: Cmd+Space (Spotlight) and Mod+Space. The shell's own app grid
+  (Launchpad) stays optional.
+
+---
+
+## 5. Keyboard: macOS parity (decision needed)
+
+The constraint is that **the same physical keys do the same thing on
+THEBATTLESHIP and voyager.**
+
+What exists on Linux today:
+
+| Physical key | Linux today | macOS native |
+|---|---|---|
+| Super (Cmd position) | **Cmd**: app shortcuts via xremap (copy, paste, tabs, …) | Cmd |
+| Caps (hold), Esc (hold), Right Ctrl | **niri Mod** (Mod5) | — |
+| Ctrl | Ctrl (terminal signals) | Ctrl (terminal, Emacs text nav, **Ctrl+←/→ Spaces, Ctrl+↑ Mission Control**) |
+| Alt | Option (word navigation) | Option |
+
+**Option A, recommended: Caps-hold = WM key on both machines, plus mac-native Ctrl aliases.**
+- Keep Linux as it is. On voyager, map Caps-hold → Hyper with kanata or
+  Karabiner, managed from nix-darwin, and bind the WM (OmniWM per
+  `desktop-design.md`) on Hyper. The whole WM layer is then identical.
+- Add macOS's *own* WM-ish shortcuts on Linux too: Ctrl+←/→ = workspace
+  left/right, Ctrl+↑ = niri overview (Mission Control), Ctrl+↓ = app windows.
+  Muscle memory from stock macOS then works on niri as well.
+- Ctrl+letters stay untouched (terminals, readline, Emacs-style text editing).
+
+**Option B: Ctrl as the WM key (Cody's suggestion).** It mirrors macOS
+Spaces for the arrows, but Ctrl+letters collide with terminal signals (C, D,
+R, W, L, Z) and with Emacs text navigation in every macOS text field (A, E, K,
+N, P). It needs per-app exceptions on both OSes.
+
+Either way, add a **shortcut audit** against the macOS list and fill gaps in
+`_mac-keybindings.nix` / niri binds:
+
+- Cmd+Space Spotlight · Cmd+Tab / Cmd+` app switcher and same-app windows
+- Cmd+Q quit app vs Cmd+W close window · Cmd+H hide · Cmd+M minimize
+- Cmd+Shift+3/4/5 screenshots · Ctrl+Cmd+Q lock · Cmd+Opt+Esc force quit
+- Cmd+, settings · Cmd+Ctrl+F fullscreen
+
+Keep the bind table as **shared Nix data**, generating both niri `binds.kdl`
+fragments and the voyager WM/kanata config. That answers the open question in
+`desktop-design.md`.
+
+---
+
+## 6. Plan (phases)
+
+Each phase ends with something runnable in the nested dev session (Phase 0),
+and nothing replaces the working Noctalia session until Phase 6.
+
+### Phase 0: Repo + dev loop *(do first)*
+- Create `Codys-Wright/studio-linux` (flake-parts) and
+  `Codys-Wright/studio-linux-themes`. Credit javiiervm in `CREDITS.md`.
+- `nix run` / `nix run .#dev`: niri **nested as a window** (inside KDE
+  today) with studio's base niri fragments + a hello-world bar from `./src`.
+  - niri hot-reloads KDL on save and Quickshell hot-reloads QML on save, so
+    both iterate with no rebuild.
+  - Blur, layer-shell, `WlSessionLock` (lock screen) and walker all work
+    nested. The greeter uses `.#greeter-preview`.
+- Package nirimod.
+- **Fleet side:**
+  - Add the `studio-linux` input + `fleet.desktop._.studio` aspect (off by
+    default). `settings.desktop.shell = "noctalia" | "studio"` picks per host.
+  - Delete the stale `_niri-settings.nix` + `niri-wrapper.nix`.
+  - Fix the `~/.flake` symlink so it applies to cody only (§2).
+
+**Done when:** `nix run github:Codys-Wright/studio-linux` opens a nested niri
+window with a glass bar from any machine, and in a checkout `nix run .#dev`
+updates live when KDL or QML is edited.
+
+### Phase 1: Theme spine
+- Theme pack format (`manifest.json` + `theme.json` core: palette + glass).
+  Built-in packs: `tokyonight` (ported from Stylix, the current look) + one
+  light theme.
+- `studio theme` runtime renderer (also called by Nix for built-ins),
+  `apply|list`, `current` symlink + overrides directory.
+- Consumers: niri fragment (colors + blur), kitty, Ghostty, GTK, Noctalia
+  `colors.json` (so it works before our shell exists).
+- Stylix narrowed to fonts, cursor and the default.
+
+**Done when:** `studio theme apply <light theme>` recolors niri (and toggles
+blur), terminals, GTK and Noctalia live with no rebuild, and the default
+theme comes from Nix.
+
+### Phase 1b: Theme manager + importers
+- `install|new|export|remove`, index support, `~/.local/share/studio themes`.
+- `cozytile:` importer (all five) and `qylock:` importer (palette + assets;
+  lock designs become usable in Phase 5).
+
+**Done when:** `studio theme install cozytile:all` followed by `apply sakura`
+works on a machine whose build contains none of them.
+
+### Phase 2: Shell skeleton
+- `src/` skeleton, `studio-shell` package, HM systemd user service, dev/installed split.
+- Services: `Niri` adapter (event-stream), `Theme`, `Settings` (defaults ⊕
+  overrides).
+- Menu bar: workspaces, focused-app title, clock, tray, status icons. Glass +
+  blur.
+
+**Done when:** in nested niri, the bar tracks workspaces and focus, recolors
+on `studio theme apply`, and a setting changed in `overrides/` applies live.
+
+### Phase 3: Core shell features
+- Dock, Control Center, notifications (Quickshell server), OSD, media,
+  Dynamic Island, Cmd+Tab switcher, theme selector, wallpaper picker.
+- Settings app (writes overrides and marks values that differ from the
+  default).
+
+### Phase 4: Launcher + save-back
+- walker/elephant service, Spotlight theme wired to the theme bundle, binds.
+- `studio diff|save|save --as-theme`.
+
+**Done when:** a theme tweaked in the selector can be saved as a new theme
+JSON in the repo, and it is the default after the next `just switch`.
+
+### Phase 5: Lock + greeter
+- Loader SDDM theme + loader Quickshell lock + vendored qylock shim. Default
+  mac-style design, palette-driven.
+- Lock wired to swayidle and Ctrl+Cmd+Q. The loader replaces MacTahoe-Dark.
+  `apply --greeter` via the polkit helper.
+
+**Done when:** `studio theme install qylock:nier-automata` + `apply --greeter`
+changes both the lock screen and the login screen with no rebuild.
+
+### Phase 6: Cut-over + keyboard parity
+- Replace Noctalia in `startup.kdl`/aspects. Delete `noctalia` bits and
+  `wlr-which-key` if the shell takes it over.
+- Keyboard decision (§5) implemented on both machines from shared bind data.
+  voyager gets kanata/Karabiner + WM config in nix-darwin.
+
+### Phase 7+: Grow the system (the vorssaint-utils feature list)
+Our own shell's backlog, with vorssaint-utils as the reference for "what a
+complete menu-bar system does":
+
+- per-app volume mixer · system monitor + fan control · window snapping
+  presets · dock window previews · clipboard history + snippets · **file shelf**
+  (drag-drop stash) · **Command Bar** (actions palette over niri + shell IPC) ·
+  radial menu · screen capture/recording UI · keep-awake (caffeine) · …
+- Plus a settings UI that covers nirimod's ground (monitor arrangement, bind
+  conflicts, animation curves) inside our shell. That replaces nirimod once it
+  exists.
+
+---
+
+## 7. Repo layouts
+
+**studio-linux**
+```
+flake.nix                 # flake-parts; outputs in §1a
+src/                      # studio-shell QML
+  shell.qml  services/  bar/  dock/  controlcenter/  island/  switcher/  osd/  settings/  theme-selector/
+lock/                     # loader lock + loader SDDM theme; vendor/qylock-shim/ (GPL-3.0 + LICENSE)
+cli/                      # `studio` CLI: render, theme manager, importers (qylock, cozytile), diff/save, greeter helper
+templates/render/         # per-consumer templates: niri.kdl, kitty.conf, ghostty, gtk.css, walker css, noctalia
+themes/                   # built-in packs only (default + basics)
+niri/                     # base KDL fragments (layout, animations, blur rules, binds, startup)
+defaults/shell.json       # product defaults (layer 1)
+nix/
+  packages/  modules/nixos.nix  modules/home.nix  apps.nix  checks.nix
+docs/PLAN.md  CREDITS.md  LICENSE
+```
+
+**studio-linux-themes**
+```
+index.json                # name → source, preview; includes qylock:*/cozytile:* importer entries
+packs/<name>/             # manifest.json, theme.json (palette + glass), optional wallpaper/fonts/lock/greeter/apps
+```
+
+**Fleet (`~/.flake`) after integration**
+```
+modules/desktop/studio/studio.nix          # fleet.desktop._.studio — flake-file input + wraps the modules
+users/cody/_data/studio.json               # cody's consumer defaults (saveTarget)
+modules/desktop/environment/niri/_config/  # includes studio base; host outputs/workspaces/rules stay here
+```
+
+Per-host knobs stay den settings on `fleet.desktop`:
+
+```nix
+den.hosts.x86_64-linux.THEBATTLESHIP.settings.desktop = {
+  shell = "studio";         # "noctalia" | "studio" during the transition
+  theme = "tokyonight";     # default; runtime can override
+};
+```
+
+## 8. Open decisions
+
+1. **Keyboard:** Option A (Caps-hold WM key on both + mac Ctrl aliases) or
+   Option B (Ctrl as WM key)? *Recommend A.*
+2. **Pack palette mapping for imports:** when a qylock or Cozytile theme has
+   no explicit palette, extract it from the wallpaper (matugen/wallust) and
+   let the user fix it in the editor. Or require hand-mapping each one once
+   and publishing the results in our index? *Leaning: extract, then curate
+   the ones we use.*
+3. **Theme index home:** a separate public repo (e.g. `studio themes`) holding
+   our own packs + importer entries, or a directory in this repo?
+4. **Shell name** (placeholder: `studio-shell`).
+5. **voyager WM:** stay with OmniWM (as `desktop-design.md` plans), or
+   AeroSpace, which has a richer config, for the parity layer?
+
+### Decided
+- Themes are mainly **palette + glass/blur state**. The design language
+  (Liquid Glass, mac-like components) is fixed, and themes need not be
+  mac-like.
+- javiiervm/dotfiles is our **starting point** (author permission; credit in
+  `CREDITS.md`, link TODO).
+- qylock and Cozytile themes are **all** available, but only through the
+  runtime theme manager, never as a build dependency. qylock: vendor the shim
+  only, no flake input.
+
+## 9. To verify early
+- Quickshell 0.3.1 support for `ext-background-effect` (otherwise use niri
+  `layer-rule` blur).
+- niri reloads when an *included* file changes, not only `config.kdl`.
+- Ghostty runtime config reload mechanics; kitty `background_blur` on niri.
+- Whether nirimod is in nixpkgs, and its `uv`-based install under Nix.
+- The qylock shim works through a QML `Loader` from a runtime path under SDDM
+  (`/var/lib/...` is readable by the `sddm` user, and QML import paths
+  resolve).
+- How many qylock themes ship a `theme.conf` palette vs need extraction.
