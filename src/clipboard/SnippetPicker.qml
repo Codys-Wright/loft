@@ -76,7 +76,7 @@ PanelWindow {
         height: Math.min(420, parent.height - 160)
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.round(parent.height * 0.4 - height / 2)
-        radius: 26
+        radius: Theme.panelRadius + 8
         strength: 1.6
 
         MouseArea {

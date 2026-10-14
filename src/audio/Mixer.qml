@@ -87,7 +87,8 @@ PanelWindow {
         GlassSurface {
             id: backing
             anchors.fill: parent
-            radius: 28
+            // The Control Center's shape: panel and module radii.
+            radius: Theme.panelRadius + 8
         }
 
         MouseArea {
@@ -142,7 +143,7 @@ PanelWindow {
                 id: outputTile
                 Layout.fillWidth: true
                 implicitHeight: outputCol.implicitHeight + 24
-                radius: 22
+                radius: Theme.panelRadius
                 showHighlight: false
 
                 readonly property PwNode sink: Sound.defaultSink
@@ -256,7 +257,7 @@ PanelWindow {
             GlassSurface {
                 Layout.fillWidth: true
                 implicitHeight: Math.min(appsCol.implicitHeight, 430) + 24
-                radius: 22
+                radius: Theme.panelRadius
                 showHighlight: false
 
                 Flickable {
@@ -304,7 +305,7 @@ PanelWindow {
                 visible: Features.on("micTools") && Sound.sources.length > 0
                 Layout.fillWidth: true
                 implicitHeight: micCol.implicitHeight + 24
-                radius: 22
+                radius: Theme.panelRadius
                 showHighlight: false
 
                 readonly property PwNode source: Sound.defaultSource
