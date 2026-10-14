@@ -134,6 +134,10 @@ class PaletteCache:
         self.dirty = True
         return digest
 
+    def digest(self, path: Path) -> str | None:
+        """The file's content hash (cached by path, size and mtime), None if unreadable."""
+        return self._hash(Path(path))
+
     def get(self, path: Path) -> dict | None:
         """{"swatches", "polarity", "palette"} of an image (or a video's frame), None if unreadable."""
         digest = self._hash(Path(path))
@@ -230,6 +234,45 @@ def loose_images(directory: Path) -> list[Path]:
         return []
 
 
+class Matcher:
+    """How close an image (and the pack it comes from) is to a theme.
+
+    The theme's imagery is its default wallpaper's colors (else its palette
+    as a pseudo image). An asset is measured palette-to-palette (theme vs
+    its source pack) and image-to-image (swatches of the theme's wallpaper
+    vs the asset's image), so a dark UI with a light pink wallpaper still
+    finds other light pink wallpapers. Used by `rank` and the library's
+    per-theme views."""
+
+    def __init__(self, target: Pack, packs: dict[str, Pack], cache: PaletteCache):
+        tp = _pal(target)
+        if tp is None:
+            raise PackError(f"{target.path}: theme.json has no usable palette")
+        self.target = target
+        self.cache = cache
+        self.tpol, self.tpal = tp
+        self.other_pal: dict[str, tuple[str, dict]] = {}
+        self.pack_d: dict[str, float] = {}
+        for name, p in packs.items():
+            pp = _pal(p)
+            if pp is not None:
+                self.other_pal[name] = pp
+                self.pack_d[name] = palette_distance(self.tpal, pp[1], self.tpol, pp[0])
+        tdef = target.default_wallpaper()
+        timg = cache.get(tdef["path"]) if tdef else None
+        self.tswatches = [tuple(x) for x in timg["swatches"]] if timg else palette_swatches(self.tpal)
+
+    def distance(self, entry: dict, image: str | None) -> tuple[float | None, dict | None]:
+        """(distance, the image's cached palette) of an asset from `entry["source_pack"]`."""
+        img = self.cache.get(Path(image)) if image else None
+        ds = []
+        if entry.get("source_pack") in self.pack_d and entry["source_pack"] != self.target.name:
+            ds.append(self.pack_d[entry["source_pack"]])
+        if img:
+            ds.append(swatch_distance(self.tswatches, [tuple(x) for x in img["swatches"]]))
+        return (sum(ds) / len(ds) if ds else None), img
+
+
 def rank(
     target: Pack,
     packs: dict[str, Pack],
@@ -237,40 +280,20 @@ def rank(
     idx: dict | None = None,
     cache: PaletteCache | None = None,
     dirs: list[Path] | None = None,
+    topics: dict[str, list[Path]] | None = None,
+    thumb=None,
     limit: int | None = None,
 ) -> dict:
-    """The vibe set of `target`: own, curated, then ranked matches."""
+    """The vibe set of `target`: own, curated, then ranked matches.
+
+    `dirs` are folders of loose images, `topics` the wallpaper library's
+    curated images by topic (library.py); both rank like any other image.
+    `thumb(path)` returns a cached downscaled copy for pickers, or None."""
     idx = idx or {}
     cache = cache or PaletteCache(None)
-    tp = _pal(target)
-    if tp is None:
-        raise PackError(f"{target.path}: theme.json has no usable palette")
-    tpol, tpal = tp
-    other_pal: dict[str, tuple[str, dict]] = {}
-    pack_d: dict[str, float] = {}
-    for name, p in packs.items():
-        pp = _pal(p)
-        if pp is not None:
-            other_pal[name] = pp
-            pack_d[name] = palette_distance(tpal, pp[1], tpol, pp[0])
-
-    # The theme's imagery: its default wallpaper's colors (else its palette
-    # as a pseudo image). An asset is measured palette-to-palette (theme vs
-    # its source pack) and image-to-image (swatches of the theme's wallpaper
-    # vs the asset's image), so a dark UI with a light pink wallpaper still
-    # finds other light pink wallpapers.
-    tdef = target.default_wallpaper()
-    timg = cache.get(tdef["path"]) if tdef else None
-    tswatches = [tuple(x) for x in timg["swatches"]] if timg else palette_swatches(tpal)
-
-    def distance(entry: dict, image: str | None) -> tuple[float | None, dict | None]:
-        img = cache.get(Path(image)) if image else None
-        ds = []
-        if entry.get("source_pack") in pack_d and entry["source_pack"] != target.name:
-            ds.append(pack_d[entry["source_pack"]])
-        if img:
-            ds.append(swatch_distance(tswatches, [tuple(x) for x in img["swatches"]]))
-        return (sum(ds) / len(ds) if ds else None), img
+    m = Matcher(target, packs, cache)
+    tpol, tpal, other_pal = m.tpol, m.tpal, m.other_pal
+    distance = m.distance
 
     def decorate(entry: dict, origin: str, measure: bool) -> dict:
         e = dict(entry, origin=origin)
@@ -290,6 +313,10 @@ def rank(
                 e["score"] = round(score(d), 3)
             if img and not is_lock:
                 e["palette"] = _card(img["polarity"], img["palette"])
+        if thumb and not is_lock and e.get("kind") == "image":
+            t = thumb(e["path"])
+            if t:
+                e["thumb"] = t
         return e
 
     own_w = [decorate(wallpaper_json(e, target.name), "own", False) for e in target.wallpaper_entries()]
@@ -320,6 +347,12 @@ def rank(
             if str(img) not in seen_w:
                 seen_w.add(str(img))
                 match_w.append(decorate({"path": str(img), "source_pack": "", "kind": "image", "folder": str(d)}, "match", True))
+    for topic, images in (topics or {}).items():
+        for img in images:
+            if str(img) not in seen_w:
+                seen_w.add(str(img))
+                entry = {"path": str(img), "source_pack": "", "kind": "image", "folder": str(img.parent), "topic": topic}
+                match_w.append(decorate(entry, "match", True))
 
     def key(e: dict):
         return (e.get("distance") is None, e.get("distance") or 0.0, e["source_pack"], e["path"])

@@ -4,7 +4,10 @@ Environment (all optional):
   STUDIO_STATE_DIR     `current` → active rendered theme, `rendered/` cache
                        (default: $XDG_STATE_HOME/studio-linux)
   STUDIO_THEME_PATH    colon-separated dirs of theme packs
-                       (default: $XDG_DATA_HOME/studio-linux/themes, then built-ins)
+                       (default: $XDG_DATA_HOME/studio-linux/themes, then built-ins);
+                       the library's Packs/ always joins, before the built-ins
+  STUDIO_LIBRARY       the theme + wallpaper library (default: ~/Documents/Themes;
+                       `none` = off). When it exists, packs install into its Packs/
   STUDIO_SHELL_PATH    Quickshell config of the running shell, for IPC
   STUDIO_DATA_DIR      root holding themes/ and templates/render/ (default: this tree)
   STUDIO_TEMPLATE_DIR  override the render templates (dev)
@@ -30,7 +33,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import hooks, importers, index, render, vibes
+from . import hooks, importers, index, library, render, vibes
 from .pack import IGNORED, Pack, PackError, is_pack
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -56,10 +59,21 @@ class Ctx:
         home = Path.home()
         data_home = Path(_env("XDG_DATA_HOME") or home / ".local" / "share")
         state_home = Path(_env("XDG_STATE_HOME") or home / ".local" / "state")
-        self.user_themes = data_home / "studio-linux" / "themes"
+        self.legacy_themes = data_home / "studio-linux" / "themes"
         self.state_dir = Path(_env("STUDIO_STATE_DIR") or state_home / "studio-linux")
-        tp = _env("STUDIO_THEME_PATH") or f"{self.user_themes}:{self.builtin_themes}"
+        tp = _env("STUDIO_THEME_PATH") or f"{self.legacy_themes}:{self.builtin_themes}"
         self.theme_path = [Path(p) for p in tp.split(":") if p]
+        # The library (library.py): its Packs/ is where packs install when it
+        # exists, and it is always searched, first (so a freshly installed
+        # pack wins). The old data dir stays searched (it may be a symlink
+        # into the library).
+        self.library = library.root()
+        lib_packs = library.packs_dir(self.library)
+        if lib_packs is not None and _resolve(lib_packs) not in [_resolve(p) for p in self.theme_path]:
+            self.theme_path.insert(0, lib_packs)
+        # Where `install` / `new` put packs; `remove` looks in both.
+        self.user_themes = lib_packs if lib_packs is not None else self.legacy_themes
+        self.user_dirs = [self.user_themes] + ([self.legacy_themes] if _resolve(self.legacy_themes) != _resolve(self.user_themes) else [])
         self.shell_path = Path(_env("STUDIO_SHELL_PATH") or self.data_dir / "src")
         self.theme: dict = {}
 
@@ -119,6 +133,13 @@ class Ctx:
             raise Fail(str(e)) from e
 
 
+def _resolve(p: Path) -> Path:
+    try:
+        return p.resolve()
+    except OSError:
+        return p
+
+
 def load_dev_env() -> None:
     env_file = Path(_env("XDG_RUNTIME_DIR") or "/tmp") / "studio-dev" / "session.env"
     if not env_file.is_file():
@@ -173,8 +194,16 @@ def cmd_vibes(ctx: Ctx, args) -> None:
     packs = ctx.packs()
     packs.setdefault(pack.name, pack)
     cache = vibes.PaletteCache(ctx.state_dir)
+    lib = library.Library(ctx.library) if ctx.library is not None and not args.no_library else None
+    topics = lib.topics() if lib is not None and lib.exists() else {}
+
+    def thumb(path: str) -> str | None:
+        return library.thumb(ctx.state_dir, cache, Path(path))
+
     try:
-        result = vibes.rank(pack, packs, idx=ctx.index(), cache=cache, dirs=[Path(d) for d in args.dir], limit=args.limit)
+        result = vibes.rank(
+            pack, packs, idx=ctx.index(), cache=cache, dirs=[Path(d) for d in args.dir], topics=topics, thumb=thumb, limit=args.limit
+        )
     finally:
         cache.save()
     if args.json:
@@ -187,7 +216,8 @@ def cmd_vibes(ctx: Ctx, args) -> None:
             d = f"{e['distance']:6.1f}" if "distance" in e else "      "
             what = e.get("name") or os.path.relpath(e["path"], packs[e["source_pack"]].path) if e["source_pack"] in packs else e["path"]
             flag = "  [video]" if e.get("kind") == "video" else ""
-            print(f"  {e['origin']:8} {d}  {e['source_pack'] or '(folder)':22} {what}{flag}")
+            src = e["source_pack"] or (f"[{e['topic']}]" if e.get("topic") else "(folder)")
+            print(f"  {e['origin']:8} {d}  {src:22} {what}{flag}")
 
 
 def cmd_current(ctx: Ctx, args) -> None:
@@ -377,9 +407,10 @@ def cmd_install(ctx: Ctx, args) -> None:
 
 
 def cmd_remove(ctx: Ctx, args) -> None:
-    dest = ctx.user_themes / args.name
-    if not is_pack(dest):
-        raise Fail(f"'{args.name}' is not an installed theme ({ctx.user_themes}); built-in themes can't be removed")
+    dest = next((d / args.name for d in ctx.user_dirs if is_pack(d / args.name)), None)
+    if dest is None:
+        where = ":".join(map(str, ctx.user_dirs))
+        raise Fail(f"'{args.name}' is not an installed theme ({where}); built-in themes can't be removed")
     shutil.rmtree(dest)
     # Drop its render cache unless it's what `current` shows right now.
     rendered = ctx.state_dir / "rendered" / args.name
@@ -420,6 +451,65 @@ def cmd_export(ctx: Ctx, args) -> None:
     print(out)
 
 
+# ── library ─────────────────────────────────────────────────────────────────
+
+
+def _library(ctx: Ctx) -> library.Library:
+    if ctx.library is None:
+        raise Fail("the library is turned off (STUDIO_LIBRARY=none)")
+    return library.Library(ctx.library)
+
+
+def cmd_library_sort(ctx: Ctx, args) -> None:
+    lib = _library(ctx)
+    if not lib.exists():
+        if args.json:  # the shell asks on every machine; no library is not an error
+            print(json.dumps({"root": str(lib.root), "exists": False}))
+            return
+        raise Fail(f"no library at {lib.root} (create it, `studio library add`, or set STUDIO_LIBRARY)")
+    cache = vibes.PaletteCache(ctx.state_dir)
+    try:
+        idx = lib.sort(ctx.packs(), cache=cache, state_dir=ctx.state_dir, idx=ctx.index())
+    except library.LibraryError as e:
+        raise Fail(str(e)) from e
+    finally:
+        cache.save()
+    if args.json:
+        print(json.dumps(idx))
+    elif not args.quiet:
+        ch = idx["changes"]
+        print(library.summary(idx))
+        print(f"\nlinks: {ch['created']} created, {ch['removed']} removed")
+
+
+def cmd_library_status(ctx: Ctx, args) -> None:
+    lib = _library(ctx)
+    idx = library.load_index(lib)
+    if args.json:
+        print(json.dumps(idx or {"root": str(lib.root), "exists": lib.exists()}))
+        return
+    if idx is None:
+        print(f"{lib.root}: " + ("not sorted yet (`studio library sort`)" if lib.exists() else "no library"))
+        return
+    print(library.summary(idx))
+    print(f"\nsorted {idx['generated']}")
+
+
+def cmd_library_add(ctx: Ctx, args) -> None:
+    lib = _library(ctx)
+    try:
+        added = lib.add([Path(f).expanduser() for f in args.files], args.topic, move=args.move)
+    except library.LibraryError as e:
+        raise Fail(str(e)) from e
+    for p in added:
+        print(p)
+    if not args.no_sort:
+        args.json = False
+        args.quiet = True
+        cmd_library_sort(ctx, args)
+    print(f"studio: {'moved' if args.move else 'copied'} {len(added)} into {lib.topics_dir / args.topic}")
+
+
 # ── entry ───────────────────────────────────────────────────────────────────
 
 
@@ -445,6 +535,7 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true", help="machine-readable (the shell's pickers)")
     s.add_argument("--dir", action="append", default=[], metavar="DIR", help="also rank the images in DIR (repeatable)")
     s.add_argument("--limit", type=int, help="at most N ranked matches of each kind")
+    s.add_argument("--no-library", action="store_true", help="leave out the library's topic images")
     s.set_defaults(fn=cmd_vibes)
 
     s = sub.add_parser("apply", help="render (cached), make current, reload consumers")
@@ -490,6 +581,27 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("name")
     s.add_argument("-o", "--output", help="archive path (default: NAME.tar.gz)")
     s.set_defaults(fn=cmd_export)
+
+    lib = top.add_parser(
+        "library",
+        help="the theme + wallpaper library ($STUDIO_LIBRARY, default ~/Documents/Themes)",
+        description="Packs/ and Wallpapers/Topics/<Topic>/ hold the files; sort generates symlink views "
+        "in Wallpapers/Colors, Wallpapers/Tones and Wallpapers/Themes (and README.md).",
+    )
+    sub = lib.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("sort", help="(re)generate the Colors / Tones / Themes views and the index")
+    s.add_argument("--json", action="store_true", help="print the index (what the shell reads)")
+    s.add_argument("-q", "--quiet", action="store_true")
+    s.set_defaults(fn=cmd_library_sort)
+    s = sub.add_parser("status", help="counts per topic, color, tone and theme (from the last sort)")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_library_status)
+    s = sub.add_parser("add", help="copy (or move) images into a topic, then sort")
+    s.add_argument("files", nargs="+")
+    s.add_argument("--topic", required=True, help="topic folder name (created when new)")
+    s.add_argument("--move", action="store_true", help="move instead of copy")
+    s.add_argument("--no-sort", action="store_true", help="don't re-sort afterwards")
+    s.set_defaults(fn=cmd_library_add)
     return p
 
 
