@@ -125,6 +125,9 @@ Singleton {
                 // Downloads in progress as a live activity; "" = the XDG download dir.
                 property bool downloads: true
                 property string downloadsDir: ""
+                // Read Chromium-family browsers' History db (a private copy,
+                // total_bytes only) for "% done"; off = size and speed only.
+                property bool downloadsBrowserHistory: true
                 // AI agents page (Claude Code / Codex usage from their local
                 // logs, counts only) and the running-agents mark in the pill.
                 property bool ai: true

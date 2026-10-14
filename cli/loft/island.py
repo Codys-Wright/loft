@@ -1213,9 +1213,11 @@ class Inotify:
 
 
 class DownloadWatcher:
-    def __init__(self, folder: Path, totals: bool = True):
+    def __init__(self, folder: Path, totals: bool = True, browser_history: bool = True):
         self.folder = folder
         self.totals = totals
+        # Chromium-family totals come from a private copy of the browser's History db.
+        self.browser_history = browser_history
         self.active: dict[str, dict] = {}
 
     def scan(self, now: float) -> tuple[list[dict], list[dict]]:
@@ -1263,7 +1265,7 @@ class DownloadWatcher:
                 rec["_tries"] = rec.get("_tries", 0) + 1
                 if control is not None:
                     rec["total"] = aria2_total(control)
-                elif n.endswith(".crdownload"):
+                elif n.endswith(".crdownload") and self.browser_history:
                     rec["total"] = chromium_total(str(p))
             current[n] = rec
         finished = []
@@ -1296,9 +1298,9 @@ def _dir_size(p: Path) -> int:
     return total
 
 
-def watch_downloads(folder: Path, interval: float = 1.0, once: bool = False, out=None) -> None:
+def watch_downloads(folder: Path, interval: float = 1.0, once: bool = False, out=None, browser_history: bool = True) -> None:
     out = out or sys.stdout
-    w = DownloadWatcher(folder)
+    w = DownloadWatcher(folder, browser_history=browser_history)
     try:
         ino = Inotify(str(folder))
     except OSError:
@@ -1451,6 +1453,12 @@ def add_parser(top, shell_path_of) -> None:
     s.add_argument("folder", nargs="?", help="default: the XDG download dir")
     s.add_argument("--watch", action="store_true", help="keep running, one line per change")
     s.add_argument("--interval", type=float, default=1.0)
+    s.add_argument(
+        "--no-browser-history",
+        dest="browser_history",
+        action="store_false",
+        help="don't read Chromium-family browsers' History db for a download's total size",
+    )
 
     def _dl(ctx, a):
         if a.folder:
@@ -1460,7 +1468,7 @@ def add_parser(top, shell_path_of) -> None:
 
             folder = user_dir("DOWNLOAD")
         try:
-            watch_downloads(folder, a.interval, once=not a.watch)
+            watch_downloads(folder, a.interval, once=not a.watch, browser_history=a.browser_history)
         except (KeyboardInterrupt, BrokenPipeError):
             pass
 

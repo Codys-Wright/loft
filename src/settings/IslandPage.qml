@@ -282,6 +282,15 @@ ColumnLayout {
                 onCommitted: t => page.isl.downloadsDir = t.trim()
             }
         }
+
+        SettingsRow {
+            label: "Read browser download history"
+            hint: "Chrome, Brave, Chromium…: a private copy of their History, only a download's total size, for \"% done\""
+            SettingsSwitch {
+                checked: page.isl.downloadsBrowserHistory
+                onToggled: on => page.isl.downloadsBrowserHistory = on
+            }
+        }
     }
 
     // ── AI agents ───────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ Singleton {
 
     readonly property bool enabled: Settings.island.downloads
     readonly property string folder: Settings.island.downloadsDir
+    readonly property bool browserHistory: Settings.island.downloadsBrowserHistory
 
     // [{ name, temp, path, size, total, progress?, speed, started }]
     property var active: []
@@ -79,7 +80,7 @@ Singleton {
     Process {
         id: watcher
         running: root.enabled && !root.restarting
-        command: ["loft", "island", "downloads", "--watch"].concat(root.folder !== "" ? [root.folder] : [])
+        command: ["loft", "island", "downloads", "--watch"].concat(root.browserHistory ? [] : ["--no-browser-history"]).concat(root.folder !== "" ? [root.folder] : [])
         stdout: SplitParser {
             onRead: line => {
                 let d;
@@ -101,6 +102,10 @@ Singleton {
     // The folder setting changed: restart the watcher on the new one.
     property bool restarting: false
     onFolderChanged: {
+        restarting = true;
+        restart.restart();
+    }
+    onBrowserHistoryChanged: {
         restarting = true;
         restart.restart();
     }
