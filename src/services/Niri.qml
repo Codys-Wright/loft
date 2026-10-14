@@ -28,6 +28,12 @@ Singleton {
 
     // A screenshot was taken (niri's screenshot UI or actions); path may be "".
     signal screenshotTaken(string path)
+    // niri (re)loaded its config files; failed = it kept the previous config.
+    signal configLoaded(bool failed)
+    // The set of outputs carrying workspaces changed (hotplug, enable/disable).
+    // niri 26.04 has no output events, so this is the closest live signal.
+    signal outputsChanged
+    property string outputKey: ""
 
     function workspacesOn(output) {
         return workspaces.filter(w => w.output === output);
@@ -69,6 +75,11 @@ Singleton {
             for (const w of e.workspaces)
                 m[w.id] = w;
             workspaceMap = m;
+            const key = [...new Set(e.workspaces.map(w => w.output ?? ""))].sort().join(",");
+            if (key !== outputKey) {
+                outputKey = key;
+                outputsChanged();
+            }
             break;
         }
         case "WorkspaceActivated": {
@@ -134,6 +145,9 @@ Singleton {
             break;
         case "ScreenshotCaptured":
             screenshotTaken(e.path ?? "");
+            break;
+        case "ConfigLoaded":
+            configLoaded(e.failed ?? false);
             break;
         }
     }

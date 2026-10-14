@@ -359,6 +359,11 @@ fn parse_size(s: &str) -> Result<Value> {
 impl KeyDef {
     /// Parse a CLI value (or accept a JSON value) into the stored form.
     pub fn parse(&self, raw: &Value) -> Result<Value> {
+        self.parse_inner(raw)
+            .map_err(|e| anyhow::anyhow!("{}: {e} (got {raw})", self.key))
+    }
+
+    fn parse_inner(&self, raw: &Value) -> Result<Value> {
         let s = match raw {
             Value::String(s) => s.clone(),
             other => other.to_string(),
@@ -368,21 +373,21 @@ impl KeyDef {
                 let v: f64 = s.trim().parse()?;
                 let v = v.round() as i64;
                 if !(min..=max).contains(&v) {
-                    bail!("{} must be in {min}..={max}", self.key);
+                    bail!("must be in {min}..={max}");
                 }
                 json!(v)
             }
             Kind::Number { min, max } | Kind::Float { min, max } => {
                 let v: f64 = s.trim().parse()?;
                 if !(min..=max).contains(&v) {
-                    bail!("{} must be in {min}..={max}", self.key);
+                    bail!("must be in {min}..={max}");
                 }
                 json!(v)
             }
             Kind::Str => json!(s),
             Kind::Enum(opts) => {
                 if !opts.contains(&s.as_str()) {
-                    bail!("{} must be one of {}", self.key, opts.join(", "));
+                    bail!("must be one of {}", opts.join(", "));
                 }
                 json!(s)
             }

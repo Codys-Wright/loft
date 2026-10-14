@@ -50,4 +50,25 @@ Point your apps at the rendered fragments once; `apply` keeps them current:
 `python3 cli/studio …` runs the same CLI (the dev shell has `jsonschema`), and
 `nix flake check` runs the schema, unit, golden-render and `niri validate` checks.
 
+## niri settings
+
+Studio Settings has Displays, Keyboard & Mouse, Layout & Motion and Keybinds pages,
+backed by `studio-niri` (`crates/studio-niri`). Your own niri KDL is never edited:
+changes are stored in `<state>/overrides/niri.json` and rendered (validated with
+`niri validate`) into `<state>/overrides/niri.kdl`, which the studio sessions include
+**first** (niri uses the first `output` block matching a monitor) and **last** (every
+other section merges, later wins). Displays are recorded by make/model/serial, never
+by connector. With the home-manager module, `~/.config/studio-linux/niri.kdl` includes
+it last; add `include optional=true "~/.config/studio-linux/niri-early.kdl"` at the top
+of your niri config for display overrides to win over your own `output` blocks.
+
+```sh
+studio-niri outputs                       # live outputs, modes, identities
+studio-niri output set DP-1 --scale 1.25 --render   # live + recorded (by identity)
+studio-niri set layout.gaps 8 --render    # see `studio-niri keys`
+studio-niri show                          # value + source (override / file:line / default)
+studio-niri binds --conflicts             # keys bound more than once, and which wins
+studio-niri reset [input|layout.gaps|…]   # drop overrides and re-render
+```
+
 Status: Phase 0 (dev loop, glass bar + dock placeholder) and Phase 1 theme engine (render, apply, install). See [docs/PLAN.md](docs/PLAN.md). Themes: [studio-linux-themes](https://github.com/Codys-Wright/studio-linux-themes).

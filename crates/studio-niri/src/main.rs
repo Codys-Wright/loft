@@ -42,7 +42,8 @@ struct RenderFlags {
 enum Cmd {
     /// Live outputs from niri (modes, scale, transform, position, VRR, identity).
     Outputs {
-        /// Read `niri msg --json outputs` output from a file instead of IPC.
+        /// Read `niri msg --json outputs` output from a file instead of IPC
+        /// (also $STUDIO_NIRI_OUTPUTS_FILE).
         #[arg(long, hide = true)]
         from_file: Option<PathBuf>,
     },
@@ -225,6 +226,13 @@ fn run(cli: Cli) -> Result<()> {
 
     match cli.cmd {
         Cmd::Outputs { from_file } => {
+            // $STUDIO_NIRI_OUTPUTS_FILE: pretend these are the live outputs
+            // (UI work on multi-monitor layouts from a single-output session).
+            let from_file = from_file.or_else(|| {
+                std::env::var_os("STUDIO_NIRI_OUTPUTS_FILE")
+                    .filter(|v| !v.is_empty())
+                    .map(PathBuf::from)
+            });
             let outs: outputs::Outputs = match from_file {
                 Some(f) => serde_json::from_str(&std::fs::read_to_string(&f)?)
                     .with_context(|| format!("parsing {}", f.display()))?,
@@ -392,6 +400,14 @@ fn run(cli: Cli) -> Result<()> {
             let tree = studio_niri::load_tree(entry)?;
             let all = binds::collect(&tree);
             let conf = binds::conflicts(&all);
+            // A file included twice (the overrides fragment) counts once.
+            let mut files: Vec<String> = Vec::new();
+            for f in &tree.files {
+                let p = f.path.display().to_string();
+                if !files.contains(&p) {
+                    files.push(p);
+                }
+            }
             if j {
                 let v = if conflicts {
                     json!({
@@ -405,7 +421,7 @@ fn run(cli: Cli) -> Result<()> {
                 } else {
                     json!({
                         "config": tree.entry,
-                        "files": tree.files.iter().map(|f| f.path.display().to_string()).collect::<Vec<_>>(),
+                        "files": files,
                         "binds": all,
                         "conflicts": conf.keys().collect::<Vec<_>>(),
                         "errors": tree.errors,
