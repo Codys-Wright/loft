@@ -18,6 +18,7 @@ Singleton {
     readonly property string file: `${stateDir}/overrides/shell.json`
 
     readonly property alias dock: settings.dock
+    readonly property alias displays: settings.displays
     readonly property alias island: settings.island
     readonly property alias wallpaper: settings.wallpaper
     readonly property alias appearance: settings.appearance
@@ -58,6 +59,14 @@ Singleton {
                 property list<string> pinned: ["org.gnome.Nautilus", "firefox", "kitty", "com.mitchellh.ghostty", "obsidian"]
                 property real iconSize: 48
                 property real magnification: 1.3
+            }
+
+            // Which display carries the dock and the bar's status area (see
+            // Displays.qml). niri identity ("Make Model Serial") or connector
+            // name; "" = automatic (largest display / the one to its right).
+            property JsonObject displays: JsonObject {
+                property string main: ""
+                property string fallback: ""
             }
 
             property JsonObject island: JsonObject {

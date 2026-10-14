@@ -87,6 +87,9 @@ PanelWindow {
     // ── Right: status items (Controls; Settings → Menu Bar) ─────────────
     StatusItems {
         id: statusRow
+        // The bar is on every display; its status area only on the active one
+        // (main display, or the fallback while the main one is fullscreen).
+        visible: Displays.isActive(root.modelData)
         anchors {
             right: parent.right
             rightMargin: 10

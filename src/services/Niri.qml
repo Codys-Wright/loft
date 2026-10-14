@@ -135,6 +135,15 @@ Singleton {
             windowMap = m;
             break;
         }
+        case "WindowLayoutsChanged": {
+            // [[id, layout], …] — sizes/positions, e.g. a window going fullscreen.
+            const m = Object.assign({}, windowMap);
+            for (const [id, layout] of e.changes)
+                if (m[id])
+                    m[id] = Object.assign({}, m[id], { layout: layout });
+            windowMap = m;
+            break;
+        }
         case "WindowUrgencyChanged":
             if (windowMap[e.id]) {
                 const m = Object.assign({}, windowMap);
