@@ -1,0 +1,8 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "icons",
+  "id": "system",
+  "name": "System",
+  "description": "Sets nothing: home-manager's icon and cursor themes stay in charge",
+  "data": {}
+}

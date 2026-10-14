@@ -1,0 +1,11 @@
+{
+  "$schema": "https://loft.dev/schema/pack-2.json",
+  "format": 2,
+  "id": "loft",
+  "name": "Loft",
+  "author": "Loft",
+  "version": "1.0.0",
+  "license": "MIT",
+  "source": "https://github.com/Codys-Wright/loft",
+  "description": "Loft's built-in themes and facets"
+}

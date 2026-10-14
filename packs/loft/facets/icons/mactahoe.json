@@ -1,0 +1,20 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "icons",
+  "id": "mactahoe",
+  "name": "MacTahoe",
+  "data": {
+    "icons": {
+      "theme": "MacTahoe-blue",
+      "fallback": "Adwaita"
+    },
+    "cursor": {
+      "theme": "MacTahoe-cursors",
+      "size": 24
+    },
+    "requires": [
+      "mactahoe-icon-theme",
+      "mactahoe-cursors"
+    ]
+  }
+}

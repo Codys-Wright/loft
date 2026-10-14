@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/appearance-1.json",
+  "title": "Loft appearance.json (user layer)",
+  "description": "<state>/appearance.json (docs/THEME-ARCHITECTURE.md \u00a74.2). `loft` is the only writer.",
+  "$defs": {
+    "selection": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^(colors|wallpapers|material|motion|shape|typography|icons|lock|launcher|sounds):([a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ref": {
+              "type": "string",
+              "pattern": "^(colors|wallpapers|material|motion|shape|typography|icons|lock|launcher|sounds):([a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$"
+            },
+            "inline": {
+              "type": "object"
+            },
+            "patch": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "minProperties": 1
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "theme": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "variant": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "dark",
+        "light",
+        "auto",
+        null
+      ]
+    },
+    "pins": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "colors",
+          "wallpapers",
+          "material",
+          "motion",
+          "shape",
+          "typography",
+          "icons",
+          "lock",
+          "launcher",
+          "sounds"
+        ]
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/selection"
+      }
+    },
+    "customizations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "colors",
+              "wallpapers",
+              "material",
+              "motion",
+              "shape",
+              "typography",
+              "icons",
+              "lock",
+              "launcher",
+              "sounds"
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/selection"
+          }
+        }
+      }
+    },
+    "accessibility": {
+      "type": "object",
+      "properties": {
+        "reduceMotion": {
+          "type": "boolean"
+        },
+        "reduceTransparency": {
+          "type": "boolean"
+        },
+        "increaseContrast": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "version"
+  ]
+}

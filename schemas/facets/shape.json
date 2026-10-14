@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/facets/shape.json",
+  "title": "Loft shape facet data (resolved)",
+  "description": "The `data` of a resolved facet: after fill, polar values and @color references (docs/THEME-ARCHITECTURE.md \u00a72, \u00a73.4). Facet documents may leave keys out and use {dark, light} / @refs.",
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "colorAlpha": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+    }
+  },
+  "type": "object",
+  "properties": {
+    "radius": {
+      "type": "object",
+      "properties": {
+        "window": {
+          "type": "number",
+          "minimum": 0
+        },
+        "panel": {
+          "type": "number",
+          "minimum": 0
+        },
+        "control": {
+          "type": "number",
+          "minimum": 0
+        },
+        "surface": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "gaps": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "focus": {
+      "enum": [
+        "shadow",
+        "ring",
+        "both"
+      ]
+    },
+    "focusRing": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "border": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "shadow": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/colorAlpha"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "softness": {
+          "type": "number",
+          "minimum": 0
+        },
+        "spread": {
+          "type": "number"
+        },
+        "offset": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "inactive": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

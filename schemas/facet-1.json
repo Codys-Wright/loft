@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/facet-1.json",
+  "title": "Loft facet document (envelope)",
+  "description": "One facet (docs/THEME-ARCHITECTURE.md \u00a72). `data` is checked by facets/<kind>.json after resolution.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "preview": {
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "colors",
+        "wallpapers",
+        "material",
+        "motion",
+        "shape",
+        "typography",
+        "icons",
+        "lock",
+        "launcher",
+        "sounds"
+      ]
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "source": {
+      "type": "string"
+    },
+    "license": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "data"
+  ]
+}

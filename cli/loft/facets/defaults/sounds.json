@@ -1,0 +1,12 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "sounds",
+  "id": "default",
+  "name": "None",
+  "description": "Product default: every key a facet leaves out takes this value (fill)",
+  "data": {
+    "theme": null,
+    "events": {},
+    "volumeFeedback": false
+  }
+}

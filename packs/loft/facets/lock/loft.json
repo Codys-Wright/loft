@@ -1,0 +1,10 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "lock",
+  "id": "loft",
+  "name": "Built-in",
+  "description": "The macOS-style lock card",
+  "data": {
+    "format": "builtin"
+  }
+}

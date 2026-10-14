@@ -1,0 +1,7 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "typography",
+  "id": "loft",
+  "name": "System",
+  "data": {}
+}

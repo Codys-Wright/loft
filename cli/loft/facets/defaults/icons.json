@@ -1,0 +1,18 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "icons",
+  "id": "default",
+  "name": "System",
+  "description": "Product default: every key a facet leaves out takes this value (fill)",
+  "data": {
+    "icons": {
+      "theme": null,
+      "fallback": null
+    },
+    "cursor": {
+      "theme": null,
+      "size": null
+    },
+    "requires": []
+  }
+}

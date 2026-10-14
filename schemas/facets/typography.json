@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/facets/typography.json",
+  "title": "Loft typography facet data (resolved)",
+  "description": "The `data` of a resolved facet: after fill, polar values and @color references (docs/THEME-ARCHITECTURE.md \u00a72, \u00a73.4). Facet documents may leave keys out and use {dark, light} / @refs.",
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "colorAlpha": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+    }
+  },
+  "type": "object",
+  "properties": {
+    "ui": {
+      "type": "object",
+      "properties": {
+        "family": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "weight": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "mono": {
+      "type": "object",
+      "properties": {
+        "family": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "display": {
+      "type": "object",
+      "properties": {
+        "family": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "applyTo": {
+      "type": "object",
+      "properties": {
+        "terminals": {
+          "type": "boolean"
+        },
+        "gtk": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "fonts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "additionalProperties": false
+}

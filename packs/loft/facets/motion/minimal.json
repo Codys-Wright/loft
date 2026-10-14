@@ -1,0 +1,10 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "motion",
+  "id": "minimal",
+  "name": "Minimal",
+  "description": "Crossfades only in the shell; niri animations off",
+  "data": {
+    "minimal": true
+  }
+}

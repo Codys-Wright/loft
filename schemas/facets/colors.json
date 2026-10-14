@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/facets/colors.json",
+  "title": "Loft colors facet data (resolved)",
+  "description": "The `data` of a resolved facet: after fill, polar values and @color references (docs/THEME-ARCHITECTURE.md \u00a72, \u00a73.4). Facet documents may leave keys out and use {dark, light} / @refs.",
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "colorAlpha": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+    }
+  },
+  "type": "object",
+  "properties": {
+    "polarity": {
+      "enum": [
+        "dark",
+        "light"
+      ]
+    },
+    "palette": {
+      "type": "object",
+      "required": [
+        "bg",
+        "surface",
+        "overlay",
+        "text",
+        "subtext",
+        "accent",
+        "accent2",
+        "urgent",
+        "ok",
+        "warn"
+      ],
+      "properties": {
+        "bg": {
+          "$ref": "#/$defs/color"
+        },
+        "surface": {
+          "$ref": "#/$defs/color"
+        },
+        "overlay": {
+          "$ref": "#/$defs/color"
+        },
+        "text": {
+          "$ref": "#/$defs/color"
+        },
+        "subtext": {
+          "$ref": "#/$defs/color"
+        },
+        "accent": {
+          "$ref": "#/$defs/color"
+        },
+        "accent2": {
+          "$ref": "#/$defs/color"
+        },
+        "urgent": {
+          "$ref": "#/$defs/color"
+        },
+        "ok": {
+          "$ref": "#/$defs/color"
+        },
+        "warn": {
+          "$ref": "#/$defs/color"
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/color"
+      }
+    },
+    "ansi": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/color"
+          },
+          "minItems": 16,
+          "maxItems": 16
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gradient": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/color"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "polarity",
+    "palette"
+  ]
+}

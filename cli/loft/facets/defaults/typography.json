@@ -1,0 +1,26 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "typography",
+  "id": "default",
+  "name": "System",
+  "description": "Product default: every key a facet leaves out takes this value (fill)",
+  "data": {
+    "ui": {
+      "family": null,
+      "size": 11,
+      "weight": "regular"
+    },
+    "mono": {
+      "family": null,
+      "size": 11
+    },
+    "display": {
+      "family": null
+    },
+    "applyTo": {
+      "terminals": false,
+      "gtk": false
+    },
+    "fonts": []
+  }
+}

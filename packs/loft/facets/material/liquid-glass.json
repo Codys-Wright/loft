@@ -1,0 +1,46 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "material",
+  "id": "liquid-glass",
+  "name": "Liquid Glass",
+  "description": "Golden Gate glass: blur, tinted fill, dark rim, bright specular",
+  "data": {
+    "blur": {
+      "enabled": true,
+      "xray": true,
+      "noise": 0.02,
+      "saturation": 1.6
+    },
+    "glass": {
+      "opacity": {
+        "dark": 0.45,
+        "light": 0.5
+      },
+      "tint": {
+        "dark": "@bg",
+        "light": "@mix(bg,#ffffff,0.5)"
+      },
+      "border": "#ffffff",
+      "borderOpacity": {
+        "dark": 0.14,
+        "light": 0.6
+      },
+      "edgeDarken": {
+        "dark": 0.35,
+        "light": 0.18
+      },
+      "specular": {
+        "dark": 0.5,
+        "light": 0.75
+      }
+    },
+    "terminals": {
+      "opacity": null,
+      "blur": true
+    },
+    "menuBar": {
+      "background": false,
+      "adaptiveText": true
+    }
+  }
+}

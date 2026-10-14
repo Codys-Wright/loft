@@ -1,0 +1,8 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "motion",
+  "id": "loft",
+  "name": "Loft",
+  "description": "The default motion (every value from the product default)",
+  "data": {}
+}

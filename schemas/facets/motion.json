@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/facets/motion.json",
+  "title": "Loft motion facet data (resolved)",
+  "description": "The `data` of a resolved facet: after fill, polar values and @color references (docs/THEME-ARCHITECTURE.md \u00a72, \u00a73.4). Facet documents may leave keys out and use {dark, light} / @refs.",
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "colorAlpha": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+    }
+  },
+  "type": "object",
+  "properties": {
+    "speed": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 10
+    },
+    "shell": {
+      "type": "object",
+      "properties": {
+        "durations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "curves": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4
+          }
+        },
+        "spring": {
+          "type": "object",
+          "properties": {
+            "damping": {
+              "type": "number",
+              "minimum": 0
+            },
+            "stiffness": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "niri": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "object",
+          "boolean"
+        ]
+      }
+    },
+    "minimal": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}
