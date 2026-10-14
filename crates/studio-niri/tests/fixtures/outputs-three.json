@@ -1,0 +1,52 @@
+{
+  "DP-1": {
+    "name": "DP-1",
+    "make": "Samsung Electric Company",
+    "model": "Odyssey G95NC",
+    "serial": "H1AK500000",
+    "physical_size": [1190, 340],
+    "modes": [
+      { "width": 5120, "height": 1440, "refresh_rate": 239761, "is_preferred": true },
+      { "width": 5120, "height": 1440, "refresh_rate": 119999, "is_preferred": false },
+      { "width": 3840, "height": 1080, "refresh_rate": 60000, "is_preferred": false }
+    ],
+    "current_mode": 0,
+    "is_custom_mode": false,
+    "vrr_supported": true,
+    "vrr_enabled": false,
+    "logical": { "x": 0, "y": 0, "width": 5120, "height": 1440, "scale": 1.0, "transform": "Normal" }
+  },
+  "HDMI-A-1": {
+    "name": "HDMI-A-1",
+    "make": "LG Electronics",
+    "model": "LG ULTRAGEAR",
+    "serial": null,
+    "physical_size": [600, 340],
+    "modes": [
+      { "width": 2560, "height": 1440, "refresh_rate": 143912, "is_preferred": true },
+      { "width": 2560, "height": 1440, "refresh_rate": 59951, "is_preferred": false },
+      { "width": 1920, "height": 1080, "refresh_rate": 60000, "is_preferred": false }
+    ],
+    "current_mode": 0,
+    "is_custom_mode": false,
+    "vrr_supported": false,
+    "vrr_enabled": false,
+    "logical": { "x": 5120, "y": 0, "width": 2560, "height": 1440, "scale": 1.0, "transform": "Normal" }
+  },
+  "DP-2": {
+    "name": "DP-2",
+    "make": "Dell Inc.",
+    "model": "DELL U2722D",
+    "serial": "7XKQ2K3",
+    "physical_size": [600, 340],
+    "modes": [
+      { "width": 2560, "height": 1440, "refresh_rate": 59951, "is_preferred": true },
+      { "width": 1920, "height": 1080, "refresh_rate": 60000, "is_preferred": false }
+    ],
+    "current_mode": 0,
+    "is_custom_mode": false,
+    "vrr_supported": false,
+    "vrr_enabled": false,
+    "logical": { "x": -1440, "y": 0, "width": 1440, "height": 2560, "scale": 1.0, "transform": "90" }
+  }
+}

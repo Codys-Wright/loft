@@ -1,0 +1,17 @@
+{
+  "eDP-1": {
+    "name": "eDP-1",
+    "make": "Unknown",
+    "model": "Unknown",
+    "serial": null,
+    "physical_size": [300, 190],
+    "modes": [
+      { "width": 2880, "height": 1800, "refresh_rate": 60000, "is_preferred": true }
+    ],
+    "current_mode": null,
+    "is_custom_mode": false,
+    "vrr_supported": false,
+    "vrr_enabled": false,
+    "logical": null
+  }
+}

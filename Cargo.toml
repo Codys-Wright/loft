@@ -1,0 +1,8 @@
+[workspace]
+resolver = "3"
+members = ["crates/studio-niri"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/Codys-Wright/studio-linux"

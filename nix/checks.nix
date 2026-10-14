@@ -5,6 +5,8 @@
 #   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte
 #   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`
+#   studio-niri     the crate builds and its tests pass (incl. `niri validate`)
+#   studio-niri-clippy  `cargo clippy --all-targets -D warnings`
 #
 # After an intended output change, refresh the goldens from a checkout:
 #   for t in tokyonight latte; do rm -rf tests/golden/$t; nix run .#studio -- theme render themes/$t tests/golden/$t; done
@@ -61,6 +63,19 @@
           done
           touch $out
         '';
+
+        studio-niri = self'.packages.studio-niri;
+
+        studio-niri-clippy = self'.packages.studio-niri.overrideAttrs (old: {
+          pname = "studio-niri-clippy";
+          nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.clippy ];
+          dontCargoBuild = true;
+          doCheck = false;
+          buildPhase = ''
+            cargo clippy --offline --all-targets -- -D warnings
+          '';
+          installPhase = "touch $out";
+        });
 
         ghostty-config = check "ghostty-config" [ pkgs.ghostty ] ''
           export HOME=$TMPDIR
