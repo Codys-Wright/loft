@@ -21,6 +21,7 @@ Singleton {
     readonly property alias island: settings.island
     readonly property alias wallpaper: settings.wallpaper
     readonly property alias appearance: settings.appearance
+    readonly property alias sound: settings.sound
     // Feature id → on/off (Features.qml); absent = the module's default.
     property alias features: settings.features
 
@@ -69,6 +70,19 @@ Singleton {
                 // Runtime overrides on top of the theme (-1 / "" = theme value).
                 property real glassOpacity: -1
                 property int blur: -1 // -1 theme, 0 off, 1 on
+            }
+
+            property JsonObject sound: JsonObject {
+                // Mixer favorites (application names), top to bottom.
+                property list<string> pinned: []
+                // Per-app volume goes up to 150 % when on.
+                property bool boost: true
+                property bool meters: true
+                // Lower the new output when headphones / a Bluetooth sink disappear.
+                property bool safeOnUnplug: true
+                property real safeVolume: 0.3
+                // Bar mic icon while an app records or the mics are muted.
+                property bool micIndicator: true
             }
         }
     }

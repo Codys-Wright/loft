@@ -28,6 +28,7 @@
         foot # the demo session's terminal (Mod+Return); consumers bind their own
         gammastep # Night Light
         wf-recorder # Screen recording
+        pipewire # pw-metadata: per-app output (Sound mixer)
         walker # Spotlight launcher (frontend)
         elephant # launcher data providers
         jq

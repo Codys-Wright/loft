@@ -11,6 +11,7 @@ import qs.lock
 import qs.osd
 import qs.switcher
 import qs.wallpaper
+import qs.audio
 import qs.settings
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
@@ -62,4 +63,9 @@ ShellRoot {
     SettingsApp {}
 
     Lock {}
+
+    Variants {
+        model: Features.on("mixer") ? Quickshell.screens : []
+        Mixer {}
+    }
 }

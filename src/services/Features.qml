@@ -27,7 +27,10 @@ Singleton {
         { id: "osd", label: "Volume display", icon: "󰕾", group: "Sound", description: "On-screen pill when volume changes" },
         { id: "switcher", label: "App switcher", icon: "󰕰", group: "Windows", description: "⌘Tab between apps" },
         { id: "wallpaperPicker", label: "Wallpaper picker", icon: "󰸉", group: "Desktop", description: "Browse and apply wallpapers" },
-        { id: "lock", label: "Lock screen", icon: "󰌾", group: "Desktop", core: true, description: "Session lock with the theme's design" }
+        { id: "lock", label: "Lock screen", icon: "󰌾", group: "Desktop", core: true, description: "Session lock with the theme's design" },
+        { id: "mixer", label: "Volume mixer", icon: "󰘮", group: "Sound", description: "Per-app volume up to 150 %, mute, favorites and per-app output" },
+        { id: "audioOutputs", label: "Output switcher", icon: "󰓃", group: "Sound", description: "Pick the output from the Control Center or ⌘⇧O; safe volume when headphones disconnect" },
+        { id: "micTools", label: "Microphone tools", icon: "󰍬", group: "Sound", description: "Default input, level, mute all (⌘⇧M), bar indicator while recording" }
     ]
 
     readonly property var presets: ({

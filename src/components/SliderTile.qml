@@ -3,6 +3,8 @@ import qs.services
 
 // A glass slider (volume, brightness): drag or scroll; click the icon to
 // toggle (e.g. mute). `value` is 0..1; `moved(v)` fires while dragging.
+// Optional: a clickable title (with a chevron, e.g. pick the output) and an
+// expand chevron on the right (e.g. open the mixer).
 GlassSurface {
     id: root
 
@@ -10,9 +12,14 @@ GlassSurface {
     property string title: ""
     property real value: 0
     property bool dimmed: false
+    property bool titleClickable: false
+    property bool titleOpen: false
+    property bool expandable: false
 
     signal moved(real value)
     signal iconClicked
+    signal titleClicked
+    signal expandClicked
 
     implicitHeight: 70
     radius: 22
@@ -26,11 +33,53 @@ GlassSurface {
             leftMargin: 16
             topMargin: 10
         }
+        width: Math.min(implicitWidth, root.width - 80)
+        elide: Text.ElideRight
         text: root.title
         color: Theme.text
         font.family: Theme.fontUi
         font.pixelSize: 13
         font.weight: Font.DemiBold
+
+        MouseArea {
+            anchors.fill: parent
+            anchors.margins: -4
+            anchors.rightMargin: -22
+            enabled: root.titleClickable
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.titleClicked()
+        }
+    }
+
+    Icon {
+        visible: root.titleClickable
+        anchors {
+            left: label.right
+            leftMargin: 5
+            verticalCenter: label.verticalCenter
+        }
+        text: root.titleOpen ? "󰅃" : "󰅀"
+        size: 11
+        color: Theme.subtext
+    }
+
+    Icon {
+        visible: root.expandable
+        anchors {
+            right: parent.right
+            rightMargin: 16
+            verticalCenter: label.verticalCenter
+        }
+        text: "󰅂"
+        size: 14
+        color: Theme.subtext
+
+        MouseArea {
+            anchors.fill: parent
+            anchors.margins: -8
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.expandClicked()
+        }
     }
 
     Item {

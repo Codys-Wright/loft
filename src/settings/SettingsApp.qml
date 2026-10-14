@@ -26,6 +26,7 @@ Scope {
         { id: "input", icon: "󰌌", label: "Keyboard & Mouse" },
         { id: "layout", icon: "󰕰", label: "Layout & Motion" },
         { id: "keybinds", icon: "󰘳", label: "Keybinds" },
+        { id: "sound", icon: "󰕾", label: "Sound" },
         { id: "features", icon: "󰐱", label: "Features" },
         { id: "about", icon: "󰋼", label: "About" }
     ]
@@ -536,6 +537,11 @@ Scope {
                         FeaturesPage {
                             Layout.fillWidth: true
                             visible: root.section === "features"
+                        }
+
+                        SoundPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "sound"
                         }
 
                         // About

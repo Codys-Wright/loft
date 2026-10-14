@@ -13,4 +13,6 @@ binds {
     Mod+Shift+W hotkey-overlay-title="Wallpapers" { spawn @IPC@ "wallpaper" "toggle"; }
     // macOS Ctrl+Cmd+Q.
     Mod+Ctrl+Q hotkey-overlay-title="Lock Screen" { spawn @IPC@ "lock" "lock"; }
+    Mod+Shift+O hotkey-overlay-title="Next Audio Output" { spawn @IPC@ "audio" "nextOutput"; }
+    Mod+Shift+M hotkey-overlay-title="Mute Microphones" { spawn @IPC@ "mic" "toggleMute"; }
 }
