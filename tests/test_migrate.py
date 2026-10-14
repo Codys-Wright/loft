@@ -28,6 +28,11 @@ from loft.cli import main
 from loft.facets import appearance as A
 from loft.pack import validate_v2
 
+try:  # `discover -s tests` (nix flake check) or `-m unittest tests.test_migrate`
+    import test_importers as TI
+except ImportError:
+    from tests import test_importers as TI
+
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tests" / "fixtures" / "migrate" / "Packs"
 BUILTIN = ROOT / "packs"
@@ -62,6 +67,8 @@ class Home(unittest.TestCase):
         self.new = self.home / "Documents" / "Loft"
         self.state = self.home / ".local" / "state" / "loft"
         shutil.copytree(FIXTURES, self.old / "Packs")
+        for q in [self.old, *self.old.rglob("*")]:  # the Nix store's copy is read-only
+            q.chmod(q.stat().st_mode | 0o200)
         topic = self.old / "Wallpapers" / "Topics" / "Avatar"
         topic.mkdir(parents=True)
         (topic / "aang.jpg").write_bytes(b"\xff\xd8\xff\xe0aang")
@@ -342,8 +349,7 @@ class PackV2(Home):
 def _pair_repo(root: Path) -> str:
     """qylock upstream with a declared pair (osu / osumania: one background,
     two lock designs) and a single theme."""
-    from test_importers import git_repo, make_png, two_tone
-
+    git_repo, make_png, two_tone = TI.git_repo, TI.make_png, TI.two_tone
     bg = make_png(32, 32, two_tone)
     files = {"README.md": "qylock"}
     for name, qml in (("osu", "Item {}"), ("osumania", "Item { id: mania }"), ("still", "Item {}")):
@@ -360,8 +366,7 @@ class ImportV2(Home):
 
     def setUp(self):
         super().setUp()
-        from test_importers import cozytile_repo
-
+        cozytile_repo = TI.cozytile_repo
         shutil.rmtree(self.old)  # an empty machine: packs go to the data dir
         self.user = self.home / ".local" / "share" / "loft" / "themes"
         os.environ["LOFT_COZYTILE_URL"] = cozytile_repo(self.tmp / "cozytile")
