@@ -29,7 +29,43 @@ Singleton {
         queue = queue.slice(1);
     }
 
+    // ── From the iPhone ─────────────────────────────────────────────────
+    // tetherd (Phone.qml) raises the phone's app notifications itself, as
+    // libnotify app "Tether" with desktop-entry=tether-gtk and KDE's
+    // x-kde-origin-name=iPhone / x-kde-display-appname=<iPhone app> hints;
+    // Loft's own message banners carry `phone: true`.
+    function hint(n, key) {
+        try {
+            return n?.hints ? (n.hints[key] ?? "") : "";
+        } catch (e) {
+            return "";
+        }
+    }
+    function isPhone(n) {
+        if (!n)
+            return false;
+        return n.phone === true || n.desktopEntry === "tether-gtk" || hint(n, "x-kde-origin-name") === "iPhone";
+    }
+    // The iPhone app's name ("Instagram"), not "Tether".
+    function phoneApp(n) {
+        return hint(n, "x-kde-display-appname") || (n?.phone ? n.appName : "") || "iPhone";
+    }
+    // The app line of a banner / history row: "Instagram · iPhone".
+    function appLabel(n) {
+        if (!n)
+            return "";
+        return isPhone(n) ? `${phoneApp(n)} · iPhone` : (n.appName ?? "");
+    }
+
     function activate(n) {
+        // tetherd's Messages popup: open the conversation in Loft rather
+        // than tether's own reply dialog.
+        if (isPhone(n) && !n.phone && Features.on("phone") && phoneApp(n) === "Messages" && Phone.up) {
+            Phone.openByName(n.summary ?? "");
+            n.dismiss();
+            next();
+            return;
+        }
         // The "default" action, if the app offered one, else nothing.
         const action = (n.actions ?? []).find(a => a.identifier === "default") ?? null;
         if (action)
@@ -57,6 +93,20 @@ Singleton {
         persistenceSupported: true
 
         onNotification: n => {
+            if (root.isPhone(n) && Features.on("phone")) {
+                // Settings → Phone → Notifications off: the phone's are dropped.
+                if (!PhoneConfig.notifications) {
+                    n.dismiss();
+                    return;
+                }
+                n.tracked = true;
+                // A new message already has Loft's banner (with Reply) from
+                // the socket: keep tetherd's copy in the history only.
+                if (root.phoneApp(n) === "Messages" && Phone.up && PhoneConfig.messages)
+                    return;
+                root.show(n);
+                return;
+            }
             n.tracked = true;
             root.show(n);
         }
@@ -78,6 +128,11 @@ Singleton {
 
         function clear(): void {
             root.queue = [];
+        }
+
+        // Banners waiting (tests).
+        function pending(): int {
+            return root.queue.length;
         }
     }
 }

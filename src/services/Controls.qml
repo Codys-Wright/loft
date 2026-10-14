@@ -32,6 +32,7 @@ Singleton {
         { id: "connectivity", label: "Connectivity", icon: "󰖩", group: "System", sizes: ["2x2"], bar: false, kind: "panel" },
         { id: "wifi", label: "Wi-Fi", icon: "󰖩", group: "System", feature: "wifiControl", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "panel", activeOnly: "option" },
         { id: "bluetooth", label: "Bluetooth", icon: "󰂯", group: "System", feature: "bluetoothControl", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "panel", activeOnly: "option" },
+        { id: "phone", label: "iPhone", icon: "󰄜", group: "Everyday", feature: "phone", sizes: ["2x1", "1x1"], bar: true, barDefault: false, kind: "panel", activeOnly: "option" },
         { id: "focus", label: "Focus", icon: "󰂛", group: "Everyday", feature: "focusControl", sizes: ["2x1", "1x1"], bar: true, barDefault: true, kind: "panel", activeOnly: "default" },
         { id: "display", label: "Display", icon: "󰃟", group: "Display", feature: "displayControl", sizes: ["4x1"], bar: true, barDefault: false, kind: "panel" },
         { id: "sound", label: "Sound", icon: "󰕾", group: "Sound", feature: "soundControl", sizes: ["4x1"], bar: true, barDefault: true, kind: "panel" },
@@ -68,12 +69,13 @@ Singleton {
         })
 
     // Bar items left to right (readouts first, the clock last).
-    readonly property var barDefaultOrder: ["readout.cpu", "readout.memory", "readout.cpuTemp", "readout.gpu", "readout.network", "readout.battery", "tray", "camera", "micMute", "record", "nowPlaying", "caffeine", "nightLight", "focusTimer", "powerMode", "cleaning", "screenshot", "colorPicker", "clipboard", "overview", "displays", "lock", "inputSource", "focus", "battery", "bluetooth", "wifi", "sound", "display", "spotlight", "controlcenter", "clock"]
+    readonly property var barDefaultOrder: ["readout.cpu", "readout.memory", "readout.cpuTemp", "readout.gpu", "readout.network", "readout.battery", "tray", "camera", "micMute", "record", "nowPlaying", "caffeine", "nightLight", "focusTimer", "powerMode", "cleaning", "screenshot", "colorPicker", "clipboard", "overview", "displays", "lock", "inputSource", "phone", "focus", "battery", "bluetooth", "wifi", "sound", "display", "spotlight", "controlcenter", "clock"]
 
     readonly property var ccDefaultLayout: [
         { id: "connectivity", size: "2x2" },
         { id: "focus", size: "2x1" },
         { id: "caffeine", size: "1x1" },
+        { id: "phone", size: "2x1" },
         { id: "nightLight", size: "1x1" },
         { id: "display", size: "4x1" },
         { id: "sound", size: "4x1" },
@@ -134,6 +136,8 @@ Singleton {
             return Panels.doNotDisturb || FocusTimer.active;
         case "nowPlaying":
             return player?.isPlaying ?? false;
+        case "phone":
+            return Phone.connected;
         case "battery":
             return hasBattery && UPower.onBattery;
         case "caffeine":
@@ -417,6 +421,8 @@ Singleton {
             return hasBattery ? `${Math.round(batteryPercent)}%` : "";
         case "nowPlaying":
             return player ? (player.trackTitle || "Not playing") : "Not playing";
+        case "phone":
+            return Phone.activeCall ? `On a call · ${Phone.callTime}` : Phone.unread > 0 && Phone.connected ? `${Phone.statusLine} · ${Phone.unread} unread` : Phone.statusLine;
         }
         return "";
     }
@@ -443,6 +449,8 @@ Singleton {
             }
         case "nowPlaying":
             return player?.isPlaying ? "󰏤" : "󰐊";
+        case "phone":
+            return Phone.activeCall ? "󰏶" : Phone.glyph;
         }
         return control(id)?.icon ?? "";
     }

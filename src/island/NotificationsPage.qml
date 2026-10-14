@@ -100,7 +100,7 @@ Item {
 
                         Text {
                             Layout.fillWidth: true
-                            text: `${row.modelData.appName}  ·  ${row.modelData.summary}`
+                            text: `${Notifications.appLabel(row.modelData)}  ·  ${row.modelData.summary}`
                             color: Theme.islandText
                             font.family: Theme.fontUi
                             font.pixelSize: 12

@@ -12,11 +12,14 @@ Item {
     property string activity: ""
 
     readonly property var timer: Timers.primary
+    readonly property var call: Phone.activeCall ?? Phone.ringingCall
     readonly property var download: Downloads.primary
-    readonly property color tint: activity === "recording" ? Theme.urgent : activity === "timer" ? Theme.warn : Theme.accent
+    readonly property color tint: activity === "call" ? "#34c759" : activity === "recording" ? Theme.urgent : activity === "timer" ? Theme.warn : Theme.accent
 
     readonly property string heading: {
         switch (activity) {
+        case "call":
+            return Phone.callerName(call);
         case "recording":
             return "Screen Recording";
         case "focus":
@@ -30,6 +33,8 @@ Item {
     }
     readonly property string detail: {
         switch (activity) {
+        case "call":
+            return call?.connected ? `${Phone.callTime}  ·  ${Phone.deviceName}` : `${Phone.callStateLabel(call)}  ·  ${Phone.deviceName}`;
         case "recording":
             return `${FocusTimer.format(Recorder.elapsed)}${Recorder.paused ? "  ·  paused" : ""}`;
         case "focus":
@@ -67,7 +72,7 @@ Item {
 
             Rectangle {
                 anchors.centerIn: parent
-                visible: root.activity === "recording" || (root.activity === "download" && root.download?.progress === undefined)
+                visible: root.activity === "recording" || root.activity === "call" || (root.activity === "download" && root.download?.progress === undefined)
                 width: 84
                 height: 84
                 radius: 42
@@ -80,6 +85,14 @@ Item {
                     height: 30
                     radius: 15
                     color: Theme.urgent
+                }
+
+                Icon {
+                    anchors.centerIn: parent
+                    visible: root.activity === "call"
+                    text: "󰏶"
+                    size: 38
+                    color: root.tint
                 }
 
                 Icon {
@@ -131,8 +144,29 @@ Item {
                 Layout.topMargin: 10
                 spacing: 12
 
+                // A call: Answer while it rings, Hang Up (audio is on the iPhone).
                 IslandButton {
-                    visible: root.activity !== "download"
+                    visible: root.activity === "call" && (root.call?.ringing ?? false)
+                    icon: "󰏲"
+                    tint: root.tint
+                    on: true
+                    onClicked: Phone.answer()
+                }
+                IslandButton {
+                    visible: root.activity === "call"
+                    icon: "󰏵"
+                    tint: "#ff3b30"
+                    on: true
+                    onClicked: root.call?.ringing ? Phone.decline() : Phone.hangup()
+                }
+                IslandButton {
+                    visible: root.activity === "call"
+                    icon: "󰍩"
+                    onClicked: Phone.openMessages("")
+                }
+
+                IslandButton {
+                    visible: root.activity !== "download" && root.activity !== "call"
                     icon: root.paused ? "󰐊" : "󰏤"
                     onClicked: {
                         if (root.activity === "recording")
@@ -151,7 +185,7 @@ Item {
                 }
 
                 IslandButton {
-                    visible: root.activity !== "download"
+                    visible: root.activity !== "download" && root.activity !== "call"
                     icon: "󰓛"
                     tint: Theme.urgent
                     onClicked: {

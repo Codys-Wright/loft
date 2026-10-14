@@ -198,6 +198,25 @@
           '';
         };
 
+        phone = {
+          enable = lib.mkEnableOption ''
+            the iPhone bridge for Loft's phone feature: installs tether
+            (github.com/zackb/tether) and runs its daemon, `tetherd`, as a user
+            service (upstream's own unit, tetherd.service). Loft's Phone service
+            talks to its socket, $XDG_RUNTIME_DIR/tetherd.sock. The Bluetooth
+            half needs the system too — BlueZ with `Experimental = true` and the
+            Hands-Free class unit (tether-btclass@hciN) — see
+            docs/research/phone-integration.md and Settings → Phone. Turn the
+            feature on in Settings → Features → iPhone once the phone is paired
+          '';
+          package = lib.mkOption {
+            type = lib.types.package;
+            default = pkgs.tether;
+            defaultText = lib.literalExpression "pkgs.tether";
+            description = "The tether package (tetherd, the `tether` CLI, tether-gtk).";
+          };
+        };
+
         gtk = lib.mkOption {
           type = lib.types.bool;
           default = true;
@@ -243,7 +262,8 @@
         home.packages = [
           sp.loft
           sp.loft-launcher
-        ];
+        ]
+        ++ lib.optional cfg.phone.enable cfg.phone.package;
 
         # `loft` in terminals sees the same library as the shell.
         home.sessionVariables.LOFT_LIBRARY = library;
@@ -319,6 +339,33 @@
               command = "${lib.getExe pkgs.niri} msg action power-off-monitors";
             };
           events.before-sleep = lockCmd;
+        };
+
+        # The iPhone bridge (programs.loft.phone): upstream's tetherd.service,
+        # with the store path. Not tied to the graphical session — tetherd runs
+        # without Wayland, it just skips clipboard sync then.
+        systemd.user.services.tetherd = lib.mkIf cfg.phone.enable {
+          Unit = {
+            Description = "Tether daemon, bridging an iPhone to this computer";
+            Documentation = "https://github.com/zackb/tether";
+            After = [
+              "dbus.socket"
+              "network.target"
+              "bluetooth.target"
+            ];
+            StartLimitIntervalSec = 60;
+            StartLimitBurst = 3;
+          };
+          Service = {
+            Type = "simple";
+            ExecStart = "${cfg.phone.package}/bin/tetherd";
+            Restart = "on-failure";
+            RestartSec = 3;
+            # tetherd keeps its own log in $XDG_STATE_HOME/tether.
+            StandardOutput = "null";
+            StandardError = "journal";
+          };
+          Install.WantedBy = [ "default.target" ];
         };
 
         systemd.user.services.loft-launcher = service "Loft launcher (walker + elephant)" "${lib.getExe sp.loft-launcher} service";
