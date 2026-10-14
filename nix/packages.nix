@@ -212,7 +212,7 @@
               if [ -z "$qdbus" ]; then
                 echo "studio-dev: --output needs KDE's qdbus; ignoring" >&2
               else
-                sed "s/@OUTPUT@/$output/g" ${./dev/kwin-place.js} > "$dir/kwin-place.js"
+                sed -e "s/@OUTPUT@/$output/g" -e "s/@PID@/$niri_pid/g" ${./dev/kwin-place.js} > "$dir/kwin-place.js"
                 id="$("$qdbus" org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$dir/kwin-place.js" studio-dev-place)"
                 "$qdbus" org.kde.KWin "/Scripting/Script$id" org.kde.kwin.Script.run >/dev/null
                 # Stay loaded long enough to catch the window being mapped.
