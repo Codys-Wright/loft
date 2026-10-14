@@ -16,6 +16,8 @@
 #                          mouse + keyboard) and loft-shot (screenshots), see
 #                          docs/TESTING.md
 #
+# Both sessions include <state>/overrides/spaces.kdl once, after the theme
+# (`loft-niri space render`: the spaces' workspaces, rules and binds).
 # Both sessions include <state>/overrides/niri.kdl FIRST (niri uses the first
 # `output` block matching a monitor, so output overrides must come first) and
 # LAST (every other section merges, later wins). Both expose their entry
@@ -164,6 +166,7 @@
             include "${../niri}/base.kdl"
             include "${shellBinds}"
             include optional=true "$state/current/niri.kdl"
+            include optional=true "$state/overrides/spaces.kdl"
             include optional=true "$state/overrides/niri.kdl"
             spawn-at-startup "${lib.getExe self'.packages.loft-shell}"
             spawn-at-startup "${lib.getExe self'.packages.loft-launcher}" "service"

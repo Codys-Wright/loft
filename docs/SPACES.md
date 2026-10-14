@@ -1,6 +1,8 @@
 # Spaces: functional desktops across every display
 
-Status: **spec**, nothing here is implemented yet. It is designed together with
+Status: **P0–P2 implemented** on the `spaces` branch (test infra, spikes, model, roles,
+`spaces.kdl` render, activation in `loft-niri space …`); P3–P8 are spec. See §10 for
+the status and §3.4 for what the spikes measured. It is designed together with
 [THEME-ARCHITECTURE.md](THEME-ARCHITECTURE.md), which defines how a space can carry a
 theme or its own wallpapers, and it reuses the display-role model of the `wallsets`
 branch. Names are the Loft names (`loft`, `loft-niri`, `~/.local/state/loft`).
@@ -68,6 +70,11 @@ and Gaming.
   working.
 - `apps[]` is what the space launches or gathers on that display, in column order (§4).
 - `theme`, `facets`, `wallpapers`, `dock`, `menubar`, `focus`, `bar`, `startup`: §5.
+- A binding may carry `layout` (niri workspace `layout {}` overrides as KDL-in-JSON:
+  `{"struts": {"top": 0}, "focus-ring": {"off": true}}`): it lives on the binding,
+  `displays.main.layout`, next to the workspace it changes.
+- `focus` is the Do Not Disturb object (above). Where keyboard focus lands on
+  activation is `target: "main" | "stay"` (§3.1); the two used to share the name.
 
 ### 2.2 A template: Project
 
@@ -160,23 +167,25 @@ display that should keep focus.
 activate(space S, from display F):
   plan = resolve_roles(live outputs, S.displays)            # display → binding (workspace | keep)
   ensure(S, plan)                                           # §3.2: create/rename/move missing workspaces
-  order = [d for d in plan if plan[d] != keep and d != target]
-          sorted by distance from target, farthest first   # each focus jump stays short
-  target = main               (default: `focus: "main"`)
-         | F if F is bound in S   (`focus: "stay"`)
+  target = main               (default: `target: "main"`)
+         | F if F is bound in S   (`target: "stay"`)
+  order = [d for d in plan if plan[d] != keep and d != target
+                           and plan[d] isn't already active on d]   # no needless focus hop
+          sorted by distance from target, farthest first
+  if order: FocusWorkspace { reference: { Name: plan[target].workspace } }   # first (§3.4)
   for d in order:   FocusWorkspace { reference: { Name: plan[d].workspace } }
   FocusWorkspace    { reference: { Name: plan[target].workspace } }   # last: keyboard focus lands here
   emit SpaceActivated(S)   → shell: island banner, dock, menu bar, DND, theme (§5)
 ```
 
 - All actions go over **one** connection to niri's socket, back to back, with no reads
-  in between, so they land in the same frame or the next. The workspace-switch
-  animations of all displays run together. Measured target: under 2 frames between the
-  first and last output switching (phase P0 verifies it).
-- The focus ring on intermediate displays is visible for one frame at most. With niri
-  `input { warp-mouse-to-focus }` on, the pointer travels with each focus. That's
-  harmless, because it ends on `target`, but Loft warns in Settings → Spaces when warp
-  is on.
+  in between. niri applies them about 0.1 ms apart, and every display switches within
+  two frames (§3.4). The workspace-switch animations are clock-based, so they run
+  together whatever frame they first show up in.
+- The target is focused **first and last**: the one early frame niri renders already
+  shows the target focused, so no rendered frame has the focus ring on an intermediate
+  display. Intermediate windows still get keyboard focus for well under a millisecond,
+  and the pointer jumps to the target display's center (§3.4).
 - Windows keep their focus history per workspace, so the last-focused window on
   `target` gets keyboard focus. That is the editor in a Project, REAPER in Music.
 - Activating the space that is already active refocuses `main` and restores any `keep`
@@ -191,10 +200,16 @@ activate(space S, from display F):
 | Space kind | How its workspaces exist |
 |---|---|
 | Singletons | Declared in the generated `spaces.kdl` (`workspace "music" { open-on-output "<identity>" }`), with the identity resolved from the role when the file is rendered. Declared named workspaces exist from niri start, so `open-on-workspace` rules work at login. |
-| Instances | Created at runtime: claim the empty workspace niri keeps last on the role's output with `SetWorkspaceName { name, workspace }` (the technique `MenuState.qml` uses for `hidden-<output>`), then `MoveWorkspaceToIndex` to sit in space order. Named workspaces are kept when empty. Instances are also written to `spaces.kdl` on the next render, so they survive a niri restart. |
+| Instances | Created at runtime: claim the empty workspace niri keeps last on the role's output with `FocusMonitor` + `SetWorkspaceName { name, workspace: Id }` (the technique `MenuState.qml` uses for `hidden-<output>`), then `MoveWorkspaceToIndex` to sit in space order. Named workspaces are kept when empty (§3.4). The `FocusMonitor` works around a niri 26.04 bug: it only appends the next empty workspace when the renamed one is on the *focused* monitor. The new empty workspace's id is unknown until niri reports it, so a second creation on one display takes another round (`loft-niri space focus` loops, at most 4 rounds). Instances are also written to `spaces.kdl` on the next render, so they survive a niri restart. |
 
 `spaces.kdl` is re-rendered when spaces change and when the display layout changes
 (`Displays.qml` already watches outputs). Roles move with the desk, identities don't.
+
+At niri's start, declared workspaces appear in config order (each display shows its
+first). But workspaces that a config **reload** declares are each inserted at the top of
+their display, so a render on a running niri lists them in reverse. `loft-niri space
+render` therefore runs `space order` after the reload: every display gets the spaces'
+workspaces first, in space order, and unowned ones keep their order after them.
 
 ### 3.3 Fewer displays than roles
 
@@ -207,10 +222,78 @@ decides what happens:
 | `"columns"` | The role's apps are gathered into the main workspace as columns: `left` apps before, `right` apps after. Good for one ultrawide. |
 | `"skip"` | The role's apps aren't launched while the display is missing. |
 
-When the display comes back, niri moves a workspace back to the output it was created
-on (it remembers that output). For workspaces Loft created while the display was absent,
-Loft issues `MoveWorkspaceToMonitor` to the role's output, triggered by the outputs
-change.
+When a display is unplugged, niri moves its workspaces to its **first** monitor (the
+one connected first, not necessarily `main`), appended in order. For `stack`, `ensure`
+moves the role's workspace to main's display (`MoveWorkspaceToMonitor`) right below the
+space's main workspace (`MoveWorkspaceToIndex`).
+
+When the display comes back, niri moves back the workspaces *it* displaced (it remembers
+their output). An explicit `MoveWorkspaceToMonitor` re-homes a workspace, so folded
+workspaces (and ones Loft created while the display was absent) don't come back by
+themselves. `ensure` notices that they are on the wrong display and moves them back,
+on the next activation (and, from P4 on, when the outputs change).
+
+### 3.4 What P0 measured
+
+Everything below was measured in headless multi-output sessions (`loft-dev --session
+spaces --outputs 1440x2560,5120x1440,2560x1440`, niri 26.04 + the dev-only patch in
+TESTING.md). Actions and frames were timed with niri's debug log, frame pacing was 60 Hz,
+and screenshots are in the P0/P2 report.
+
+**Multi-output test sessions.** niri's nested (winit) backend has exactly one output, so
+the spec's "headless sway with several outputs" can't give niri several. `loft-dev
+--outputs` runs niri on its own headless backend instead, made usable at runtime by a
+small patch (`nix/dev/niri-headless-outputs.patch`, used only for `--outputs`): virtual
+outputs `headless-N` (identity `niri headless N`), 60 Hz frame pacing, screencopy
+(`loft-shot` works), and `niri msg output headless-N off|on` as a real hotplug.
+
+1. **Do runtime-named workspaces persist when empty?** Yes. A workspace named with
+   `SetWorkspaceName` stays when empty and unfocused, through focus changes, a config
+   reload (`load-config-file`) and an unplug/replug of its display. Two caveats:
+   - the `niri msg action set-workspace-name --workspace N` CLI reads `N` as an *index
+     on the focused monitor*, not an id. Use IPC with `{"Id": n}`, as `loft-niri` does;
+   - naming a workspace on a non-focused monitor doesn't add the trailing empty workspace
+     (niri bug, `layout/mod.rs` `set_workspace_name` only checks the active monitor). So
+     `ensure` focuses that monitor first (§3.2).
+2. **Are pipelined IPC requests applied in one frame?** Not strictly, but close. niri
+   handles one request per event-loop turn: each action waits for an idle callback before
+   the next line is read. Pipelined on one connection, 3–4 actions were all applied
+   within 0.4–0.9 ms (20 runs: median 0.48 ms, worst 14.8 ms). An idle display renders
+   right after the first action, though. So frame 1 (+0.2 ms) shows only the first
+   action, and frame 2 (+17 ms at 60 Hz) shows the final state. In all 20 runs the last
+   action landed before frame 2. Separate `niri msg` processes spread the same actions
+   over 19–30 ms and 3 frames. That's why the binds call `loft-niri` (one pipelined
+   connection), and why the target is focused first: the early frame is then the target
+   already switched and focused, not some intermediate display. On real monitors each
+   output has its own vblank, so "one frame" across displays doesn't exist anyway. The
+   switch animations are clock-based and start within a millisecond of each other.
+3. **Does `MoveWorkspaceToIndex` keep the order across hotplug?** Yes, as long as
+   nothing reorders the workspaces while their display is away. `MoveWorkspaceToIndex`'s
+   `index` is 1-based. On unplug, the display's workspaces are appended to niri's first
+   monitor in their order. On replug, they return in the order they have *there*: a
+   reorder while away carries over, and a workspace moved explicitly with
+   `MoveWorkspaceToMonitor` doesn't return at all (§3.3).
+4. **Is the focus flash / pointer warp of "activate without focus" visible?**
+   - **Focus flash:** with the target-first-and-last order, no rendered frame showed the
+     focus ring on an intermediate display (20/20 runs). With plain farthest-first
+     order, the first frame does (one frame, 17 ms at 60 Hz).
+   - **Focus events:** intermediate windows still get keyboard focus for well under a
+     millisecond. The event stream shows `WindowFocusChanged` for each, and apps may
+     redraw focus-dependent UI (terminal cursor, GTK backdrop). **P4:** Spaces.qml and
+     the bar must not react to focus events mid-activation (debounce, or wait for
+     `SpaceActivated`).
+   - **Pointer warp: visible.** `FocusWorkspace` on another display centers the pointer
+     on that display (`move_cursor_to_output`) whether or not `warp-mouse-to-focus` is
+     on. Measured: the pointer at (3000,700) on main ended at main's center (4000,720)
+     after activating a space whose other displays had to switch. It jumps only when a
+     non-target display actually switches; displays already showing their workspace are
+     skipped.
+   - **Fix:** a small upstream niri action that switches a monitor's active workspace
+     without focusing it (`focus-workspace --no-focus` / `SetActiveWorkspace`). It
+     removes the warp and the focus events. It's a few lines in `input/mod.rs`
+     (`monitor.activate_workspace(idx)` without `focus_output`), but it needs a new
+     `niri-ipc` variant, so it's for upstream, or a Loft-carried niri patch (open
+     question Q-S1).
 
 ## 4. Spinning up and restoring apps
 
@@ -324,8 +407,10 @@ space never changes the global theme selection: leaving it re-applies the global
 | Mod+Ctrl+Space | space switcher overlay (the app switcher's layout, `src/switcher/`, listing spaces with their windows) |
 | Mod+Alt+PageUp / PageDown | niri's own per-output workspace up / down (the escape hatch) |
 
-These are generated into `spaces.kdl` as `spawn "loft-niri" "space" "focus" "3"` and so
-on. Plain Mod+PageUp / PageDown stop meaning "the next niri workspace on this output":
+These are generated into `spaces.kdl` as `spawn "loft-niri" "space" "focus" "music"` and
+so on, by space **id** rather than position, so a stale `spaces.kdl` never switches to the
+wrong space. Mod+Ctrl+Space is already the Radial Menu (`niri/shell-binds.kdl.in`), so
+the space switcher overlay needs another key (P6, open question Q-S4). Plain Mod+PageUp / PageDown stop meaning "the next niri workspace on this output":
 with spaces they move between spaces too, so the displays never get out of step.
 
 ### 6.3 Spotlight, island, overview
@@ -368,6 +453,14 @@ repo: spaces/templates/{project,main,music,video,communication,gaming,task}.json
 The Loft session includes it after `base.kdl` and the theme fragment. A consumer like the
 fleet includes it last, through `~/.config/loft/niri.kdl` as it does with
 `overrides/niri.kdl`, so its binds and declarations win over earlier duplicates.
+
+Library location (P1): `$LOFT_SPACES_DIR`, else `~/Documents/Loft/Spaces`;
+`LOFT_LIBRARY=none` uses the built-ins only. Built-in templates are compiled into
+`loft-niri`. As soon as the library has any singleton `<id>.json`, the library's
+singletons replace the built-in set (seeding copies them there first). Settings →
+Displays' main display is read from `overrides/shell.json` `displays.main`. Sessions
+include `overrides/spaces.kdl` **once**, after the theme fragment (a workspace declared
+twice exists twice).
 
 **Defaults from Nix** (PLAN §4.1 layering): `programs.loft.spaces` takes JSON
 (`lib.importJSON ./spaces/music.json`) as consumer defaults, and the library files are
@@ -456,7 +549,9 @@ loft space set <id> <path> <value>           # loft space set music theme.theme 
 loft space move-window <id> [--role R]       # Mod+Shift+N
 loft space render                            # spaces.kdl (+ niri validate) and the elephant menu
 loft space import-niri <config.kdl>          # §8 proposal, read-only
-loft-niri space focus|ensure|plan <id> [--json]   # the fast path; `plan` prints the action list without sending it
+loft-niri space focus|ensure|move-window <id|n>    # the fast path (P2, implemented)
+loft-niri space next | prev | order | list [--archived] | render [--dry-run] [--no-binds]
+loft-niri space plan <id|n> [--move-window] [--from-file STATE.json]   # the action list, not sent
 ```
 
 ## 10. Implementation plan
@@ -472,6 +567,30 @@ loft-niri space focus|ensure|plan <id> [--json]   # the fast path; `plan` prints
 | **P6. Creation UX** | `cli/loft` `space` commands, Spotlight provider, New Project sheet, Settings → Spaces page, space switcher overlay | P2, P3, P4 | P5 |
 | **P7. Later** | Spaces overview, Task space design | P4 | — |
 | **P8. Fleet migration** | `~/.flake` changes, reviewed by Cody (`import-niri` output as a starting point) | P2, P4 | — |
+
+**Status (2026-10-14, branch `spaces`).**
+
+- **P0 done.** `loft-dev --outputs` (multi-output headless sessions, documented in
+  TESTING.md). Spike answers are in §3.4.
+- **P1 done.** `crates/loft-niri/src/spaces/{model,expr,roles,render}.rs`,
+  `schemas/space-1.json`, `spaces/templates/{main,music,video,comms,gaming,task,
+  project}.json`. Roles are checked against the wallsets fixtures. Golden `spaces.kdl`
+  files (Cody's desk, a laptop) are in `crates/loft-niri/tests/golden/` and pass `niri
+  validate` with `base.kdl`. All of it runs in `nix flake check` (crate tests, clippy,
+  `tests/test_spaces_schema.py`).
+- **P2 done.** `spaces/plan.rs` (pure `activate` / `ensure_only` / `move_window` /
+  `order_all` / `step`, with golden action lists for focus order, keep, already-shown
+  displays, target stay/main, fold stack/columns/skip, creation rounds, wrong-display
+  moves and space order), `spaces/live.rs` (pipelined IPC), and `loft-niri space …`.
+  Exercised live in a 3-output session: activating each space, next/prev, move-window,
+  unplug/fold/replug, runtime-created instances, multi-round creation, render + order.
+- **Not done in P2:** "activating the active space restores `keep` displays that were
+  switched by hand" (§3.1) needs per-space memory of what the keep displays showed,
+  which belongs in P3's `runtime.json`. `columns` fold only skips the workspace; moving
+  the apps in is P3.
+- **Decisions taken while implementing** (each noted where it applies): `target` vs
+  `focus`, `layout` on the binding, binds by id, `space order` after render, Comms' id
+  is `comms` (file `comms.json`, name "Communication").
 
 **Tests.**
 
@@ -528,3 +647,18 @@ loft-niri space focus|ensure|plan <id> [--json]   # the fast path; `plan` prints
 
 Also decided: the AOC monitor (`HDMI-A-2`) is matched by identity in the fleet's
 `outputs.kdl` (fleet fix, independent of spaces).
+
+### Open questions from P0–P2
+
+- **Q-S1.** Carry a Loft niri patch for "activate a workspace without focusing" (removes
+  the pointer jump and the intermediate focus events, §3.4), or only propose it
+  upstream?
+- **Q-S2.** `code` (today's generic editor workspace on the center) has no space, since
+  §12.6 lists none. Keep it as an unowned utility workspace like `lab`, add it back as
+  a "Programming" singleton, or let the editor rules target the active Project?
+- **Q-S3.** Main binds `left` as `keep` (like Music and Gaming), so the left display
+  keeps chat. Should Main show something of its own there instead?
+- **Q-S4.** Mod+Ctrl+Space (§6.2's space switcher) is taken by the Radial Menu. Which
+  key should the switcher get?
+- **Q-S5.** Cody's AOC (`HDMI-A-2`, x=-2560) becomes `left-2`. No built-in space binds
+  it, so it's always `keep`. Is that right?

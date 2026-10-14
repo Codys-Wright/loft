@@ -200,7 +200,7 @@ pub fn is_known_role(role: &str) -> bool {
 }
 
 /// A space on a live layout: which workspace each display shows.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Default)]
 pub struct Resolution {
     /// The main display (None: no displays).
     pub main: Option<Display>,

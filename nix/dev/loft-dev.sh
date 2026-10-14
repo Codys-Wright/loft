@@ -351,8 +351,10 @@ if [ "$named" = 1 ]; then
   launcher_env="\"XDG_CACHE_HOME=$dir/cache\" \"LOFT_SCRIPTS_DIR=$dir/scripts\" \"LOFT_LAUNCHER_DRYRUN=$dir/launcher-dryrun.log\" "
 fi
 
-# The theme fragment comes after base.kdl so it wins, then dev-local,
-# then the runtime overrides (also first: see the header comment).
+# The theme fragment comes after base.kdl so it wins, then dev-local, then
+# the spaces (`loft-niri space render`; included once: a workspace declared
+# twice exists twice), then the runtime overrides (also first: see the
+# header comment).
 cat > "$dir/config.kdl" <<EOF
 include optional=true "$dir/overrides/niri.kdl"
 $output_kdl
@@ -360,6 +362,7 @@ include "$root/niri/base.kdl"
 include "$dir/shell-binds.kdl"
 include optional=true "$dir/current/niri.kdl"
 include optional=true "$root/niri/dev-local.kdl"
+include optional=true "$dir/overrides/spaces.kdl"
 include optional=true "$dir/overrides/niri.kdl"
 $extra_kdl
 spawn-at-startup "env" $launcher_env"LOFT_STATE_DIR=$dir" "LOFT_LAUNCHER_DIR=$root/launcher" "LOFT_SHELL_SRC=$root/src" "loft-launcher" "service"

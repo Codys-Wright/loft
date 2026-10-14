@@ -120,6 +120,73 @@ enum Cmd {
         #[command(flatten)]
         flags: RenderFlags,
     },
+    /// Spaces (docs/SPACES.md): list, activate, render spaces.kdl.
+    Space {
+        #[command(flatten)]
+        opts: SpaceOpts,
+        #[command(subcommand)]
+        cmd: SpaceCmd,
+    },
+}
+
+#[derive(clap::Args)]
+struct SpaceOpts {
+    /// Space documents (default: $LOFT_SPACES_DIR, else ~/Documents/Loft/Spaces;
+    /// LOFT_LIBRARY=none: built-ins only).
+    #[arg(long, global = true)]
+    spaces_dir: Option<PathBuf>,
+    /// The main display, connector or identity (default: Settings → Displays,
+    /// else the largest).
+    #[arg(long, global = true)]
+    main: Option<String>,
+}
+
+#[derive(Subcommand)]
+enum SpaceCmd {
+    /// The spaces in order (Mod+1…9), with their workspaces per role.
+    List {
+        /// Include archived instances.
+        #[arg(long)]
+        archived: bool,
+    },
+    /// Activate a space (id, or its position 1…9): every display it binds.
+    Focus { space: String },
+    /// Create / move the space's workspaces where they belong; no switching.
+    Ensure { space: String },
+    /// Print the actions `focus` would send, without sending them.
+    Plan {
+        space: String,
+        /// Plan `move-window` instead of `focus`.
+        #[arg(long)]
+        move_window: bool,
+        /// Plan against a recorded state ({"outputs", "workspaces",
+        /// "focused_window"}) instead of the live niri.
+        #[arg(long)]
+        from_file: Option<PathBuf>,
+    },
+    /// Activate the next space (Mod+Ctrl+Right).
+    Next,
+    /// Activate the previous space (Mod+Ctrl+Left).
+    Prev,
+    /// Put each display's space workspaces in space order.
+    Order,
+    /// Move the focused window to the space's workspace on the same role
+    /// as its display (else main's), without following it.
+    MoveWindow { space: String },
+    /// spaces → <state>/overrides/spaces.kdl (validated, swapped, reloaded).
+    Render {
+        /// Print instead of writing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Leave the space binds out.
+        #[arg(long)]
+        no_binds: bool,
+        /// The command the binds run (default: loft-niri).
+        #[arg(long)]
+        bin: Option<String>,
+        #[command(flatten)]
+        flags: RenderFlags,
+    },
 }
 
 #[derive(Subcommand)]
@@ -483,6 +550,7 @@ fn run(cli: Cli) -> Result<()> {
                 "overrides reset".into()
             });
         }
+        Cmd::Space { opts, cmd } => space_cmd(&paths, entry, j, opts, cmd)?,
         Cmd::Apply { data, flags } => {
             let text = match data {
                 Some(d) => d,
@@ -564,4 +632,185 @@ fn change_json(c: &OutputChange) -> Value {
         m.insert("off".into(), json!(off));
     }
     Value::Object(m)
+}
+
+fn space_cmd(
+    paths: &Paths,
+    entry: Option<&std::path::Path>,
+    j: bool,
+    opts: SpaceOpts,
+    cmd: SpaceCmd,
+) -> Result<()> {
+    use loft_niri::spaces::model::{Binding, Catalog, Env, library_dir};
+    use loft_niri::spaces::{live, plan, render as srender, roles};
+
+    let dir = opts.spaces_dir.or_else(library_dir);
+    let cat = Catalog::load(dir.as_deref(), &Env::from_process(&paths.state));
+    for p in &cat.problems {
+        eprintln!("loft-niri: spaces: {p}");
+    }
+    let main = opts.main.or_else(|| live::main_from_settings(&paths.state));
+    let find = |key: &str| {
+        cat.find(key).with_context(|| {
+            let ids: Vec<_> = cat.active().iter().map(|s| s.id.clone()).collect();
+            format!("no space `{key}` (spaces: {})", ids.join(", "))
+        })
+    };
+    let report = |plans: &[plan::Plan]| {
+        let v = json!({ "ok": true, "rounds": plans });
+        print(j, &v, || {
+            plans
+                .iter()
+                .flat_map(|p| p.notes.iter().cloned())
+                .collect::<Vec<_>>()
+                .join("\n")
+        });
+    };
+    match cmd {
+        SpaceCmd::List { archived } => {
+            let spaces: Vec<_> = cat
+                .spaces
+                .iter()
+                .filter(|s| archived || !s.archived)
+                .collect();
+            let active = cat.active();
+            let rows: Vec<Value> = spaces
+                .iter()
+                .map(|s| {
+                    let pos = active.iter().position(|a| a.id == s.id).map(|i| i + 1);
+                    let displays: serde_json::Map<String, Value> = s
+                        .displays
+                        .iter()
+                        .map(|(r, b)| {
+                            let v = match b {
+                                Binding::Keep => json!("keep"),
+                                Binding::Bound(b) => json!(b.workspace),
+                            };
+                            (r.clone(), v)
+                        })
+                        .collect();
+                    json!({
+                        "id": s.id, "name": s.name, "icon": s.icon, "order": s.order,
+                        "position": pos, "template": s.template, "archived": s.archived,
+                        "displays": displays, "doc": s.doc,
+                    })
+                })
+                .collect();
+            print(
+                j,
+                &json!({ "spaces": rows, "problems": cat.problems }),
+                || {
+                    rows.iter()
+                        .map(|r| {
+                            let pos = r["position"].as_u64().map_or(" ".into(), |p| p.to_string());
+                            let ws: Vec<String> = r["displays"]
+                                .as_object()
+                                .unwrap()
+                                .iter()
+                                .map(|(k, v)| format!("{k}={}", v.as_str().unwrap_or("")))
+                                .collect();
+                            format!(
+                                "{pos} {} {:24} {:16} {}",
+                                r["icon"].as_str().unwrap_or(" "),
+                                r["name"].as_str().unwrap_or(""),
+                                r["id"].as_str().unwrap_or(""),
+                                ws.join("  ")
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                },
+            );
+        }
+        SpaceCmd::Focus { space } => report(&live::focus(&cat, find(&space)?, main)?),
+        SpaceCmd::Ensure { space } => {
+            let s = find(&space)?;
+            let order = cat.active();
+            report(&live::run(main, |st| plan::ensure_only(st, s, &order))?)
+        }
+        SpaceCmd::MoveWindow { space } => {
+            let s = find(&space)?;
+            let order = cat.active();
+            report(&live::run(main, |st| plan::move_window(st, s, &order))?)
+        }
+        SpaceCmd::Order => {
+            let order = cat.active();
+            report(&live::run(main, |st| plan::order_all(st, &order))?)
+        }
+        SpaceCmd::Next | SpaceCmd::Prev => {
+            let forward = matches!(cmd, SpaceCmd::Next);
+            let st = live::read_state(main.clone())?;
+            let s = plan::step(&st, &cat, forward).context("no spaces")?;
+            report(&live::focus(&cat, s, main)?)
+        }
+        SpaceCmd::Plan {
+            space,
+            move_window,
+            from_file,
+        } => {
+            let s = find(&space)?;
+            let st = match from_file {
+                Some(f) => live::state_from_file(&f, main)?,
+                None => live::read_state(main)?,
+            };
+            let order = cat.active();
+            let p = if move_window {
+                plan::move_window(&st, s, &order)
+            } else {
+                plan::activate(&st, s, &order)
+            };
+            // The plan is JSON either way: the actions as niri's IPC takes them.
+            println!("{}", serde_json::to_string_pretty(&p)?);
+        }
+        SpaceCmd::Render {
+            dry_run,
+            no_binds,
+            bin,
+            flags,
+        } => {
+            let displays = match loft_niri::live_outputs() {
+                Some(o) => roles::displays_from_niri(&o),
+                None => {
+                    eprintln!(
+                        "loft-niri: niri isn't reachable; workspaces are declared without displays"
+                    );
+                    Vec::new()
+                }
+            };
+            let opts = srender::RenderOpts {
+                bin: bin.as_deref().unwrap_or("loft-niri"),
+                binds: !no_binds,
+            };
+            let text = srender::render(&cat.active(), &displays, main.as_deref(), &opts);
+            if dry_run {
+                print!("{text}");
+                return Ok(());
+            }
+            let written = live::render_to_disk(
+                &paths.state,
+                &text,
+                entry,
+                !flags.no_validate,
+                !flags.no_reload,
+            )?;
+            let path = live::spaces_kdl(&paths.state);
+            // Workspaces a reload declares land in reverse order; fix it.
+            if written && !flags.no_reload && loft_niri::ipc::available() {
+                let order = cat.active();
+                live::run(main.clone(), |st| plan::order_all(st, &order))?;
+            }
+            print(
+                j,
+                &json!({ "ok": true, "written": written, "path": path }),
+                || {
+                    if written {
+                        format!("wrote {}", path.display())
+                    } else {
+                        format!("{} is up to date", path.display())
+                    }
+                },
+            );
+        }
+    }
+    Ok(())
 }
