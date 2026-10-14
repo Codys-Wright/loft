@@ -166,10 +166,65 @@ services.displayManager.sddm = {
 security.pam.services.loft-lock = { };     # + LOFT_LOCK_PAM=loft-lock in the shell's environment
 ```
 
-## Spotlight: apps, !bangs and Quicklinks
+## Spotlight: a command bar
 
-`Mod+Space` opens Spotlight (walker + elephant, `loft-launcher`). Besides apps, windows,
-the calculator and niri actions:
+`Mod+Space` opens Spotlight (walker + elephant, `loft-launcher`). Plain queries find apps
+(fuzzy, plus how often you open them; an empty query lists your recent ones), open windows,
+commands, your script commands, answers and the web. Prefixes narrow it; `?` lists them all:
+
+| Type | |
+|---|---|
+| `firefox`, `foot` | apps and open windows ("switch to") |
+| `lock`, `shut down`, `restart`, `log out`, `sleep`, `empty trash` | ask first: the query becomes "Shut Down?" with one row, Enter runs it, Esc cancels. Sleep warns on NVIDIA machines (they may not wake) |
+| `dnd`, `caffeine`, `turn off displays` | Do Not Disturb, Keep Awake, displays off |
+| `settings wifi`, `wallpaper settings`, `keybinds` | every Settings page and Control Center module |
+| `themes`, `quick panel`, `port manager`, `flake updates`, `cleaner`, `system monitor` | Loft's panels and Utilities |
+| `maximize`, `float`, `center`, `overview`, `close window` | a curated set of niri window actions (all ~130 are under `;` → Niri Actions) |
+| `5 km to mi`, `72f to c`, `1 GiB in MB`, `15% of 80`, `2^10` | the calculator: Enter copies the answer, Ctrl+Enter just the number |
+| `100 usd in eur`, `$20 to ¥` | currencies (rates: below) |
+| `3pm PT in Berlin`, `9:30 tokyo to london`, `time in Sydney` | time zones |
+| `generate password 32`, `copy wifi ip`, `dark mode` | script commands, with their arguments after the title |
+| `=` `!` `/` `:` `.` `$` `>` `+` `;` | calculator, web, files (with image / text / PDF previews), clipboard, emoji, windows, shell command, todo, providers |
+
+### Calculator
+
+Math, units and currencies are libqalculate's (`qalc`, with its own config dir so your qalc
+settings stay yours); the query is normalized first ("in", "as", "→" mean "to"; `72f` is °F;
+one target unit, no "3 mi + 188 yd"), and anything qalc only half understood ("5 apples") is
+dropped instead of shown as unit soup. Time zones are the provider's own: city names from the
+tz database, abbreviations (PT, ET, CET, IST, JST, …) and UTC offsets. Currency rates are the
+ones qalc has; Settings → Spotlight → *Update currency rates daily* lets it download fresh ones
+(once a day, nothing otherwise). `launcher/elephant-calculator`; it replaces elephant's `calc`,
+which downloads rates at every start.
+
+### Script commands
+
+Raycast's script commands: executable files with metadata comments, in
+`~/.local/share/loft/scripts` (yours) and `launcher/scripts` (built in: Toggle Dark Mode,
+Restart Shell, Copy Wi-Fi IP, Flake Update Summary, Generate Password). A user script with a
+built-in's file name replaces it.
+
+```bash
+#!/usr/bin/env bash
+# @raycast.schemaVersion 1
+# @raycast.title Generate Password
+# @raycast.mode compact            # silent | compact | fullOutput
+# @raycast.icon 🔑                 # emoji, icon name or image path
+# @raycast.packageName Utilities
+# @raycast.argument1 { "type": "text", "placeholder": "length", "optional": true }
+# @raycast.needsConfirmation false
+# @keyword password, random        # Loft: more names to type
+```
+
+Raycast's community scripts work as they are. Type the title; arguments follow it
+(`generate password 32`) or Enter/Tab on a script that needs some types the title for you.
+`silent` shows a banner only when the script prints something, `compact` its last line,
+`fullOutput` every line in Spotlight (Enter copies one). Failures show the last line as a
+banner. Ctrl+E edits a script, Ctrl+R shows its folder. Settings → Spotlight lists them with a
+switch each (`scripts.disabled` in `spotlight.json`), New Script (a template in your folder)
+and Open Folder. `launcher/elephant-commands`.
+
+### !bangs and Quicklinks
 
 | Type | |
 |---|---|
@@ -188,12 +243,13 @@ URL with `%TERM%` (without it, the link just opens the page). Add one from a ban
 reorder, test. They live in `<state>/spotlight.json`, seeded from
 `launcher/spotlight-defaults.json`, and apply on the next keystroke.
 
-How: an elephant provider, `launcher/elephant-bangs` (Go, built inside elephant's own
-derivation as `loft-elephant`, since Go plugins only load into the exact binary they were
-built with), ranks the bangs (~3 ms for all of them per keystroke) and answers plain queries
-with the quicklinks, URLs and the default engine. Scoping needs walker to let a provider set
-its query: `launcher/walker-set-query.patch` (`loft-walker`). The bang list is unduck's
-`src/bang.ts` at a pinned rev (`loft-bangs` in `nix/packages.nix`: bump `rev` and `hash`
+How: elephant providers in Go — `launcher/elephant-bangs`, `elephant-calculator` and
+`elephant-commands`, built inside elephant's own derivation as `loft-elephant` (Go plugins
+only load into the exact binary they were built with; their Go tests run in that build). The
+bangs one ranks the bangs (~3 ms for all of them per keystroke) and answers plain queries
+with the quicklinks, URLs and the default engine. Scoping (and the confirmations, script
+arguments and `?` help rows) needs walker to let a provider set its query:
+`launcher/walker-set-query.patch` (`loft-walker`). The bang list is unduck's `src/bang.ts` at a pinned rev (`loft-bangs` in `nix/packages.nix`: bump `rev` and `hash`
 to refresh), converted by `launcher/bangs.py`, which also fixes the NixOS search URLs and adds
 `!nixopts`, `!hmopts`, `!noogle` and `!kagi`.
 

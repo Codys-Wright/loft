@@ -18,6 +18,9 @@
 #   clipboard-urlclean  Clean URL's tracking-parameter stripping (src/services/urlclean.js)
 #   wallpaper-sets  display roles + set resolution (src/services/wallsets.js), against the
 #                   fixture tests/test_wallsets.py checks cli/loft/wallsets.py with
+#   launcher-bangs  Spotlight's bangs provider in a real elephant; building loft-elephant for it
+#                   also runs the calculator + commands providers' Go tests (units, time
+#                   zones, scoring, script metadata/arguments)
 #
 # After an intended output change, refresh the goldens from a checkout:
 #   for t in tokyonight latte; do rm -rf tests/golden/$t; LOFT_THEME_INDEX=none nix run .#loft -- theme render themes/$t tests/golden/$t; done

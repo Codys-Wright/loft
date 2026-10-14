@@ -99,6 +99,11 @@ Scope {
         function dock(): void {
             root.show("dock");
         }
+        // Any page by id (Spotlight's "… Settings" commands).
+        function open(section: string): void {
+            if (root.sections.some(s => s.id === section))
+                root.show(section);
+        }
     }
 
     // The niri pages show live state: re-read it whenever they're opened.

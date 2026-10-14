@@ -54,7 +54,10 @@ A named session is, by default:
     notification server and the global-menu registrar never meet the live desktop's;
   - its own `XDG_RUNTIME_DIR` (`$XDG_RUNTIME_DIR/loft-dev-NAME/run`), so the Wayland and
     IPC sockets, elephant and the clipboard cache are separate;
-  - its own cliphist db and state dir (theme, niri overrides).
+  - its own cliphist db and state dir (theme, niri overrides);
+  - its own launcher caches (`XDG_CACHE_HOME` for elephant/walker: files index, history,
+    favicons) and script-commands folder, and Spotlight's Lock / Log Out / Restart / Shut
+    Down / Sleep / Empty Trash are only logged to `<state>/launcher-dryrun.log`, never run.
 - **silent**: no audio server, so dragging the volume slider can't change the real volume.
   `--share-audio` links the host's PipeWire in, but only do that when the test is about audio.
 

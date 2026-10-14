@@ -4,9 +4,10 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Spotlight's web side (the launcher's `bangs` elephant provider,
-// launcher/elephant-bangs): Quicklinks, favorite !bangs and the default
-// search engine, in <state>/spotlight.json. The launcher seeds the file from
+// Spotlight's settings, in <state>/spotlight.json: the web side (the
+// launcher's `bangs` elephant provider, launcher/elephant-bangs) — Quicklinks,
+// favorite !bangs, the default search engine — plus currency rates (the
+// `calculator` provider) and which script commands are on (`commands`). The launcher seeds the file from
 // launcher/spotlight-defaults.json and its provider re-reads it on change, so
 // edits here apply on the next keystroke. Edited in Settings → Spotlight.
 //
@@ -20,6 +21,10 @@ Singleton {
     readonly property var quicklinks: data.quicklinks ?? []
     readonly property var favorites: data.favorites ?? []
     readonly property string defaultEngine: data.defaultEngine || "g"
+    // Download currency rates (qalc -e) at most daily — off: qalc's last ones.
+    readonly property bool currencyRates: data.currencyRates === true
+    // Script commands turned off, by file name (launcher/elephant-commands).
+    readonly property var disabledScripts: data.scripts?.disabled ?? []
 
     // The default engine menu; any other bang or quicklink keyword works too.
     readonly property var engines: [
@@ -107,6 +112,63 @@ Singleton {
             run(["elephant", "activate", `bangs;home:${kw};open;${kw};`]);
         else
             run(["elephant", "activate", `bangs;search:${kw};search;${kw} test;`]);
+    }
+
+    function setCurrencyRates(on) {
+        save({ currencyRates: on });
+    }
+
+    // ── Script commands (the `commands` elephant provider) ──────────────
+
+    // [{ id, title, mode, path, builtin, disabled, args, pkg, icon, desc }]
+    property var scripts: []
+    // Your scripts folder (<data>/loft/scripts, or $LOFT_SCRIPTS_DIR).
+    property string scriptsDir: ""
+
+    function refreshScripts() {
+        run(["elephant", "query", "--json", "commands;#scripts;500"], out => {
+            const rows = [];
+            for (const line of out.split("\n")) {
+                if (!line.startsWith("{"))
+                    continue;
+                try {
+                    const it = JSON.parse(line).item ?? {};
+                    const info = JSON.parse(it.subtext ?? "{}");
+                    if (info.dir !== undefined)
+                        root.scriptsDir = info.dir;
+                    else
+                        rows.push(info);
+                } catch (e) {}
+            }
+            root.scripts = rows;
+        });
+    }
+
+    function setScriptEnabled(id, on) {
+        const off = disabledScripts.filter(d => d !== id);
+        if (!on)
+            off.push(id);
+        save({ scripts: Object.assign({}, data.scripts ?? {}, { disabled: off }) });
+    }
+
+    function editScript(id) {
+        run(["elephant", "activate", `commands;script:${id};edit;;`]);
+    }
+
+    // A template in your folder, opened in your editor.
+    function newScript() {
+        run(["elephant", "activate", "commands;new:New Script;new;;"], () => refreshTimer.restart());
+    }
+
+    function revealScripts() {
+        if (scriptsDir !== "")
+            run(["sh", "-c", 'mkdir -p "$1" && exec xdg-open "$1"', "sh", scriptsDir]);
+    }
+
+    Timer {
+        id: refreshTimer
+        interval: 600
+        onTriggered: root.refreshScripts()
     }
 
     // Bang search for the quicklink picker: [{ key, name, detail }].
