@@ -123,6 +123,7 @@ the bar on the display with the status area. Layout in `Settings.controlCenter.l
 | Dynamic Island (music, notifications, timers, …) | have | + calendars, downloads, lyrics, camera preview, file tools |
 | AI agents in the island | todo | Claude Code / Codex usage + live sessions from their local logs (~/.claude, ~/.codex) |
 | Command Bar | partial (walker) | + unit conversion, saved scripts, app menu commands n/a |
+| Web search: !bangs, Quicklinks, default engine | have | Spotlight (`launcher/elephant-bangs`): `!` browses/fuzzy-finds 13.5k DuckDuckGo bangs, Enter/Tab scopes (`!nixpkgs ` + term), `!yt lofi` direct; quicklinks (`yt`, `yt lofi`, `gm`) without the !; Settings → Spotlight edits the default engine, favorites and quicklinks (`<state>/spotlight.json`) |
 | Quick panel (favorite tools palette) | todo | glass palette of tools/toggles, ⌃⌘V |
 | Quick toggles | partial (CC) | + dark/light, empty trash, eject disks, lock |
 | Radial menu | todo | pointer-centred wheel of apps/tools with profiles |

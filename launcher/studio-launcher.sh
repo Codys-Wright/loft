@@ -1,7 +1,8 @@
 # studio-launcher — runs the Spotlight launcher (walker + elephant).
 #
 #   studio-launcher service   prepare walker's config and run elephant + the walker service
-#   studio-launcher [open]    open (or close) the launcher (!bangs: !yt lofi, !gh niri, !w …)
+#   studio-launcher [open]    open (or close) the launcher (!bangs: !nixpk ⏎ firefox, !yt lofi;
+#                             quicklinks: yt lofi)
 #   studio-launcher emoji     emoji / symbol picker (walker's symbols provider)
 #   studio-launcher clipboard clipboard history
 #
@@ -28,10 +29,28 @@ prepare() {
     cat "$src/walker/config.toml"
   } > "$dir/walker/config.toml"
 
-  # !bangs (elephant websearch engines). A user ~/.config/elephant/websearch.toml
-  # still wins — XDG_CONFIG_HOME comes before this dir.
+  # !bangs + Quicklinks: elephant's `bangs` provider (launcher/elephant-bangs).
+  # Quicklinks, favorites and the default engine live in spotlight.json
+  # (Settings → Spotlight; the provider re-reads it on change), seeded here.
+  # A user ~/.config/elephant/bangs.toml still wins (XDG_CONFIG_HOME first).
   mkdir -p "$dir/elephant"
-  ln -sfn "@BANGS@" "$dir/elephant/websearch.toml"
+  rm -f "$dir/elephant/websearch.toml" # the pre-provider !bangs (13k websearch engines)
+  if [ ! -e "$state_dir/spotlight.json" ]; then
+    cp "$src/spotlight-defaults.json" "$state_dir/spotlight.json.tmp"
+    chmod u+w "$state_dir/spotlight.json.tmp"
+    mv "$state_dir/spotlight.json.tmp" "$state_dir/spotlight.json"
+  fi
+  shell="${STUDIO_SHELL_SRC:-@SHELL@}"
+  cat > "$dir/elephant/bangs.toml" <<EOF
+data = "@BANGS@"
+settings = "$state_dir/spotlight.json"
+defaults = "$src/spotlight-defaults.json"
+settings_cmd = "quickshell ipc --any-display --path '$shell' call settings spotlight"
+EOF
+  # Tests: open URLs with something else than xdg-open (e.g. a logger).
+  if [ -n "${STUDIO_LAUNCHER_OPEN:-}" ]; then
+    printf 'command = "%s"\n' "$STUDIO_LAUNCHER_OPEN" >> "$dir/elephant/bangs.toml"
+  fi
 
   # Until the theme engine renders walker.css (PLAN §4.2), derive the colors
   # from the active theme.json so the launcher is themed today.

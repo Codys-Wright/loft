@@ -312,7 +312,7 @@ include optional=true "$dir/current/niri.kdl"
 include optional=true "$root/niri/dev-local.kdl"
 include optional=true "$dir/overrides/niri.kdl"
 $extra_kdl
-spawn-at-startup "env" "STUDIO_STATE_DIR=$dir" "STUDIO_LAUNCHER_DIR=$root/launcher" "studio-launcher" "service"
+spawn-at-startup "env" "STUDIO_STATE_DIR=$dir" "STUDIO_LAUNCHER_DIR=$root/launcher" "STUDIO_SHELL_SRC=$root/src" "studio-launcher" "service"
 spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_NIRI_CONFIG=$dir/config.kdl" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=@UI_FONT@" "STUDIO_ICON_FONT=@ICON_FONT@" "QML_IMPORT_PATH=@LOCK_QML_PATH@" "QT_PLUGIN_PATH=@QT_MM_PLUGINS@" "quickshell" "--path" "$root/src"
 EOF
 

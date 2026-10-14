@@ -1,0 +1,19 @@
+--- a/src/data.rs
++++ b/src/data.rs
+@@ -339,6 +339,16 @@
+                 let mut resp = SubscribeResponse::new();
+                 resp.merge_from_bytes(&payload)?;
+ 
++                // studio-linux: "menus:%SETQUERY%<text>" replaces the query
++                // text (cursor at the end) instead of opening a menu — how an
++                // elephant provider moves the launcher into a sub-search
++                // ("!nixpk" + Enter → "!nixpkgs ").
++                if let Some(text) = resp.value.strip_prefix("menus:%SETQUERY%") {
++                    let text = text.to_string();
++                    glib::idle_add_once(move || set_input_text(&text));
++                    continue;
++                }
++
+                 glib::idle_add_once(move || {
+                     set_global_provider_actions(None);
+                     set_provider(resp.value);

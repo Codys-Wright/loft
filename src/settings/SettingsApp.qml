@@ -34,6 +34,7 @@ Scope {
         { id: "features", icon: "󰐱", badge: "green", label: "Features" },
         { id: "clipboard", icon: "󰨸", badge: "yellow", label: "Clipboard & Files" },
         { id: "snippets", icon: "󱐋", badge: "brown", label: "Snippets", feature: "snippets" },
+        { id: "spotlight", icon: "󰍉", badge: "blue", label: "Spotlight" },
         { id: "menubar", icon: "󰍜", badge: "graphite", label: "Menu Bar" },
         { id: "desktopmenu", icon: "󰍝", badge: "blue", label: "Desktop Menu", feature: "desktopMenu" },
         { id: "about", icon: "󰋼", badge: "gray", label: "About" }
@@ -78,6 +79,10 @@ Scope {
         }
         function menubar(): void {
             root.show("menubar");
+        }
+        // Spotlight's Quicklinks (the launcher opens it after Create Quicklink).
+        function spotlight(): void {
+            root.show("spotlight");
         }
     }
 
@@ -575,6 +580,11 @@ Scope {
                     SnippetsPage {
                         Layout.fillWidth: true
                         visible: root.section === "snippets"
+                    }
+
+                    SpotlightPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "spotlight"
                     }
                 }
             }

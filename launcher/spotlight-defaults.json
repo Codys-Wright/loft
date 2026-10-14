@@ -1,0 +1,20 @@
+{
+  "defaultEngine": "g",
+  "favorites": ["yt", "gh", "nixpkgs", "w", "g", "ddg", "maps", "amazon", "reddit", "noogle", "nixopts", "hmopts"],
+  "quicklinks": [
+    { "id": "ql-yt", "keyword": "yt", "name": "YouTube", "bang": "yt" },
+    { "id": "ql-gh", "keyword": "gh", "name": "GitHub", "bang": "gh" },
+    { "id": "ql-np", "keyword": "np", "name": "NixOS Packages", "bang": "nixpkgs" },
+    { "id": "ql-no", "keyword": "no", "name": "NixOS Options", "bang": "nixopts" },
+    { "id": "ql-hm", "keyword": "hm", "name": "Home Manager Options", "bang": "hmopts" },
+    { "id": "ql-noogle", "keyword": "noogle", "name": "Noogle", "bang": "noogle" },
+    { "id": "ql-w", "keyword": "w", "name": "Wikipedia", "bang": "w" },
+    { "id": "ql-g", "keyword": "g", "name": "Google", "bang": "g" },
+    { "id": "ql-ddg", "keyword": "ddg", "name": "DuckDuckGo", "bang": "ddg" },
+    { "id": "ql-maps", "keyword": "maps", "name": "Google Maps", "bang": "maps" },
+    { "id": "ql-r", "keyword": "r", "name": "Reddit", "bang": "r" },
+    { "id": "ql-am", "keyword": "am", "name": "Amazon", "bang": "amazon" },
+    { "id": "ql-gm", "keyword": "gm", "name": "Gmail", "url": "https://mail.google.com/" },
+    { "id": "ql-cal", "keyword": "cal", "name": "Google Calendar", "url": "https://calendar.google.com/" }
+  ]
+}

@@ -152,6 +152,37 @@ services.displayManager.sddm = {
 security.pam.services.studio-lock = { };   # + STUDIO_LOCK_PAM=studio-lock in the shell's environment
 ```
 
+## Spotlight: apps, !bangs and Quicklinks
+
+`Mod+Space` opens Spotlight (walker + elephant, `studio-launcher`). Besides apps, windows,
+the calculator and niri actions:
+
+| Type | |
+|---|---|
+| `!` | every DuckDuckGo bang (13,574, from [unduck](https://github.com/T3-Content/unduck)): your quicklinks and favorites first, then the most used |
+| `!nixpk`, `!youtube`, `!yout` | fuzzy on the trigger, the name, the domain and the category; one row per site, with its favicon |
+| Enter or Tab on a bang | the sub-search: the query becomes `!nixpkgs ` and the row says "Search NixOS Packages". Type, Enter opens the results in your browser. Backspace on the empty term leaves |
+| `!yt lofi` | searches right away (a space after an exact trigger is the scope too) |
+| `yt` | a quicklink keyword: the top result. Enter scopes to it, `yt lofi` searches directly, `gm` opens Gmail |
+| `github.com` | Open https://github.com |
+| anything else | the last row searches the default engine |
+
+Ctrl+Enter opens a bang's site; Ctrl+K in a scope creates a quicklink for it. Settings →
+Spotlight edits the default engine (Google, DuckDuckGo, Brave, Kagi, Bing, Startpage, Ecosia
+or any bang), the favorite bangs and the quicklinks: a keyword, then a `!bang` or your own
+URL with `%TERM%` (without it, the link just opens the page). Add one from a bang search,
+reorder, test. They live in `<state>/spotlight.json`, seeded from
+`launcher/spotlight-defaults.json`, and apply on the next keystroke.
+
+How: an elephant provider, `launcher/elephant-bangs` (Go, built inside elephant's own
+derivation as `studio-elephant`, since Go plugins only load into the exact binary they were
+built with), ranks the bangs (~3 ms for all of them per keystroke) and answers plain queries
+with the quicklinks, URLs and the default engine. Scoping needs walker to let a provider set
+its query: `launcher/walker-set-query.patch` (`studio-walker`). The bang list is unduck's
+`src/bang.ts` at a pinned rev (`studio-bangs` in `nix/packages.nix`: bump `rev` and `hash`
+to refresh), converted by `launcher/bangs.py`, which also fixes the NixOS search URLs and adds
+`!nixopts`, `!hmopts`, `!noogle` and `!kagi`.
+
 ## Clipboard, snippets, shelf, scratchpad
 
 | | |

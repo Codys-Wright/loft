@@ -124,6 +124,31 @@
           installPhase = "touch $out";
         });
 
+        # Spotlight's bangs provider against a real elephant (only that
+        # provider loaded): ranking, scopes, quicklinks, URL filling.
+        launcher-bangs = check "launcher-bangs" [ pkgs.python3 ] ''
+          export HOME=$TMPDIR XDG_RUNTIME_DIR=$TMPDIR/run XDG_CONFIG_HOME=$TMPDIR/cfg XDG_CACHE_HOME=$TMPDIR/cache
+          cfg=$XDG_CONFIG_HOME/elephant
+          mkdir -p $XDG_RUNTIME_DIR $cfg
+          el=${self'.packages.studio-elephant}
+          ignored=$(cd $el/lib/elephant/providers && ls *.so | sed 's/\.so$//' | grep -vx bangs | sed 's/.*/"&"/' | paste -sd, -)
+          echo "ignored_providers = [$ignored]" > $cfg/elephant.toml
+          printf '#!/bin/sh\necho "$1" >> %s\n' $TMPDIR/opened > $TMPDIR/open
+          chmod +x $TMPDIR/open
+          {
+            echo 'data = "${self'.packages.studio-bangs}/bangs.json"'
+            echo "settings = \"$TMPDIR/spotlight.json\""
+            echo 'defaults = "${../launcher/spotlight-defaults.json}"'
+            echo "command = \"$TMPDIR/open\""
+            echo 'favicons = false'
+          } > $cfg/bangs.toml
+          $el/bin/elephant > elephant.log 2>&1 &
+          for _ in $(seq 1 100); do [ -S $XDG_RUNTIME_DIR/elephant/elephant.sock ] && break; sleep 0.1; done
+          python3 ${../tests/bangs_provider.py} $el/bin/elephant $TMPDIR/opened || { cat elephant.log; exit 1; }
+          kill %1
+          touch $out
+        '';
+
         ghostty-config = check "ghostty-config" [ pkgs.ghostty ] ''
           export HOME=$TMPDIR
           for t in ${builtin}/tokyonight ${builtin}/latte; do
