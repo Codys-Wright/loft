@@ -37,8 +37,12 @@ PanelWindow {
     property int page: 0
     readonly property int pageCount: 2
 
-    readonly property real targetWidth: expanded ? 460 : playing ? 300 : 150
-    readonly property real targetHeight: expanded ? 200 : 34
+    // A notification banner takes over the pill until it times out.
+    readonly property var banner: Notifications.current
+    readonly property bool bannering: banner !== null && !expanded
+
+    readonly property real targetWidth: expanded ? 460 : bannering ? 440 : playing ? 300 : 150
+    readonly property real targetHeight: expanded ? 200 : bannering ? 84 : 34
 
     // Input and blur follow the pill's silhouette only.
     mask: Region {
@@ -67,7 +71,7 @@ PanelWindow {
         }
         width: root.targetWidth
         height: root.targetHeight
-        radius: root.expanded ? 28 : height / 2
+        radius: root.expanded ? 28 : root.bannering ? 26 : height / 2
         showHighlight: false
         strength: 1.6
         clip: true
@@ -108,7 +112,7 @@ PanelWindow {
                 rightMargin: 14
             }
             visible: opacity > 0
-            opacity: root.expanded ? 0 : 1
+            opacity: root.expanded || root.bannering ? 0 : 1
             spacing: 10
 
             Behavior on opacity {
@@ -150,6 +154,30 @@ PanelWindow {
                 Layout.preferredWidth: 18
                 Layout.preferredHeight: 14
             }
+        }
+
+        // ── Notification banner ─────────────────────────────────────────
+        Banner {
+            anchors {
+                fill: parent
+                margins: 12
+            }
+            notification: root.banner
+            visible: opacity > 0
+            opacity: root.bannering ? 1 : 0
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 180
+                }
+            }
+        }
+
+        // Each banner stays 5s (longer while hovered via the expanded state).
+        Timer {
+            running: root.bannering
+            interval: 5000
+            onTriggered: Notifications.next()
         }
 
         // ── Expanded pages ──────────────────────────────────────────────
