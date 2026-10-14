@@ -42,11 +42,10 @@ binds {
     // IPC connection, ~5 ms); the shell sees the switch in niri's events and
     // shows the island banner. The generated spaces.kdl (included later)
     // binds Mod+1…9, Mod+Shift+1…9 and these two again, identically.
-    // Spaces binds: off until the consumer opts in (Settings → Features → Spaces and
-    // the fleet migration, SPACES.md P8) — they act on workspaces directly.
-    // Mod+Ctrl+S hotkey-overlay-title="Space Switcher" { spawn @IPC@ "spaces" "switcher"; }
-    // Mod+Ctrl+Left hotkey-overlay-title="Previous Space" { spawn "loft-niri" "space" "prev"; }
-    // Mod+Ctrl+Right hotkey-overlay-title="Next Space" { spawn "loft-niri" "space" "next"; }
+    // Through the shell, so they do nothing while Settings → Features → Spaces is off.
+    Mod+Ctrl+S hotkey-overlay-title="Space Switcher" { spawn @IPC@ "spaces" "switcher"; }
+    Mod+Ctrl+Left hotkey-overlay-title="Previous Space" { spawn @IPC@ "spaces" "prev"; }
+    Mod+Ctrl+Right hotkey-overlay-title="Next Space" { spawn @IPC@ "spaces" "next"; }
 }
 
 // ⌘Tab: niri's recent-windows switcher (live previews). xremap sends a

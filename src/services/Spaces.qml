@@ -236,6 +236,8 @@ Singleton {
     }
 
     function step(delta) {
+        if (!enabled)
+            return;
         run([delta > 0 ? "next" : "prev"]);
     }
 
@@ -382,6 +384,8 @@ Singleton {
     property string switcherOutput: ""
 
     function toggleSwitcher(output) {
+        if (!enabled)
+            return;
         if (switcherOutput !== "") {
             switcherOutput = "";
             return;
