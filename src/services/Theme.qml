@@ -24,16 +24,16 @@ Singleton {
     readonly property color bg: theme.palette.bg
     readonly property color surface: theme.palette.surface
     readonly property color overlay: theme.palette.overlay
-    // Text roles are contrast-aware: when the Liquid Glass slider is set
-    // clearer than the theme's default, glass shows mostly wallpaper, and
-    // the palette's text may no longer read on it — then text turns white or
-    // black (whichever reads, Theme.onGlass). At the theme's default and
-    // above, and with Reduce transparency, they are the palette's.
     readonly property color paletteText: theme.palette.text
     readonly property color paletteSubtext: theme.palette.subtext
-    readonly property bool textAdapted: !reduceTransparency && glass < glassDefault - 0.001 && !Qt.colorEqual(onGlass, paletteText)
-    readonly property color text: textAdapted ? onGlass : paletteText
-    readonly property color subtext: textAdapted ? onGlassSubtext : paletteSubtext
+    // Text on panels and windows is always the palette's. Adapting it
+    // globally to "the wallpaper" picked black text from one screen's
+    // wallpaper for every surface on every screen (white-glow black text on
+    // dark glass). Only the menu bar adapts, per screen (barTextFor), since
+    // it sits directly on that screen's wallpaper; a surface that needs it
+    // can opt in with onGlassFor(strength, screen).
+    readonly property color text: paletteText
+    readonly property color subtext: paletteSubtext
     readonly property color accent: theme.palette.accent
     readonly property color accent2: theme.palette.accent2
     readonly property color urgent: theme.palette.urgent
