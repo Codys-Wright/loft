@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import qs.components
@@ -11,6 +12,10 @@ Item {
     id: root
 
     property var player: null
+    // The island's outline, so the art backdrop doesn't stick out past its
+    // rounded corners: bottom corners rounded, top square when attached.
+    property real cornerRadius: 0
+    property bool squareTop: false
     readonly property string art: player?.trackArtUrl ?? ""
 
     // Brightest reasonably saturated color of the art, else the theme accent.
@@ -35,20 +40,47 @@ Item {
         onTriggered: root.player.positionChanged()
     }
 
-    Image {
+    Item {
+        id: backdrop
         anchors.fill: parent
         visible: root.art !== ""
-        source: root.art
-        fillMode: Image.PreserveAspectCrop
-        asynchronous: true
-        opacity: 0.55
+        layer.enabled: visible && root.cornerRadius > 0
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: backdropMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1
+        }
+
+        Image {
+            anchors.fill: parent
+            source: root.art
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            opacity: 0.55
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "black"
+            opacity: 0.45
+        }
     }
 
-    Rectangle {
+    Item {
+        id: backdropMask
         anchors.fill: parent
-        visible: root.art !== ""
-        color: "black"
-        opacity: 0.45
+        visible: false
+        layer.enabled: true
+        Rectangle {
+            anchors.fill: parent
+            radius: root.cornerRadius
+        }
+        Rectangle {
+            visible: root.squareTop
+            width: parent.width
+            height: Math.min(parent.height, root.cornerRadius + 1)
+        }
     }
 
     Row {

@@ -657,6 +657,9 @@ PanelWindow {
         id: mediaPage
         MediaPage {
             player: root.player
+            // The art backdrop follows the island's outline.
+            cornerRadius: pill.radius
+            squareTop: root.attached
         }
     }
     Component {

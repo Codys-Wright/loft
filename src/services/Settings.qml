@@ -197,7 +197,7 @@ Singleton {
                 property bool alertTemp: true // above Settings.island.maxTemp
                 property bool alertMemory: true
                 property real memoryPressure: 20 // PSI "some" avg10, %
-                property bool alertDisk: true
+                property bool alertDisk: false
                 property real diskThreshold: 0.9 // any mounted fs, 0..1
                 property bool alertBattery: true
                 property int batteryThreshold: 15 // %
