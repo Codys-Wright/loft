@@ -63,7 +63,7 @@
     "windowRadius": 12,
     "panelRadius": 18,
     "controlRadius": 8,
-    "focus": "shadow"
+    "focus": "both"
   },
   "bar": {
     "adaptiveText": true,

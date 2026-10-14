@@ -7,7 +7,8 @@ layout {
     // shape.focus: "shadow" marks the focused window with its deeper shadow
     // alone (no ring); "ring" and "both" draw the ring, focusRing.width wide.
     focus-ring {
-        off
+        on
+        width 2
         active-color "#1e66f5cc"
         inactive-color "#00000000"
         urgent-color "#d20f39"

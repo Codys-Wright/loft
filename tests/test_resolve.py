@@ -65,13 +65,16 @@ def same_tree(a: Path, b: Path, ignore: tuple = ()) -> list[str]:
 
 # What phase B added to every render (docs/THEME-ARCHITECTURE.md §6): the
 # grouped shell tokens, niri's focus ring / border switches, wallpapers.json.
+# The default look keeps today's ring (focus "both", width 2): only the explicit
+# `on` / `width` lines are new in niri.kdl.
 # Everything else must stay byte-identical to the frozen v1 renderer.
 NIRI_ADDED = (
     (
         '    // shape.focus: "shadow" marks the focused window with its deeper shadow\n'
         '    // alone (no ring); "ring" and "both" draw the ring, focusRing.width wide.\n'
     ),
-    "        off\n",
+    "        on\n        width 2\n",  # shape.focus "both" (the default): base.kdl's ring, explicit
+    "    border {\n        off\n",  # shape.border off (the default, as base.kdl)
 )
 
 
@@ -88,7 +91,7 @@ def without_additions(d: Path, into: Path) -> Path:
     (into / "theme.json").write_text(json.dumps(t, indent=2) + "\n")
     kdl = (into / "niri.kdl").read_text()
     for chunk in NIRI_ADDED:
-        kdl = kdl.replace(chunk, "")
+        kdl = kdl.replace(chunk, "    border {\n" if chunk.startswith("    border") else "")
     kdl = kdl.replace("    // shape.border: drawn or not, and how wide.\n", "    // Colors only: whether the border is drawn stays the base/consumer's call.\n")
     (into / "niri.kdl").write_text(kdl)
     return into

@@ -110,7 +110,7 @@ class Render(unittest.TestCase):
         rc, _, err = loft("theme", "render", str(FIXTURE), str(self.tmp / "legacy"))
         self.assertEqual(rc, 0, err)
         theme = json.loads((self.tmp / "legacy" / "theme.json").read_text())
-        self.assertEqual(theme["shape"], {"windowRadius": 0, "panelRadius": 18, "controlRadius": 8, "focus": "shadow"})
+        self.assertEqual(theme["shape"], {"windowRadius": 0, "panelRadius": 18, "controlRadius": 8, "focus": "both"})
         self.assertEqual(theme["radii"], {"window": 0})
         self.assertEqual(theme["bar"], {"adaptiveText": True, "background": False})
         self.assertEqual(theme["glass"]["edgeDarken"], 0.18)  # light polarity

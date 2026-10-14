@@ -1073,14 +1073,19 @@ check also renders `loft@dark` / `loft@light`.
   "the pack alone" (no catalog, no appearance.json) through the same units.
 - **New output (intended golden changes):** `theme.json` gains `shape.focus`,
   `motion` (speed, minimal, durations ÷ speed or 0, curves, spring), `type`,
-  `icons`, `a11y`; `niri.kdl` renders `shape.focus` (`focus-ring { off }` for the
-  default `"shadow"`; `on` + width for `ring` / `both`, plus a small focused
-  shadow for `ring`), `shape.border` (`off` / `on` + width), `shape.gaps` (only when
+  `icons`, `a11y`; `niri.kdl` renders `shape.focus` (`on` + width for `ring` /
+  `both`, plus a small focused shadow for `ring`; `focus-ring { off }` for
+  `"shadow"`), `shape.border` (`off` / `on` + width), `shape.gaps` (only when
   set) and `animations {}` (only when motion isn't the default: `off` when
   minimal, `slowdown 1/speed`, the facet's `niri` keys passed through);
   `wallpapers.json` is new. Every other byte is unchanged: `tests/test_resolve.py`
   compares the frozen v1 renderer (`tests/v1_reference.py`) with the units minus
   exactly these additions, for the built-ins and v1 fixtures.
+- **Decision (2026-10-14): the default `shape.focus` is `"both"`, not `"shadow"`**
+  (`defaults/shape.json`; `shape:loft` inherits it): Cody keeps the accent focus
+  ring, so the built-in look is unchanged (ring on, width 2, same colors; the
+  only new niri.kdl lines are the explicit `on` / `width 2`). `"shadow"` stays
+  available as a choice.
 - **Deviations in B:** the composition hash covers resolved.json as well as the
   unit digests (two selections with the same files but different sources get
   their own resolved.json); identity is only in resolved.json, never in
