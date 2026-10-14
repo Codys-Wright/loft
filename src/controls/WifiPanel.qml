@@ -79,6 +79,17 @@ ColumnLayout {
     property string failed: "" // name whose last attempt failed
     property bool otherOpen: false
     property bool joining: false
+    // A join in flight: NetworkManager may fail it without a signal (D-Bus
+    // error), so give up after a while.
+    property string pending: ""
+    Timer {
+        id: joinTimeout
+        interval: 20000
+        onTriggered: if (root.pending !== "") {
+            root.failed = root.pending;
+            root.pending = "";
+        }
+    }
     property string joinError: ""
 
     function reset() {
@@ -344,7 +355,7 @@ ColumnLayout {
         required property var modelData
         readonly property bool asking: root.askFor === modelData.name
         text: modelData.name
-        detail: modelData.stateChanging ? "Connecting…" : root.failed === modelData.name ? "Couldn't join — check the password" : ""
+        detail: modelData.stateChanging || root.pending === modelData.name ? "Connecting…" : root.failed === modelData.name ? "Couldn't join — check the password" : ""
         trailingGlyph: NetStatus.bars(modelData.signalStrength)
         trailingGlyph2: NetStatus.secured(modelData) ? "󰌾" : ""
         onClicked: root.pick(modelData)
@@ -359,6 +370,8 @@ ColumnLayout {
             function onConnectedChanged() {
                 if (nr.modelData.connected && root.askFor === nr.modelData.name)
                     root.reset();
+                if (nr.modelData.connected && root.pending === nr.modelData.name)
+                    root.pending = "";
             }
         }
 
@@ -389,6 +402,8 @@ ColumnLayout {
                     enabled: pw.text.length >= 8 || !NetStatus.secured(nr.modelData)
                     onClicked: {
                         root.failed = "";
+                        root.pending = nr.modelData.name;
+                        joinTimeout.restart();
                         nr.modelData.connectWithPsk(pw.text);
                         root.askFor = "";
                     }

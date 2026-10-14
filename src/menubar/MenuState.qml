@@ -630,7 +630,8 @@ Singleton {
         target: "extras"
 
         function show(id: string, withDetails: bool): void {
-            const out = Niri.focusedWorkspace?.output ?? "";
+            // The status area lives on one display (Displays.activeName).
+            const out = Displays.activeName || (Niri.focusedWorkspace?.output ?? "");
             root.openExtra(out, id, null, withDetails);
         }
         function wifi(): void {

@@ -89,4 +89,23 @@ Singleton {
             }
         }
     }
+
+    // Bindable quick switches: `qs ipc call pwclock rate 96000`, `… auto`.
+    IpcHandler {
+        target: "pwclock"
+
+        function rate(r: int): void {
+            root.setRate(r);
+        }
+        function quantum(q: int): void {
+            root.setQuantum(q);
+        }
+        function auto(): void {
+            root.setRate(0);
+            root.setQuantum(0);
+        }
+        function status(): string {
+            return `rate ${root.effectiveRate} (force ${root.forceRate}) quantum ${root.effectiveQuantum} (force ${root.forceQuantum})`;
+        }
+    }
 }

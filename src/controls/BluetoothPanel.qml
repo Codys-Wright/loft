@@ -36,13 +36,17 @@ ColumnLayout {
         if (wantDiscovery && !adapter.discovering) {
             adapter.discovering = true;
             startedDiscovery = true;
-        } else if (!wantDiscovery && startedDiscovery) {
-            adapter.discovering = false;
-            startedDiscovery = false;
+        } else if (!wantDiscovery) {
+            stopDiscovery();
         }
     }
-    Component.onDestruction: if (startedDiscovery && adapter)
-        adapter.discovering = false
+    function stopDiscovery() {
+        const a = Bluetooth.defaultAdapter;
+        if (startedDiscovery && a)
+            a.discovering = false;
+        startedDiscovery = false;
+    }
+    Component.onDestruction: stopDiscovery()
 
     // A device we're pairing: trust + connect once paired.
     property var pairing: null
