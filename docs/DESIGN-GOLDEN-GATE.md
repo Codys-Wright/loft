@@ -45,9 +45,12 @@ values below are ours — tokens, so themes can tune them.
   while the slider drags and is saved on release. It sets the fill opacity
   (1:1, so a theme's default looks as before), the tint strength (fades toward
   neutral below the default) and the text shadow (none at/above the default).
-  Below the default, `Theme.text` / `subtext` become contrast-aware: when the
-  palette's text would not reach 4.5:1 on the glass over this wallpaper
-  (`Theme.onGlass`), they turn white or near-black.
+  Text on panels and windows keeps the palette's colors (only the menu bar
+  adapts, per screen); instead, below the default an outer surface
+  (strength ≥ 1) never gets clearer than its palette text needs for 3:1 over
+  the worst wallpaper among the screens (`Theme.legibleAlpha`: the darkest
+  for dark text, the lightest for light text), and the text shadow does the
+  rest. A surface can still opt in to adaptive text with `Theme.onGlassFor`.
 - **Reduce transparency** — `Theme.reduceTransparency`: `Theme.blur` is off
   everywhere, `fillFor` returns opaque theme colors (`flatFill`), the bar gets
   its (flat) background.
