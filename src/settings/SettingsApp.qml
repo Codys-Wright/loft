@@ -28,6 +28,8 @@ Scope {
         { id: "keybinds", icon: "󰘳", label: "Keybinds" },
         { id: "system", icon: "󰍛", label: "System" },
         { id: "features", icon: "󰐱", label: "Features" },
+        { id: "clipboard", icon: "󰨸", label: "Clipboard & Files" },
+        { id: "snippets", icon: "󱐋", label: "Snippets", feature: "snippets" },
         { id: "about", icon: "󰋼", label: "About" }
     ]
 
@@ -560,6 +562,16 @@ Scope {
                                 label: "Design"
                                 hint: "Liquid Glass components ported from javiiervm/dotfiles"
                             }
+                        }
+
+                        ClipboardPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "clipboard"
+                        }
+
+                        SnippetsPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "snippets"
                         }
                     }
                 }

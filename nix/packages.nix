@@ -36,6 +36,10 @@
         elephant # launcher data providers
         jq
         coreutils
+        cliphist # Clipboard history (recorder + store)
+        wl-clipboard # wl-copy / wl-paste: clipboard history, plain-text paste, Clean URL
+        wtype # paste / snippet expansion into the focused app
+        xdg-utils # Shelf: open parked files and links
       ];
 
       # The CLI's own tree: Python package + templates + built-in packs/schema.

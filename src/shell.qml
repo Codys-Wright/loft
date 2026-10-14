@@ -13,6 +13,7 @@ import qs.switcher
 import qs.wallpaper
 import qs.settings
 import qs.monitor
+import qs.clipboard
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 // Optional modules are gated by the feature registry (services/Features.qml).
@@ -72,5 +73,25 @@ ShellRoot {
     LazyLoader {
         active: Features.on("alerts")
         SystemAlerts {}
+    }
+
+    Variants {
+        model: Features.on("clipboard") ? Quickshell.screens : []
+        ClipboardPanel {}
+    }
+
+    Variants {
+        model: Features.on("snippets") ? Quickshell.screens : []
+        SnippetPicker {}
+    }
+
+    Variants {
+        model: Features.on("shelf") ? Quickshell.screens : []
+        ShelfPanel {}
+    }
+
+    LazyLoader {
+        active: Features.on("scratchpad")
+        ScratchpadWindow {}
     }
 }

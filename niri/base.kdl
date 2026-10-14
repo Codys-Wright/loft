@@ -87,6 +87,7 @@ window-rule {
 
 window-rule {
     match title="^System Monitor$"
+    match title="^Studio Scratchpad$"
     open-floating true
     geometry-corner-radius 24
 }

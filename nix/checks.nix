@@ -8,6 +8,7 @@
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`
 #   studio-niri     the crate builds and its tests pass (incl. `niri validate`)
 #   studio-niri-clippy  `cargo clippy --all-targets -D warnings`
+#   clipboard-urlclean  Clean URL's tracking-parameter stripping (src/services/urlclean.js)
 #
 # After an intended output change, refresh the goldens from a checkout:
 #   for t in tokyonight latte; do rm -rf tests/golden/$t; nix run .#studio -- theme render themes/$t tests/golden/$t; done
@@ -62,6 +63,11 @@
             echo "niri validate: base.kdl + $t/niri.kdl"
             niri validate -c config.kdl
           done
+          touch $out
+        '';
+
+        clipboard-urlclean = check "clipboard-urlclean" [ pkgs.nodejs-slim ] ''
+          node ${../tests/urlclean.test.js} ${../src/services/urlclean.js}
           touch $out
         '';
 

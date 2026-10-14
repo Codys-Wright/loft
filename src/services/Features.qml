@@ -31,7 +31,11 @@ Singleton {
         { id: "systemMonitor", label: "System Monitor", icon: "󰄧", group: "System", description: "History graphs, processes (quit / force quit), disks, sensors and fans" },
         { id: "barReadouts", label: "Menu bar readouts", icon: "󰍛", group: "System", description: "CPU, memory, temperature, GPU, network and battery in the bar" },
         { id: "network", label: "Network", icon: "󰛳", group: "System", description: "Live traffic, session totals, local addresses and a speed test" },
-        { id: "alerts", label: "Alerts", icon: "󰀦", group: "System", description: "Notifications for sustained load, heat, memory pressure, low disk and battery" }
+        { id: "alerts", label: "Alerts", icon: "󰀦", group: "System", description: "Notifications for sustained load, heat, memory pressure, low disk and battery" },
+        { id: "clipboard", label: "Clipboard history", icon: "󰨸", group: "Clipboard & files", description: "History with pins and image previews, paste as plain text, auto-clear, Clean URL" },
+        { id: "snippets", label: "Text snippets", icon: "󱐋", group: "Clipboard & files", description: "Saved text typed into any app, with {date} and {clipboard} variables" },
+        { id: "shelf", label: "Shelf", icon: "󰄠", group: "Clipboard & files", description: "Park files, links and text at the screen edge while dragging" },
+        { id: "scratchpad", label: "Scratchpad", icon: "󰺿", group: "Everyday", description: "Tabbed, autosaved Markdown notes in a floating window" }
     ]
 
     readonly property var presets: ({

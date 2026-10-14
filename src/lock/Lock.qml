@@ -127,6 +127,14 @@ Scope {
         }
     }
 
+    // Lock hook for other modules (services/LockState.qml). Follows the
+    // lock request: WlSessionLock.locked doesn't notify when it's released.
+    Binding {
+        target: LockState
+        property: "locked"
+        value: state.locked
+    }
+
     PamContext {
         id: pam
         config: root.pamService
