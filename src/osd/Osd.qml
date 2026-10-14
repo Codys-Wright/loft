@@ -2,28 +2,29 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Services.Pipewire
 import qs.components
 import qs.services
 
 // On-screen display: a glass pill above the dock that appears when the output
 // volume or mute changes (keys, apps, the Control Center) and fades out.
 // Sound announcements (output switched, microphones muted — Sound.announced)
-// show in the same pill as an icon and a line of text.
+// show in the same pill as an icon and a line of text. The state lives in
+// Hud.qml; this pill is its fallback — with the Dynamic Island on (and
+// Settings → Dynamic Island → Show changes in the Dynamic Island), the island
+// shows it instead.
 PanelWindow {
     id: root
 
     required property ShellScreen modelData
     screen: modelData
 
-    readonly property PwNode sink: Pipewire.defaultAudioSink
-    readonly property bool ready: sink?.ready ?? false
-    readonly property real volume: ready ? sink.audio.volume : 0
-    readonly property bool muted: ready ? sink.audio.muted : false
+    readonly property real volume: Hud.value
+    readonly property bool muted: Hud.muted
+    readonly property string message: Hud.kind === "message" ? Hud.text : ""
+    readonly property string messageIcon: Hud.icon
 
-    property bool shown: false
-    // Only the focused output shows it.
-    readonly property bool onThisScreen: (Niri.focusedWorkspace?.output ?? modelData.name) === modelData.name
+    // Only the focused output shows it (Hud.output).
+    readonly property bool shown: !Hud.inIsland && Hud.kind !== "brightness" && Hud.onScreen(modelData.name)
 
     visible: shown || fade.running
     WlrLayershell.layer: WlrLayer.Overlay
@@ -41,62 +42,6 @@ PanelWindow {
         id: blur
         item: Theme.blur && shown ? pill : null
         radius: pill.radius
-    }
-
-    PwObjectTracker {
-        objects: root.sink ? [root.sink] : []
-    }
-
-    // Ignore the initial values reported when the sink first binds.
-    property bool armed: false
-    Timer {
-        running: root.ready
-        interval: 500
-        onTriggered: root.armed = true
-    }
-
-    function poke() {
-        if (!armed || !onThisScreen)
-            return;
-        // A volume change right after an announcement (the new output's
-        // volume) keeps the announcement up.
-        if (!messageTimer.running)
-            message = "";
-        shown = true;
-        hide.restart();
-    }
-
-    property string message: ""
-    property string messageIcon: ""
-
-    function say(icon, text) {
-        if (!onThisScreen)
-            return;
-        messageIcon = icon;
-        message = text;
-        shown = true;
-        messageTimer.restart();
-        hide.restart();
-    }
-
-    Connections {
-        target: Sound
-        function onAnnounced(icon, text) {
-            root.say(icon, text);
-        }
-    }
-
-    Timer {
-        id: messageTimer
-        interval: 2200
-    }
-    onVolumeChanged: poke()
-    onMutedChanged: poke()
-
-    Timer {
-        id: hide
-        interval: root.message ? 2200 : 1400
-        onTriggered: root.shown = false
     }
 
     GlassSurface {

@@ -233,7 +233,7 @@ Singleton {
         return ff === "webcam" || /webcam|camera|insta360/i.test(label(n)) ? "󰄀" : "󰍬";
     }
 
-    // Announcements for the OSD (Osd.qml): icon + text.
+    // Announcements for the HUD (Hud.qml → the island or Osd.qml): icon + text.
     signal announced(string icon, string text)
 
     // Don't announce the state the shell starts into.

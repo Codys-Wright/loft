@@ -79,6 +79,15 @@ ColumnLayout {
                 onActivated: v => page.isl.fill = v
             }
         }
+
+        SettingsRow {
+            label: "Show changes in the Dynamic Island"
+            hint: page.isl.hud !== false ? "Volume, mute, brightness and sound messages widen the island for a moment" : "They show in a pill above the Dock"
+            SettingsSwitch {
+                checked: page.isl.hud !== false
+                onToggled: on => page.isl.hud = on
+            }
+        }
     }
 
     // ── Pages ───────────────────────────────────────────────────────────
@@ -92,7 +101,7 @@ ColumnLayout {
         }
 
         Hint {
-            text: "Hover the island to expand it; scroll to switch pages. Collapsed, it shows (first wins): alerts and banners, live activities, the next event when it's close, now playing, the time."
+            text: "Hover the island to expand it; scroll to switch pages. Collapsed, it shows (first wins): volume / brightness changes, alerts and banners, live activities, the next event when it's close, now playing, the time."
         }
 
         Repeater {
