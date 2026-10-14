@@ -35,6 +35,7 @@ Scope {
         { id: "clipboard", icon: "󰨸", badge: "yellow", label: "Clipboard & Files" },
         { id: "snippets", icon: "󱐋", badge: "brown", label: "Snippets", feature: "snippets" },
         { id: "menubar", icon: "󰍜", badge: "graphite", label: "Menu Bar" },
+        { id: "desktopmenu", icon: "󰍝", badge: "blue", label: "Desktop Menu", feature: "desktopMenu" },
         { id: "about", icon: "󰋼", badge: "gray", label: "About" }
     ]
 
@@ -62,6 +63,9 @@ Scope {
 
         function features(): void {
             root.show("features");
+        }
+        function desktopmenu(): void {
+            root.show("desktopmenu");
         }
         function wallpaper(): void {
             root.show("wallpaper");
@@ -538,6 +542,11 @@ Scope {
                     MenuBarPage {
                         Layout.fillWidth: true
                         visible: root.section === "menubar"
+                    }
+
+                    DesktopMenuPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "desktopmenu"
                     }
 
                     // About

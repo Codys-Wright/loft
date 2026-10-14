@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import qs.desktopmenu
 import qs.services
 
 // Background layer. niri's xray blur samples it, so it is what the glass
@@ -91,5 +92,14 @@ PanelWindow {
     Layer {
         id: b
         opacity: root.source !== "" && b.status === Image.Ready && (!root.flip || a.status !== Image.Ready) ? 1 : 0
+    }
+
+    // A right-click on the desktop (a click that lands on no window) opens
+    // the desktop menu at the pointer (desktopmenu/DesktopMenu.qml).
+    MouseArea {
+        anchors.fill: parent
+        enabled: Features.on("desktopMenu")
+        acceptedButtons: Qt.RightButton
+        onPressed: mouse => DesktopMenu.openAt(root.modelData.name, mouse.x, mouse.y)
     }
 }

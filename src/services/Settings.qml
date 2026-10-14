@@ -26,6 +26,9 @@ Singleton {
     readonly property alias sound: settings.sound
     // Feature id → on/off (Features.qml); absent = the module's default.
     property alias features: settings.features
+    // The desktop's right-click menu (desktopmenu/DesktopMenu.qml):
+    // { items: [{ id, shown }] } in menu order; absent = the default menu.
+    property alias desktopMenu: settings.desktopMenu
     readonly property alias lock: settings.lock
     // Per-theme choices, keyed by theme name (Vibes.qml reads and writes
     // them): { "<theme>": { wallpaper, rotate, perWorkspace, lockDesign } }.
@@ -90,6 +93,7 @@ Singleton {
             }
 
             property var features: ({})
+            property var desktopMenu: ({})
             property JsonObject lock: JsonObject {
                 // A lock design directory, "builtin", or "" = the theme's default.
                 property string design: ""

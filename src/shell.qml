@@ -17,6 +17,7 @@ import qs.settings
 import qs.devtools
 import qs.monitor
 import qs.clipboard
+import qs.desktopmenu
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 // Optional modules are gated by the feature registry (services/Features.qml).
@@ -32,6 +33,12 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         Bar {}
+    }
+
+    // The desktop's right-click menu (opened from the wallpaper layer).
+    Variants {
+        model: Features.on("desktopMenu") ? Quickshell.screens : []
+        DesktopMenuOverlay {}
     }
 
     Variants {

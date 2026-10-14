@@ -27,6 +27,7 @@ Singleton {
         { id: "osd", label: "Volume display", icon: "󰄧", group: "Sound", description: "On-screen pill when volume changes" },
         { id: "switcher", label: "App switcher", icon: "󰕰", group: "Windows", description: "⌘Tab between apps" },
         { id: "wallpaperPicker", label: "Wallpaper picker", icon: "󰸉", group: "Desktop", description: "Browse and apply wallpapers" },
+        { id: "desktopMenu", label: "Desktop menu", icon: "󰍝", group: "Desktop", page: "DesktopMenuPage.qml", description: "Right-click the wallpaper: wallpaper, theme, appearance, displays, screenshot, terminal, lock, settings" },
         { id: "lock", label: "Lock screen", icon: "󰌾", group: "Desktop", core: true, description: "Session lock with the theme's design" },
         { id: "systemMonitor", label: "System Monitor", icon: "󰄧", group: "System", description: "History graphs, processes (quit / force quit), disks, sensors and fans" },
         { id: "barReadouts", label: "Menu bar readouts", icon: "󰍛", group: "System", default: false, description: "CPU, memory, temperature, GPU, network and battery in the bar" },
