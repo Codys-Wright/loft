@@ -84,6 +84,9 @@ Scope {
         function spotlight(): void {
             root.show("spotlight");
         }
+        function dock(): void {
+            root.show("dock");
+        }
     }
 
     // The niri pages show live state: re-read it whenever they're opened.
@@ -374,91 +377,9 @@ Scope {
                         visible: root.section === "lockscreen"
                     }
 
-                    // Dock
-                    Card {
+                    DockPage {
+                        Layout.fillWidth: true
                         visible: root.section === "dock"
-
-                        Row_ {
-                            label: "Icon size"
-                            Slider_ {
-                                from: 32
-                                to: 80
-                                step: 1
-                                suffix: " px"
-                                value: Settings.dock.iconSize
-                                onMoved: v => Settings.dock.iconSize = v
-                            }
-                        }
-
-                        Row_ {
-                            label: "Magnification"
-                            Slider_ {
-                                from: 1
-                                to: 2
-                                step: 0.05
-                                decimals: 2
-                                suffix: "×"
-                                value: Settings.dock.magnification
-                                onMoved: v => Settings.dock.magnification = v
-                            }
-                        }
-
-                        Row_ {
-                            label: "Pinned apps"
-                            hint: "× to unpin"
-                        }
-
-                        Flow {
-                            Layout.fillWidth: true
-                            spacing: 8
-
-                            Repeater {
-                                model: Settings.dock.pinned
-                                delegate: Rectangle {
-                                    id: pin
-                                    required property string modelData
-                                    required property int index
-                                    width: pinRow.implicitWidth + 20
-                                    height: 34
-                                    radius: 17
-                                    color: Theme.withAlpha(Theme.text, 0.08)
-
-                                    RowLayout {
-                                        id: pinRow
-                                        anchors.centerIn: parent
-                                        spacing: 8
-
-                                        Image {
-                                            Layout.preferredWidth: 20
-                                            Layout.preferredHeight: 20
-                                            source: Apps.icon(pin.modelData)
-                                            sourceSize: Qt.size(40, 40)
-                                        }
-                                        Text {
-                                            text: Apps.name(pin.modelData)
-                                            color: Theme.text
-                                            font.family: Theme.fontUi
-                                            font.pixelSize: 12
-                                        }
-                                        Icon {
-                                            text: "󰅖"
-                                            size: 12
-                                            color: Theme.subtext
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                anchors.margins: -6
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    const l = Array.from(Settings.dock.pinned);
-                                                    l.splice(pin.index, 1);
-                                                    Settings.dock.pinned = l;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
 
                     // Island

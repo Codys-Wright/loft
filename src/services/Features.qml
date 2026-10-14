@@ -22,6 +22,8 @@ Singleton {
     readonly property var modules: [
         { id: "bar", label: "Menu bar", icon: "󰍜", group: "Desktop", core: true, description: "App menu, workspaces, tray, status, date" },
         { id: "dock", label: "Dock", icon: "󱂬", group: "Desktop", description: "Pinned and running apps with magnification" },
+        { id: "dockStacks", label: "Dock folders & Trash", icon: "󰉍", group: "Desktop", description: "Downloads (and any folder) as a stack in the dock — fan, grid or list — and the Trash" },
+        { id: "dockRecents", label: "Recent apps in Dock", icon: "󰄉", group: "Desktop", description: "A dock section with apps you used recently that aren't in the dock" },
         { id: "island", label: "Dynamic Island", icon: "󰟜", group: "Everyday", description: "Now playing, live activities, notifications, system pages" },
         { id: "controlcenter", label: "Control Center", icon: "󰒓", group: "Desktop", description: "Network, Bluetooth, toggles, now playing, volume, calendar" },
         { id: "osd", label: "Volume display", icon: "󰄧", group: "Sound", description: "On-screen pill when volume changes" },

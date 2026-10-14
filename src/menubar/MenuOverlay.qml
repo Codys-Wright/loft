@@ -84,6 +84,7 @@ PanelWindow {
                 MenuState.key(event);
                 event.accepted = true;
             }
+            Keys.onReleased: event => MenuState.keyReleased(event)
 
             // ── A status item's panel (Wi-Fi, Sound, …) ─────────────────
             GlassSurface {
@@ -173,14 +174,20 @@ PanelWindow {
             items: MenuState.open ? MenuState.itemsAt(index) : []
             highlighted: MenuState.path[index]
 
+            // A context menu (the dock) opens away from its screen edge.
+            readonly property var ctx: MenuState.context
             x: {
                 void root.titles.stamp; // re-evaluate after the titles move
+                if (!parentPanel && ctx) {
+                    const want = ctx.edge === "left" ? ctx.x + 8 : ctx.edge === "right" ? ctx.x - width - 8 : ctx.x - width / 2;
+                    return Math.max(8, Math.min(want, root.width - width - 8));
+                }
                 if (!parentPanel)
                     return Math.max(8, Math.min(root.titles.titleX(MenuState.current) - 6, root.width - width - 8));
                 const right = parentPanel.x + parentPanel.width - 4;
                 return right + width <= root.width - 8 ? right : Math.max(8, parentPanel.x - width + 4);
             }
-            y: parentPanel ? Math.max(2, Math.min(parentPanel.y + parentPanel.rowY(MenuState.path[index - 1]) - pad, root.height - height - 8)) : 2
+            y: parentPanel ? Math.max(2, Math.min(parentPanel.y + parentPanel.rowY(MenuState.path[index - 1]) - pad, root.height - height - 8)) : ctx ? Math.max(2, Math.min(ctx.edge === "bottom" ? ctx.y - root.barHeight - height - 8 : ctx.y - root.barHeight - height / 2, root.height - height - 8)) : 2
 
             onHovered: item => MenuState.highlight(index, item, true)
             onClicked: item => {
@@ -230,7 +237,7 @@ PanelWindow {
             Icon {
                 visible: root.w === null
                 Layout.alignment: Qt.AlignHCenter
-                text: "󰽰"
+                text: MenuState.pendingAsk?.icon ?? "󰽰"
                 size: 56
                 color: Theme.accent
             }
@@ -239,6 +246,8 @@ PanelWindow {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 text: {
+                    if (MenuState.pendingAsk)
+                        return MenuState.pendingAsk.title;
                     if (MenuState.mode === "confirm")
                         return `Quit ${Apps.name(root.w?.app_id)}?`;
                     return root.w ? Apps.name(root.w.app_id) : "studio-linux";
@@ -255,6 +264,8 @@ PanelWindow {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
                 text: {
+                    if (MenuState.pendingAsk)
+                        return MenuState.pendingAsk.text ?? "";
                     if (MenuState.mode === "confirm")
                         return `${MenuState.pendingQuit?.count ?? 0} windows are open. Unsaved work in them may be lost.`;
                     if (!root.w)
@@ -321,7 +332,7 @@ PanelWindow {
                 }
                 SettingsButton {
                     primary: true
-                    text: MenuState.mode === "confirm" ? "Quit" : "OK"
+                    text: MenuState.pendingAsk ? (MenuState.pendingAsk.button ?? "OK") : MenuState.mode === "confirm" ? "Quit" : "OK"
                     onClicked: MenuState.mode === "confirm" ? MenuState.confirmQuit() : MenuState.close()
                 }
             }

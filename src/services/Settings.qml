@@ -65,6 +65,30 @@ Singleton {
                 property list<string> pinned: ["org.gnome.Nautilus", "firefox", "kitty", "com.mitchellh.ghostty", "obsidian"]
                 property real iconSize: 48
                 property real magnification: 1.3
+                // bottom | left | right
+                property string position: "bottom"
+                // Bounce an app's icon until its first window opens.
+                property bool bounce: true
+                // A dot under apps with open windows.
+                property bool indicators: true
+                // The recent-apps section (feature dockRecents): how many.
+                property int recentCount: 3
+                // Docked folders (feature dockStacks), left of the Trash:
+                // { path ("xdg:DOWNLOAD", "~/Documents/Themes", /abs),
+                //   sort: added|name|modified|kind, display: stack|folder,
+                //   view: auto|fan|grid|list }
+                property var folders: [
+                    { path: "xdg:DOWNLOAD", sort: "added", display: "stack", view: "auto" }
+                ]
+                property bool trash: true
+                // Hide until the pointer touches the screen edge: "never",
+                // "always", "whenWindows" (only while the display's workspace
+                // has windows). Default for displays without their own choice.
+                property var autoHide: "never"
+                // Per display, keyed by niri identity ("Make Model Serial"):
+                // { enabled, autoHide, position }. Missing keys fall back to
+                // the values above; an ultrawide (≥ 2.2:1) defaults to "whenWindows".
+                property var displays: ({})
             }
 
             // Which display carries the dock and the bar's status area (see

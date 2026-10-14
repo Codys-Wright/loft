@@ -34,7 +34,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import hooks, importers, index, library, render, vibes, wallsets
+from . import dock, hooks, importers, index, library, render, vibes, wallsets
 from .pack import IGNORED, Pack, PackError, is_pack
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -962,6 +962,8 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("state", choices=["on", "off", "default"])
     common(s, layout=False)
     s.set_defaults(fn=cmd_wall_auto)
+
+    dock.add_parser(top, lambda ctx: ctx.state_dir)
     return p
 
 

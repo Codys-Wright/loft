@@ -82,6 +82,7 @@ pub fn show(paths: &Paths, entry: Option<&Path>) -> Result<Value> {
 ///   "set":   { "layout.gaps": 8 },
 ///   "unset": [ "input.mouse" ],
 ///   "reset_outputs": [ "<identity>" ],
+///   "window_rules": { "<app-id>": { "open-on-workspace": "Desktop 2" } | null },
 ///   "live": true, "record": true, "render": true }
 /// ```
 #[derive(Debug, Clone, Copy)]
@@ -140,6 +141,34 @@ pub fn apply(paths: &Paths, data: &Value, opts: ApplyOpts) -> Result<Value> {
         {
             if let Some(k) = k.as_str() {
                 ov.remove(k);
+            }
+        }
+        // The dock's Assign To: whole records replaced, null removes.
+        for (section, field) in [
+            ("window-rules", "window_rules"),
+            ("workspaces", "workspaces"),
+        ] {
+            if let Some(m) = data.get(field).and_then(Value::as_object) {
+                for (k, v) in m {
+                    match v {
+                        Value::Object(_) => {
+                            let sec =
+                                ov.0.entry(section)
+                                    .or_insert_with(|| Value::Object(Map::new()));
+                            if !sec.is_object() {
+                                *sec = Value::Object(Map::new());
+                            }
+                            sec.as_object_mut().unwrap().insert(k.clone(), v.clone());
+                        }
+                        Value::Null => {
+                            if let Some(sec) = ov.0.get_mut(section).and_then(Value::as_object_mut)
+                            {
+                                sec.remove(k);
+                            }
+                        }
+                        _ => bail!("{field}.{k}: expected an object or null"),
+                    }
+                }
             }
         }
         for id in data

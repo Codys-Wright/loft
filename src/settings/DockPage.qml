@@ -1,0 +1,360 @@
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import qs.components
+import qs.services
+
+// Settings → Dock: size and magnification, per-display dock (show,
+// auto-hide, position), behavior, the recent-apps section, docked folders
+// and the Trash, and the pinned apps.
+ColumnLayout {
+    id: page
+    spacing: 12
+
+    SettingsCard {
+        PageHeader {
+            title: "Dock"
+        }
+
+        SettingsRow {
+            label: "Size"
+            SettingsSlider {
+                from: 32
+                to: 80
+                step: 1
+                suffix: " px"
+                value: Settings.dock.iconSize
+                onMoved: v => Settings.dock.iconSize = v
+            }
+        }
+
+        SettingsRow {
+            label: "Magnification"
+            hint: "Icons grow under the pointer (1× = off)"
+            SettingsSlider {
+                from: 1
+                to: 2
+                step: 0.05
+                decimals: 2
+                suffix: "×"
+                value: Settings.dock.magnification
+                onMoved: v => Settings.dock.magnification = v
+            }
+        }
+
+        SettingsRow {
+            label: "Animate opening applications"
+            hint: "The icon bounces until the app's first window opens"
+            SettingsSwitch {
+                checked: Settings.dock.bounce
+                onToggled: on => Settings.dock.bounce = on
+            }
+        }
+
+        SettingsRow {
+            label: "Show indicators for open applications"
+            SettingsSwitch {
+                checked: Settings.dock.indicators
+                onToggled: on => Settings.dock.indicators = on
+            }
+        }
+
+        SettingsRow {
+            label: "Hiding windows"
+            hint: "niri has no minimize: Hide parks an app's windows on a \"hidden-<display>\" workspace; Show All brings them back"
+        }
+    }
+
+    SettingsCard {
+        PageHeader {
+            title: "Displays"
+        }
+
+        SettingsRow {
+            label: "Default position"
+            hint: "For displays without their own choice"
+            SettingsSegmented {
+                options: [
+                    { value: "left", label: "Left" },
+                    { value: "bottom", label: "Bottom" },
+                    { value: "right", label: "Right" }
+                ]
+                current: Settings.dock.position
+                onActivated: v => Settings.dock.position = v
+            }
+        }
+
+        Repeater {
+            model: Quickshell.screens
+
+            delegate: ColumnLayout {
+                id: disp
+                required property var modelData
+                readonly property var prefs: DockData.displayPrefs(modelData)
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                spacing: 8
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Theme.withAlpha(Theme.text, 0.08)
+                }
+
+                SettingsRow {
+                    label: DockData.displayLabel(disp.modelData)
+                    hint: `${disp.modelData.name} · ${disp.modelData.width}×${disp.modelData.height}`
+                    SettingsSwitch {
+                        checked: disp.prefs.enabled
+                        onToggled: on => DockData.setDisplayPref(disp.modelData, "enabled", on)
+                    }
+                }
+                SettingsRow {
+                    visible: disp.prefs.enabled
+                    label: "Automatically hide and show the Dock"
+                    hint: "Move the pointer to the edge to show it. Every dock steps aside while a window is fullscreen"
+                    SettingsSegmented {
+                        options: [
+                            { value: "never", label: "Never" },
+                            { value: "whenWindows", label: "With windows" },
+                            { value: "always", label: "Always" }
+                        ]
+                        current: disp.prefs.autoHide
+                        onActivated: v => DockData.setDisplayPref(disp.modelData, "autoHide", v)
+                    }
+                }
+                SettingsRow {
+                    visible: disp.prefs.enabled
+                    label: "Position on screen"
+                    SettingsSegmented {
+                        options: [
+                            { value: "left", label: "Left" },
+                            { value: "bottom", label: "Bottom" },
+                            { value: "right", label: "Right" }
+                        ]
+                        current: disp.prefs.position
+                        onActivated: v => DockData.setDisplayPref(disp.modelData, "position", v)
+                    }
+                }
+            }
+        }
+    }
+
+    SettingsCard {
+        PageHeader {
+            title: "Recent apps"
+        }
+
+        SettingsRow {
+            label: "Show suggested and recent apps in Dock"
+            hint: "Apps you used lately that aren't in the dock, in their own section"
+            SettingsSwitch {
+                checked: Features.on("dockRecents")
+                onToggled: on => Features.set("dockRecents", on)
+            }
+        }
+
+        SettingsRow {
+            visible: Features.on("dockRecents")
+            label: "How many"
+            SettingsSlider {
+                from: 1
+                to: 8
+                step: 1
+                value: Settings.dock.recentCount
+                onMoved: v => Settings.dock.recentCount = Math.round(v)
+            }
+        }
+    }
+
+    SettingsCard {
+        PageHeader {
+            title: "Folders and Trash"
+        }
+
+        SettingsRow {
+            label: "Folders in the Dock"
+            hint: "Stacks left of the Trash; right-click one to sort it or change how it opens"
+            SettingsSwitch {
+                checked: Features.on("dockStacks")
+                onToggled: on => Features.set("dockStacks", on)
+            }
+        }
+
+        Repeater {
+            model: Features.on("dockStacks") ? Settings.dock.folders : []
+
+            delegate: SettingsRow {
+                id: fr
+                required property var modelData
+                required property int index
+                label: DockData.folder(modelData.path)?.listing?.name || modelData.path
+                hint: modelData.path
+
+                RowLayout {
+                    spacing: 6
+                    SettingsSelect {
+                        options: [
+                            { value: "auto", label: "Automatic" },
+                            { value: "fan", label: "Fan" },
+                            { value: "grid", label: "Grid" },
+                            { value: "list", label: "List" }
+                        ]
+                        current: fr.modelData.view ?? "auto"
+                        onActivated: v => DockData.setFolder(fr.index, { view: v })
+                    }
+                    SettingsSelect {
+                        options: [
+                            { value: "added", label: "Date Added" },
+                            { value: "modified", label: "Date Modified" },
+                            { value: "name", label: "Name" },
+                            { value: "kind", label: "Kind" }
+                        ]
+                        current: fr.modelData.sort ?? "added"
+                        onActivated: v => DockData.setFolder(fr.index, { sort: v })
+                    }
+                    SettingsSegmented {
+                        options: [
+                            { value: "stack", label: "Stack" },
+                            { value: "folder", label: "Folder" }
+                        ]
+                        current: fr.modelData.display ?? "stack"
+                        onActivated: v => DockData.setFolder(fr.index, { display: v })
+                    }
+                    Icon {
+                        text: "󰅖"
+                        size: 13
+                        color: Theme.subtext
+                        MouseArea {
+                            anchors.fill: parent
+                            anchors.margins: -6
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: DockData.removeFolder(fr.index)
+                        }
+                    }
+                }
+            }
+        }
+
+        SettingsRow {
+            visible: Features.on("dockStacks")
+            label: "Add folder to Dock"
+            hint: "A path (~/Documents), or pick one"
+            RowLayout {
+                spacing: 6
+                SettingsTextField {
+                    id: newFolder
+                    implicitWidth: 220
+                    placeholder: "~/Documents/Themes"
+                    onCommitted: t => {
+                        DockData.addFolder(t);
+                        text = "";
+                    }
+                }
+                SettingsButton {
+                    text: "Add"
+                    onClicked: {
+                        DockData.addFolder(newFolder.text);
+                        newFolder.text = "";
+                    }
+                }
+            }
+        }
+
+        Flow {
+            visible: Features.on("dockStacks")
+            Layout.fillWidth: true
+            spacing: 6
+
+            Repeater {
+                model: [
+                    { path: "xdg:DOWNLOAD", label: "Downloads" },
+                    { path: "xdg:DOCUMENTS", label: "Documents" },
+                    { path: "~/Documents/Themes", label: "Theme library" },
+                    { path: "xdg:PICTURES", label: "Pictures" },
+                    { path: "xdg:DESKTOP", label: "Desktop" },
+                    { path: "~", label: "Home" }
+                ].filter(o => !Array.from(Settings.dock.folders).some(f => f.path === o.path))
+
+                delegate: SettingsButton {
+                    required property var modelData
+                    text: "+ " + modelData.label
+                    onClicked: DockData.addFolder(modelData.path)
+                }
+            }
+        }
+
+        SettingsRow {
+            visible: Features.on("dockStacks")
+            label: "Trash"
+            hint: "Click opens it; drop files on it to trash them; right-click to empty"
+            SettingsSwitch {
+                checked: Settings.dock.trash
+                onToggled: on => Settings.dock.trash = on
+            }
+        }
+    }
+
+    SettingsCard {
+        PageHeader {
+            title: "Pinned apps"
+        }
+
+        SettingsRow {
+            label: "In the Dock"
+            hint: "Right-click an app → Options → Keep in Dock to add one; × to remove"
+        }
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Repeater {
+                model: Settings.dock.pinned
+                delegate: Rectangle {
+                    id: pin
+                    required property string modelData
+                    required property int index
+                    width: pinRow.implicitWidth + 20
+                    height: 34
+                    radius: 17
+                    color: Theme.withAlpha(Theme.text, 0.08)
+
+                    RowLayout {
+                        id: pinRow
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        AppIcon {
+                            Layout.preferredWidth: 20
+                            Layout.preferredHeight: 20
+                            appId: pin.modelData
+                            pixelSize: 40
+                        }
+                        Text {
+                            text: Apps.name(pin.modelData)
+                            color: Theme.text
+                            font.family: Theme.fontUi
+                            font.pixelSize: 12
+                        }
+                        Icon {
+                            text: "󰅖"
+                            size: 12
+                            color: Theme.subtext
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -6
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    const l = Array.from(Settings.dock.pinned);
+                                    l.splice(pin.index, 1);
+                                    Settings.dock.pinned = l;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

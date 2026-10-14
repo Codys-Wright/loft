@@ -19,6 +19,8 @@ Singleton {
 
     // connector → niri identity, from `niri msg -j outputs`.
     property var identities: ({})
+    // connector → model name (for labels: "MPG491CX OLED").
+    property var models: ({})
 
     readonly property var screens: Quickshell.screens
 
@@ -89,10 +91,13 @@ Singleton {
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    const m = {};
-                    for (const [name, o] of Object.entries(JSON.parse(text)))
+                    const m = {}, models = {};
+                    for (const [name, o] of Object.entries(JSON.parse(text))) {
                         m[name] = `${o.make} ${o.model} ${o.serial ?? "Unknown"}`;
+                        models[name] = o.model || name;
+                    }
                     root.identities = m;
+                    root.models = models;
                 } catch (e) {
                     console.warn(`Displays: ${e}`);
                 }

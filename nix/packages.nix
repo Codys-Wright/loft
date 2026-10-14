@@ -62,7 +62,8 @@
         wl-clipboard # wl-copy / wl-paste: clipboard history, plain-text paste, Clean URL
         wtype # paste / snippet expansion into the focused app
         xdg-utils # Shelf: open parked files and links
-        inotify-tools # dev loop: reload after a failed reload (devtools/ReloadToast)
+        inotify-tools # dev loop: reload after a failed reload (devtools/ReloadToast); dock folders live
+        glib # gio: the dock's Trash (gio trash, empty) and trash:/// · gdbus: Show in Files
       ];
 
       # The CLI's own tree: Python package + templates + built-in packs/schema.
