@@ -85,8 +85,25 @@ Singleton {
         onTriggered: root.step++
     }
 
+    // Per-display choices for this theme: { "<niri identity>": path } —
+    // identities ("Make Model Serial") survive connector renumbering.
+    readonly property var displayChoices: has("displays") ? choices.displays : ({})
+
+    function chooseWallpaperFor(screenName, path) {
+        const d = Object.assign({}, displayChoices);
+        const key = Displays.identity(screenName);
+        if (path)
+            d[key] = path;
+        else
+            delete d[key];
+        setChoice("displays", d);
+    }
+
     // Absolute path (or "") of what a screen should show.
     function wallpaperFor(screenName) {
+        const perDisplay = displayChoices[Displays.identity(screenName)] ?? displayChoices[screenName];
+        if (perDisplay)
+            return perDisplay;
         if (chosenWallpaper !== "")
             return chosenWallpaper;
         const col = collection;
