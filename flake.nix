@@ -18,6 +18,7 @@
         ./nix/packages.nix
         ./nix/apps.nix
         ./nix/dev-shell.nix
+        ./nix/lock.nix
       ];
     };
 }
