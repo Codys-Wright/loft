@@ -1,0 +1,19 @@
+{
+  "polarity": "light",
+  "palette": {
+    "bg": "#FFFFFF",
+    "surface": "#f0f0f0",
+    "overlay": "#c8c8c8",
+    "text": "#111111",
+    "subtext": "#555555",
+    "accent": "#0066cc",
+    "accent2": "#7a3cc8",
+    "urgent": "#cc2222",
+    "ok": "#228822",
+    "warn": "#aa7700"
+  },
+  "glass": { "blur": false, "xray": false },
+  "wallpaper": { "image": "wall.png" },
+  "fonts": { "ui": "Inter", "mono": "JetBrains Mono", "size": 12 },
+  "radii": { "window": 0 }
+}

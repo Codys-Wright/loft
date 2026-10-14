@@ -1,0 +1,8 @@
+{
+  "name": "tokyonight",
+  "author": "studio-linux",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "source": "https://github.com/folke/tokyonight.nvim",
+  "description": "Tokyo Night (night) palette with dark Liquid Glass — the default theme"
+}
