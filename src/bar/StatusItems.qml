@@ -326,7 +326,7 @@ Item {
         BarExtra {
             controlId: "clock"
             screenName: root.screenName
-            readonly property bool showTime: Settings.menubar.clockTime === true
+            readonly property bool showTime: Settings.menubar.clockTime !== false
             label: Qt.formatDateTime(clock.date, showTime ? (Settings.menubar.clock24 ? "ddd MMM d  HH:mm" : "ddd MMM d  h:mm AP") : "ddd MMM d")
             SystemClock {
                 id: clock
@@ -338,9 +338,36 @@ Item {
     Component {
         id: ccC
         BarExtra {
+            id: ccExtra
             controlId: "controlcenter"
             screenName: root.screenName
-            glyph: "󰒓"
+            // macOS's Control Center icon: two stacked toggle switches
+            // (knob left on top, right below), drawn so it matches exactly.
+            glyph: ""
+            Column {
+                anchors.centerIn: parent
+                spacing: 2
+                Repeater {
+                    model: [false, true]
+                    Rectangle {
+                        required property bool modelData
+                        width: 15
+                        height: 6.5
+                        radius: height / 2
+                        color: "transparent"
+                        border.width: 1.3
+                        border.color: ccExtra.fg
+                        Rectangle {
+                            width: 4.3
+                            height: 4.3
+                            radius: width / 2
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: parent.modelData ? parent.width - width - 1.1 : 1.1
+                            color: ccExtra.fg
+                        }
+                    }
+                }
+            }
             Rectangle {
                 anchors.fill: parent
                 radius: 6

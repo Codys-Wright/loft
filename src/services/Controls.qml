@@ -30,8 +30,8 @@ Singleton {
 
     readonly property var controls: [
         { id: "connectivity", label: "Connectivity", icon: "󰖩", group: "System", sizes: ["2x2"], bar: false, kind: "panel" },
-        { id: "wifi", label: "Wi-Fi", icon: "󰖩", group: "System", feature: "wifiControl", sizes: ["1x1", "2x1"], bar: true, barDefault: true, kind: "panel", activeOnly: "option" },
-        { id: "bluetooth", label: "Bluetooth", icon: "󰂯", group: "System", feature: "bluetoothControl", sizes: ["1x1", "2x1"], bar: true, barDefault: true, kind: "panel", activeOnly: "option" },
+        { id: "wifi", label: "Wi-Fi", icon: "󰖩", group: "System", feature: "wifiControl", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "panel", activeOnly: "option" },
+        { id: "bluetooth", label: "Bluetooth", icon: "󰂯", group: "System", feature: "bluetoothControl", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "panel", activeOnly: "option" },
         { id: "focus", label: "Focus", icon: "󰂛", group: "Everyday", feature: "focusControl", sizes: ["2x1", "1x1"], bar: true, barDefault: true, kind: "panel", activeOnly: "default" },
         { id: "display", label: "Display", icon: "󰃟", group: "Display", feature: "displayControl", sizes: ["4x1"], bar: true, barDefault: false, kind: "panel" },
         { id: "sound", label: "Sound", icon: "󰕾", group: "Sound", feature: "soundControl", sizes: ["4x1"], bar: true, barDefault: true, kind: "panel" },

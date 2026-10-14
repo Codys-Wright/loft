@@ -178,7 +178,7 @@ ColumnLayout {
             enabled: page.cfg.alertTemp
             SettingsSlider {
                 from: 60
-                to: 105
+                to: 110
                 step: 1
                 suffix: " °C"
                 value: Settings.island.maxTemp

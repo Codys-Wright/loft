@@ -115,7 +115,8 @@ Singleton {
                 // glass: the Liquid Glass material.
                 property string fill: "black"
                 // Alert border when a temperature (°C) or load (0..1) exceeds these.
-                property real maxTemp: 95
+                // 100 °C: desktop CPUs (Tjmax 100) are designed to boost up to it.
+                property real maxTemp: 100
                 property real maxLoad: 0.92
                 property int focusMinutes: 25
                 // Expanded pages in order, [{ id, shown }]; [] = the default

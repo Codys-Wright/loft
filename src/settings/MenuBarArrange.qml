@@ -217,12 +217,12 @@ ColumnLayout {
             label: "Show the time"
             hint: "The time also lives in the island; the bar shows the date by default"
             SettingsSwitch {
-                checked: Settings.menubar.clockTime === true
+                checked: Settings.menubar.clockTime !== false
                 onToggled: on => AppMenu.setPref("clockTime", on)
             }
         }
         SettingsRow {
-            visible: Settings.menubar.clockTime === true
+            visible: Settings.menubar.clockTime !== false
             label: "24-hour time"
             SettingsSwitch {
                 checked: Settings.menubar.clock24 === true
