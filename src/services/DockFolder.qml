@@ -8,7 +8,7 @@ import Quickshell.Io
 Scope {
     id: root
 
-    // "xdg:DOWNLOAD", "~/Documents/Themes", an absolute path; ignored for trash.
+    // "xdg:DOWNLOAD", "~/Documents/Loft", an absolute path; ignored for trash.
     property string spec: ""
     property string sort: "added"
     property bool trash: false

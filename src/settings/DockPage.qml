@@ -300,7 +300,7 @@ ColumnLayout {
                 SettingsTextField {
                     id: newFolder
                     implicitWidth: 220
-                    placeholder: "~/Documents/Themes"
+                    placeholder: "~/Documents/Loft"
                     onCommitted: t => {
                         DockData.addFolder(t);
                         text = "";
@@ -325,7 +325,7 @@ ColumnLayout {
                 model: [
                     { path: "xdg:DOWNLOAD", label: "Downloads" },
                     { path: "xdg:DOCUMENTS", label: "Documents" },
-                    { path: "~/Documents/Themes", label: "Theme library" },
+                    { path: "~/Documents/Loft", label: "Theme library" },
                     { path: "xdg:PICTURES", label: "Pictures" },
                     { path: "xdg:DESKTOP", label: "Desktop" },
                     { path: "~", label: "Home" }

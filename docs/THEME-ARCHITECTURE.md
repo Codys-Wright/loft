@@ -1,7 +1,7 @@
 # Theme architecture: facets, themes, variants
 
 Status: **spec, partly implemented**: phases A (model + resolver), B (render units,
-composition cache, hook diffing) and D (CLI surface) have landed; see [§9 Status](#status). It replaces the "a theme is one pack
+composition cache, hook diffing), C (packs, library, migration) and D (CLI surface) have landed; see [§9 Status](#status). It replaces the "a theme is one pack
 with one `theme.json`" model of [THEME-FORMAT.md](THEME-FORMAT.md) and absorbs the
 `wallsets` branch (multi-display wallpaper sets). The companion spec
 [SPACES.md](SPACES.md) uses this model to give each functional space its own theme
@@ -1134,6 +1134,48 @@ check also renders `loft@dark` / `loft@light`.
   customization touch the same keys, saving the customization into a variant or
   theme lets the pin win again. `save-variant` / `save-as` print a note when the
   look changes.
+
+**Done: C (pack v2 + library + migration + importers).** `cli/loft/migrate.py`,
+v2 pack IO in `pack.py` (`validate_v2`, `write_doc`), `library.py`, the
+importers, `tests/test_migrate.py` (six real packs, media stubbed).
+
+- **Library root** `~/Documents/Loft` (`$LOFT_LIBRARY`; `programs.loft.library`'s
+  default). While it doesn't exist and `~/Documents/Themes` does, the old root
+  is used, so deploying before migrating changes nothing. Spaces follow the
+  library (`$LOFT_SPACES_DIR`, else `$LOFT_LIBRARY/Spaces`: QML and loft-niri).
+- **`loft library migrate [--apply] [--undo [REPORT]]`** (also `loft theme
+  migrate`) does §5.5 steps 1–5 with these choices:
+  - v1 packs are converted **in place**: each gets `pack.json` and
+    `facets/<kind>/*.json` (adapter ids, so lock names and renders stay the
+    same) and keeps `theme.json` / `manifest.json` for the v1 readers (the
+    shell's `theme list --json`, `library sort`, vibes, `wallpaper` sets).
+    A grouped theme lives in its base's pack; cozytile's in a new JSON-only
+    `Packs/cozytile`, referring to `colors:cozytile-sakura/…` etc.
+  - Variants carry their member pack's identity (`author`, `version`,
+    `source`, `upstream`) and a `v1` link (`{path, greeter?, vibes?}`, relative
+    to the theme's pack) that the render units read for curated vibes and the
+    greeter; the colors facet's envelope `apps` names the palette's `apps/`
+    dir (a variant's `spicetify.ini`); `render/identity.py` gives both to the
+    `manifest` unit and the units' apps/ overrides (`spotify`, `apps`).
+  - Grouping rules: an importer's `RICE` (cozytile), its `VARIANT_OF`
+    (qylock), same colors + wallpapers, `x` / `x-dark|light`. Base chip ids:
+    the member's short name, or its polarity for a light/dark pair.
+  - User state is merged into `appearance.json` (nothing overwritten);
+    `shell.json` / `niri.json` are copied to `*.pre-loft.json` but **left as
+    they are**: the shell reads `appearance` / `perTheme` and niri.json's
+    `animations` until phase E. Customizations go under the slot the old name
+    meant (`perTheme.tokyonight` → `customizations.loft.dark`), not `"*"`.
+  - The report is saved under `<state>/migration/`; `--undo` reverses it
+    (hard links stay: same content).
+- **M1 with renders** on a copy of Cody's library: all 46 old names render
+  byte for byte the same through their aliases (library root swapped), except
+  `qylock-osumania`'s manifest, whose wallpapers are osu's now (one facet,
+  hard-linked files).
+- **Importers write v2** (`--v1` / `LOFT_IMPORT_FORMAT=1` for the old packs,
+  which the shell's picker lists until phase E). A variant brings its base;
+  later installs add variants to the pack. `theme install|update|export|
+  remove|validate` handle v2 packs; export includes the packs a theme uses,
+  and remove refuses a pack another theme uses (`--with-deps`).
 
 **Test strategy.**
 

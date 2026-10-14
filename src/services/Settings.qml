@@ -74,7 +74,7 @@ Singleton {
                 // The recent-apps section (feature dockRecents): how many.
                 property int recentCount: 3
                 // Docked folders (feature dockStacks), left of the Trash:
-                // { path ("xdg:DOWNLOAD", "~/Documents/Themes", /abs),
+                // { path ("xdg:DOWNLOAD", "~/Documents/Loft", /abs),
                 //   sort: added|name|modified|kind, display: stack|folder,
                 //   view: auto|fan|grid|list }
                 property var folders: [

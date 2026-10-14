@@ -1,0 +1,19 @@
+{
+  "name": "qylock-osumania",
+  "author": "Darkkal44",
+  "version": "0.0.0+f6561e2ceae3",
+  "license": "GPL-3.0",
+  "source": "https://github.com/Darkkal44/qylock/tree/f6561e2ceae33f26e5e660742a5df2f725cbe514/themes/osumania",
+  "description": "osu!mania theme (imported: palette from B Glow.jpg, 7 backgrounds)",
+  "upstream": {
+    "importer": "qylock",
+    "url": "https://github.com/Darkkal44/qylock",
+    "ref": "HEAD",
+    "commit": "f6561e2ceae33f26e5e660742a5df2f725cbe514",
+    "path": "themes/osumania"
+  },
+  "lock": {
+    "format": "qylock",
+    "path": "lock/qylock"
+  }
+}

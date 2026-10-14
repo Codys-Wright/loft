@@ -56,8 +56,9 @@ def template_dir_default() -> Path:
 
 
 def source(res: Resolved, catalog: Catalog, template_dir: Path, curated: dict | None = None) -> Source:
-    apps = res.theme.root / "apps" if res.theme.root is not None else None
-    return Source(res, catalog, Path(template_dir), curated or {}, apps)
+    from .identity import apps_dir
+
+    return Source(res, catalog, Path(template_dir), curated or {}, apps_dir(res))
 
 
 def render_to(res: Resolved, catalog: Catalog, outdir: Path, template_dir: Path, curated: dict | None = None) -> list[str]:

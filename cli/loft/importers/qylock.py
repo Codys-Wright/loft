@@ -42,6 +42,11 @@ LICENSE = "GPL-3.0"
 DESCRIPTION = "Darkkal44's qylock SDDM/Quickshell lock designs (lock design + derived palette)"
 
 LOCK_PATH = "lock/qylock"
+
+# Designs that are a variant of another one (docs/THEME-ARCHITECTURE.md
+# §5.5): theme → (base theme, variant id). Everything else is a theme of its
+# own in the `qylock` collection.
+VARIANT_OF = {"osumania": ("osu", "mania"), "material-you-dark": ("material-you", "dark")}
 NOT_BACKGROUND = re.compile(r"(logo|avatar|pfp|title|icon|preview|screenshot)", re.I)
 SKIP_EXT = {".qml", ".js", ".ttf", ".otf", ".woff", ".woff2", ".conf", ".desktop", ".md", ".txt", ".json", ".svg", ".qmldir"}
 
@@ -49,6 +54,17 @@ SKIP_EXT = {".qml", ".js", ".ttf", ".otf", ".woff", ".woff2", ".conf", ".desktop
 def pack_name(theme: str) -> str:
     slug = re.sub(r"[^a-z0-9._-]+", "-", theme.lower()).strip("-")
     return f"qylock-{slug}"
+
+
+def v2_group(theme: str, available: list[str]) -> tuple[str, str, str | None]:
+    """Format 2: `qylock-<theme>`, or the declared pairs (VARIANT_OF) as a
+    variant of their base's pack. (pack, base theme, variant id or None)."""
+    decl = VARIANT_OF.get(theme.lower())
+    if decl:
+        base = next((t for t in available if t.lower() == decl[0]), None)
+        if base is not None:
+            return pack_name(base), base, decl[1]
+    return pack_name(theme), theme, None
 
 
 def list_themes(up: Upstream) -> list[str]:

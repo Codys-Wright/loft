@@ -181,42 +181,66 @@ def _abs(root: Path | None, p):
     return str(q if q.is_absolute() else root / q)
 
 
-def absolutize(kind: str, data: dict, root: Path | None) -> dict:
-    """Make a facet's file references absolute (they are relative to the
-    document's pack). Works on documents and on patches (missing keys stay missing)."""
-    if root is None or not isinstance(data, dict):
+def map_paths(kind: str, data: dict, fn) -> dict:
+    """A copy of a facet's data (or patch) with every file reference passed
+    through fn(str) -> str; missing keys stay missing."""
+    if not isinstance(data, dict):
         return data
     d = copy.deepcopy(data)
     if kind == "wallpapers":
         if isinstance(d.get("collection"), list):
             d["collection"] = [
-                _abs(root, i) if isinstance(i, str) else {k: _abs(root, v) if k in ("path", "video", "preview") else v for k, v in i.items()} if isinstance(i, dict) else i
+                fn(i) if isinstance(i, str) else {k: fn(v) if k in ("path", "video", "preview") else v for k, v in i.items()} if isinstance(i, dict) else i
                 for i in d["collection"]
             ]
         if isinstance(d.get("dirs"), list):
-            d["dirs"] = [_abs(root, x) for x in d["dirs"]]
+            d["dirs"] = [fn(x) for x in d["dirs"]]
         if "default" in d:
-            d["default"] = _abs(root, d["default"])
+            d["default"] = fn(d["default"])
         if isinstance(d.get("sets"), list):
             for s in d["sets"]:
                 for k in ("displays", "workspaces"):
                     if isinstance(s, dict) and isinstance(s.get(k), dict):
-                        s[k] = {r: _abs(root, p) for r, p in s[k].items()}
+                        s[k] = {r: fn(p) for r, p in s[k].items()}
     elif kind == "lock":
         for k in ("path", "main", "preview", "background"):
             if k in d:
-                d[k] = _abs(root, d[k])
+                d[k] = fn(d[k])
         if isinstance(d.get("wallpaper"), str) and d["wallpaper"] not in ("design", "desktop"):
-            d["wallpaper"] = _abs(root, d["wallpaper"])
+            d["wallpaper"] = fn(d["wallpaper"])
     elif kind == "typography" and isinstance(d.get("fonts"), list):
-        d["fonts"] = [_abs(root, x) for x in d["fonts"]]
+        d["fonts"] = [fn(x) for x in d["fonts"]]
     elif kind == "launcher":
         for k in ("css", "layout"):
             if k in d:
-                d[k] = _abs(root, d[k])
+                d[k] = fn(d[k])
     elif kind == "sounds" and isinstance(d.get("events"), dict):
-        d["events"] = {k: _abs(root, v) for k, v in d["events"].items()}
+        d["events"] = {k: fn(v) for k, v in d["events"].items()}
     return d
+
+
+def absolutize(kind: str, data: dict, root: Path | None) -> dict:
+    """Make a facet's file references absolute (they are relative to the
+    document's pack). Works on documents and on patches (missing keys stay missing)."""
+    if root is None or not isinstance(data, dict):
+        return data
+    return map_paths(kind, data, lambda p: _abs(root, p))
+
+
+def relativize(kind: str, data: dict, root: Path) -> dict:
+    """The inverse of absolutize for writing a pack: references under root
+    become relative to it, others stay as they are."""
+    base = Path(root)
+
+    def rel(p):
+        if not isinstance(p, str) or not p or not Path(p).is_absolute():
+            return p
+        try:
+            return str(Path(p).relative_to(base))
+        except ValueError:
+            return p
+
+    return map_paths(kind, data, rel)
 
 
 # ── documents ───────────────────────────────────────────────────────────────

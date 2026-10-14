@@ -433,7 +433,7 @@ def normalize(pack: Pack) -> tuple[dict, list[tuple[Path, str]]]:
 def normalize_theme(t: dict, name: str, root: Path | None, default: dict | None) -> tuple[dict, list[tuple[Path, str]]]:
     """normalize() for a v1 theme.json dict: `default` is the default
     wallpaper entry ({path, kind}); it is copied into the bundle when it
-    lives under `root` (the pack). The facet renderer (facets/compat.py)
+    lives under `root` (the pack). The v1 adapter and the render units
     builds `t` from resolved facets and comes through here too."""
     pal_in = t["palette"]
     polarity = t.get("polarity", "dark")
@@ -696,3 +696,134 @@ def v1_documents(pack: Pack) -> tuple[dict, list[dict]]:
         v1["greeter"] = str(pack.path / "greeter")
     theme["v1"] = v1
     return theme, docs
+
+
+# ── pack v2 (docs/THEME-ARCHITECTURE.md §5.1) ───────────────────────────────
+#
+#   <pack>/pack.json                 identity, license, upstream (schemas/pack-2.json)
+#   <pack>/themes/<id>.json          themes (schemas/theme-2.json)
+#   <pack>/facets/<kind>/<id>.json   facets (schemas/facet-1.json); file
+#                                    references are relative to the pack
+#
+# A directory with pack.json is a v2 pack, whatever else it holds: a v1
+# pack migrated in place (`loft library migrate`) keeps its theme.json and
+# manifest.json for the v1 readers (the shell's theme list, library sort,
+# vibes, wallpaper sets) until they read the facet model.
+
+PACK_JSON = "pack.json"
+PACK_SCHEMA = "https://loft.dev/schema/pack-2.json"
+FACET_SCHEMA = "https://loft.dev/schema/facet-1.json"
+THEME_SCHEMA = "https://loft.dev/schema/theme-2.json"
+
+
+def is_pack_v2(path: Path) -> bool:
+    return (Path(path) / PACK_JSON).is_file()
+
+
+def is_any_pack(path: Path) -> bool:
+    return is_pack_v2(path) or is_pack(path)
+
+
+def pack_id(path: Path) -> str:
+    """A pack's id: pack.json `id` (v2), the manifest name (v1), else the dir name."""
+    path = Path(path)
+    if is_pack_v2(path):
+        try:
+            meta = _read_json(path / PACK_JSON)
+        except PackError:
+            return path.name
+        return meta.get("id") or path.name
+    if is_pack(path):
+        return Pack(path).name
+    return path.name
+
+
+def v2_meta(path: Path) -> dict:
+    return _read_json(Path(path) / PACK_JSON)
+
+
+def write_doc(path: Path, doc: dict) -> None:
+    """Atomic JSON write (readers never see half a file)."""
+    import os
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}")
+    tmp.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def v2_files(path: Path) -> dict:
+    """{"pack": pack.json, "themes": [files], "facets": {kind: [files]}} of a v2 pack."""
+    from .facets.model import KINDS
+
+    path = Path(path)
+    themes = sorted(p for p in (path / "themes").glob("*.json")) if (path / "themes").is_dir() else []
+    facets = {k: sorted((path / "facets" / k).glob("*.json")) for k in KINDS if (path / "facets" / k).is_dir()}
+    return {"pack": path / PACK_JSON, "themes": themes, "facets": facets}
+
+
+def validate_v2(path: Path, builtin: Path | None = None, others: list[Path] = ()) -> list[str]:
+    """Every problem of a v2 pack: documents against the schemas, kind
+    folders, file references, and its themes resolving (each variant) against
+    the pack itself, `others` (dirs of packs it may refer to) and the
+    built-ins. [] when valid."""
+    from .facets import resolve as R
+    from .facets import schema
+    from .facets.model import NAME, Catalog, FacetError, absolutize, map_paths, read_json
+
+    path = Path(path).resolve()
+    errors: list[str] = []
+    files = v2_files(path)
+    try:
+        meta = read_json(files["pack"])
+    except FacetError as e:
+        return [str(e)]
+    errors += [f"pack.json: {e}" for e in schema.check_doc("pack-2.json", meta)]
+    for kind, fs in files["facets"].items():
+        for f in fs:
+            rel = f.relative_to(path)
+            try:
+                doc = read_json(f)
+            except FacetError as e:
+                errors.append(str(e))
+                continue
+            errors += [f"{rel}: {e}" for e in schema.check_doc("facet-1.json", doc)]
+            if doc.get("kind") != kind:
+                errors.append(f"{rel}: kind {doc.get('kind')!r} doesn't match its folder ({kind})")
+            if doc.get("id", f.stem) != f.stem or not NAME.match(f.stem):
+                errors.append(f"{rel}: the id must be the file name ({f.stem!r}, lowercase letters, digits, . _ -)")
+            if isinstance(doc.get("data"), dict):
+                data = absolutize(kind, doc["data"], path)
+                missing: list[str] = []
+
+                def check(p, kind=kind):
+                    if isinstance(p, str) and p and Path(p).is_absolute() and not Path(p).exists():
+                        missing.append(p)
+                    return p
+
+                map_paths(kind, data, check)
+                errors += [f"{rel}: {m} not found" for m in missing]
+            if isinstance(doc.get("apps"), str) and not (path / doc["apps"]).is_dir():
+                errors.append(f"{rel}: apps: {doc['apps']} not found in the pack")
+    for f in files["themes"]:
+        try:
+            doc = read_json(f)
+        except FacetError as e:
+            errors.append(str(e))
+            continue
+        errors += [f"{f.relative_to(path)}: {e}" for e in schema.check_doc("theme-2.json", doc)]
+    if errors:
+        return errors
+    cat = Catalog([Path(d) for d in others], builtin=builtin, extra_packs=[path])
+    errors += cat.errors
+    pid = meta.get("id") or path.name
+    for t in [t for t in cat.themes() if t.pack == pid]:
+        for vid in [None, *t.variant_ids()]:
+            try:
+                res = R.resolve(cat, t, vid)
+            except FacetError as e:
+                errors.append(f"theme {t.id}{'@' + vid if vid else ''}: {e}")
+                continue
+            errors += [f"theme {res.ref}: {e}" for e in res.errors]
+    return errors

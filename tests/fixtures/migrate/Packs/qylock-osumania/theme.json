@@ -1,0 +1,35 @@
+{
+  "polarity": "dark",
+  "palette": {
+    "bg": "#281625",
+    "surface": "#3c2137",
+    "overlay": "#62495e",
+    "text": "#e8d9e6",
+    "subtext": "#ae9eac",
+    "accent": "#c76bc0",
+    "accent2": "#c29770",
+    "urgent": "#d68596",
+    "ok": "#85d6a3",
+    "warn": "#d6ab85"
+  },
+  "glass": {
+    "blur": true,
+    "xray": true,
+    "tint": "#281625",
+    "opacity": 0.55,
+    "border": "#ffffff",
+    "borderOpacity": 0.12,
+    "radius": 14
+  },
+  "wallpaper": {
+    "image": "lock/qylock/background/B Glow.jpg",
+    "images": [
+      "lock/qylock/background/A Glow.jpg",
+      "lock/qylock/background/C Glow.jpg",
+      "lock/qylock/background/D Glow.jpg",
+      "lock/qylock/background/E Glow.jpg",
+      "lock/qylock/background/F Glow.jpg",
+      "lock/qylock/background/G Glow.jpg"
+    ]
+  }
+}

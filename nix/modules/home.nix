@@ -170,12 +170,16 @@
 
         library = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
-          default = "${config.home.homeDirectory}/Documents/Themes";
-          defaultText = lib.literalExpression ''"''${config.home.homeDirectory}/Documents/Themes"'';
+          default = "${config.home.homeDirectory}/Documents/Loft";
+          defaultText = lib.literalExpression ''"''${config.home.homeDirectory}/Documents/Loft"'';
           description = ''
             The theme + wallpaper library: installed packs in `Packs/`,
-            curated wallpapers in `Wallpapers/Topics/<Topic>/`, and the
+            your themes in `Themes/`, curated wallpapers in
+            `Wallpapers/Topics/<Topic>/`, spaces in `Spaces/`, and the
             Colors / Tones / Themes views `loft library sort` generates.
+            `loft library migrate --apply` moves a library from the old
+            default (~/Documents/Themes, which becomes a symlink); until
+            then the old one is used.
             Packs install here when it exists (otherwise into
             ~/.local/share/loft/themes, which stays searched either
             way). Not created by the module. null turns it off.

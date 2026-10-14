@@ -50,9 +50,22 @@ DESCRIPTION = "Darkkal44's Cozytile qtile rice themes (Cozy, Sakura, Natura, Eve
 
 HEX = r"#[0-9a-fA-F]{6}"
 
+# One rice: every Cozytile theme is a variant of one `cozytile` theme
+# (docs/THEME-ARCHITECTURE.md §5.5), the first listed being the base.
+RICE = ("Cozy", "Sakura", "Natura", "Everforest", "Carbon")
+TITLE = "Cozytile"
+
 
 def pack_name(theme: str) -> str:
     return f"cozytile-{theme.lower()}"
+
+
+def v2_group(theme: str, available: list[str]) -> tuple[str, str, str | None]:
+    """Format 2: every theme is a variant of `cozytile`; the base is the first
+    of RICE upstream has. (pack, base theme, variant id or None for the base)."""
+    order = [t for t in RICE if t in available] + sorted(t for t in available if t not in RICE)
+    base = order[0] if order else theme
+    return NAME, base, None if theme == base else theme.lower()
 
 
 def list_themes(up: Upstream) -> list[str]:

@@ -424,6 +424,9 @@ class Install(unittest.TestCase):
                 "LOFT_STATE_DIR": str(self.tmp / "state"),
                 "LOFT_HOOKS": "none",
                 "LOFT_THEME_INDEX": "none",
+                # These check what the importers build (v1 packs); format 2
+                # (the default) is tests/test_migrate.py's ImportV2.
+                "LOFT_IMPORT_FORMAT": "1",
                 "LOFT_COZYTILE_URL": cozytile_repo(self.tmp / "cozytile"),
                 "LOFT_QYLOCK_URL": qylock_repo(self.tmp / "qylock"),
             }

@@ -8,7 +8,7 @@ import qs.services
 // folder) ranked by how well it matches the theme's colors. Clicking one
 // applies it for this theme; rotation and per-workspace cycle the collection
 // when nothing is picked. All choices are remembered per theme (Vibes).
-// The Library card browses ~/Documents/Themes (Library) by topic, color
+// The Library card browses ~/Documents/Loft (Library) by topic, color
 // family + tone, or the theme an image goes with. Displays & Workspaces
 // (WallpaperDisplays) picks per display / workspace and manages sets.
 ColumnLayout {

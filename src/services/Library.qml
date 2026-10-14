@@ -4,7 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// The theme + wallpaper library (~/Documents/Themes, $LOFT_LIBRARY):
+// The theme + wallpaper library (~/Documents/Loft, $LOFT_LIBRARY):
 // `loft library sort --json` regenerates its Colors / Tones / Themes views
 // and prints the index the Wallpaper page browses — every image with its
 // topic or pack, color families, tone and a cached thumbnail, plus the
