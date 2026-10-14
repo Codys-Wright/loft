@@ -5,6 +5,7 @@ import qs.background
 import qs.bar
 import qs.dock
 import qs.controlcenter
+import qs.island
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 ShellRoot {
@@ -26,5 +27,10 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         ControlCenter {}
+    }
+
+    Variants {
+        model: Quickshell.screens
+        Island {}
     }
 }

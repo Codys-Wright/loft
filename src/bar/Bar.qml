@@ -140,7 +140,8 @@ PanelWindow {
             }
 
             Text {
-                text: Qt.formatDateTime(clock.date, "ddd MMM d   h:mm AP")
+                // The time lives in the island.
+                text: Qt.formatDateTime(clock.date, "ddd MMM d")
                 color: Theme.text
                 font.family: Theme.fontUi
                 font.pixelSize: 13
