@@ -318,12 +318,7 @@
               timeout = cfg.idle.screenOffAfter;
               command = "${lib.getExe pkgs.niri} msg action power-off-monitors";
             };
-          events = [
-            {
-              event = "before-sleep";
-              command = lockCmd;
-            }
-          ];
+          events.before-sleep = lockCmd;
         };
 
         systemd.user.services.loft-launcher = service "Loft launcher (walker + elephant)" "${lib.getExe sp.loft-launcher} service";
