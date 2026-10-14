@@ -16,7 +16,7 @@ import Quickshell
 Singleton {
     id: root
 
-    readonly property var groups: ["Desktop", "Sound", "System", "Windows", "Clipboard & files", "Everyday", "Capture", "Apps", "Display"]
+    readonly property var groups: ["Desktop", "Sound", "System", "Windows", "Clipboard & files", "Everyday", "Capture", "Apps", "Display", "Controls"]
 
     // id, label, icon, group, description, default (on unless false), core (can't be turned off)
     readonly property var modules: [
@@ -44,6 +44,18 @@ Singleton {
         { id: "colorPicker", label: "Color picker", icon: "󰈊", group: "Capture", description: "Pick any pixel with a loupe; HEX / RGB / HSL / QML, recent colors" },
         { id: "camera", label: "Camera mirror", icon: "󰄀", group: "Capture", description: "A floating round camera preview + an island page" },
         { id: "appMenu", label: "App menu", icon: "󰀻", group: "Desktop", page: "MenuBarPage.qml", description: "Click the app name (or Mod+F10): About, New Window, desktop actions, window commands, Hide, Quit" },
+        // Controls: each lives in the Control Center, the menu bar, or both
+        // (Controls.qml; arranged in Settings → Menu Bar and CC Edit Controls).
+        { id: "wifiControl", label: "Wi-Fi & network", icon: "󰖩", group: "Controls", page: "MenuBarPage.qml", description: "Networks, password entry, wired links and VPNs (Tailscale), details with ⌥-click" },
+        { id: "bluetoothControl", label: "Bluetooth", icon: "󰂯", group: "Controls", page: "MenuBarPage.qml", description: "Devices with battery, connect, nearby devices to pair; low-battery alerts" },
+        { id: "soundControl", label: "Sound", icon: "󰕾", group: "Controls", page: "MenuBarPage.qml", description: "Volume, outputs (with Bluetooth battery), mixer; ⌥-click: inputs and the PipeWire clock" },
+        { id: "nowPlaying", label: "Now Playing", icon: "󰎆", group: "Controls", page: "MenuBarPage.qml", description: "Art, transport and scrubber for every MPRIS player" },
+        { id: "focusControl", label: "Focus", icon: "󰂛", group: "Controls", page: "MenuBarPage.qml", description: "Do Not Disturb and focus timers" },
+        { id: "displayControl", label: "Display", icon: "󰃟", group: "Controls", page: "MenuBarPage.qml", description: "Brightness (backlight / DDC), Night Light, Dark or Light appearance" },
+        { id: "batteryControl", label: "Battery", icon: "󰁹", group: "Controls", page: "MenuBarPage.qml", description: "Charge, time remaining, power source and power mode (only with a battery)" },
+        { id: "cameraIndicator", label: "Camera in use", icon: "󰄀", group: "Controls", page: "MenuBarPage.qml", description: "A green dot in the bar while an app uses a camera, with who" },
+        { id: "inputSource", label: "Input source", icon: "󰌌", group: "Controls", page: "MenuBarPage.qml", description: "Keyboard layout in the bar (only with more than one layout)" },
+        { id: "spotlightIcon", label: "Spotlight icon", icon: "󰍉", group: "Controls", page: "MenuBarPage.qml", description: "A magnifier in the bar that opens the launcher" },
         { id: "globalMenu", label: "Global menu", icon: "󰍜", group: "Desktop", page: "MenuBarPage.qml", description: "The focused app's File / Edit / View menus in the bar (Qt/KDE apps; GTK menubars best effort)" }
     ]
 

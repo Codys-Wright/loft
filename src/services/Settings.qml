@@ -33,6 +33,8 @@ Singleton {
     property alias perTheme: settings.perTheme
     // Menu bar module (AppMenu.pref): key → value; absent = the default.
     property alias menubar: settings.menubar
+    // Control Center layout and the menu bar's status items (Controls.qml).
+    property alias controlCenter: settings.controlCenter
 
     FileView {
         id: view
@@ -96,6 +98,8 @@ Singleton {
             property var perTheme: ({})
 
             property var menubar: ({})
+
+            property var controlCenter: ({})
 
             property JsonObject appearance: JsonObject {
                 // Runtime overrides on top of the theme (-1 / "" = theme value).

@@ -24,8 +24,16 @@ Singleton {
     property int current: -1
     property var path: []
     property int depth: 0
-    // "menu" | "about" | "confirm"
+    // "menu" | "about" | "confirm" | "extra" (a status item's panel)
     property string mode: "menu"
+    // The open status item (mode "extra"): control id, the bar item it
+    // hangs from, and ⌥ details.
+    property string extra: ""
+    property var anchor: null
+    property bool details: false
+    // Per screen: the status items with panels, left to right
+    // ([{ id, item }]), for hover-switching and arrow keys.
+    property var extraItems: ({})
     // The focused window when the menu opened (focus moves to the menu).
     property var target: null
     // Quit waiting for confirmation: { window, count }.
@@ -77,6 +85,8 @@ Singleton {
         path = [];
         depth = 1;
         mode = "menu";
+        extra = "";
+        anchor = null;
         open = true;
         notifyOpened(index);
         if (index === 0 && (NiriSettings.bindsData.binds ?? []).length === 0)
@@ -92,12 +102,106 @@ Singleton {
 
     // Hovering another title while a menu is open switches to it (macOS).
     function hoverTitle(screenName, index) {
-        if (open && mode === "menu" && screen === screenName && current !== index)
+        if (open && (mode === "menu" || mode === "extra") && screen === screenName && (mode === "extra" || current !== index))
             openTitle(screenName, index);
+    }
+
+    // ── Status items (extras) ────────────────────────────────────────────
+    function setExtraItems(screenName, list) {
+        const m = Object.assign({}, extraItems);
+        m[screenName] = list;
+        extraItems = m;
+    }
+
+    function anchorOf(screenName, id) {
+        const l = extraItems[screenName] ?? [];
+        return (l.find(e => e.id === id) ?? l.find(e => e.id === "overflow"))?.item ?? null;
+    }
+
+    function openExtra(screenName, id, anchorItem, withDetails) {
+        if (open && mode === "menu")
+            notifyClosed(current);
+        if (!open)
+            target = AppMenu.activeWindow;
+        screen = screenName;
+        current = -1;
+        path = [];
+        depth = 0;
+        extra = id;
+        anchor = anchorItem ?? anchorOf(screenName, id);
+        details = !!withDetails;
+        mode = "extra";
+        Nav.item = null;
+        open = true;
+    }
+
+    function toggleExtra(screenName, id, anchorItem, withDetails) {
+        if (open && mode === "extra" && extra === id && screen === screenName && details === !!withDetails)
+            close();
+        else
+            openExtra(screenName, id, anchorItem, withDetails);
+    }
+
+    // Hovering another status item (or a title) while a menu is open
+    // switches to it, as on macOS.
+    function hoverExtra(screenName, id, anchorItem) {
+        if (open && (mode === "menu" || mode === "extra") && screen === screenName && !(mode === "extra" && extra === id))
+            openExtra(screenName, id, anchorItem, false);
+    }
+
+    function stepExtra(delta) {
+        const l = (extraItems[screen] ?? []).filter(e => e.item && e.item.visible);
+        const i = l.findIndex(e => e.id === extra);
+        const j = i + delta;
+        if (j < 0 && titleCountOn(screen) > firstTitle) {
+            // Left past the first status item: the last menu title.
+            openTitle(screen, titleCountOn(screen) - 1);
+            return;
+        }
+        if (l.length === 0)
+            return;
+        const e = l[(j + l.length) % l.length];
+        openExtra(screen, e.id, e.item, false);
+    }
+
+    function extraKey(event) {
+        switch (event.key) {
+        case Qt.Key_Escape:
+            if (!(Nav.root && typeof Nav.root.back === "function" && Nav.root.back()))
+                close();
+            break;
+        case Qt.Key_Down:
+            Nav.step(1);
+            break;
+        case Qt.Key_Up:
+            Nav.step(-1);
+            break;
+        case Qt.Key_Left:
+            stepExtra(-1);
+            break;
+        case Qt.Key_Right:
+            stepExtra(1);
+            break;
+        case Qt.Key_Return:
+        case Qt.Key_Enter:
+        case Qt.Key_Space:
+            Nav.activate();
+            break;
+        default:
+            if (event.text && event.text.length === 1 && /\S/.test(event.text))
+                Nav.typeSelect(event.text);
+        }
     }
 
     function step(delta) {
         const n = titleCountOn(screen) - firstTitle;
+        // Right past the last title (or left past the first): status items.
+        const extras = (extraItems[screen] ?? []).filter(e => e.item && e.item.visible);
+        if (extras.length > 0 && ((delta > 0 && current === titleCountOn(screen) - 1) || (delta < 0 && current === firstTitle))) {
+            const e = delta > 0 ? extras[0] : extras[extras.length - 1];
+            openExtra(screen, e.id, e.item, false);
+            return;
+        }
         if (n <= 1)
             return;
         const next = firstTitle + ((current - firstTitle + delta) % n + n) % n;
@@ -118,6 +222,10 @@ Singleton {
         depth = 0;
         path = [];
         mode = "menu";
+        extra = "";
+        anchor = null;
+        details = false;
+        Nav.item = null;
         pendingQuit = null;
     }
 
@@ -208,6 +316,10 @@ Singleton {
 
     // ── Keyboard (MenuOverlay forwards keys) ─────────────────────────────
     function key(event) {
+        if (mode === "extra") {
+            extraKey(event);
+            return;
+        }
         if (mode !== "menu") {
             if (event.key === Qt.Key_Escape)
                 close();
@@ -510,6 +622,85 @@ Singleton {
         mode = "about";
         depth = 0;
         open = true;
+    }
+
+    // Status items: open one on the focused output (no arguments: the ipc
+    // CLI can't pass them together with --path).
+    IpcHandler {
+        target: "extras"
+
+        function show(id: string, withDetails: bool): void {
+            // The status area lives on one display (Displays.activeName).
+            const out = Displays.activeName || (Niri.focusedWorkspace?.output ?? "");
+            root.openExtra(out, id, null, withDetails);
+        }
+        function wifi(): void {
+            show("wifi", false);
+        }
+        function wifiDetails(): void {
+            show("wifi", true);
+        }
+        function bluetooth(): void {
+            show("bluetooth", false);
+        }
+        function bluetoothDetails(): void {
+            show("bluetooth", true);
+        }
+        function sound(): void {
+            show("sound", false);
+        }
+        function soundDetails(): void {
+            show("sound", true);
+        }
+        function nowPlaying(): void {
+            show("nowPlaying", false);
+        }
+        function focus(): void {
+            show("focus", false);
+        }
+        function display(): void {
+            show("display", false);
+        }
+        function battery(): void {
+            show("battery", false);
+        }
+        function clock(): void {
+            show("clock", false);
+        }
+        function camera(): void {
+            show("camera", false);
+        }
+        function inputSource(): void {
+            show("inputSource", false);
+        }
+        function overflow(): void {
+            show("overflow", false);
+        }
+        function details(): void {
+            if (root.open && root.mode === "extra")
+                root.details = !root.details;
+        }
+        function close(): void {
+            root.close();
+        }
+        function down(): void {
+            root.key({ key: Qt.Key_Down, text: "" });
+        }
+        function up(): void {
+            root.key({ key: Qt.Key_Up, text: "" });
+        }
+        function left(): void {
+            root.key({ key: Qt.Key_Left, text: "" });
+        }
+        function right(): void {
+            root.key({ key: Qt.Key_Right, text: "" });
+        }
+        function enter(): void {
+            root.key({ key: Qt.Key_Return, text: "" });
+        }
+        function esc(): void {
+            root.key({ key: Qt.Key_Escape, text: "" });
+        }
     }
 
     IpcHandler {

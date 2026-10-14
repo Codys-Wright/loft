@@ -16,7 +16,12 @@ RowLayout {
     readonly property var battery: UPower.displayDevice
     readonly property bool hasBattery: battery !== null && battery.ready && battery.isLaptopBattery
     // Battery only where there is one; GPU only where it can be read.
-    readonly property var shown: (Features.on("barReadouts") ? Settings.system.readouts : []).filter(k => k !== "battery" || hasBattery)
+    // Only these keys (the menu bar arranges each readout as its own item).
+    property var only: null
+    // Bar colors (the bar adapts them to the wallpaper).
+    property color textColor: Theme.text
+    property color subColor: Theme.subtext
+    readonly property var shown: (Features.on("barReadouts") ? (only ?? Settings.system.readouts) : []).filter(k => k !== "battery" || hasBattery)
 
     function openMonitor(key) {
         if (!Features.on("systemMonitor"))
@@ -108,12 +113,12 @@ RowLayout {
                 Icon {
                     text: readout.r.icon
                     size: 13
-                    color: readout.r.alert ? Theme.urgent : hover.containsMouse ? Theme.accent : Theme.subtext
+                    color: readout.r.alert ? Theme.urgent : hover.containsMouse ? Theme.accent : root.subColor
                 }
                 Text {
                     Layout.preferredWidth: metrics.advanceWidth
                     text: readout.r.text
-                    color: readout.r.alert ? Theme.urgent : Theme.text
+                    color: readout.r.alert ? Theme.urgent : root.textColor
                     font.family: Theme.fontUi
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
@@ -132,7 +137,7 @@ RowLayout {
                 Icon {
                     text: "󰛳"
                     size: 13
-                    color: hover.containsMouse ? Theme.accent : Theme.subtext
+                    color: hover.containsMouse ? Theme.accent : root.subColor
                 }
                 Column {
                     spacing: -2
@@ -143,7 +148,7 @@ RowLayout {
                             width: netMetrics.advanceWidth
                             horizontalAlignment: Text.AlignRight
                             text: `${modelData[0]} ${SystemStats.formatRateShort(modelData[1])}`
-                            color: Theme.text
+                            color: root.textColor
                             font.family: Theme.fontUi
                             font.pixelSize: 9
                             font.weight: Font.DemiBold

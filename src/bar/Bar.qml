@@ -104,65 +104,26 @@ PanelWindow {
         }
     }
 
-    // ── Right: status ───────────────────────────────────────────────────
-    RowLayout {
+    // ── Right: status items (Controls; Settings → Menu Bar) ─────────────
+    StatusItems {
         id: statusRow
         // The bar is on every display; its status area only on the active one
         // (main display, or the fallback while the main one is fullscreen).
         visible: Displays.isActive(root.modelData)
         anchors {
             right: parent.right
-            rightMargin: 14
+            rightMargin: 10
             verticalCenter: parent.verticalCenter
         }
-        spacing: 16
-
-        Readouts {}
-
-        Tray {
-            window: root
-            visible: children.length > 1
-        }
-
-        MicIndicator {
-            screenName: root.modelData.name
-        }
-
-        Volume {
-            screenName: root.modelData.name
-        }
-
-        Icon {
-            text: "󰒓"
-            size: 15
-            color: Panels.controlCenterOpen ? Theme.accent : Theme.text
-
-            MouseArea {
-                anchors.fill: parent
-                anchors.margins: -6
-                cursorShape: Qt.PointingHandCursor
-                onClicked: Panels.toggleControlCenter(root.modelData.name)
-            }
-        }
-
-        Text {
-            // The time lives in the island.
-            text: Qt.formatDateTime(clock.date, "ddd MMM d")
-            color: Theme.text
-            font.family: Theme.fontUi
-            font.pixelSize: 13
-            font.weight: Font.Medium
-        }
+        window: root
+        screenName: root.modelData.name
+        // Up to the island (centred, ≤ 300 px compact).
+        maxWidth: root.width / 2 - (Features.on("island") ? 160 : 12) - 10
     }
 
     // Caffeine (Control Center): keep the session from idling.
     IdleInhibitor {
         window: root
         enabled: Panels.caffeine
-    }
-
-    SystemClock {
-        id: clock
-        precision: SystemClock.Minutes
     }
 }

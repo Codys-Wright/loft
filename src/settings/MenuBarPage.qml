@@ -2,11 +2,17 @@ import QtQuick
 import QtQuick.Layouts
 import qs.services
 
-// Settings → Menu Bar: the app menu (click the app name / Mod+F10) and the
-// global menu (the focused app's File / Edit / View … in the bar).
+// Settings → Menu Bar: the status items (MenuBarArrange), the app menu
+// (click the app name / Mod+F10) and the global menu (the focused app's
+// File / Edit / View … in the bar).
 ColumnLayout {
     id: page
     spacing: 12
+
+    // The status area: items, tray, clock, Control Center.
+    MenuBarArrange {
+        Layout.fillWidth: true
+    }
 
     SettingsCard {
         PageHeader {

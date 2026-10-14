@@ -163,6 +163,13 @@ Scope {
         value: state.locked
     }
 
+    Connections {
+        target: LockState
+        function onLockRequested() {
+            root.lock();
+        }
+    }
+
     PamContext {
         id: pam
         config: root.pamService
