@@ -73,7 +73,11 @@
               export STUDIO_THEME_FILE="$state/current/theme.json"
             fi
             export STUDIO_UI_FONT="${uiFont}" STUDIO_ICON_FONT="${iconFont}"
-            exec quickshell --path ${../src} "$@"
+            # STUDIO_SHELL_SRC runs the QML from a checkout instead (hot reload);
+            # the CLI's IPC hooks must target the same path.
+            src="''${STUDIO_SHELL_SRC:-${../src}}"
+            export STUDIO_SHELL_PATH="$src"
+            exec quickshell --path "$src" "$@"
           '';
         };
 

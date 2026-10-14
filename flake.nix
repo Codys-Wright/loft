@@ -19,6 +19,7 @@
         ./nix/apps.nix
         ./nix/dev-shell.nix
         ./nix/checks.nix
+        ./nix/modules/home.nix
       ];
     };
 }
