@@ -123,6 +123,7 @@ the bar on the display with the status area. Layout in `Settings.controlCenter.l
 | Paste as plain text | have | Mod+Shift+Alt+V / IPC `clipboard pastePlain`: wl-paste --type text → wl-copy text/plain → paste |
 | Shelf (park files/text/links while dragging) | have | edge drop target (a thin strip mid-edge notices drags and slides the shelf out), items persisted, dragged back out as text/uri-list / text/plain (Qt Drag.Automatic); IPC `shelf toggle\|addClipboard`. Verified client↔client in nested niri |
 | Finder shortcuts | n/a | file-manager specific |
+| Files (Nautilus) as the Finder | have | Golden Gate glass sidebar (translucent, blurred by niri), opaque file view, traffic lights in the sidebar, accent-colored sidebar icons; Space = Quick Look (Sushi). `programs.loft.gtk` wires the GTK CSS; see DESIGN-GOLDEN-GATE.md |
 | Clean URL | have | opt-in watcher (Settings → Clipboard & Files) + "Clean link" in the panel; rules in src/services/urlclean.js (unit-tested) |
 | Disk image installer | n/a | Nix installs apps declaratively |
 

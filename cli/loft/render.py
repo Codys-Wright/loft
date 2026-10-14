@@ -83,6 +83,15 @@ def variables(norm: dict, fonts_set: bool) -> dict[str, str]:
             "focus_inactive": "#00000000",
             "launcher_glass": c.rgba(g["tint"], min(g["opacity"] * 1.6, 0.92)),
             "launcher_selection": c.rgba(p["text"], 0.12),
+            # Glass sidebars in GTK apps (Nautilus): the theme's glass tint over
+            # the blur niri draws behind the window; opaque without blur.
+            "gtk_sidebar_glass": (
+                c.rgba(c.mix(g["tint"], p["surface"], 0.5), min(max(g["opacity"] * 0.8, 0.25), 0.65))
+                if g["blur"]
+                else p["surface"]
+            ),
+            "gtk_sidebar_hover": c.rgba(p["text"], 0.07),
+            "gtk_sidebar_selected": c.rgba(p["text"], 0.13 if dark else 0.1),
             "niri_blur": "on" if g["blur"] else "off",
             "kitty_blur": "1" if g["blur"] else "0",
             "wallpaper_image": norm["wallpaper"]["image"],

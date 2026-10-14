@@ -71,6 +71,15 @@ values below are ours — tokens, so themes can tune them.
 - **GTK / libadwaita** — `templates/render/gtk.css`: accent and palette, the
   window radius, traffic-light window buttons (glyphs on hover, grey in
   backdrop).
+  `programs.loft.gtk` (default on) imports it from `~/.config/gtk-{3,4}.0/gtk.css`
+  and puts the window buttons on the left (settings.ini + GNOME's `button-layout`
+  key, which libadwaita reads through the portal).
+- **Glass sidebars (Nautilus)** — the same `gtk.css` makes Files' window
+  transparent, its `.sidebar-pane` a thin tint of the theme's glass
+  (`gtk_sidebar_glass`; opaque when the theme turns blur off) and its file view
+  opaque; a niri window rule (`templates/render/niri.kdl`) blurs behind it.
+  Edge-to-edge, a hairline instead of a shadow, accent-colored sidebar icons,
+  rounded selection pills, traffic lights in the sidebar like Finder's.
 
 ## Not copied
 - The notch, HDR UI highlights, and iOS-style app icon layers.

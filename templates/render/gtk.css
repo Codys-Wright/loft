@@ -172,3 +172,56 @@ headerbar button.titlebutton:backdrop:not(:hover) {
   background-image: none;
 }
 
+
+/* ── Golden Gate glass sidebar: Nautilus (Files) ───────────────────────────
+ * The sidebar is translucent and niri blurs what is behind the window (the
+ * window rule in niri.kdl); the file view stays opaque. Edge to edge, no
+ * shadow between the panes, colored sidebar icons, macOS-style rows. With the
+ * traffic lights on the left (gtk-decoration-layout=close,minimize,maximize:)
+ * they sit in the sidebar like Finder's. */
+window.nautilus-window,
+window.nautilus-window.background {
+  background-color: transparent;
+}
+window.nautilus-window .sidebar-pane {
+  background-color: ${gtk_sidebar_glass};
+  box-shadow: none;
+  border-right: 1px solid alpha(${text}, 0.08);
+}
+window.nautilus-window .sidebar-pane:backdrop {
+  background-color: ${gtk_sidebar_glass};
+}
+window.nautilus-window .sidebar-pane headerbar,
+window.nautilus-window .sidebar-pane toolbarview > .top-bar,
+window.nautilus-window .sidebar-pane .navigation-sidebar,
+window.nautilus-window .sidebar-pane scrolledwindow,
+window.nautilus-window .sidebar-pane viewport {
+  background: none;
+  box-shadow: none;
+}
+window.nautilus-window .content-pane {
+  background-color: @view_bg_color;
+}
+window.nautilus-window .sidebar-pane .navigation-sidebar > row {
+  min-height: 28px;
+  margin: 1px 10px;
+  padding: 0 8px;
+  border-radius: 7px;
+}
+window.nautilus-window .sidebar-pane .navigation-sidebar > row:hover {
+  background-color: ${gtk_sidebar_hover};
+}
+window.nautilus-window .sidebar-pane .navigation-sidebar > row:selected {
+  background-color: ${gtk_sidebar_selected};
+  color: ${text};
+}
+window.nautilus-window .sidebar-pane .navigation-sidebar > row image {
+  color: ${accent};
+}
+window.nautilus-window .sidebar-pane .navigation-sidebar > row:selected image {
+  color: ${accent};
+}
+window.nautilus-window .sidebar-pane .navigation-sidebar > separator {
+  margin: 6px 18px;
+  background: alpha(${text}, 0.08);
+}
