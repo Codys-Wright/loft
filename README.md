@@ -132,6 +132,30 @@ right screen edge (Wayland only reports a drag to the surface under the pointer,
 strip there is the sensor) or with `qs ipc … call shelf toggle`. IPC targets: `clipboard`
 (toggle, pastePlain, clear, cleanUrl, wipe, settings), `snippets`, `shelf`, `scratchpad`.
 
+## Menu bar: app menu and global menu
+
+Click the focused app's bold name (or Mod+F10) for its app menu: About, New Window and
+the `.desktop` file's actions, Move to Workspace / Display, Float, Full Screen, Center,
+Hide (niri has no minimize: windows park on a `hidden-<output>` workspace until Show All),
+Close and Quit. The app's own menus (File, Edit, View …) follow it in the bar; menus
+take the keyboard (arrows, Enter, Esc, type to select) and hovering across titles
+switches between them. Settings → Menu Bar.
+
+The global menu comes from `studio-appmenu` (`crates/studio-appmenu`), which the shell
+runs. It owns `com.canonical.AppMenu.Registrar`, so Qt/KDE apps started afterwards move
+their menubar into the bar; it never takes the name from another registrar (Plasma's),
+and finds menus by introspection then. GTK apps with a GtkApplication menubar show
+theirs too (their in-window menubar stays); Electron does under XWayland when
+libdbusmenu-glib is loadable. GTK4/libadwaita apps, Firefox and Wayland Electron have
+no exported menubar.
+
+```sh
+printf '{"cmd":"focus","pid":%s}\n' "$(pidof kate)" | studio-appmenu   # → {"menu":{…}}
+```
+
+To try it from inside another desktop (KDE has its own registrar on your session bus),
+run the nested session on a private bus: `dbus-run-session -- nix run .#dev`.
+
 ## niri settings
 
 Studio Settings has Displays, Keyboard & Mouse, Layout & Motion and Keybinds pages,

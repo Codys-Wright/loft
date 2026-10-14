@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Wayland
 import qs.audio
 import qs.components
+import qs.menubar
 import qs.services
 
 // The menu bar, as on macOS: one translucent strip, flush with the top edge
@@ -66,26 +67,14 @@ PanelWindow {
         }
         spacing: 16
 
-        // The OS mark, like the Apple menu: the NixOS logo (nf-linux-nixos).
-        Icon {
-            text: "\uf313"
-            size: 16
-            color: Theme.text
-
-            MouseArea {
-                anchors.fill: parent
-                anchors.margins: -6
-                cursorShape: Qt.PointingHandCursor
-                onClicked: Niri.toggleOverview()
-            }
-        }
-
-        Text {
-            text: Niri.focusedWindow ? Apps.name(Niri.focusedWindow.app_id) : "Desktop"
-            color: Theme.text
-            font.family: Theme.fontUi
-            font.pixelSize: 13
-            font.weight: Font.Bold
+        // The OS mark (overview), the focused app in bold (its app menu),
+        // then the app's global menus: File Edit View … (src/menubar/).
+        MenuBarTitles {
+            window: root
+            screenName: root.modelData.name
+            barHeight: root.barHeight
+            // Up to the island (centred, ≤ 300 px compact), past the workspaces.
+            maxWidth: root.width / 2 - (Features.on("island") ? 160 : 12) - 14 - left.spacing - workspaces.implicitWidth
         }
 
         Workspaces {

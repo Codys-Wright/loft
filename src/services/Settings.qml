@@ -30,6 +30,8 @@ Singleton {
     // them): { "<theme>": { wallpaper, rotate, perWorkspace, lockDesign } }.
     // A key a theme doesn't have falls back to the global value above it.
     property alias perTheme: settings.perTheme
+    // Menu bar module (AppMenu.pref): key → value; absent = the default.
+    property alias menubar: settings.menubar
 
     FileView {
         id: view
@@ -82,6 +84,8 @@ Singleton {
             }
 
             property var perTheme: ({})
+
+            property var menubar: ({})
 
             property JsonObject appearance: JsonObject {
                 // Runtime overrides on top of the theme (-1 / "" = theme value).

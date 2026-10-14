@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/studio-niri"]
+members = ["crates/studio-appmenu", "crates/studio-niri"]
 
 [workspace.package]
 edition = "2024"

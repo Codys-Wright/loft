@@ -8,6 +8,8 @@
 #                          and themes from a checkout so everything hot-reloads
 #   studio-niri            niri settings backend (crates/studio-niri): live outputs,
 #                          runtime overrides → <state>/overrides/niri.kdl, keybinds
+#   studio-appmenu         global menu daemon (crates/studio-appmenu): AppMenu registrar
+#                          + DBusMenu / org.gtk.Menus reader for the bar
 #
 # Both sessions include <state>/overrides/niri.kdl FIRST (niri uses the first
 # `output` block matching a monitor, so output overrides must come first) and
@@ -111,6 +113,7 @@
           runtimeInputs = runtimeDeps ++ [
             self'.packages.studio
             self'.packages.studio-niri
+            self'.packages.studio-appmenu
           ];
           text = ''
             if [ -z "''${STUDIO_THEME_FILE:-}" ]; then
@@ -158,6 +161,7 @@
             self'.packages.studio-launcher
             self'.packages.studio
             self'.packages.studio-niri
+            self'.packages.studio-appmenu
           ];
           text = ''
             usage() { echo "usage: studio-dev [--output NAME | --windowed] [CHECKOUT]" >&2; exit 2; }
@@ -376,8 +380,40 @@
             ];
           };
           cargoLock.lockFile = ../Cargo.lock;
+          cargoBuildFlags = [
+            "-p"
+            "studio-niri"
+          ];
+          cargoTestFlags = [
+            "-p"
+            "studio-niri"
+          ];
           nativeCheckInputs = [ pkgs.niri ];
           meta.mainProgram = "studio-niri";
+        };
+
+        # Global menu daemon for the bar (src/services/AppMenu.qml runs it).
+        studio-appmenu = pkgs.rustPlatform.buildRustPackage {
+          pname = "studio-appmenu";
+          version = "0.1.0";
+          src = lib.fileset.toSource {
+            root = ../.;
+            fileset = lib.fileset.unions [
+              ../Cargo.toml
+              ../Cargo.lock
+              ../crates
+            ];
+          };
+          cargoLock.lockFile = ../Cargo.lock;
+          cargoBuildFlags = [
+            "-p"
+            "studio-appmenu"
+          ];
+          cargoTestFlags = [
+            "-p"
+            "studio-appmenu"
+          ];
+          meta.mainProgram = "studio-appmenu";
         };
 
         # Screenshot the running studio-dev session: `nix run .#shot -- out.png`.

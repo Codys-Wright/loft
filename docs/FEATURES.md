@@ -31,8 +31,8 @@ in parallel without touching each other.
 ## Menu bar — wave 1 (menu bar)
 | Feature | Status | How |
 |---|---|---|
-| App menu for every app (macOS ⌘-menu) | todo | the bar's app pill opens: About, Hide, New Window + `.desktop` actions, window commands (move to workspace/display, float, fullscreen), Quit (with hold-to-quit protection) |
-| Global menu (File / Edit / View … in the bar) | todo | Rust `appmenu` daemon: a `com.canonical.AppMenu.Registrar` (Qt exports its menubar when one exists) + reads DBusMenu / `org.gtk.Menus` for the focused window, matched by PID from niri (niri has no KDE appmenu protocol); the bar draws glass dropdowns. Qt/KDE apps yes; GTK3 via appmenu-gtk-module; Electron only under XWayland; GTK4/libadwaita/Firefox no (in-window menus) |
+| App menu for every app (macOS ⌘-menu) | have | click the bold app name or Mod+F10 (`src/menubar/`): About, New Window + `.desktop` actions, Move to Workspace ▸ / Display ▸, Float/Tile, Full Screen, Maximize Column, Center, Hide / Hide Others / Show All (parking workspace `hidden-<output>`: niri has no minimize), Close Window, Quit (closes every window, confirms when several, optional SIGTERM after 3/10 s). Hold-to-quit: todo |
+| Global menu (File / Edit / View … in the bar) | have | `studio-appmenu` (crates/studio-appmenu): owns `com.canonical.AppMenu.Registrar` (never replaces another one, e.g. Plasma's), matches the focused window by pid (niri has no appmenu protocol) — registrar entries, then introspection of the process's bus connections, and `_NET_ACTIVE_WINDOW` for X11 windows. Reads DBusMenu (Qt/KDE, Electron on X11) and `org.gtk.Menus` (GtkApplication menubars). Verified: Qt/KDE (Kate, KCalc, PyQt), GTK3 GtkApplication (Mousepad, gtk3-demo-application), Electron under XWayland (needs libdbusmenu-glib). No: GTK4/libadwaita apps without a menubar (Text Editor), Firefox, Electron on Wayland |
 
 ## Windows and the dock — wave 2 (windows)
 | Feature | Status | How |

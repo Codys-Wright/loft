@@ -33,6 +33,7 @@ Scope {
         { id: "features", icon: "󰐱", label: "Features" },
         { id: "clipboard", icon: "󰨸", label: "Clipboard & Files" },
         { id: "snippets", icon: "󱐋", label: "Snippets", feature: "snippets" },
+        { id: "menubar", icon: "󰍜", label: "Menu Bar" },
         { id: "about", icon: "󰋼", label: "About" }
     ]
 
@@ -69,6 +70,9 @@ Scope {
         }
         function capture(): void {
             root.show("capture");
+        }
+        function menubar(): void {
+            root.show("menubar");
         }
     }
 
@@ -549,6 +553,11 @@ Scope {
                         CapturePage {
                             Layout.fillWidth: true
                             visible: root.section === "capture"
+                        }
+
+                        MenuBarPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "menubar"
                         }
 
                         // About

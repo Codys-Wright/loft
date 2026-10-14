@@ -42,7 +42,9 @@ Singleton {
         { id: "capture", label: "Screenshots & recording", icon: "󰹑", group: "Capture", description: "⌘⇧5 selector: area/window/screen shots, recording with audio, thumbnail, annotate, pin, GIF, trim" },
         { id: "ocr", label: "Text from screen", icon: "󱄽", group: "Capture", description: "Copy the text or QR code in a screen region (tesseract, zbar)" },
         { id: "colorPicker", label: "Color picker", icon: "󰈊", group: "Capture", description: "Pick any pixel with a loupe; HEX / RGB / HSL / QML, recent colors" },
-        { id: "camera", label: "Camera mirror", icon: "󰄀", group: "Capture", description: "A floating round camera preview + an island page" }
+        { id: "camera", label: "Camera mirror", icon: "󰄀", group: "Capture", description: "A floating round camera preview + an island page" },
+        { id: "appMenu", label: "App menu", icon: "󰀻", group: "Desktop", page: "MenuBarPage.qml", description: "Click the app name (or Mod+F10): About, New Window, desktop actions, window commands, Hide, Quit" },
+        { id: "globalMenu", label: "Global menu", icon: "󰍜", group: "Desktop", page: "MenuBarPage.qml", description: "The focused app's File / Edit / View menus in the bar (Qt/KDE apps; GTK menubars best effort)" }
     ]
 
     readonly property var presets: ({
