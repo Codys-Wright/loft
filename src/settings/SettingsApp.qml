@@ -351,17 +351,21 @@ Scope {
                                     Text {
                                         anchors {
                                             left: parent.left
+                                            right: polarityGlyph.left
                                             bottom: parent.bottom
                                             margins: 10
+                                            rightMargin: 6
                                         }
                                         text: card.modelData.name
                                         color: card.p.text
                                         font.family: Theme.fontUi
                                         font.pixelSize: 13
                                         font.weight: card.current ? Font.Bold : Font.Medium
+                                        elide: Text.ElideRight
                                     }
 
                                     Text {
+                                        id: polarityGlyph
                                         anchors {
                                             right: parent.right
                                             bottom: parent.bottom
