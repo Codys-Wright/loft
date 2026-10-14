@@ -13,7 +13,8 @@ Environment (all optional):
   STUDIO_THEME_INDEX   themes index (path, file:// or http(s) URL; `none` = off)
                        for curated vibe links (default: studio-linux-themes on GitHub)
 
-`studio --dev …` targets the session started by `nix run .#dev` instead.
+`studio --dev …` targets the session started by `nix run .#dev` instead
+($STUDIO_SESSION=NAME: the one started with `studio-dev --session NAME`).
 """
 
 from __future__ import annotations
@@ -120,9 +121,17 @@ class Ctx:
 
 
 def load_dev_env() -> None:
-    env_file = Path(_env("XDG_RUNTIME_DIR") or "/tmp") / "studio-dev" / "session.env"
+    # `studio-dev --session NAME` sessions live in studio-dev-NAME; the
+    # default (`dev`) in studio-dev. Inside an isolated session
+    # XDG_RUNTIME_DIR is the session's own, so prefer the host's.
+    name = _env("STUDIO_SESSION") or "dev"
+    runtime = _env("STUDIO_DEV_HOST_RUNTIME") or _env("XDG_RUNTIME_DIR") or "/tmp"
+    sub = "studio-dev" if name == "dev" else f"studio-dev-{name}"
+    env_file = Path(runtime) / sub / "session.env"
+    if not env_file.is_file() and _env("XDG_RUNTIME_DIR"):
+        env_file = Path(f"/run/user/{os.getuid()}") / sub / "session.env"
     if not env_file.is_file():
-        raise Fail("no studio-dev session running")
+        raise Fail(f"no studio-dev session `{name}` running")
     for line in env_file.read_text().splitlines():
         if "=" in line and not line.startswith("#"):
             k, v = line.split("=", 1)

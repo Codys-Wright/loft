@@ -11,6 +11,9 @@
 #   studio-niri-clippy  `cargo clippy --all-targets -D warnings`
 #   studio-appmenu  the global menu daemon builds and its tests pass
 #   studio-appmenu-clippy  the same clippy gate for it
+#   studio-input    the test driver builds and its tests pass (keymaps, combos,
+#                   script parsing, bind lookup, screenshot geometry)
+#   studio-input-clippy  the same clippy gate for it
 #   clipboard-urlclean  Clean URL's tracking-parameter stripping (src/services/urlclean.js)
 #
 # After an intended output change, refresh the goldens from a checkout:
@@ -97,6 +100,20 @@
           buildPhase = ''
             cargo clippy --offline -p studio-appmenu --all-targets -- -D warnings
           '';
+          installPhase = "touch $out";
+        });
+
+        studio-input = self'.packages.studio-input;
+
+        studio-input-clippy = self'.packages.studio-input.overrideAttrs (old: {
+          pname = "studio-input-clippy";
+          nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.clippy ];
+          dontCargoBuild = true;
+          doCheck = false;
+          buildPhase = ''
+            cargo clippy --offline -p studio-input --all-targets -- -D warnings
+          '';
+          postInstall = "";
           installPhase = "touch $out";
         });
 
