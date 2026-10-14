@@ -1,9 +1,18 @@
-"""Scrolling capture: stitch screenshots of a scrolling area into one tall image.
+"""Scrolling capture: stitch screenshots of a scrolling area into one tall
+(or wide) image.
 
 Frames are grabbed from the same screen rectangle while its content scrolls
 (grim -t ppm). Consecutive frames are compared row by row: every pixel row
 gets a hash, and the scroll distance between two frames is the vertical
 shift that lines up the most rows of the new frame with the previous one.
+
+Sideways scrolling (axis "x": a timeline, a wide table, `less -S`) is the
+same problem turned 90°: each frame is transposed, so its pixel columns
+become rows, and everything below applies to columns — sticky headers and
+footers become sticky left / right panels (a DAW's track headers, a
+spreadsheet's frozen first column, a vertical scrollbar), and the edge left
+out of the hashes is the bottom one, where a horizontal scrollbar moves.
+`detect_axis` tells the two apart from the first frame that scrolled.
 
   * Sticky headers and footers (toolbars, tab bars, status lines) are rows
     that sit at the same place in both frames. They are left out of the
@@ -75,6 +84,20 @@ def parse_ppm(buf: bytes) -> Image:
     if len(data) != width * height * 3:
         raise ValueError("truncated PPM")
     return Image(width, height, data)
+
+
+def transpose(img: Image) -> Image:
+    """The image turned on its diagonal: pixel (x, y) moves to (y, x), so
+    columns become rows. Extended-slice copies, one per column and channel,
+    keep it fast in pure Python."""
+    w, h, d = img.width, img.height, img.data
+    out = bytearray(w * h * 3)
+    stride = w * 3
+    for x in range(w):
+        o = x * h * 3
+        for c in range(3):
+            out[o + c : o + h * 3 : 3] = d[x * 3 + c :: stride]
+    return Image(h, w, bytes(out))
 
 
 def read_ppm(path: str | os.PathLike) -> Image:
@@ -151,6 +174,7 @@ def read_png(path: str | os.PathLike) -> Image:
                 line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
         prev = line
         if bpp == 4:
+            line = bytearray(line)  # `prev` keeps the alpha bytes
             del line[3::4]
         out += line
     return Image(width, height, bytes(out))
@@ -271,35 +295,64 @@ def match(prev: tuple[list[int], list[bool]], cur: tuple[list[int], list[bool]],
 @dataclass
 class Placed:
     path: str
-    y: int  # canvas row of the frame's row 0
+    y: int  # canvas row (column, for axis "x") of the frame's row 0
     shift: int  # rows it moved past the previous kept frame (0 for the first)
     top: int
     bottom: int
     gap: bool = False
 
 
+AXES = ("y", "x")
+
+
+def detect_axis(prev: Image, cur: Image, threshold: float = 0.9) -> str | None:
+    """Which way the content moved between two frames of the same area:
+    "y" (up / down), "x" (sideways) or None (no scroll yet: unchanged, a
+    caret, or nothing lines up). Both directions are tried; a real scroll
+    lines up in one of them only."""
+    best: tuple[float, str] | None = None
+    for axis in AXES:
+        a, b = (prev, cur) if axis == "y" else (transpose(prev), transpose(cur))
+        m = match(signature(a), signature(b), threshold)
+        if m.kind in ("added", "back") and (best is None or m.score > best[0]):
+            best = (m.score, axis)
+    return best[1] if best else None
+
+
 @dataclass
 class Stitcher:
     """Incremental stitcher. `add` a frame (a PPM path); kept frames stay on
-    disk until `compose` writes the result."""
+    disk until `compose` writes the result. `axis` "y" stitches top to
+    bottom, "x" left to right (on transposed frames: "rows" below are the
+    frames' pixel columns then)."""
 
     threshold: float = 0.9
-    width: int = 0
+    axis: str = "y"
+    width: int = 0  # the frames' size, as grabbed
     height: int = 0
     frames: list[Placed] = field(default_factory=list)
     gaps: int = 0
     _last: tuple[list[int], list[bool]] | None = None
 
+    def __post_init__(self):
+        if self.axis not in AXES:
+            raise ValueError(f"axis must be one of {AXES}")
+
+    @property
+    def length(self) -> int:
+        """A frame's extent along the scroll axis."""
+        return self.height if self.axis == "y" else self.width
+
     def add(self, path: str | os.PathLike, img: Image | None = None) -> Match:
         img = img or read_ppm(path)
-        sig = signature(img)
+        if self.frames and (img.width, img.height) != (self.width, self.height):
+            raise ValueError("frames must all have the same size")
+        sig = signature(img if self.axis == "y" else transpose(img))
         if not self.frames:
             self.width, self.height = img.width, img.height
             self.frames.append(Placed(str(path), 0, 0, 0, 0))
             self._last = sig
-            return Match("added", img.height, 0, 0, 1.0)
-        if (img.width, img.height) != (self.width, self.height):
-            raise ValueError("frames must all have the same size")
+            return Match("added", self.length, 0, 0, 1.0)
         m = match(self._last, sig, self.threshold)
         if m.kind in ("added", "gap"):
             last = self.frames[-1]
@@ -320,52 +373,102 @@ class Stitcher:
         return min(bots) if bots else 0
 
     @property
-    def total_height(self) -> int:
-        return self.frames[-1].y + self.height if self.frames else 0
+    def total_length(self) -> int:
+        """The stitched image's extent along the axis (height for "y",
+        width for "x"), before sticky rows are deduplicated."""
+        return self.frames[-1].y + self.length if self.frames else 0
 
-    def segments(self) -> list[dict]:
-        """Where each kept frame's rows go: [{path, sy, h, y}] — source rows
-        [sy, sy + h) of `path` land at canvas row y."""
+    @property
+    def total_height(self) -> int:
+        return self.total_length
+
+    def spans(self) -> list[tuple[str, int, int, int]]:
+        """Where each kept frame's rows (columns, for "x") go: [(path, s, n,
+        at)] — source rows [s, s + n) of `path` land at canvas row `at`."""
         if not self.frames:
             return []
-        h, foot = self.height, self.footer()
-        out = []
+        h, foot = self.length, self.footer()
         first = self.frames[0]
         if len(self.frames) == 1:
-            return [{"path": first.path, "sy": 0, "h": h, "y": 0}]
-        out.append({"path": first.path, "sy": 0, "h": h - foot, "y": 0})
+            return [(first.path, 0, h, 0)]
+        out = [(first.path, 0, h - foot, 0)]
         for f in self.frames[1:]:
             n = min(f.shift, h - foot - (f.top if f.gap else 0))
             if n > 0:
-                out.append({"path": f.path, "sy": h - foot - n, "h": n, "y": f.y + h - foot - n})
+                out.append((f.path, h - foot - n, n, f.y + h - foot - n))
         last = self.frames[-1]
         if foot:
-            out.append({"path": last.path, "sy": h - foot, "h": foot, "y": last.y + h - foot})
+            out.append((last.path, h - foot, foot, last.y + h - foot))
         return out
+
+    def segments(self) -> list[dict]:
+        """`spans` for the live preview: [{path, sy, h, y}] for "y",
+        [{path, sx, w, x}] for "x"."""
+        keys = ("sy", "h", "y") if self.axis == "y" else ("sx", "w", "x")
+        return [{"path": p, keys[0]: s, keys[1]: n, keys[2]: at} for p, s, n, at in self.spans()]
+
+    @property
+    def stitched_length(self) -> int:
+        return sum(n for _p, _s, n, _at in self.spans())
+
+    def size(self) -> tuple[int, int]:
+        """The stitched image's (width, height)."""
+        n = self.stitched_length
+        return (self.width, n) if self.axis == "y" else (n, self.height)
 
     def rows(self):
         """The stitched image's rows, top to bottom."""
+        if self.axis == "x":
+            yield from self._rows_x()
+            return
         cache: dict[str, Image] = {}
-        for s in self.segments():
-            img = cache.get(s["path"])
+        for path, s, n, _at in self.spans():
+            img = cache.get(path)
             if img is None:
                 cache.clear()  # one frame in memory at a time
-                img = cache[s["path"]] = read_ppm(s["path"])
-            for y in range(s["sy"], s["sy"] + s["h"]):
+                img = cache[path] = read_ppm(path)
+            for y in range(s, s + n):
                 yield img.row(y)
+
+    def _rows_x(self):
+        # Columns from many frames make up every row: build the canvas one
+        # frame at a time (≤ 40 000 px wide: ≤ 120 MB per 1000 rows), then
+        # hand out its rows.
+        width, height = self.size()
+        stride = width * 3
+        canvas = bytearray(stride * height)
+        x = 0
+        for path, s, n, _at in self.spans():
+            img = read_ppm(path)
+            src = img.width * 3
+            for y in range(height):
+                o = y * src + s * 3
+                canvas[y * stride + x * 3 : y * stride + (x + n) * 3] = img.data[o : o + n * 3]
+            x += n
+        for y in range(height):
+            yield bytes(canvas[y * stride : (y + 1) * stride])
 
     def compose(self, out: str | os.PathLike) -> tuple[int, int]:
         if not self.frames:
             raise ValueError("no frames")
-        segs = self.segments()
-        height = sum(s["h"] for s in segs)
-        Path(out).write_bytes(png_bytes(self.width, height, self.rows()))
-        return self.width, height
+        width, height = self.size()
+        Path(out).write_bytes(png_bytes(width, height, self.rows()))
+        return width, height
 
 
-def stitch_files(paths: list[str], out: str, threshold: float = 0.9) -> dict:
-    """Batch: stitch PPM frames, in order, into a PNG; returns a summary."""
-    st = Stitcher(threshold=threshold)
+def stitch_files(paths: list[str], out: str, threshold: float = 0.9, axis: str = "y") -> dict:
+    """Batch: stitch PPM frames, in order, into a PNG; returns a summary.
+    axis "auto": the first pair of frames that scrolled decides."""
+    if axis == "auto":
+        axis = "y"
+        imgs = [read_ppm(paths[0])] if paths else []
+        for p in paths[1:]:
+            imgs.append(read_ppm(p))
+            found = detect_axis(imgs[-2], imgs[-1], threshold)
+            if found:
+                axis = found
+                break
+    st = Stitcher(threshold=threshold, axis=axis)
     kinds: dict[str, int] = {}
     for p in paths:
         k = st.add(p).kind
@@ -373,6 +476,7 @@ def stitch_files(paths: list[str], out: str, threshold: float = 0.9) -> dict:
     width, height = st.compose(out)
     return {
         "path": str(out),
+        "axis": axis,
         "width": width,
         "height": height,
         "frames": len(paths),

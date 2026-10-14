@@ -4,17 +4,25 @@ recording zooms.
   scroll   a scrolling-capture session: grabs the area (grim -t ppm) a few
            times a second while you scroll it, stitches the frames
            (loft.stitch) and prints one JSON line per change —
-           {"event": "frame", "height", "frames", "segments": […]} — for the
-           live preview. Commands on stdin: `done` writes the PNG and prints
-           {"event": "done", "path", …}; `cancel` throws it away; `auto
-           [X Y]` starts Auto Scroll (loft-pointer turns the wheel over the
-           area; X Y: where to put the pointer back), `stop` / `abort` end it
-           (abort: the user moved the pointer, so it stays where it is).
+           {"event": "frame", "axis", "width", "height", "frames",
+           "segments": […]} — for the live preview. --axis y (down, the
+           default), x (sideways: columns, left to right) or auto (the first
+           scroll decides; {"event": "axis", "axis", "detected": true}).
+           Commands on stdin: `done` writes the PNG and prints {"event":
+           "done", "path", …}; `cancel` throws it away; `axis y|x|auto`
+           changes the direction (starting over from the last frame if
+           anything was stitched); `auto [X Y]` starts Auto Scroll
+           (loft-pointer turns the wheel over the area — the horizontal one
+           for x; X Y: where to put the pointer back), `stop` / `abort` end
+           it (abort: the user moved the pointer, so it stays where it is).
            Auto Scroll also ends by itself at the end of the content (a few
            frames in a row with no new rows although the wheel turned), at
-           AUTO_TIMEOUT and at MAX_HEIGHT; {"event": "auto", "state":
+           AUTO_TIMEOUT and at MAX_LENGTH; {"event": "auto", "state":
            starting|running|stopping|stopped, "reason"} reports it.
-  stitch   stitch PPM frames into one tall PNG (batch, for scripts/tests)
+  stitch   stitch PPM frames into one tall (--axis x: wide) PNG (batch, for
+           scripts/tests)
+  panorama one image of a whole niri workspace strip (loft.panorama): every
+           column side by side, wider than the display
   zoom auto    find where the action is in a recording — pointer movement,
                clicks that change the UI, typing — and propose zoom segments
   zoom render  export a recording with zoom segments (and an optional trim)
@@ -51,7 +59,8 @@ from . import stitch
 
 # ── Scrolling capture ───────────────────────────────────────────────────
 
-MAX_HEIGHT = 40000  # px: stop growing (a PNG this tall is ~150 MB of pixels)
+MAX_LENGTH = 40000  # px along the scroll axis: stop growing (~150 MB of pixels)
+MAX_HEIGHT = MAX_LENGTH
 
 
 def emit(obj: dict) -> None:
@@ -123,7 +132,7 @@ def area_center(geometry: str) -> tuple[int, int]:
     return x + w // 2, y + h // 2
 
 
-def pointer_command(at: tuple[int, int], restore: tuple[float, float] | None, interval_ms: int = AUTO_INTERVAL_MS) -> list[str]:
+def pointer_command(at: tuple[int, int], restore: tuple[float, float] | None, interval_ms: int = AUTO_INTERVAL_MS, axis: str = "y") -> list[str]:
     """loft-pointer's argv, on this session's own Wayland display (the
     shell's, which started us) — never any other."""
     exe = os.environ.get("LOFT_POINTER") or shutil.which("loft-pointer")
@@ -138,6 +147,8 @@ def pointer_command(at: tuple[int, int], restore: tuple[float, float] | None, in
     cmd = [exe, "scroll", "--display", display, "--at", f"{at[0]},{at[1]}", "--interval-ms", str(interval_ms), "--timeout", str(int(AUTO_TIMEOUT) + 10)]
     if os.environ.get("NIRI_SOCKET"):
         cmd += ["--niri-socket", os.environ["NIRI_SOCKET"]]
+    if axis == "x":
+        cmd += ["--axis", "horizontal"]
     if restore is not None:
         cmd += ["--restore", f"{restore[0]:g},{restore[1]:g}"]
     return cmd
@@ -222,8 +233,8 @@ class PointerHelper:
         return out
 
 
-def start_pointer(at: tuple[int, int], restore: tuple[float, float] | None, interval_ms: int) -> PointerHelper:
-    return PointerHelper(pointer_command(at, restore, interval_ms))
+def start_pointer(at: tuple[int, int], restore: tuple[float, float] | None, interval_ms: int, axis: str = "y") -> PointerHelper:
+    return PointerHelper(pointer_command(at, restore, interval_ms, axis))
 
 
 def scroll_session(
@@ -236,14 +247,37 @@ def scroll_session(
     helper_factory=start_pointer,
     clock=time.monotonic,
     restore_delay: float = RESTORE_DELAY,
+    axis: str = "y",
 ) -> int:
     """Run until `done` / `cancel` on stdin (or `commands`, an iterator of
     lines, for tests). Returns the exit code."""
     work.mkdir(parents=True, exist_ok=True)
-    st = stitch.Stitcher()
+    if axis not in ("y", "x", "auto"):
+        raise ValueError("axis must be y, x or auto")
+    # "auto": stitch top to bottom until a frame has moved one way or the
+    # other (stitch.detect_axis); sideways starts over with the kept frames.
+    detecting = axis == "auto"
+    st = stitch.Stitcher(axis="y" if detecting else axis)
+    last_img: stitch.Image | None = None  # the last kept frame (detection)
     n = 0
     status = ""
     auto: dict | None = None  # {helper, stop: AutoStop, pace, running}
+
+    def set_axis(new: str, detected: bool) -> None:
+        """Lock (or change) the direction; anything stitched the other way
+        starts over from the last kept frame."""
+        nonlocal st, detecting
+        detecting = new == "auto"
+        want = "y" if detecting else new
+        restarted = False
+        if want != st.axis:
+            old = st
+            st = stitch.Stitcher(axis=want)
+            keep = old.frames if detected else old.frames[-1:]
+            for f in keep:
+                st.add(f.path)
+            restarted = len(old.frames) > len(keep)
+        emit({"event": "axis", "axis": new, "detected": detected, "restarted": restarted})
 
     def auto_start(args: list[str]) -> None:
         nonlocal auto
@@ -255,9 +289,11 @@ def scroll_session(
                 restore = (float(args[0]), float(args[1]))
             except ValueError:
                 restore = None
-        emit({"event": "auto", "state": "starting"})
+        if detecting:
+            set_axis("y", False)  # the wheel needs a direction: down unless told
+        emit({"event": "auto", "state": "starting", "axis": st.axis})
         try:
-            helper = helper_factory(area_center(geometry), restore, AUTO_INTERVAL_MS)
+            helper = helper_factory(area_center(geometry), restore, AUTO_INTERVAL_MS, axis=st.axis)
         except (OSError, RuntimeError, ValueError) as e:
             emit({"event": "auto", "state": "stopped", "reason": "unavailable", "message": str(e)})
             return
@@ -309,7 +345,7 @@ def scroll_session(
             return 1
         out.parent.mkdir(parents=True, exist_ok=True)
         w, h = st.compose(out)
-        emit({"event": "done", "path": str(out), "width": w, "height": h, "frames": len(st.frames), "gaps": st.gaps})
+        emit({"event": "done", "path": str(out), "axis": st.axis, "width": w, "height": h, "frames": len(st.frames), "gaps": st.gaps})
         return 0
 
     def cleanup() -> None:
@@ -343,6 +379,12 @@ def scroll_session(
                     return 0
                 if cmd == "auto":
                     auto_start(args)
+                elif cmd == "axis" and args and args[0] in ("y", "x", "auto"):
+                    want = args[0]
+                    if want != ("auto" if detecting else st.axis):
+                        auto_end("stop")  # the wheel turns the other way now
+                        set_axis(want, False)
+                        status = ""
                 elif cmd == "stop":
                     auto_end("stop")
                 elif cmd == "abort":
@@ -352,8 +394,15 @@ def scroll_session(
             if not grabber(geometry, f):
                 emit({"event": "error", "message": "grim failed"})
                 return 1
-            m = st.add(f)
-            if m.kind not in ("added", "gap"):
+            img = stitch.read_ppm(f)
+            if detecting and st.frames and last_img is not None:
+                found = stitch.detect_axis(last_img, img, st.threshold)
+                if found:
+                    set_axis(found, True)
+            m = st.add(f, img)
+            if m.kind in ("added", "gap"):
+                last_img = img
+            else:
                 f.unlink(missing_ok=True)
             if auto is not None:
                 if m.kind == "gap" and auto["pace"] < AUTO_MAX_INTERVAL_MS:
@@ -365,21 +414,24 @@ def scroll_session(
                     auto_end(why)
             if m.kind != status or m.kind in ("added", "gap"):
                 status = m.kind
+                w, h = st.size()
                 emit(
                     {
                         "event": "frame",
                         "status": m.kind,
-                        "width": st.width,
+                        "axis": "auto" if detecting else st.axis,
+                        "width": w,
+                        "height": h,
+                        "frameWidth": st.width,
                         "frameHeight": st.height,
-                        "height": sum(s["h"] for s in st.segments()),
                         "frames": len(st.frames),
                         "gaps": st.gaps,
                         "segments": st.segments(),
                     }
                 )
-            if st.total_height >= MAX_HEIGHT:
+            if st.total_length >= MAX_LENGTH:
                 auto_end("limit")
-                emit({"event": "limit", "height": st.total_height})
+                emit({"event": "limit", "axis": st.axis, "length": st.total_length})
                 return finish()
     finally:
         cleanup()
@@ -676,17 +728,23 @@ def add_parser(top) -> None:
     s.add_argument("--out", required=True, help="PNG to write on `done`")
     s.add_argument("--work", help="frame scratch dir (default: next to --out's tmp)")
     s.add_argument("--interval", type=float, default=0.12)
+    s.add_argument("--axis", choices=("y", "x", "auto"), default="y", help="y: down (default), x: sideways, auto: the first scroll decides")
 
     def _scroll(ctx, a):
         work = Path(a.work) if a.work else Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / f"loft-scroll-{os.getpid()}"
-        sys.exit(scroll_session(a.geometry, work, Path(a.out), a.interval))
+        sys.exit(scroll_session(a.geometry, work, Path(a.out), a.interval, axis=a.axis))
 
     s.set_defaults(fn=_scroll)
 
     s = sub.add_parser("stitch", help="stitch PPM frames (in order) into one PNG")
     s.add_argument("frames", nargs="+")
     s.add_argument("-o", "--out", required=True)
-    s.set_defaults(fn=lambda ctx, a: print(json.dumps(stitch.stitch_files(a.frames, a.out))))
+    s.add_argument("--axis", choices=("y", "x", "auto"), default="y")
+    s.set_defaults(fn=lambda ctx, a: print(json.dumps(stitch.stitch_files(a.frames, a.out, axis=a.axis))))
+
+    from . import panorama
+
+    panorama.add_parser(sub)
 
     z = sub.add_parser("zoom", help="recording zooms: find (auto) and export (render)")
     zs = z.add_subparsers(dest="zcmd", required=True)

@@ -13,6 +13,11 @@ import qs.services
 // the app as usual. Nothing of the HUD sits inside the area, so none of it
 // ends up in the frames.
 //
+// Sideways (Capture.scrollAxis "x": a timeline, a wide table): the strip
+// runs under (or over) the area instead and grows to the right, the pill
+// says how wide. The pill's ↕ / ↔ pick the direction; with neither picked
+// (scrollAxis "auto") the first scroll decides.
+//
 // Auto Scroll (Capture.scrollAuto): once the helper has put the pointer in
 // the middle of the area, the HUD takes input everywhere except a small hole
 // under the pointer — the wheel notches go through the hole to the app, and
@@ -28,6 +33,7 @@ PanelWindow {
     readonly property var job: Capture.scrolling
     readonly property rect area: job?.rect ?? Qt.rect(0, 0, 0, 0)
     readonly property bool autoOn: Capture.scrollAuto === "starting" || Capture.scrollAuto === "running"
+    readonly property bool sideways: Capture.scrollAxis === "x"
     // The pointer is in place: guard everything but the hole under it.
     readonly property bool guarding: visible && Capture.scrollAuto === "running"
     readonly property int holeSize: 24
@@ -75,11 +81,33 @@ PanelWindow {
     // ── Layout ──────────────────────────────────────────────────────────
     readonly property int gap: 14
     readonly property int stripWidth: 150
-    // Which side has room for the preview strip: right, left or none.
-    readonly property string side: width - (area.x + area.width) >= stripWidth + 2 * gap ? "right" : area.x >= stripWidth + 2 * gap ? "left" : "none"
+    // Sideways: the strip's height.
+    readonly property int stripHeight: 116
+    readonly property real spaceBelow: height - (area.y + area.height)
+    readonly property real spaceAbove: area.y
+    // Which side has room for the preview strip: right, left or none —
+    // sideways: below, above or none.
+    readonly property string side: {
+        if (sideways)
+            return spaceBelow >= stripHeight + 2 * gap ? "below" : spaceAbove >= stripHeight + 2 * gap ? "above" : "none";
+        return width - (area.x + area.width) >= stripWidth + 2 * gap ? "right" : area.x >= stripWidth + 2 * gap ? "left" : "none";
+    }
     // The pill: under the area, above it, in the strip's column, or (no room
-    // anywhere) inside the area's bottom edge.
-    readonly property string pillAt: height - (area.y + area.height) >= pill.height + 2 * gap ? "below" : area.y >= pill.height + 2 * gap ? "above" : side !== "none" ? "side" : "inside"
+    // anywhere) inside the area's bottom edge. Sideways it goes on the other
+    // side from the strip, or past the strip ("below" / "above" then mean
+    // beyond it).
+    readonly property real stripSpan: sideways && side !== "none" ? stripHeight + gap : 0
+    readonly property string pillAt: {
+        const need = pill.height + 2 * gap;
+        if (sideways) {
+            if (side === "below")
+                return spaceBelow >= need + stripSpan ? "below" : spaceAbove >= need ? "above" : "inside";
+            if (side === "above")
+                return spaceBelow >= need ? "below" : spaceAbove >= need + stripSpan ? "above" : "inside";
+            return spaceBelow >= need ? "below" : spaceAbove >= need ? "above" : "inside";
+        }
+        return spaceBelow >= need ? "below" : spaceAbove >= need ? "above" : side !== "none" ? "side" : "inside";
+    }
 
     // Where the helper puts the pointer: the middle of the area (the same
     // rounding as `loft capture scroll`'s area_center).
@@ -143,10 +171,18 @@ PanelWindow {
     GlassSurface {
         id: strip
         visible: root.side !== "none"
-        x: root.side === "right" ? root.area.x + root.area.width + root.gap : root.area.x - root.gap - width
-        y: Math.max(root.gap, Math.min(root.height - height - root.gap, root.area.y + (root.pillAt === "side" ? pill.height + 10 : 0)))
-        width: root.stripWidth
-        height: Math.max(120, Math.min(root.area.height - (root.pillAt === "side" ? pill.height + 10 : 0), root.height - 2 * root.gap))
+        x: {
+            if (root.sideways)
+                return Math.max(root.gap, Math.min(root.width - width - root.gap, root.area.x));
+            return root.side === "right" ? root.area.x + root.area.width + root.gap : root.area.x - root.gap - width;
+        }
+        y: {
+            if (root.sideways)
+                return root.side === "below" ? root.area.y + root.area.height + root.gap : root.area.y - root.gap - height;
+            return Math.max(root.gap, Math.min(root.height - height - root.gap, root.area.y + (root.pillAt === "side" ? pill.height + 10 : 0)));
+        }
+        width: root.sideways ? Math.max(220, Math.min(root.area.width, root.width - 2 * root.gap)) : root.stripWidth
+        height: root.sideways ? root.stripHeight : Math.max(120, Math.min(root.area.height - (root.pillAt === "side" ? pill.height + 10 : 0), root.height - 2 * root.gap))
         radius: 14
         strength: 1.8
 
@@ -164,14 +200,22 @@ PanelWindow {
             }
 
             // The stitched image at strip width; it slides up so the newest
-            // rows stay in view.
+            // rows stay in view. Sideways: at strip height, sliding left so
+            // the newest columns stay in view.
             Item {
                 id: canvas
-                readonly property real k: Capture.scrollWidth > 0 ? viewport.width / Capture.scrollWidth : 0
-                width: viewport.width
-                height: Capture.scrollHeight * k
-                y: Math.min(0, viewport.height - height)
+                readonly property real k: root.sideways ? (Capture.scrollHeight > 0 ? viewport.height / Capture.scrollHeight : 0) : (Capture.scrollWidth > 0 ? viewport.width / Capture.scrollWidth : 0)
+                width: root.sideways ? Capture.scrollWidth * k : viewport.width
+                height: root.sideways ? viewport.height : Capture.scrollHeight * k
+                x: root.sideways ? Math.min(0, viewport.width - width) : 0
+                y: root.sideways ? 0 : Math.min(0, viewport.height - height)
                 Behavior on y {
+                    NumberAnimation {
+                        duration: 180
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on x {
                     NumberAnimation {
                         duration: 180
                         easing.type: Easing.OutCubic
@@ -182,18 +226,20 @@ PanelWindow {
                     model: Capture.scrollSegments
                     delegate: Item {
                         required property var modelData
-                        x: 0
-                        y: modelData.y * canvas.k
-                        width: canvas.width
-                        height: Math.ceil(modelData.h * canvas.k)
+                        readonly property bool across: modelData.sx !== undefined
+                        x: across ? modelData.x * canvas.k : 0
+                        y: across ? 0 : modelData.y * canvas.k
+                        width: across ? Math.ceil(modelData.w * canvas.k) : canvas.width
+                        height: across ? canvas.height : Math.ceil(modelData.h * canvas.k)
                         clip: true
 
                         Image {
-                            y: -parent.modelData.sy * canvas.k
-                            width: canvas.width
-                            height: Capture.scrollFrameHeight * canvas.k
+                            x: parent.across ? -parent.modelData.sx * canvas.k : 0
+                            y: parent.across ? 0 : -parent.modelData.sy * canvas.k
+                            width: parent.across ? Capture.scrollFrameWidth * canvas.k : canvas.width
+                            height: parent.across ? canvas.height : Capture.scrollFrameHeight * canvas.k
                             source: "file://" + parent.modelData.path
-                            sourceSize.width: Math.round(canvas.width * 2)
+                            sourceSize.width: Math.round(width * 2)
                             fillMode: Image.Stretch
                             asynchronous: true
                             smooth: true
@@ -208,7 +254,7 @@ PanelWindow {
                 width: parent.width - 16
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                text: "Scroll the area — new rows appear here"
+                text: Capture.scrollAxis === "x" ? "Scroll sideways — new columns appear here" : Capture.scrollAxis === "auto" ? "Scroll down or sideways — the stitched image appears here" : "Scroll the area — new rows appear here"
                 color: Theme.subtext
                 font.family: Theme.fontUi
                 font.pixelSize: 11
@@ -261,9 +307,9 @@ PanelWindow {
         y: {
             switch (root.pillAt) {
             case "below":
-                return root.area.y + root.area.height + root.gap;
+                return root.area.y + root.area.height + root.gap + (root.side === "below" ? root.stripSpan : 0);
             case "above":
-                return root.area.y - root.gap - height;
+                return root.area.y - root.gap - height - (root.side === "above" ? root.stripSpan : 0);
             case "side":
                 return Math.max(root.gap, root.area.y);
             default:
@@ -291,23 +337,61 @@ PanelWindow {
             anchors.centerIn: parent
             spacing: 10
 
-            Icon {
-                text: "󰡏"
-                size: 16
-                color: Theme.accent
+            // Direction: ↕ / ↔; neither picked = the first scroll decides.
+            // Picking the picked one again goes back to deciding by itself.
+            Row {
+                spacing: 2
+                Repeater {
+                    model: [
+                        {
+                            axis: "y",
+                            icon: "󰡏"
+                        },
+                        {
+                            axis: "x",
+                            icon: "󰡎"
+                        }
+                    ]
+                    delegate: Rectangle {
+                        id: axisBtn
+                        required property var modelData
+                        readonly property bool on: Capture.scrollAxis === modelData.axis
+                        width: 26
+                        height: 26
+                        radius: 13
+                        color: on ? Theme.withAlpha(Theme.accent, 0.3) : axisMouse.containsMouse ? Theme.withAlpha(Theme.text, 0.14) : "transparent"
+                        border.width: on ? 1 : 0
+                        border.color: Theme.withAlpha(Theme.accent, 0.6)
+                        opacity: Capture.scrollFinishing ? 0.5 : 1
+
+                        Icon {
+                            anchors.centerIn: parent
+                            text: axisBtn.modelData.icon
+                            size: 15
+                            color: axisBtn.on ? Theme.accent : Capture.scrollAxis === "auto" ? Theme.subtext : Theme.text
+                        }
+                        MouseArea {
+                            id: axisMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Capture.scrollSetAxis(axisBtn.on ? "auto" : axisBtn.modelData.axis)
+                        }
+                    }
+                }
             }
             ColumnLayout {
                 spacing: 0
                 Text {
-                    readonly property string tall: `${Capture.scrollHeight.toLocaleString(Qt.locale(), "f", 0)} px`
+                    readonly property string size: `${(root.sideways ? Capture.scrollWidth : Capture.scrollHeight).toLocaleString(Qt.locale(), "f", 0)} px`
                     text: {
                         if (Capture.scrollFinishing)
                             return "Stitching…";
                         if (root.autoOn || Capture.scrollAuto === "stopping")
-                            return Capture.scrollFrames <= 1 ? "Auto Scrolling…" : `Auto Scrolling · ${tall}`;
+                            return Capture.scrollFrames <= 1 ? "Auto Scrolling…" : `Auto Scrolling · ${size}`;
                         if (Capture.scrollFrames <= 1)
-                            return "Scroll to capture";
-                        return `${tall} tall`;
+                            return Capture.scrollAxis === "x" ? "Scroll sideways to capture" : "Scroll to capture";
+                        return root.sideways ? `${size} wide` : `${size} tall`;
                     }
                     color: Theme.text
                     font.family: Theme.fontUi
@@ -323,11 +407,11 @@ PanelWindow {
                             pointer: "Stopped: the mouse moved",
                             stop: "Auto Scroll stopped",
                             timeout: "Auto Scroll timed out",
-                            limit: "Reached the height limit",
+                            limit: root.sideways ? "Reached the width limit" : "Reached the height limit",
                             error: "Auto Scroll failed",
                             unavailable: "Auto Scroll unavailable"
                         })
-                    text: root.autoOn ? "Move the mouse or press a key to stop" : Capture.scrollAuto === "" ? (why[Capture.scrollAutoReason] ?? "") : ""
+                    text: root.autoOn ? "Move the mouse or press a key to stop" : Capture.scrollAuto === "" && Capture.scrollAutoReason !== "" ? (why[Capture.scrollAutoReason] ?? "") : Capture.scrollAxis === "auto" && Capture.scrollFrames <= 1 ? "Down or sideways: the first scroll decides" : ""
                     visible: text !== "" && !Capture.scrollFinishing
                     color: Theme.subtext
                     font.family: Theme.fontUi

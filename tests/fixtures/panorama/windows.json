@@ -1,0 +1,266 @@
+[
+ {
+  "id": 2,
+  "title": "foot",
+  "app_id": "foot",
+  "pid": 1002,
+  "workspace_id": 1,
+  "is_focused": false,
+  "is_floating": false,
+  "is_urgent": false,
+  "layout": {
+   "pos_in_scrolling_layout": [
+    1,
+    1
+   ],
+   "tile_size": [
+    517.0,
+    870.0
+   ],
+   "window_size": [
+    517,
+    870
+   ],
+   "tile_pos_in_workspace_view": null,
+   "window_offset_in_tile": [
+    0.0,
+    0.0
+   ]
+  },
+  "focus_timestamp": {
+   "secs": 41698,
+   "nanos": 872111310
+  }
+ },
+ {
+  "id": 3,
+  "title": "foot",
+  "app_id": "foot",
+  "pid": 1003,
+  "workspace_id": 1,
+  "is_focused": false,
+  "is_floating": false,
+  "is_urgent": false,
+  "layout": {
+   "pos_in_scrolling_layout": [
+    2,
+    1
+   ],
+   "tile_size": [
+    782.0,
+    429.0
+   ],
+   "window_size": [
+    782,
+    429
+   ],
+   "tile_pos_in_workspace_view": null,
+   "window_offset_in_tile": [
+    0.0,
+    0.0
+   ]
+  },
+  "focus_timestamp": {
+   "secs": 41541,
+   "nanos": 333910711
+  }
+ },
+ {
+  "id": 4,
+  "title": "foot",
+  "app_id": "foot",
+  "pid": 1004,
+  "workspace_id": 1,
+  "is_focused": false,
+  "is_floating": false,
+  "is_urgent": false,
+  "layout": {
+   "pos_in_scrolling_layout": [
+    2,
+    2
+   ],
+   "tile_size": [
+    782.0,
+    429.0
+   ],
+   "window_size": [
+    782,
+    429
+   ],
+   "tile_pos_in_workspace_view": null,
+   "window_offset_in_tile": [
+    0.0,
+    0.0
+   ]
+  },
+  "focus_timestamp": {
+   "secs": 41664,
+   "nanos": 692339960
+  }
+ },
+ {
+  "id": 5,
+  "title": "foot",
+  "app_id": "foot",
+  "pid": 1005,
+  "workspace_id": 1,
+  "is_focused": false,
+  "is_floating": false,
+  "is_urgent": false,
+  "layout": {
+   "pos_in_scrolling_layout": [
+    3,
+    1
+   ],
+   "tile_size": [
+    1046.0,
+    870.0
+   ],
+   "window_size": [
+    1046,
+    870
+   ],
+   "tile_pos_in_workspace_view": null,
+   "window_offset_in_tile": [
+    0.0,
+    0.0
+   ]
+  },
+  "focus_timestamp": {
+   "secs": 41701,
+   "nanos": 602913011
+  }
+ },
+ {
+  "id": 6,
+  "title": "foot",
+  "app_id": "foot",
+  "pid": 1006,
+  "workspace_id": 1,
+  "is_focused": false,
+  "is_floating": false,
+  "is_urgent": false,
+  "layout": {
+   "pos_in_scrolling_layout": [
+    4,
+    1
+   ],
+   "tile_size": [
+    500.0,
+    870.0
+   ],
+   "window_size": [
+    500,
+    870
+   ],
+   "tile_pos_in_workspace_view": null,
+   "window_offset_in_tile": [
+    0.0,
+    0.0
+   ]
+  },
+  "focus_timestamp": {
+   "secs": 41743,
+   "nanos": 116275511
+  }
+ },
+ {
+  "id": 7,
+  "title": "foot",
+  "app_id": "foot",
+  "pid": 1007,
+  "workspace_id": 1,
+  "is_focused": false,
+  "is_floating": false,
+  "is_urgent": false,
+  "layout": {
+   "pos_in_scrolling_layout": [
+    5,
+    1
+   ],
+   "tile_size": [
+    782.0,
+    870.0
+   ],
+   "window_size": [
+    782,
+    870
+   ],
+   "tile_pos_in_workspace_view": null,
+   "window_offset_in_tile": [
+    0.0,
+    0.0
+   ]
+  },
+  "focus_timestamp": {
+   "secs": 41752,
+   "nanos": 991363502
+  }
+ },
+ {
+  "id": 8,
+  "title": "foot",
+  "app_id": "foot",
+  "pid": 1008,
+  "workspace_id": 1,
+  "is_focused": false,
+  "is_floating": false,
+  "is_urgent": false,
+  "layout": {
+   "pos_in_scrolling_layout": [
+    5,
+    2
+   ],
+   "tile_size": [
+    782.0,
+    870.0
+   ],
+   "window_size": [
+    782,
+    870
+   ],
+   "tile_pos_in_workspace_view": null,
+   "window_offset_in_tile": [
+    0.0,
+    0.0
+   ]
+  },
+  "focus_timestamp": {
+   "secs": 41756,
+   "nanos": 453544966
+  }
+ },
+ {
+  "id": 9,
+  "title": "foot",
+  "app_id": "foot",
+  "pid": 1009,
+  "workspace_id": 1,
+  "is_focused": true,
+  "is_floating": true,
+  "is_urgent": false,
+  "layout": {
+   "pos_in_scrolling_layout": null,
+   "tile_size": [
+    782.0,
+    870.0
+   ],
+   "window_size": [
+    782,
+    870
+   ],
+   "tile_pos_in_workspace_view": [
+    818.0,
+    54.0
+   ],
+   "window_offset_in_tile": [
+    0.0,
+    0.0
+   ]
+  },
+  "focus_timestamp": {
+   "secs": 41757,
+   "nanos": 149720981
+  }
+ }
+]

@@ -6,10 +6,11 @@ import qs.components
 import qs.services
 
 // The capture selector (macOS ⌘⇧5): a glass toolbar at the bottom center
-// of the focused screen. Screenshot (screen / window / area / scrolling) · Record
-// (screen / area) · Text · Color, an Options menu (save location, timer,
-// thumbnail, clipboard, annotate, pointer, audio, color format) and the
-// Capture button. Recent picked colors show above it in Color mode.
+// of the focused screen. Screenshot (screen / window / area / scrolling /
+// workspace — the whole niri strip as one wide image) · Record (screen /
+// area) · Text · Color, an Options menu (save location, timer, thumbnail,
+// clipboard, annotate, pointer, audio, color format, scroll direction,
+// workspace background) and the Capture button. Recent picked colors show above it in Color mode.
 // Enter captures, Escape closes.
 PanelWindow {
     id: root
@@ -66,7 +67,7 @@ PanelWindow {
         property string tip
         property string kind
         property string where
-        readonly property bool selected: Capture.mode === kind && (kind === "text" || kind === "color" || kind === "scroll" || Capture.target === where)
+        readonly property bool selected: Capture.mode === kind && (kind === "text" || kind === "color" || kind === "scroll" || kind === "panorama" || Capture.target === where)
         visible: Capture.allowed(kind)
 
         Layout.preferredWidth: 44
@@ -251,10 +252,16 @@ PanelWindow {
                 where: "area"
             }
             ModeButton {
-                icon: "󰡏"
+                icon: Capture.cfg.scrollDirection === "x" ? "󰡎" : "󰡏"
                 tip: "Capture Scrolling Area"
                 kind: "scroll"
                 where: "area"
+            }
+            ModeButton {
+                icon: "󱤨"
+                tip: "Capture Entire Workspace (every column, wider than the screen)"
+                kind: "panorama"
+                where: "screen"
             }
 
             Divider {
@@ -364,6 +371,8 @@ PanelWindow {
                                 return "Pick Color";
                             case "scroll":
                                 return "Capture Scrolling";
+                            case "panorama":
+                                return "Capture Workspace";
                             default:
                                 return "Capture";
                             }
@@ -472,12 +481,12 @@ PanelWindow {
             spacing: 1
 
             MenuTitle {
-                visible: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "record"
+                visible: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "panorama" || Capture.mode === "record"
                 text: "Save to"
                 Layout.topMargin: 0
             }
             Repeater {
-                model: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "record" ? options.places : []
+                model: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "panorama" || Capture.mode === "record" ? options.places : []
                 delegate: MenuItem {
                     required property string modelData
                     label: Capture.pretty(Capture.expand(modelData))
@@ -544,6 +553,56 @@ PanelWindow {
             }
 
             MenuTitle {
+                visible: Capture.mode === "scroll"
+                text: "Scroll Direction"
+            }
+            Repeater {
+                model: Capture.mode === "scroll" ? [
+                    {
+                        v: "auto",
+                        l: "Detect Automatically"
+                    },
+                    {
+                        v: "y",
+                        l: "Vertical"
+                    },
+                    {
+                        v: "x",
+                        l: "Horizontal"
+                    }
+                ] : []
+                delegate: MenuItem {
+                    required property var modelData
+                    label: modelData.l
+                    checked: root.cfg.scrollDirection === modelData.v
+                    onActivated: root.cfg.scrollDirection = modelData.v
+                }
+            }
+
+            MenuTitle {
+                visible: Capture.mode === "panorama"
+                text: "Background"
+            }
+            Repeater {
+                model: Capture.mode === "panorama" ? [
+                    {
+                        v: "wallpaper",
+                        l: "Wallpaper"
+                    },
+                    {
+                        v: "plain",
+                        l: "Plain"
+                    }
+                ] : []
+                delegate: MenuItem {
+                    required property var modelData
+                    label: modelData.l
+                    checked: root.cfg.panoramaBackground === modelData.v
+                    onActivated: root.cfg.panoramaBackground = modelData.v
+                }
+            }
+
+            MenuTitle {
                 visible: Capture.mode === "color"
                 text: "Copy as"
             }
@@ -558,23 +617,23 @@ PanelWindow {
             }
 
             MenuTitle {
-                visible: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "record"
+                visible: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "panorama" || Capture.mode === "record"
                 text: "Options"
             }
             MenuItem {
-                visible: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "record"
+                visible: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "panorama" || Capture.mode === "record"
                 label: "Show Floating Thumbnail"
                 checked: root.cfg.showThumbnail
                 onActivated: root.cfg.showThumbnail = !root.cfg.showThumbnail
             }
             MenuItem {
-                visible: Capture.mode === "shot" || Capture.mode === "scroll"
+                visible: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "panorama"
                 label: "Copy to Clipboard"
                 checked: root.cfg.copyToClipboard
                 onActivated: root.cfg.copyToClipboard = !root.cfg.copyToClipboard
             }
             MenuItem {
-                visible: Capture.mode === "shot" || Capture.mode === "scroll"
+                visible: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "panorama"
                 label: "Annotate After Capture"
                 checked: root.cfg.annotateAfter
                 onActivated: root.cfg.annotateAfter = !root.cfg.annotateAfter
