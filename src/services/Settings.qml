@@ -91,10 +91,11 @@ Singleton {
                 property var displays: ({})
                 // Window previews (feature dockPreview): open on "hover"
                 // (after previewDelay ms) or on "click" (an app with several
-                // windows); previewThumbnails = snapshots where niri allows.
+                // windows); previewThumbnails = snapshots where niri allows
+                // (off by default until the capture is verified on a GPU desktop).
                 property string preview: "hover"
                 property int previewDelay: 450
-                property bool previewThumbnails: true
+                property bool previewThumbnails: false
             }
 
             // Which display carries the dock and the bar's status area (see
