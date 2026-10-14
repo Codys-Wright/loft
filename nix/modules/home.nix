@@ -30,6 +30,8 @@
           ${self}/niri/shell-binds.kdl.in > $out
       '';
 
+      lockCmd = "${lib.getExe pkgs.quickshell} ipc --path ${shellSrc} call lock lock";
+
       env = [
         "STUDIO_STATE_DIR=${stateDir}"
         "STUDIO_SHELL_SRC=${shellSrc}"
@@ -65,6 +67,19 @@
           '';
         };
 
+        idle = {
+          lockAfter = lib.mkOption {
+            type = lib.types.nullOr lib.types.ints.positive;
+            default = 300;
+            description = "Lock the session after this many idle seconds (null: never). Always locks before sleep.";
+          };
+          screenOffAfter = lib.mkOption {
+            type = lib.types.nullOr lib.types.ints.positive;
+            default = 600;
+            description = "Turn the monitors off after this many idle seconds (null: never).";
+          };
+        };
+
         theme = lib.mkOption {
           type = lib.types.str;
           default = "default";
@@ -97,6 +112,26 @@
                 ${lib.getExe sp.studio} theme apply ${lib.escapeShellArg cfg.theme} || true
               ''}";
             };
+
+        # Idle: lock through the shell (its WlSessionLock) and blank the screens.
+        services.swayidle = {
+          enable = true;
+          timeouts =
+            lib.optional (cfg.idle.lockAfter != null) {
+              timeout = cfg.idle.lockAfter;
+              command = lockCmd;
+            }
+            ++ lib.optional (cfg.idle.screenOffAfter != null) {
+              timeout = cfg.idle.screenOffAfter;
+              command = "${lib.getExe pkgs.niri} msg action power-off-monitors";
+            };
+          events = [
+            {
+              event = "before-sleep";
+              command = lockCmd;
+            }
+          ];
+        };
 
         systemd.user.services.studio-launcher = service "studio-linux launcher (walker + elephant)" "${lib.getExe sp.studio-launcher} service";
       };
