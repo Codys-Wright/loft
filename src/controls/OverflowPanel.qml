@@ -19,7 +19,7 @@ ColumnLayout {
     spacing: 0
 
     readonly property var ids: Controls.overflowByScreen[screenName] ?? []
-    readonly property var tucked: SystemTray.items.values.filter(i => Controls.trayTucked.includes(i.id))
+    readonly property var tucked: SystemTray.items.values.filter(i => Controls.isTrayTucked(i))
 
     Repeater {
         model: root.ids.filter(id => id !== "tray")
@@ -39,7 +39,7 @@ ColumnLayout {
     }
 
     Repeater {
-        model: root.tucked.concat(root.ids.includes("tray") ? SystemTray.items.values.filter(i => !Controls.trayTucked.includes(i.id)) : [])
+        model: root.tucked.concat(root.ids.includes("tray") ? SystemTray.items.values.filter(i => !Controls.isTrayTucked(i)) : [])
         delegate: PanelRow {
             id: trayRow
             required property var modelData

@@ -149,7 +149,8 @@ ColumnLayout {
             delegate: RowLayout {
                 id: tray
                 required property var modelData
-                readonly property bool tucked: Controls.trayTucked.includes(modelData.id)
+                readonly property bool tucked: Controls.isTrayTucked(modelData)
+                readonly property string duplicate: Controls.trayDuplicateOf(modelData)
                 readonly property bool colored: Controls.trayColor.includes(modelData.id)
                 Layout.fillWidth: true
                 spacing: 10
@@ -167,13 +168,26 @@ ColumnLayout {
                         template: !tray.colored
                     }
                 }
-                Text {
+                ColumnLayout {
                     Layout.fillWidth: true
-                    text: tray.modelData.tooltipTitle || tray.modelData.title || tray.modelData.id
-                    color: Theme.text
-                    font.family: Theme.fontUi
-                    font.pixelSize: 13
-                    elide: Text.ElideRight
+                    spacing: 0
+                    Text {
+                        Layout.fillWidth: true
+                        text: tray.modelData.tooltipTitle || tray.modelData.title || tray.modelData.id
+                        color: Theme.text
+                        font.family: Theme.fontUi
+                        font.pixelSize: 13
+                        elide: Text.ElideRight
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: tray.duplicate !== ""
+                        text: `Does what Loft's ${Controls.control(tray.duplicate)?.label ?? ""} does — tucked by default`
+                        color: Theme.subtext
+                        font.family: Theme.fontUi
+                        font.pixelSize: 10
+                        elide: Text.ElideRight
+                    }
                 }
                 Text {
                     text: "In color"
