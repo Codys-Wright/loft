@@ -3,11 +3,12 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import qs.components
+import qs.menubar
 import qs.services
 
 // The menu bar: floating Liquid Glass pills on a transparent strip
-// (javiiervm's layout). Left: app menu (studio mark + focused app, like
-// macOS) and workspaces. Right: tray, status, clock.
+// (javiiervm's layout). Left: studio mark, the focused app's menus (app
+// menu + global menu, src/menubar/) and workspaces. Right: tray, status, clock.
 PanelWindow {
     id: root
 
@@ -53,33 +54,17 @@ PanelWindow {
             verticalCenter: parent.verticalCenter
         }
         height: root.pillHeight
-        width: appRow.implicitWidth + 28
+        width: appRow.implicitWidth + 20
         radius: height / 2
 
-        RowLayout {
+        // Studio mark, bold app name (app menu), the app's global menus.
+        MenuBarTitles {
             id: appRow
             anchors.centerIn: parent
-            spacing: 10
-
-            Icon {
-                text: "󰽰"
-                size: 18
-                color: Theme.accent
-            }
-
-            Text {
-                text: Niri.focusedWindow ? Apps.name(Niri.focusedWindow.app_id) : "Desktop"
-                color: Theme.text
-                font.family: Theme.fontUi
-                font.pixelSize: 14
-                font.weight: Font.DemiBold
-            }
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: Niri.toggleOverview()
+            window: root
+            screenName: root.modelData.name
+            // Up to the island (centred, ≤ 300 px compact), past the workspaces.
+            maxWidth: root.width / 2 - (Features.on("island") ? 160 : 12) - 12 - 20 - 8 - workspacePill.width
         }
     }
 

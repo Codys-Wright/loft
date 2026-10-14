@@ -27,6 +27,7 @@ Scope {
         { id: "layout", icon: "󰕰", label: "Layout & Motion" },
         { id: "keybinds", icon: "󰘳", label: "Keybinds" },
         { id: "features", icon: "󰐱", label: "Features" },
+        { id: "menubar", icon: "󰍜", label: "Menu Bar" },
         { id: "about", icon: "󰋼", label: "About" }
     ]
 
@@ -54,6 +55,9 @@ Scope {
 
         function features(): void {
             root.show("features");
+        }
+        function menubar(): void {
+            root.show("menubar");
         }
     }
 
@@ -536,6 +540,11 @@ Scope {
                         FeaturesPage {
                             Layout.fillWidth: true
                             visible: root.section === "features"
+                        }
+
+                        MenuBarPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "menubar"
                         }
 
                         // About

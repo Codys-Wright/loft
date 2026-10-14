@@ -9,6 +9,7 @@ binds {
     Mod+A hotkey-overlay-title="Control Center" { spawn @IPC@ "controlcenter" "toggle"; }
     Mod+I hotkey-overlay-title="Island" { spawn @IPC@ "island" "toggle"; }
     Mod+Shift+T hotkey-overlay-title="Themes" { spawn @IPC@ "themes" "open"; }
+    Mod+F10 hotkey-overlay-title="App Menu" { spawn @IPC@ "appmenu" "toggle"; }
     Mod+Comma hotkey-overlay-title="Settings" { spawn @IPC@ "settings" "toggle"; }
     Mod+Shift+W hotkey-overlay-title="Wallpapers" { spawn @IPC@ "wallpaper" "toggle"; }
     // macOS Ctrl+Cmd+Q.

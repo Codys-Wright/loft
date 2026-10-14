@@ -23,6 +23,8 @@ Singleton {
     readonly property alias appearance: settings.appearance
     // Feature id → on/off (Features.qml); absent = the module's default.
     property alias features: settings.features
+    // Menu bar module (AppMenu.pref): key → value; absent = the default.
+    property alias menubar: settings.menubar
 
     FileView {
         id: view
@@ -64,6 +66,8 @@ Singleton {
             }
 
             property var features: ({})
+
+            property var menubar: ({})
 
             property JsonObject appearance: JsonObject {
                 // Runtime overrides on top of the theme (-1 / "" = theme value).
