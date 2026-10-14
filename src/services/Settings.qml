@@ -31,7 +31,9 @@ Singleton {
     property alias desktopMenu: settings.desktopMenu
     readonly property alias lock: settings.lock
     // Per-theme choices, keyed by theme name (Vibes.qml reads and writes
-    // them): { "<theme>": { wallpaper, rotate, perWorkspace, lockDesign } }.
+    // them): { "<theme>": { wallpaper, rotate, perWorkspace, lockDesign,
+    // displays, workspaces, sameAll, auto, autoSeed, sets, activeSet } }
+    // (the wallpaper keys: cli/studio/wallsets.py).
     // A key a theme doesn't have falls back to the global value above it.
     property alias perTheme: settings.perTheme
     // Menu bar module (AppMenu.pref): key → value; absent = the default.

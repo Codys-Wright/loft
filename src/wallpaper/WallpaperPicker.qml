@@ -12,7 +12,7 @@ import qs.services
 // and the wallpaper folder's images, closest colors first. Arrows / scroll
 // to browse, Enter or click to apply, Escape to close; "Use theme
 // wallpaper" goes back to the theme's default. The choice is remembered per
-// theme (Settings.perTheme). IPC: wallpaper toggle|next|prev.
+// theme (Settings.perTheme). IPC: wallpaper toggle|next|prev (Vibes.qml).
 PanelWindow {
     id: root
 
@@ -211,22 +211,6 @@ PanelWindow {
                     }
                 }
             }
-        }
-    }
-
-    IpcHandler {
-        target: "wallpaper"
-
-        function toggle(): void {
-            Panels.wallpaperPickerOpen = !Panels.wallpaperPickerOpen;
-        }
-
-        function next(): void {
-            Vibes.cycle(1);
-        }
-
-        function prev(): void {
-            Vibes.cycle(-1);
         }
     }
 }

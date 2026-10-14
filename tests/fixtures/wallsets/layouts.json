@@ -1,0 +1,146 @@
+{
+  "comment": "Display roles and wallpaper-set resolution, shared by tests/test_wallsets.py (cli/studio/wallsets.py) and tests/wallsets.test.js (src/services/wallsets.js): both implementations must agree.",
+  "cases": [
+    {
+      "name": "three displays: portrait left, ultrawide main, landscape right",
+      "layout": {
+        "outputs": [
+          { "name": "DP-5", "identity": "Acer Technologies XV271U M3 1321033793LAJ", "x": 0, "y": 0, "width": 1440, "height": 2560 },
+          { "name": "DP-4", "identity": "Microstep MPG491CX OLED Unknown", "x": 1440, "y": 0, "width": 5120, "height": 1440 },
+          { "name": "DP-3", "identity": "Acer Technologies XV271U M3 13210337C3LAJ", "x": 6560, "y": 0, "width": 2560, "height": 1440 }
+        ],
+        "main": "",
+        "workspaces": [
+          { "output": "DP-4", "idx": 1, "name": "main" },
+          { "output": "DP-4", "idx": 3, "name": "music" },
+          { "output": "DP-4", "idx": 5, "name": "" },
+          { "output": "DP-3", "idx": 1, "name": "stream" },
+          { "output": "DP-3", "idx": 2, "name": "recording" },
+          { "output": "DP-5", "idx": 3, "name": "notes" },
+          { "output": "DP-5", "idx": 4, "name": "" }
+        ]
+      },
+      "roles": {
+        "DP-5": ["left", "portrait", "display-1", "*"],
+        "DP-4": ["main", "ultrawide", "display-2", "*"],
+        "DP-3": ["right", "landscape", "display-3", "*"]
+      },
+      "set": {
+        "name": "triptych",
+        "displays": { "main": "/w/main.jpg", "left": "/w/left.jpg", "portrait": "/w/portrait.jpg", "*": "/w/any.jpg" },
+        "workspaces": { "music": "/w/music.jpg", "right#2": "/w/right2.jpg", "display-1#3": "/w/d1-3.jpg", "main#5": "/w/main5.jpg", "left#4": "/w/left4.jpg" }
+      },
+      "resolved": {
+        "displays": {
+          "Acer Technologies XV271U M3 1321033793LAJ": "/w/left.jpg",
+          "Microstep MPG491CX OLED Unknown": "/w/main.jpg",
+          "Acer Technologies XV271U M3 13210337C3LAJ": "/w/any.jpg"
+        },
+        "workspaces": {
+          "music": "/w/music.jpg",
+          "Microstep MPG491CX OLED Unknown#5": "/w/main5.jpg",
+          "recording": "/w/right2.jpg",
+          "notes": "/w/d1-3.jpg",
+          "Acer Technologies XV271U M3 1321033793LAJ#4": "/w/left4.jpg"
+        }
+      },
+      "coverage": 2,
+      "effective": {
+        "displays": {
+          "Acer Technologies XV271U M3 1321033793LAJ": "/w/a.jpg",
+          "Microstep MPG491CX OLED Unknown": "/w/b.jpg",
+          "Acer Technologies XV271U M3 13210337C3LAJ": "/w/c.jpg"
+        },
+        "workspaces": {
+          "main": "/w/b.jpg",
+          "music": "/w/m.jpg",
+          "Microstep MPG491CX OLED Unknown#5": "/w/u5.jpg",
+          "stream": "/w/c.jpg",
+          "recording": "/w/c.jpg",
+          "notes": "/w/n.jpg",
+          "Acer Technologies XV271U M3 1321033793LAJ#4": "/w/a.jpg"
+        }
+      },
+      "captured": {
+        "name": "saved",
+        "displays": { "left": "/w/a.jpg", "main": "/w/b.jpg", "right": "/w/c.jpg" },
+        "workspaces": { "music": "/w/m.jpg", "main#5": "/w/u5.jpg", "notes": "/w/n.jpg" }
+      }
+    },
+    {
+      "name": "main chosen in Settings (by identity): the right display",
+      "layout": {
+        "outputs": [
+          { "name": "DP-5", "identity": "Acer Technologies XV271U M3 1321033793LAJ", "x": 0, "y": 0, "width": 1440, "height": 2560 },
+          { "name": "DP-4", "identity": "Microstep MPG491CX OLED Unknown", "x": 1440, "y": 0, "width": 5120, "height": 1440 },
+          { "name": "DP-3", "identity": "Acer Technologies XV271U M3 13210337C3LAJ", "x": 6560, "y": 0, "width": 2560, "height": 1440 }
+        ],
+        "main": "Acer Technologies XV271U M3 13210337C3LAJ",
+        "workspaces": []
+      },
+      "roles": {
+        "DP-5": ["left-2", "portrait", "display-1", "*"],
+        "DP-4": ["left", "ultrawide", "display-2", "*"],
+        "DP-3": ["main", "landscape", "display-3", "*"]
+      },
+      "set": { "name": "s", "displays": { "main": "/w/main.jpg", "left": "/w/left.jpg" } },
+      "resolved": {
+        "displays": { "Microstep MPG491CX OLED Unknown": "/w/left.jpg", "Acer Technologies XV271U M3 13210337C3LAJ": "/w/main.jpg" },
+        "workspaces": {}
+      },
+      "coverage": 2
+    },
+    {
+      "name": "a single display",
+      "layout": {
+        "outputs": [{ "name": "eDP-1", "identity": "BOE 0x0BCA Unknown", "x": 0, "y": 0, "width": 1920, "height": 1200 }],
+        "main": "",
+        "workspaces": [{ "output": "eDP-1", "idx": 2, "name": "" }]
+      },
+      "roles": { "eDP-1": ["main", "landscape", "display-1", "*"] },
+      "set": { "name": "s", "displays": { "left": "/w/left.jpg", "*": "/w/any.jpg" }, "workspaces": { "main#2": "/w/two.jpg" } },
+      "resolved": { "displays": { "BOE 0x0BCA Unknown": "/w/any.jpg" }, "workspaces": { "BOE 0x0BCA Unknown#2": "/w/two.jpg" } },
+      "coverage": 0
+    },
+    {
+      "name": "a laptop below a larger external display",
+      "layout": {
+        "outputs": [
+          { "name": "eDP-1", "identity": "BOE 0x0BCA Unknown", "x": 320, "y": 1440, "width": 1920, "height": 1200 },
+          { "name": "DP-1", "identity": "Dell Inc. U2723QE ABC", "x": 0, "y": 0, "width": 2560, "height": 1440 }
+        ],
+        "main": "",
+        "workspaces": []
+      },
+      "roles": {
+        "eDP-1": ["bottom", "landscape", "display-2", "*"],
+        "DP-1": ["main", "landscape", "display-1", "*"]
+      },
+      "set": { "name": "s", "displays": { "landscape": "/w/land.jpg", "bottom": "/w/bottom.jpg" } },
+      "resolved": { "displays": { "BOE 0x0BCA Unknown": "/w/bottom.jpg", "Dell Inc. U2723QE ABC": "/w/land.jpg" }, "workspaces": {} },
+      "coverage": 2
+    },
+    {
+      "name": "two displays left of the main one, one right",
+      "layout": {
+        "outputs": [
+          { "name": "HDMI-A-1", "identity": "A", "x": 0, "y": 0, "width": 1920, "height": 1080 },
+          { "name": "DP-2", "identity": "B", "x": 1920, "y": 0, "width": 1920, "height": 1080 },
+          { "name": "DP-1", "identity": "M", "x": 3840, "y": 0, "width": 3840, "height": 2160 },
+          { "name": "DP-3", "identity": "R", "x": 7680, "y": 200, "width": 1920, "height": 1080 }
+        ],
+        "main": "",
+        "workspaces": []
+      },
+      "roles": {
+        "HDMI-A-1": ["left-2", "landscape", "display-1", "*"],
+        "DP-2": ["left", "landscape", "display-2", "*"],
+        "DP-1": ["main", "landscape", "display-3", "*"],
+        "DP-3": ["right", "landscape", "display-4", "*"]
+      },
+      "set": { "name": "s", "displays": { "display-1": "/w/first.jpg", "left": "/w/left.jpg", "left-2": "/w/far.jpg" } },
+      "resolved": { "displays": { "A": "/w/far.jpg", "B": "/w/left.jpg" }, "workspaces": {} },
+      "coverage": 2
+    }
+  ]
+}

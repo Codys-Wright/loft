@@ -34,7 +34,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import hooks, importers, index, library, render, vibes
+from . import hooks, importers, index, library, render, vibes, wallsets
 from .pack import IGNORED, Pack, PackError, is_pack
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -519,6 +519,320 @@ def cmd_library_add(ctx: Ctx, args) -> None:
     print(f"studio: {'moved' if args.move else 'copied'} {len(added)} into {lib.topics_dir / args.topic}")
 
 
+# ── wallpaper sets ──────────────────────────────────────────────────────────
+
+
+def _json_arg(value: str | None, what: str):
+    """A JSON argument: inline, `-` (stdin) or @file."""
+    if value is None:
+        return None
+    try:
+        if value == "-":
+            return json.load(sys.stdin)
+        if value.startswith("@"):
+            return json.loads(Path(value[1:]).expanduser().read_text())
+        return json.loads(value)
+    except (OSError, ValueError) as e:
+        raise Fail(f"--{what}: {e}") from e
+
+
+def _layout(ctx: Ctx, args) -> dict:
+    """--layout, else the live niri layout (main display from the shell's settings)."""
+    lay = _json_arg(getattr(args, "layout", None), "layout")
+    if lay is not None:
+        if not isinstance(lay, dict) or not isinstance(lay.get("outputs"), list):
+            raise Fail("--layout: expected {outputs: [{name, identity, x, y, width, height}], main?, workspaces?}")
+        lay.setdefault("workspaces", [])
+        return lay
+
+    def niri(what: str):
+        try:
+            r = subprocess.run(["niri", "msg", "-j", what], capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise Fail(f"niri msg {what}: {e} (pass --layout)") from e
+        if r.returncode != 0:
+            raise Fail(f"niri msg {what} failed (not in a niri session? pass --layout)")
+        return json.loads(r.stdout)
+
+    shell = wallsets.load_shell(ctx.state_dir)
+    main = (shell.get("displays") or {}).get("main") or None
+    return wallsets.layout_from_niri(niri("outputs"), niri("workspaces"), main)
+
+
+def _wall_theme(ctx: Ctx, args) -> Pack:
+    name = getattr(args, "theme", None) or ctx.current_name()
+    if not name:
+        raise Fail("no theme given and none is current")
+    return ctx.find(name)
+
+
+def wallpaper_plan(ctx: Ctx, pack: Pack, layout: dict, choices: dict) -> dict:
+    """Everything the shell's wallpaper sets need for this theme and layout
+    (wallsets.py): auto picks, the candidate pool, framing, roles and sets."""
+    packs = ctx.packs()
+    packs.setdefault(pack.name, pack)
+    cache = vibes.PaletteCache(ctx.state_dir)
+    frames = wallsets.FramingCache(ctx.state_dir, cache)
+    lib = library.Library(ctx.library) if ctx.library is not None else None
+    topics = lib.topics() if lib is not None and lib.exists() else {}
+    dirs = [Path(d).expanduser() for d in [(wallsets.load_shell(ctx.state_dir).get("wallpaper") or {}).get("directory") or "~/Pictures/Wallpapers"]]
+    try:
+        ranked = vibes.rank(
+            pack, packs, idx=ctx.index(), cache=cache, dirs=[d for d in dirs if d.is_dir()], topics=topics,
+            thumb=lambda p: library.thumb(ctx.state_dir, cache, Path(p)),
+        )  # fmt: skip
+        pool = wallsets.candidates(ranked, cache, frames)
+        tone = wallsets.target_tone(ranked, cache)
+        pack_sets = [
+            {"name": s["name"], "origin": "pack", "displays": {r: str(p) for r, p in s["displays"].items()}, "workspaces": {k: str(p) for k, p in s["workspaces"].items()}}
+            for s in pack.wallpaper_sets()
+        ]
+        user_sets = [dict(s, origin="user") for s in choices.get("sets") or [] if wallsets.valid_set(s)]
+        pset_def = wallsets.best_set(pack_sets, layout) if len(layout.get("outputs", [])) >= 2 else None
+        pset = dict(wallsets.resolve_set(pset_def, layout), name=pset_def["name"]) if pset_def else None
+        in_tone = sum(1 for c in pool if c["tone"] == tone)
+        auto_default = in_tone >= wallsets.AUTO_MIN
+        auto = choices["auto"] if isinstance(choices.get("auto"), bool) else auto_default
+        picks = wallsets.plan(
+            pack.name, layout, pool, choices, tone=tone, cache=cache, pack_set=None if wallsets.has_explicit(choices) else pset
+        )
+        # Where to center each image's crop: the pool, and whatever is chosen.
+        paths = {c["path"] for c in pool}
+        paths |= {p for p in (choices.get("displays") or {}).values() if isinstance(p, str)}
+        paths |= {p for p in (choices.get("workspaces") or {}).values() if isinstance(p, str)}
+        paths |= {p for s in pack_sets + user_sets for k in ("displays", "workspaces") for p in (s.get(k) or {}).values() if isinstance(p, str)}
+        if isinstance(choices.get("wallpaper"), str):
+            paths.add(choices["wallpaper"])
+        if ranked["defaults"]["wallpaper"]:
+            paths.add(ranked["defaults"]["wallpaper"])
+        framing = {}
+        for p in sorted(paths):
+            if p and Path(p).is_file():
+                fr = frames.get(Path(p))
+                if fr:
+                    framing[p] = {"focus": fr["focus"], "size": fr["size"]}
+    finally:
+        cache.save()
+        frames.save()
+    outs = layout.get("outputs", [])
+    return {
+        "theme": pack.name,
+        "polarity": ranked["polarity"],
+        "tone": tone,
+        "auto": auto,
+        "autoDefault": auto_default,
+        "seed": int(choices.get("autoSeed", 0) or 0),
+        "roles": wallsets.roles(outs, layout.get("main")),
+        "displays": picks["displays"],
+        "workspaces": picks["workspaces"],
+        "why": picks["why"],
+        "packSet": pset,
+        "sets": pack_sets + user_sets,
+        "activeSet": choices.get("activeSet", ""),
+        "framing": framing,
+        "pool": [
+            {
+                "path": c["path"],
+                "thumb": c["thumb"],
+                "origin": c["origin"],
+                "source": c["source_pack"] or c["topic"],
+                "score": c["score"],
+                "tone": c["tone"],
+                "colors": c["colors"],
+                "kept": {wallsets._ident(o): round(wallsets.interest_kept(c["framing"], o["width"] / max(o["height"], 1)), 2) for o in outs},
+            }
+            for c in pool
+        ],
+    }
+
+
+def _choices(ctx: Ctx, args, theme: str) -> dict:
+    c = _json_arg(getattr(args, "choices", None), "choices")
+    if c is None:
+        c = wallsets.theme_choices(wallsets.load_shell(ctx.state_dir), theme)
+    if not isinstance(c, dict):
+        raise Fail("--choices: expected an object (perTheme.<theme> of shell.json)")
+    return c
+
+
+def _short(path: str) -> str:
+    """A caption: the file's stem, with its pack for pack images (bg.jpg is common)."""
+    if not path:
+        return "(theme default)"
+    p = Path(path)
+    stem = p.stem
+    parts = p.parts
+    if "Packs" in parts and parts.index("Packs") + 1 < len(parts):
+        return f"{parts[parts.index('Packs') + 1]}/{stem}"
+    return stem
+
+
+def cmd_wall_plan(ctx: Ctx, args) -> None:
+    pack = _wall_theme(ctx, args)
+    layout = _layout(ctx, args)
+    res = wallpaper_plan(ctx, pack, layout, _choices(ctx, args, pack.name))
+    if args.json:
+        print(json.dumps(res))
+        return
+    choices = _choices(ctx, args, pack.name)
+    eff = wallsets.effective(layout, choices, res, res["packSet"] if not wallsets.has_explicit(choices) else None, res["auto"])
+    print(f"{res['theme']} · tone {res['tone']} · {len(res['pool'])} candidates · auto {'on' if res['auto'] else 'off'} (seed {res['seed']})")
+    for o in wallsets.ordered_outputs(layout):
+        ident = wallsets._ident(o)
+        base = eff["displays"].get(ident, "")
+        src = "chosen" if ident in (choices.get("displays") or {}) else "auto" if ident in res["displays"] else "theme"
+        print(f"\n{o['name']}  {ident}  [{', '.join(res['roles'][o['name']][:3])}]")
+        print(f"  base      {_short(base):40} {src}  {res['why'].get('display:' + ident, '')}")
+        for w in wallsets.workspaces_of(layout, o["name"]):
+            key = wallsets.ws_key(w, ident)
+            p = eff["workspaces"].get(key, "")
+            src = "chosen" if key in (choices.get("workspaces") or {}) else "auto" if key in res["workspaces"] and p == res["workspaces"][key] else "base"
+            print(f"  {w['idx']} {(w['name'] or '-')[:8]:8} {_short(p):40} {src}  {res['why'].get('workspace:' + key, '') if src == 'auto' else ''}")
+
+
+def cmd_wall_sets(ctx: Ctx, args) -> None:
+    pack = _wall_theme(ctx, args)
+    choices = _choices(ctx, args, pack.name)
+    sets = [dict(s, origin="pack") for s in (
+        {"name": s["name"], "displays": {r: str(p) for r, p in s["displays"].items()}, "workspaces": {k: str(p) for k, p in s["workspaces"].items()}}
+        for s in pack.wallpaper_sets()
+    )] + [dict(s, origin="user") for s in choices.get("sets") or [] if wallsets.valid_set(s)]  # fmt: skip
+    if args.json:
+        print(json.dumps({"theme": pack.name, "activeSet": choices.get("activeSet", ""), "sets": sets}))
+        return
+    if not sets:
+        print(f"{pack.name}: no wallpaper sets (studio wallpaper set save NAME)")
+    for s in sets:
+        mark = "*" if s["name"] == choices.get("activeSet") else " "
+        roles = ", ".join(f"{r}={_short(p)}" for r, p in s["displays"].items())
+        extra = f" + {len(s['workspaces'])} workspaces" if s["workspaces"] else ""
+        print(f"{mark} {s['origin']:4}  {s['name']:20} {roles}{extra}")
+
+
+def _find_set(pack: Pack, choices: dict, name: str) -> dict:
+    for s in choices.get("sets") or []:
+        if wallsets.valid_set(s) and s["name"] == name:
+            return s
+    for s in pack.wallpaper_sets():
+        if s["name"] == name:
+            return {"name": s["name"], "displays": {r: str(p) for r, p in s["displays"].items()}, "workspaces": {k: str(p) for k, p in s["workspaces"].items()}}
+    raise Fail(f"{pack.name} has no wallpaper set '{name}' (studio wallpaper sets)")
+
+
+def _update_choices(ctx: Ctx, theme: str, fn) -> dict:
+    shell = wallsets.load_shell(ctx.state_dir)
+    c = dict(wallsets.theme_choices(shell, theme))
+    fn(c)
+    wallsets.save_shell(ctx.state_dir, wallsets.set_theme_choices(shell, theme, c))
+    return c
+
+
+def cmd_wall_set(ctx: Ctx, args) -> None:
+    pack = _wall_theme(ctx, args)
+    choices = wallsets.theme_choices(wallsets.load_shell(ctx.state_dir), pack.name)
+    if args.action == "show":
+        print(json.dumps(_find_set(pack, choices, args.name), indent=2))
+        return
+    if args.action == "delete":
+        if not any(wallsets.valid_set(s) and s["name"] == args.name for s in choices.get("sets") or []):
+            raise Fail(f"no saved set '{args.name}' for {pack.name} (a pack's sets can't be deleted)")
+
+        def drop(c: dict) -> None:
+            c["sets"] = [s for s in c.get("sets") or [] if not (isinstance(s, dict) and s.get("name") == args.name)]
+            if c.get("activeSet") == args.name:
+                c.pop("activeSet")
+
+        _update_choices(ctx, pack.name, drop)
+        print(f"studio: deleted wallpaper set {args.name} ({pack.name})")
+        return
+    layout = _layout(ctx, args)
+    if args.action == "apply":
+        res = wallsets.resolve_set(_find_set(pack, choices, args.name), layout)
+
+        def apply(c: dict) -> None:
+            # A set replaces the display and workspace choices.
+            c["displays"] = res["displays"]
+            c["workspaces"] = res["workspaces"]
+            c["activeSet"] = args.name
+
+        _update_choices(ctx, pack.name, apply)
+        n = len(res["displays"]) + len(res["workspaces"])
+        print(f"studio: applied {args.name} to {pack.name} ({len(res['displays'])} displays, {len(res['workspaces'])} workspaces)" if n else f"studio: {args.name} names none of these displays")
+        return
+    # save
+    res = wallpaper_plan(ctx, pack, layout, choices)
+    dflt = pack.default_wallpaper()
+    default = str(dflt["path"]) if dflt and dflt["kind"] == "image" else ""
+    eff = wallsets.effective(layout, choices, res, res["packSet"] if not wallsets.has_explicit(choices) else None, res["auto"], default)
+    s = wallsets.capture(args.name, layout, eff)
+    if not s["displays"]:
+        raise Fail("nothing to save: no display shows an image")
+    if args.pack:
+        _save_set_to_pack(Path(args.pack).expanduser(), s)
+        print(f"studio: saved {args.name} into {args.pack}/theme.json")
+        return
+
+    def save(c: dict) -> None:
+        c["sets"] = [x for x in c.get("sets") or [] if not (isinstance(x, dict) and x.get("name") == args.name)] + [s]
+        c["activeSet"] = args.name
+
+    _update_choices(ctx, pack.name, save)
+    print(f"studio: saved wallpaper set {args.name} for {pack.name}: " + ", ".join(f"{r}={_short(p)}" for r, p in s["displays"].items()))
+
+
+def _save_set_to_pack(dest: Path, s: dict) -> None:
+    """Copy a set's images into the pack's wallpapers/ and add it to theme.json."""
+    pack = Pack(dest)
+    wdir = pack.path / "wallpapers"
+    wdir.mkdir(exist_ok=True)
+
+    def bring(p: str) -> str:
+        src = Path(p)
+        if pack.path in src.resolve().parents:
+            return str(src.resolve().relative_to(pack.path))
+        target = wdir / src.name
+        n = 2
+        while target.exists() and not _same_file(src, target):
+            target = wdir / f"{src.stem}-{n}{src.suffix}"
+            n += 1
+        if not target.exists():
+            shutil.copy2(src, target)
+        return str(target.relative_to(pack.path))
+
+    entry = {"name": s["name"], "displays": {r: bring(p) for r, p in s["displays"].items()}}
+    if s.get("workspaces"):
+        entry["workspaces"] = {k: bring(p) for k, p in s["workspaces"].items()}
+    theme = json.loads((pack.path / "theme.json").read_text())
+    theme["wallpaperSets"] = [x for x in theme.get("wallpaperSets", []) if x.get("name") != s["name"]] + [entry]
+    (pack.path / "theme.json").write_text(json.dumps(theme, indent=2) + "\n")
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    try:
+        return a.stat().st_size == b.stat().st_size and a.read_bytes() == b.read_bytes()
+    except OSError:
+        return False
+
+
+def cmd_wall_shuffle(ctx: Ctx, args) -> None:
+    pack = _wall_theme(ctx, args)
+    c = _update_choices(ctx, pack.name, lambda c: c.__setitem__("autoSeed", int(c.get("autoSeed", 0) or 0) + 1))
+    print(f"studio: reshuffled {pack.name}'s auto wallpapers (seed {c['autoSeed']})")
+
+
+def cmd_wall_auto(ctx: Ctx, args) -> None:
+    pack = _wall_theme(ctx, args)
+
+    def set_auto(c: dict) -> None:
+        if args.state == "default":
+            c.pop("auto", None)
+        else:
+            c["auto"] = args.state == "on"
+
+    _update_choices(ctx, pack.name, set_auto)
+    print(f"studio: auto wallpapers for {pack.name}: {args.state}")
+
+
 # ── entry ───────────────────────────────────────────────────────────────────
 
 
@@ -611,6 +925,43 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--move", action="store_true", help="move instead of copy")
     s.add_argument("--no-sort", action="store_true", help="don't re-sort afterwards")
     s.set_defaults(fn=cmd_library_add)
+
+    wall = top.add_parser(
+        "wallpaper",
+        help="wallpapers per display and workspace: sets, auto matching",
+        description="Wallpaper sets assign images by display role (main, left, right, portrait, display-N, …) and per "
+        "workspace; auto mode fills the rest with images of the theme's vibe set in the same tone (wallsets.py). "
+        "Choices live in <state>/overrides/shell.json perTheme.<theme>; the running shell picks changes up.",
+    )
+    sub = wall.add_subparsers(dest="cmd", required=True)
+
+    def common(s, layout: bool = True) -> None:
+        s.add_argument("--theme", help="theme name (default: the current theme)")
+        if layout:
+            s.add_argument("--layout", metavar="JSON", help="{outputs, main, workspaces} inline, - or @file (default: ask niri)")
+
+    s = sub.add_parser("plan", help="what every display and workspace shows, with the auto picks")
+    common(s)
+    s.add_argument("--choices", metavar="JSON", help="the theme's choices (default: from shell.json)")
+    s.add_argument("--json", action="store_true", help="machine-readable (what the shell reads)")
+    s.set_defaults(fn=cmd_wall_plan)
+    s = sub.add_parser("sets", help="list the theme's wallpaper sets (the pack's and saved ones)")
+    common(s, layout=False)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_wall_sets)
+    s = sub.add_parser("set", help="apply, save, show or delete a wallpaper set")
+    s.add_argument("action", choices=["apply", "save", "show", "delete"])
+    s.add_argument("name")
+    common(s)
+    s.add_argument("--pack", metavar="DIR", help="save: into this pack's theme.json (images copied into its wallpapers/)")
+    s.set_defaults(fn=cmd_wall_set)
+    s = sub.add_parser("shuffle", help="reseed the auto picks")
+    common(s, layout=False)
+    s.set_defaults(fn=cmd_wall_shuffle)
+    s = sub.add_parser("auto", help="auto-fill displays and workspaces with matching images")
+    s.add_argument("state", choices=["on", "off", "default"])
+    common(s, layout=False)
+    s.set_defaults(fn=cmd_wall_auto)
     return p
 
 

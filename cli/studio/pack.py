@@ -31,6 +31,8 @@ IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif", ".jxl"}
 VIDEO_EXT = {".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
 PREVIEW_NAMES = ("preview", "screenshot")
 LOCK_FORMATS = ("studio", "qylock")
+# Display roles a wallpaper set can name (wallsets.py; themes/schema.json has the same pattern).
+SET_ROLE = re.compile(r"^(?:(?:main|left|right|top|bottom)(?:-[1-9][0-9]*)?|portrait|landscape|ultrawide|display-[1-9][0-9]*|\*)$")
 
 
 def slug(text: str, fallback: str = "lock") -> str:
@@ -187,6 +189,22 @@ class Pack:
             return entries[0]
         return next((e for e in entries if e["kind"] == "image"), None)
 
+    def wallpaper_sets(self) -> list[dict]:
+        """theme.json `wallpaperSets`: [{name, displays: {role: Path}, workspaces: {key: Path}}],
+        paths made absolute; malformed entries are skipped (validate reports them)."""
+        out: list[dict] = []
+        raw = self.theme.get("wallpaperSets")
+        for s in raw if isinstance(raw, list) else []:
+            if not isinstance(s, dict) or not isinstance(s.get("name"), str) or not s["name"]:
+                continue
+            e: dict = {"name": s["name"], "displays": {}, "workspaces": {}}
+            for k in ("displays", "workspaces"):
+                v = s.get(k)
+                if isinstance(v, dict):
+                    e[k] = {r: self.abspath(p) for r, p in v.items() if isinstance(p, str) and p}
+            out.append(e)
+        return out
+
     # ── lock designs ────────────────────────────────────────────────────
 
     def lock_entries(self) -> list[dict]:
@@ -301,6 +319,20 @@ class Pack:
             for sub, ref in refs:
                 if isinstance(ref, str) and ref and not ref.startswith("/") and not (self.path / ref).is_file():
                     errors.append(f"theme.json: wallpaper/images/{i}{sub}: {ref} not found in the pack")
+        sets = self.theme.get("wallpaperSets") if isinstance(self.theme.get("wallpaperSets"), list) else []
+        names: set[str] = set()
+        for i, ws in enumerate(sets):
+            if not isinstance(ws, dict):
+                continue
+            if isinstance(ws.get("name"), str):
+                if ws["name"] in names:
+                    errors.append(f"theme.json: wallpaperSets/{i}/name: '{ws['name']}' is used twice")
+                names.add(ws["name"])
+            for k in ("displays", "workspaces"):
+                refs = ws.get(k) if isinstance(ws.get(k), dict) else {}
+                for role, ref in refs.items():
+                    if isinstance(ref, str) and ref and not ref.startswith("/") and not (self.path / ref).is_file():
+                        errors.append(f"theme.json: wallpaperSets/{i}/{k}/{role}: {ref} not found in the pack")
         m = self.manifest or {}
         specs = [("lock", m.get("lock"))] + [(f"locks/{i}", spec) for i, spec in enumerate(m.get("locks", []) if isinstance(m.get("locks"), list) else [])]
         for where, spec in specs:
@@ -347,6 +379,23 @@ def _basic_check(theme: dict) -> list[str]:
             errors.append(f"theme.json: bar/{k}: unknown key")
         elif not isinstance(v, bool):
             errors.append(f"theme.json: bar/{k}: expected true or false, got {v!r}")
+    sets = theme.get("wallpaperSets", [])
+    if not isinstance(sets, list):
+        errors.append("theme.json: wallpaperSets: expected an array")
+        sets = []
+    for i, ws in enumerate(sets):
+        if not isinstance(ws, dict) or not isinstance(ws.get("name"), str) or not ws["name"]:
+            errors.append(f"theme.json: wallpaperSets/{i}: expected an object with a name")
+            continue
+        for k in ws:
+            if k not in ("name", "description", "displays", "workspaces"):
+                errors.append(f"theme.json: wallpaperSets/{i}/{k}: unknown key")
+        for k in ("displays", "workspaces"):
+            v = ws.get(k, {})
+            if not isinstance(v, dict) or not all(isinstance(p, str) and p for p in v.values()):
+                errors.append(f"theme.json: wallpaperSets/{i}/{k}: expected an object of paths")
+            elif k == "displays":
+                errors += [f"theme.json: wallpaperSets/{i}/displays/{r}: unknown display role" for r in v if not SET_ROLE.match(r)]
     return errors
 
 
@@ -519,6 +568,13 @@ def normalized_manifest(pack: Pack, curated: dict | None = None) -> dict:
         d = locks[0]
         # Shorthand for loaders that only know one design.
         out["lock"] = {"name": d["name"], "format": d["format"], "path": d["path"], "main": d["main"]}
+    sets = pack.wallpaper_sets()
+    if sets:
+        # Multi-display arrangements by role (docs/THEME-FORMAT.md, "Wallpaper sets").
+        out["wallpaperSets"] = [
+            {"name": s["name"], "displays": {r: str(p) for r, p in s["displays"].items()}, "workspaces": {k: str(p) for k, p in s["workspaces"].items()}}
+            for s in sets
+        ]
     if isinstance(m.get("vibes"), dict):
         out["vibes"] = m["vibes"]
     if (pack.path / "greeter").is_dir():
