@@ -27,7 +27,7 @@ Scope {
         { id: "displays", icon: "󰍹", badge: "teal", label: "Displays" },
         { id: "input", icon: "󰌌", badge: "gray", label: "Keyboard & Mouse" },
         { id: "layout", icon: "󰕰", badge: "mint", label: "Layout & Motion" },
-        { id: "keybinds", icon: "󰘳", badge: "graphite", label: "Keybinds" },
+        { id: "keybinds", icon: "󰘳", badge: "graphite", label: "Keyboard Shortcuts" },
         { id: "system", icon: "󰍛", badge: "gray", label: "System" },
         { id: "sound", icon: "󰕾", badge: "pink", label: "Sound" },
         { id: "capture", icon: "󰹑", badge: "orange", label: "Capture", feature: "capture" },

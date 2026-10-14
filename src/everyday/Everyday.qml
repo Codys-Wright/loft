@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.menubar
+import qs.palette
 import qs.services
 
 // The everyday window and power modules in one place for shell.qml:
@@ -73,10 +74,32 @@ Scope {
         target: "quit"
 
         function key(): void {
-            QuitGuard.key();
+            // An app left alone (Settings → Keyboard Shortcuts): ⌘Q does
+            // nothing rather than closing the game / VM / remote desktop.
+            if (!Shortcuts.skip("⌘Q"))
+                QuitGuard.key();
         }
         function status(): string {
             return QuitGuard.phase || "idle";
+        }
+    }
+
+    // Custom shortcuts (Settings → Keyboard Shortcuts) that run a Quick
+    // Panel action: `action run <id>` (palette/Actions.qml ids). Window and
+    // text actions skip apps left alone.
+    IpcHandler {
+        target: "action"
+
+        function run(id: string): void {
+            const e = Actions.entry(id);
+            if (!e)
+                return;
+            if (["Windows", "Clipboard & text", "Snippets"].includes(e.group) && Shortcuts.skip(e.label))
+                return;
+            Actions.run(id, {});
+        }
+        function list(): string {
+            return Actions.all().map(e => `${e.id}\t${e.label}`).join("\n");
         }
     }
 
@@ -86,7 +109,8 @@ Scope {
         // The palette: the Arrange menu at the focused window (floating:
         // its centre; tiled: niri reports no position → the display's centre).
         function open(): void {
-            root.openPalette();
+            if (!Shortcuts.skip("Arrange"))
+                root.openPalette();
         }
         // A preset by name on the focused window (Arrange.floatPresets,
         // columnPresets, or center, fullscreen, maximizeColumn, …).

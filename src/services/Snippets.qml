@@ -134,6 +134,9 @@ Singleton {
         target: "snippets"
 
         function toggle(): void {
+            // The ⌘⇧. bind; apps left alone (Shortcuts.qml) don't get it.
+            if (!root.pickerOpen && Shortcuts.skip("Snippets"))
+                return;
             root.pickerOpen = root.enabled && !root.pickerOpen;
         }
         function open(): void {

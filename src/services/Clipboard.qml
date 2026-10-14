@@ -472,7 +472,9 @@ exec wl-paste --watch sh -c "$1" sh "$2" "$3" </dev/null`
             root.panelOpen = false;
         }
         function pastePlain(): void {
-            root.pastePlain();
+            // The ⌘⇧⌥V bind: types into the app, so not into one left alone.
+            if (!Shortcuts.skip("Paste as Plain Text"))
+                root.pastePlain();
         }
         function clear(): void {
             root.clear();

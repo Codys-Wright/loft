@@ -90,7 +90,7 @@ func builtins() []*command {
 		{"displays", "Displays", "video-display", []string{"monitors", "resolution", "scale", "arrangement"}},
 		{"input", "Keyboard & Mouse", "input-keyboard", []string{"keyboard", "mouse", "trackpad", "touchpad", "pointer"}},
 		{"layout", "Layout & Motion", "preferences-desktop", []string{"gaps", "animations", "window layout"}},
-		{"keybinds", "Keybinds", "preferences-desktop-keyboard-shortcuts", []string{"shortcuts", "hotkeys"}},
+		{"keybinds", "Keyboard Shortcuts", "preferences-desktop-keyboard-shortcuts", []string{"keybinds", "shortcuts", "hotkeys", "leave alone", "remap"}},
 		{"system", "System", "computer", []string{"about this computer"}},
 		{"sound", "Sound", "audio-volume-high", []string{"audio", "volume", "output", "input"}},
 		{"capture", "Capture", "applets-screenshooter", []string{"screenshots", "recording"}},
