@@ -80,6 +80,12 @@ values below are ours — tokens, so themes can tune them.
   opaque; a niri window rule (`templates/render/niri.kdl`) blurs behind it.
   Edge-to-edge, a hairline instead of a shadow, accent-colored sidebar icons,
   rounded selection pills, traffic lights in the sidebar like Finder's.
+- **GTK 4 base theme (optional)** — `programs.loft.gtkBase.{dark,light}`: a full
+  libadwaita stylesheet (MacTahoe's `-l` CSS: Tahoe toolbars, pill buttons, Finder
+  path bar) imported under the theme's gtk.css. The `gtk` hook links
+  `<state>/gtk-base.css` to the one matching the theme's polarity; the theme's
+  palette and the Golden Gate rules above still win (the sidebar is forced edge
+  to edge over MacTahoe's inset card).
 
 ## Not copied
 - The notch, HDR UI highlights, and iOS-style app icon layers.

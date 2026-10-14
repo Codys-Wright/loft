@@ -73,8 +73,29 @@ def ghostty(ctx) -> None:
 
 
 def gtk(ctx) -> None:
-    scheme = "prefer-light" if ctx.theme.get("polarity") == "light" else "prefer-dark"
-    _run(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", scheme])
+    light = ctx.theme.get("polarity") == "light"
+    _run(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", "prefer-light" if light else "prefer-dark"])
+    link_gtk_base(ctx.state_dir, "light" if light else "dark")
+
+
+def link_gtk_base(state_dir: Path, polarity: str) -> None:
+    """Point <state>/gtk-base.css at the GTK 4 base stylesheet for this polarity
+    (~/.config/loft/gtk-base-{dark,light}.css, written by `programs.loft.gtkBase`,
+    e.g. MacTahoe's libadwaita CSS), or an empty file when there is none. The
+    gtk.css home-manager writes imports it before the theme's own gtk.css."""
+    config = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    base = config / "loft" / f"gtk-base-{polarity}.css"
+    link = state_dir / "gtk-base.css"
+    tmp = state_dir / ".gtk-base.css.tmp"
+    try:
+        tmp.unlink(missing_ok=True)
+        if base.exists():
+            tmp.symlink_to(base)
+        else:
+            tmp.write_text("/* no GTK base stylesheet (programs.loft.gtkBase) */\n")
+        tmp.replace(link)
+    except OSError:
+        pass
 
 
 def selected(spec: str | None, dev: bool) -> list[str]:

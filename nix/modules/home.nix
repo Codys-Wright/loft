@@ -197,6 +197,25 @@
           '';
         };
 
+        gtkBase = {
+          dark = lib.mkOption {
+            type = lib.types.nullOr lib.types.path;
+            default = null;
+            example = lib.literalExpression ''"''${pkgs.mactahoe-gtk-theme}/share/themes/MacTahoe-Dark-blue/gtk-4.0/gtk.css"'';
+            description = ''
+              A GTK 4 / libadwaita stylesheet imported under the theme's gtk.css
+              while a dark theme is active (a full libadwaita theme such as
+              MacTahoe's `-l` CSS). The theme's palette and Loft's Golden Gate
+              rules (glass sidebar, edge-to-edge) still win over it.
+            '';
+          };
+          light = lib.mkOption {
+            type = lib.types.nullOr lib.types.path;
+            default = null;
+            description = "The same for light themes.";
+          };
+        };
+
         theme = lib.mkOption {
           type = lib.types.str;
           default = "default";
@@ -222,15 +241,27 @@
               /* Loft: the active theme (programs.loft.gtk) */
               @import url("file://${stateDir}/current/gtk.css");
             '';
+            # GTK 4 only: GTK 3 apps get their base from gtk-theme-name.
+            css4 = ''
+              /* Loft: base stylesheet for the theme's polarity (programs.loft.gtkBase) */
+              @import url("file://${stateDir}/gtk-base.css");
+            ''
+            + css;
             layout.gtk-decoration-layout = lib.mkDefault "close,minimize,maximize:";
           in
           {
             gtk3.extraCss = css;
-            gtk4.extraCss = css;
+            gtk4.extraCss = css4;
             gtk3.extraConfig = layout;
             gtk4.extraConfig = layout;
           }
         );
+        xdg.configFile."loft/gtk-base-dark.css" = lib.mkIf (cfg.gtk && cfg.gtkBase.dark != null) {
+          text = ''@import url("file://${cfg.gtkBase.dark}");'';
+        };
+        xdg.configFile."loft/gtk-base-light.css" = lib.mkIf (cfg.gtk && cfg.gtkBase.light != null) {
+          text = ''@import url("file://${cfg.gtkBase.light}");'';
+        };
         # libadwaita reads the button layout from the settings portal (GNOME's
         # key) before settings.ini.
         dconf.settings = lib.mkIf cfg.gtk {

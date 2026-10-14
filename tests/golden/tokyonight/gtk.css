@@ -191,6 +191,19 @@ window.nautilus-window .sidebar-pane {
 window.nautilus-window .sidebar-pane:backdrop {
   background-color: rgba(31, 34, 48, 0.36);
 }
+/* Edge to edge (Golden Gate), also over themes that float the sidebar as an
+ * inset card (MacTahoe draws it with a box-shadow spread). */
+window.nautilus-window .sidebar-pane:dir(ltr),
+window.nautilus-window .sidebar-pane:dir(rtl),
+window.nautilus-window .sidebar-pane:backdrop:dir(ltr),
+window.nautilus-window .sidebar-pane:backdrop:dir(rtl) {
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+window.nautilus-window .sidebar-pane:dir(ltr) {
+  border-right: 1px solid alpha(#c0caf5, 0.08);
+}
 window.nautilus-window .sidebar-pane headerbar,
 window.nautilus-window .sidebar-pane toolbarview > .top-bar,
 window.nautilus-window .sidebar-pane .navigation-sidebar,
