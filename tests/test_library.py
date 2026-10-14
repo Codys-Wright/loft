@@ -60,6 +60,12 @@ class Buckets(unittest.TestCase):
         c = library.classify([["#d8d8dc", 0.8], ["#c8c4c0", 0.2]])
         self.assertEqual((c["colors"], c["tone"]), (["Monochrome"], "Light"))
 
+    def test_short_names(self):
+        rs = [{"source": "topic", "label": "T", "name": f"show-name-screencaps.com-{n}.jpg"} for n in (3, 104)]
+        rs += [{"source": "topic", "label": "U", "name": "lone.png"}, {"source": "pack", "label": "p", "name": "bg.jpg"}]
+        library._short_names(rs)
+        self.assertEqual([r["short"] for r in rs], ["3", "104", "lone", "p"])
+
 
 class Views(unittest.TestCase):
     def setUp(self):

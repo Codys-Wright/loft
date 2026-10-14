@@ -317,6 +317,7 @@ class Library:
                     rec["thumb"] = t
             images.append(rec)
 
+        _short_names(images)
         themes = self._themes(images, packs, cache, idx or {})
         old = self._old = self.load_manifest().get("links", {})
 
@@ -485,6 +486,25 @@ class Library:
                 shutil.copy2(src, dest)
             added.append(dest)
         return added
+
+
+def _short_names(images: list[dict]) -> None:
+    """`short`: a caption for pickers. Topic images drop the file-name prefix
+    their topic folder shares (screencap series: "…screencaps.com-104" → "104");
+    pack images are the pack's name (plus the file's when it has several)."""
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for r in images:
+        groups.setdefault((r["source"], r["label"]), []).append(r)
+    for (source, label), rs in groups.items():
+        stems = [os.path.splitext(r["name"])[0] for r in rs]
+        if source == "pack":
+            for r, stem in zip(rs, stems):
+                r["short"] = label if len(rs) == 1 else f"{label} · {stem}"
+            continue
+        prefix = os.path.commonprefix(stems) if len(rs) > 1 else ""
+        cut = max((prefix.rfind(ch) for ch in "-_ ."), default=-1) + 1 if prefix else 0
+        for r, stem in zip(rs, stems):
+            r["short"] = stem[cut:] or stem if len(prefix) >= 6 else stem
 
 
 def _same(a: Path, b: Path) -> bool:

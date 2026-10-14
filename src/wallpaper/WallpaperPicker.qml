@@ -148,7 +148,7 @@ PanelWindow {
                     required property int index
                     readonly property bool current: ListView.isCurrentItem
                     readonly property bool applied: Vibes.isCurrentWallpaper(modelData.path)
-                    readonly property string caption: modelData.origin === "own" ? Vibes.theme : modelData.origin === "curated" ? "curated · " + modelData.source_pack : `${modelData.source_pack || "folder"} · ${Math.round((modelData.score ?? 0) * 100)}%`
+                    readonly property string caption: modelData.origin === "own" ? Vibes.theme : modelData.origin === "curated" ? "curated · " + modelData.source_pack : `${modelData.source_pack || modelData.topic || "folder"} · ${Math.round((modelData.score ?? 0) * 100)}%`
 
                     width: 240
                     height: ListView.view.height
@@ -172,7 +172,7 @@ PanelWindow {
                         Image {
                             anchors.fill: parent
                             anchors.margins: frame.border.width
-                            source: Vibes.url(thumb.modelData.path)
+                            source: Vibes.url(thumb.modelData.thumb ?? thumb.modelData.path)
                             sourceSize: Qt.size(480, 270)
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
