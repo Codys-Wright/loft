@@ -36,27 +36,49 @@ in parallel without touching each other.
 
 ## Menu bar extras (top right) — wave 2 (status)
 macOS's own status items (vorssaint has none of these — macOS ships them), plus
-vorssaint's readouts/sound tools that already exist, in one style: an icon in the
-flush bar → a glass dropdown under it (one open at a time, hover-switch between
-open extras like real menus), scroll on the icon where it makes sense, ⌥-click
-(Alt-click) for details, "… Settings" at the bottom opens the Settings page.
+vorssaint's readouts/sound tools that already exist, in one style: a monochrome
+icon in the bar → a glass dropdown under it (one open at a time; hovering another
+extra or an app-menu title switches to it, like real menus; arrow keys move along
+the bar too), scroll on the icon where it makes sense, ⌥-click (Alt-click) for
+details, "… Settings" at the bottom opens the Settings page. Every extra is a
+**control** (`src/services/Controls.qml`) — the same model as the Control
+Center, so each can live in the bar, the CC, or both; each panel is one shared
+component (`src/controls/*Panel.qml`) used by the dropdown and the CC's expanded
+module. IPC: `extras wifi|wifiDetails|bluetooth|sound|soundDetails|nowPlaying|focus|display|battery|clock|camera|inputSource|overflow|details|close|up|down|left|right|enter`.
 
 | Feature | Status | How |
 |---|---|---|
-| **Wi-Fi / network extra** — icon: signal bars, ethernet, offline, VPN badge | todo | Quickshell `Networking` (NetworkManager): Wi-Fi toggle; current network (signal, lock); known + other networks from a scan while open; click to connect, inline password field for new secured networks; "Other Network…" (hidden SSID); every wired link (Wired connection 1, 10G Jumbo) and VPNs (Tailscale) with state; ⌥-click details: IP, router, DNS, channel/band, link rate, RSSI; live traffic line (from `network`) |
-| **Bluetooth extra** — icon shows on / connected / off | todo | Quickshell `Bluetooth` (BlueZ): toggle; devices (connected first) with type icon and battery % (BlueZ Battery1); click = connect/disconnect; "Nearby Devices" (discovery only while open) → pair + trust; ⌥-click: address, RSSI; low-battery alert for headsets/mice (hooks `alerts`) |
-| **Sound extra** — icon reflects volume / headphones / muted | partial (icon, mixer) | output volume slider (+ scroll on icon), output device list (TF, Dante, Bluetooth with battery), "Sound Settings…", mixer chevron (`mixer`); ⌥-click: inputs + mic level, and the PipeWire graph clock — sample rate / quantum with quick switch (48/96 kHz, 64–1024 frames via `pw-metadata` clock.force-*) for studio work |
-| Now Playing extra (optional) | todo | MPRIS, like macOS's Now Playing item — for when the island is off |
-| Battery extra (only when a battery exists) | todo | UPower: %, time remaining, power source, power profile (power-profiles-daemon), energy-hungry apps (from `systemMonitor`) |
-| Clock in the bar (optional) | todo | the time lives in the island today; a setting shows date + time on the right like macOS; click → calendar / notification history |
-| Focus / Do Not Disturb indicator | todo | moon icon while DND is on (CC toggle exists) |
-| Recording indicator | partial (island) | a stop button in the bar while the Recorder runs (macOS shows one) |
-| Camera-in-use indicator | todo | green dot when a camera node is in use (PipeWire video sources / v4l2 users) — alongside the mic indicator (have) |
-| Input source (keyboard layout) | todo | only when more than one xkb layout; niri `switch-layout` |
-| Spotlight icon | todo | magnifier → `studio-launcher open` |
-| Control Center | have | the toggles icon |
-| Menu bar readouts (CPU, RAM, temps, net, battery) | have | `barReadouts` |
-| **Arrange the extras** (Bartender / Ice-style) | todo | Settings → Menu Bar: show/hide and reorder every extra and readout; tray (StatusNotifier) icons can be pinned or tucked behind a » overflow that expands on click/hover; per-item "only when active" (e.g. VPN, recording) |
+| **Wi-Fi / network extra** — icon: signal bars, ethernet, offline, VPN badge | have | Quickshell `Networking` (NetworkManager): Wi-Fi switch; current network; known + other networks (scan only while shown); click to join, inline password for new secured networks (join timeout → "couldn't join"); "Other Network…" (hidden SSID, `nmcli … hidden yes`); every wired link (connection name, speed, cable state) and VPNs — tun/WireGuard links such as Tailscale ("connected (externally)", shown not toggled) and NM VPN/WireGuard profiles (click = up/down); ⌥: IP, IPv6, router, DNS, MAC, security, BSSID, channel/band, rate, signal; live traffic line. `nmcli` (read-only, refreshed on `nmcli monitor`) fills what Quickshell doesn't model |
+| **Bluetooth extra** — icon shows on / connected / off | have | Quickshell `Bluetooth` (BlueZ): switch; paired devices (connected first) with type disc and battery % (Battery1); click = connect/disconnect; "Nearby Devices" (discovery only while that list is open and the menu shown; stopped only if we started it) → pair, then trust + connect; ⌥: address, RSSI (busctl), trusted; low-battery banner for headsets/mice/keyboards at ≤ 15 % (with `alerts`, re-arms above 25 %) |
+| **Sound extra** — icon reflects volume / headphones / muted | have | output slider (+ scroll on the icon, middle-click mute, right-click mixer — the old bar volume item folded in), outputs (Bluetooth ones with battery, matched by `api.bluez5.address`), Mixer ›, "Sound Settings…"; ⌥: inputs + mic level (only with Settings → Sound level meters, or "Show level" — it opens a capture stream), and the PipeWire clock: current rate · quantum · latency with quick switching (Auto / 44.1–96 kHz from `clock.allowed-rates`, Auto / 64–1024 frames) via `pw-metadata -n settings 0 clock.force-rate|clock.force-quantum` (Auto writes 0). IPC `pwclock rate N|quantum N|auto|status` |
+| Now Playing extra (optional) | have (off in the bar by default) | MPRIS cards: art, title/artist, transport, scrubber (seek); every player |
+| Battery extra (only when a battery exists) | have | UPower: %, time remaining / to full, power source, power mode (power-profiles-daemon), busiest apps when known (`systemMonitor` sampling) |
+| Clock in the bar (optional) | have | the date as before; Settings → Menu Bar → Clock adds the time (12/24 h); click → calendar + recent notifications |
+| Focus / Do Not Disturb indicator | have | moon while DND or a focus timer is on ("only when active" by default); menu: DND, focus for 25 / 50 min |
+| Recording indicator | have | while the Recorder runs: a red stop square + elapsed — click stops |
+| Camera-in-use indicator | have | green dot while a camera is used: PipeWire Video/Source links + processes holding `/dev/video*` (read-only /proc scan every 4 s while the indicator is on); menu lists who uses the camera and the mic |
+| Input source (keyboard layout) | have | only with more than one xkb layout (niri `KeyboardLayoutsChanged`); short name in the bar, menu switches (`SwitchLayout`) |
+| Spotlight icon | have | magnifier → `studio-launcher open` |
+| Control Center | have | the toggles icon (rebuilt, see below) |
+| Menu bar readouts (CPU, RAM, temps, net, battery) | have | `barReadouts` (off by default); each readout is its own bar item |
+| **Arrange the extras** (Bartender / Ice / Golden Gate) | have | Settings → Menu Bar: show/hide, reorder (↑/↓) and "only when active" for every control and readout; tray (StatusNotifier) icons pinned or tucked behind », drawn as monochrome templates in the bar's color (per item "In color"); items that don't fit move behind the same » (leftmost first); Super-drag a status item along the bar to move it or off the bar to remove it. Persists in `Settings.menubar.bar` |
+
+## Control Center — wave 2 (status)
+macOS Golden Gate's Control Center (`src/controlcenter/`), anchored top-right under
+the bar on the display with the status area. Layout in `Settings.controlCenter.layout`.
+
+| Feature | Status | How |
+|---|---|---|
+| Module grid (1×1, 2×1, 2×2, 4-wide rows) | have | 4-column cell grid, first-fit packing; default close to macOS: Connectivity, Focus, Keep Awake, Night Light, Display, Sound, Now Playing, Screenshot, Screen Recording, Microphones, Lock, Overview, Displays, Clipboard, Spotlight |
+| Connectivity (Wi-Fi, Bluetooth, Nearby share) | have | discs toggle, labels expand in place into the shared Wi-Fi / Bluetooth panels; Nearby = LocalSend or KDE Connect when installed (else hidden) |
+| Expand in place | have | the module's rect grows into the panel (one curve for open, close and expand); "‹ Control Center" or Esc/← backs out |
+| Display | have | brightness (backlight via brightnessctl, external monitors via ddcutil DDC/CI; hidden when nothing is adjustable) → per display, Night Light, Dark/Light appearance when the theme has an installed counterpart of the other polarity (same family name) |
+| Sound, Focus, Now Playing | have | slider row → outputs + mixer; DND + focus timers; all MPRIS players |
+| Small controls | have | Keep Awake, Night Light, Power Mode, Focus Timer, Screenshot, Screen Recording (elapsed while active), Microphones (mute all), Lock, Overview, Displays, Clipboard, Color Picker, Spotlight — only those whose feature is on |
+| Calendar | have (gallery, off by default) | the old CC calendar as a 2×2 control |
+| Edit Controls | have | Done-style edit state: drag to reorder, − removes, ⤢ cycles sizes; the gallery (grouped like Features) adds controls and pins them to the menu bar ("Menu Bar") |
+| Keyboard | have | arrows between modules, Space toggles, Enter / → expands, Tab cycles, Esc backs out then closes |
+| IPC | have | `controlcenter toggle|close|wifi|bluetooth|sound|display|focus|nowPlaying|back|edit` |
 
 ## Windows and the dock — wave 2 (windows)
 | Feature | Status | How |
