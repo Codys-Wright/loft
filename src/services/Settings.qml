@@ -22,6 +22,7 @@ Singleton {
     readonly property alias wallpaper: settings.wallpaper
     readonly property alias appearance: settings.appearance
     readonly property alias system: settings.system
+    readonly property alias sound: settings.sound
     // Feature id → on/off (Features.qml); absent = the module's default.
     property alias features: settings.features
     readonly property alias lock: settings.lock
@@ -104,6 +105,21 @@ Singleton {
                 property real diskThreshold: 0.9 // any mounted fs, 0..1
                 property bool alertBattery: true
                 property int batteryThreshold: 15 // %
+            }
+
+            property JsonObject sound: JsonObject {
+                // Mixer favorites (application names), top to bottom.
+                property list<string> pinned: []
+                // Per-app volume goes up to 150 % when on.
+                property bool boost: true
+                // Live level meters open small capture streams on the real
+                // graph while the mixer is visible — off unless asked for.
+                property bool meters: false
+                // Lower the new output when headphones / a Bluetooth sink disappear.
+                property bool safeOnUnplug: true
+                property real safeVolume: 0.3
+                // Bar mic icon while an app records or the mics are muted.
+                property bool micIndicator: true
             }
         }
     }

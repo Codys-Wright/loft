@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import qs.audio
 import qs.components
 import qs.services
 
@@ -127,7 +128,13 @@ PanelWindow {
                 visible: children.length > 1
             }
 
-            Volume {}
+            MicIndicator {
+                screenName: root.modelData.name
+            }
+
+            Volume {
+                screenName: root.modelData.name
+            }
 
             Icon {
                 text: "󰒓"

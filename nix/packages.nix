@@ -32,6 +32,7 @@
         gnugrep # System Monitor: hwmon sensors
         iproute2 # Network: local addresses (ip -j addr)
         librespeed-cli # Network: speed test (on demand)
+        pipewire # pw-metadata: per-app output (Sound mixer)
         walker # Spotlight launcher (frontend)
         elephant # launcher data providers
         jq

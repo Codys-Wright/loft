@@ -6,6 +6,7 @@ import Quickshell.Bluetooth
 import Quickshell.Networking
 import Quickshell.Services.Pipewire
 import Quickshell.Services.UPower
+import qs.audio
 import qs.components
 import qs.services
 
@@ -236,9 +237,25 @@ PanelWindow {
                 onIconClicked: if (ready)
                     sink.audio.muted = !sink.audio.muted
 
+                // Sound features: pick the output here, open the mixer.
+                property bool outputsOpen: false
+                titleClickable: Features.on("audioOutputs") && Sound.sinks.length > 1
+                titleOpen: outputsOpen
+                onTitleClicked: outputsOpen = !outputsOpen
+                expandable: Features.on("mixer")
+                onExpandClicked: {
+                    Panels.controlCenterOpen = false;
+                    Sound.openMixer(root.modelData.name);
+                }
+
                 PwObjectTracker {
                     objects: volume.sink ? [volume.sink] : []
                 }
+            }
+
+            OutputPicker {
+                Layout.fillWidth: true
+                visible: volume.outputsOpen && volume.titleClickable
             }
 
             Calendar {

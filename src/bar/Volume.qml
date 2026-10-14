@@ -3,7 +3,8 @@ import Quickshell.Services.Pipewire
 import qs.components
 import qs.services
 
-// Default output volume: scroll to change, click to mute.
+// Default output volume: scroll to change, click to mute, right-click for
+// the mixer (Feature "mixer").
 Item {
     id: root
 
@@ -11,6 +12,8 @@ Item {
     readonly property bool ready: sink?.ready ?? false
     readonly property real volume: ready ? sink.audio.volume : 0
     readonly property bool muted: ready ? sink.audio.muted : true
+    // The bar's output, for the mixer to open on.
+    property string screenName: ""
 
     implicitWidth: 22
     implicitHeight: 24
@@ -27,8 +30,7 @@ Item {
         text: {
             if (root.muted || root.volume <= 0)
                 return "󰝟";
-            const desc = (root.sink?.description ?? "").toLowerCase();
-            if (desc.includes("headphone") || desc.includes("bluez") || desc.includes("buds"))
+            if (Sound.isPersonal(root.sink))
                 return "󰋋";
             return root.volume >= 0.66 ? "󰕾" : root.volume >= 0.33 ? "󰖀" : "󰕿";
         }
@@ -37,8 +39,15 @@ Item {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: if (root.ready)
-            root.sink.audio.muted = !root.sink.audio.muted
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: event => {
+            if (event.button === Qt.RightButton) {
+                if (Features.on("mixer"))
+                    Sound.toggleMixer(root.screenName);
+            } else if (root.ready) {
+                root.sink.audio.muted = !root.sink.audio.muted;
+            }
+        }
         onWheel: wheel => {
             if (!root.ready)
                 return;

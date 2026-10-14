@@ -13,10 +13,10 @@ in parallel without touching each other.
 ## Sound — wave 1 (audio)
 | Feature | Status | How (Linux) |
 |---|---|---|
-| Volume mixer per app, boost > 100 % | todo | PipeWire stream nodes (Quickshell.Services.Pipewire), volume up to 150 %, pin/reorder favorites |
-| Per-app output | todo | set the stream's `target.object` (PipeWire metadata) from the mixer |
-| Output switcher + volume drop on headphone unplug | partial (CC slider) | default-sink picker in CC + shortcut + OSD; watch default sink changes |
-| Microphone tools (preferred input, level, mute all) | todo | default source picker, level, global mute shortcut + bar indicator |
+| Volume mixer per app, boost > 100 % | have | `mixer`: glass panel (bar volume right-click, CC chevron, `mixer toggle`); app streams grouped per app (filters/loopbacks/meters hidden), up to 150 %, mute, live levels, favorites pinned in the mixer and reordered in Settings → Sound |
+| Per-app output | have | mixer: per-app output list → `pw-metadata <stream> target.object <sink>` (delete = follow the default); the row says where it plays when not the default |
+| Output switcher + volume drop on headphone unplug | have | `audioOutputs`: picker in CC (click the device name), mixer and Settings; Mod+Shift+O / `audio nextOutput`; OSD "Output: …"; when headphones/Bluetooth vanish the new output drops to a safe volume (setting) |
+| Microphone tools (preferred input, level, mute all) | have | `micTools`: input picker + level (mixer, Settings), mute all (Mod+Shift+M / `mic toggleMute`, OSD), bar mic while an app records (amber) or muted |
 | Music app blocker | n/a | macOS media-key quirk |
 
 ## Know what the system is doing — wave 1 (system)

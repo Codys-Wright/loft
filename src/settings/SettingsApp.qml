@@ -28,6 +28,7 @@ Scope {
         { id: "layout", icon: "󰕰", label: "Layout & Motion" },
         { id: "keybinds", icon: "󰘳", label: "Keybinds" },
         { id: "system", icon: "󰍛", label: "System" },
+        { id: "sound", icon: "󰕾", label: "Sound" },
         { id: "features", icon: "󰐱", label: "Features" },
         { id: "clipboard", icon: "󰨸", label: "Clipboard & Files" },
         { id: "snippets", icon: "󱐋", label: "Snippets", feature: "snippets" },
@@ -534,6 +535,11 @@ Scope {
                         SystemPage {
                             Layout.fillWidth: true
                             visible: root.section === "system"
+                        }
+
+                        SoundPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "sound"
                         }
 
                         // About

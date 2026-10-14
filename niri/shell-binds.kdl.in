@@ -18,4 +18,6 @@ binds {
     Mod+Shift+Alt+V hotkey-overlay-title="Paste as Plain Text" { spawn @IPC@ "clipboard" "pastePlain"; }
     Mod+Shift+Period hotkey-overlay-title="Snippets" { spawn @IPC@ "snippets" "toggle"; }
     Mod+Shift+N hotkey-overlay-title="Scratchpad" { spawn @IPC@ "scratchpad" "toggle"; }
+    Mod+Shift+O hotkey-overlay-title="Next Audio Output" { spawn @IPC@ "audio" "nextOutput"; }
+    Mod+Shift+M hotkey-overlay-title="Mute Microphones" { spawn @IPC@ "mic" "toggleMute"; }
 }

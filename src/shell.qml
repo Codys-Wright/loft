@@ -11,6 +11,7 @@ import qs.lock
 import qs.osd
 import qs.switcher
 import qs.wallpaper
+import qs.audio
 import qs.settings
 import qs.devtools
 import qs.monitor
@@ -97,5 +98,10 @@ ShellRoot {
     LazyLoader {
         active: Features.on("scratchpad")
         ScratchpadWindow {}
+    }
+
+    Variants {
+        model: Features.on("mixer") ? Quickshell.screens : []
+        Mixer {}
     }
 }

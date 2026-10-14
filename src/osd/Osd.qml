@@ -8,6 +8,8 @@ import qs.services
 
 // On-screen display: a glass pill above the dock that appears when the output
 // volume or mute changes (keys, apps, the Control Center) and fades out.
+// Sound announcements (output switched, microphones muted — Sound.announced)
+// show in the same pill as an icon and a line of text.
 PanelWindow {
     id: root
 
@@ -29,7 +31,7 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     anchors.bottom: true
     margins.bottom: 130
-    implicitWidth: 300
+    implicitWidth: message ? Math.min(560, Math.max(300, messageText.implicitWidth + 92)) : 300
     implicitHeight: 56
     color: "transparent"
     mask: Region {}
@@ -56,15 +58,44 @@ PanelWindow {
     function poke() {
         if (!armed || !onThisScreen)
             return;
+        // A volume change right after an announcement (the new output's
+        // volume) keeps the announcement up.
+        if (!messageTimer.running)
+            message = "";
         shown = true;
         hide.restart();
+    }
+
+    property string message: ""
+    property string messageIcon: ""
+
+    function say(icon, text) {
+        if (!onThisScreen)
+            return;
+        messageIcon = icon;
+        message = text;
+        shown = true;
+        messageTimer.restart();
+        hide.restart();
+    }
+
+    Connections {
+        target: Sound
+        function onAnnounced(icon, text) {
+            root.say(icon, text);
+        }
+    }
+
+    Timer {
+        id: messageTimer
+        interval: 2200
     }
     onVolumeChanged: poke()
     onMutedChanged: poke()
 
     Timer {
         id: hide
-        interval: 1400
+        interval: root.message ? 2200 : 1400
         onTriggered: root.shown = false
     }
 
@@ -92,10 +123,23 @@ PanelWindow {
 
             Icon {
                 size: 20
-                text: root.muted || root.volume <= 0 ? "󰝟" : root.volume >= 0.66 ? "󰕾" : root.volume >= 0.33 ? "󰖀" : "󰕿"
+                text: root.message ? root.messageIcon : root.muted || root.volume <= 0 ? "󰝟" : root.volume >= 0.66 ? "󰕾" : root.volume >= 0.33 ? "󰖀" : "󰕿"
+            }
+
+            Text {
+                id: messageText
+                visible: root.message !== ""
+                Layout.fillWidth: true
+                text: root.message
+                elide: Text.ElideRight
+                color: Theme.text
+                font.family: Theme.fontUi
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
             }
 
             Rectangle {
+                visible: root.message === ""
                 Layout.fillWidth: true
                 height: 6
                 radius: 3
@@ -116,6 +160,7 @@ PanelWindow {
             }
 
             Text {
+                visible: root.message === ""
                 text: root.muted ? "Muted" : `${Math.round(root.volume * 100)}`
                 color: Theme.text
                 font.family: Theme.fontUi

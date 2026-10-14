@@ -35,7 +35,10 @@ Singleton {
         { id: "clipboard", label: "Clipboard history", icon: "󰨸", group: "Clipboard & files", description: "History with pins and image previews, paste as plain text, auto-clear, Clean URL" },
         { id: "snippets", label: "Text snippets", icon: "󱐋", group: "Clipboard & files", description: "Saved text typed into any app, with {date} and {clipboard} variables" },
         { id: "shelf", label: "Shelf", icon: "󰄠", group: "Clipboard & files", description: "Park files, links and text at the screen edge while dragging" },
-        { id: "scratchpad", label: "Scratchpad", icon: "󰺿", group: "Everyday", description: "Tabbed, autosaved Markdown notes in a floating window" }
+        { id: "scratchpad", label: "Scratchpad", icon: "󰺿", group: "Everyday", description: "Tabbed, autosaved Markdown notes in a floating window" },
+        { id: "mixer", label: "Volume mixer", icon: "󰘮", group: "Sound", description: "Per-app volume up to 150 %, mute, favorites and per-app output" },
+        { id: "audioOutputs", label: "Output switcher", icon: "󰓃", group: "Sound", description: "Pick the output from the Control Center or ⌘⇧O; safe volume when headphones disconnect" },
+        { id: "micTools", label: "Microphone tools", icon: "󰍬", group: "Sound", description: "Default input, level, mute all (⌘⇧M), bar indicator while recording" }
     ]
 
     readonly property var presets: ({
