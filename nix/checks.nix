@@ -8,7 +8,10 @@
 #                   helpers (scrolling-capture stitcher, Auto Scroll's stop logic with a fake
 #                   loft-pointer, recording zooms), Apps to leave alone → xremap
 #                   (tests/test_keys.py), spaces/templates and the instance fixtures against
-#                   schemas/space-1.json — all offline
+#                   schemas/space-1.json, and Spotify themed by Loft (tests/test_spotify.py:
+#                   palette → text scheme, wrapper rewriting on a fake Spotify tree,
+#                   version-change detection, setup with a fake spicetify, the `spotify`
+#                   hook) — all offline
 #   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte, and so
 #                   does `loft theme render loft@dark|loft@light` (the facet model's gate;
 #                   tests/test_resolve.py also checks imported packs through the v1 adapter)
@@ -23,6 +26,8 @@
 #   loft-sleep      the sleep watcher builds and its tests pass (fake BlueZ adapters +
 #                   sleep lock: off before sleep, back on after, only what was on)
 #   loft-sleep-clippy  the same clippy gate for it
+#   spicetify-live  Spotify's live recolor extension (spicetify/loft-live.js): colors.css
+#                   re-read cache-busted and swapped in at the same cascade slot
 #   loft-input      the test driver builds and its tests pass (keymaps, combos,
 #                   script parsing, bind lookup, screenshot geometry), and loft-pointer's
 #                   Auto Scroll pacing / stop / restore logic (motion + wheel only)
@@ -53,6 +58,7 @@
           ../themes
           ../packs
           ../schemas
+          ../spicetify
           ../tests
           ../schemas
           ../spaces
@@ -106,6 +112,11 @@
 
         clipboard-urlclean = check "clipboard-urlclean" [ pkgs.nodejs-slim ] ''
           node ${../tests/urlclean.test.js} ${../src/services/urlclean.js}
+          touch $out
+        '';
+
+        spicetify-live = check "spicetify-live" [ pkgs.nodejs-slim ] ''
+          node ${../tests/spicetify-live.test.js} ${../spicetify/loft-live.js}
           touch $out
         '';
 

@@ -18,7 +18,7 @@ import shutil
 from pathlib import Path
 from string import Template
 
-from . import color
+from . import color, palette
 from .pack import Pack, normalize, normalized_manifest
 
 c = color
@@ -121,11 +121,64 @@ def variables(norm: dict, fonts_set: bool) -> dict[str, str]:
             "layer-rule {\n    background-effect {\n        xray false\n    }\n}\n"
         )
     )
+    v.update({f"spice_{k.replace('-', '_')}": val for k, val in spicetify_scheme(p, dark).items()})
+
     f = norm["fonts"]
     # Only packs that declare fonts take over the terminal font.
     v["kitty_fonts"] = f"font_family {f['mono']}\nfont_size {c.num(f['size'])}\n" if fonts_set else ""
     v["ghostty_fonts"] = f"font-family = {f['mono']}\nfont-size = {c.num(f['size'])}\n" if fonts_set else ""
     return v
+
+
+def spicetify_scheme(p: dict[str, str], dark: bool) -> dict[str, str]:
+    """The palette as a scheme for spicetify-themes' `text` theme (its
+    color.ini keys plus Spicetify's base colors), hex without `#`.
+
+    text paints nearly everything from a handful of keys: `main` is every
+    background (sidebar, player and cards derive from it in its user.css),
+    `text`/`subtext` the foregrounds, `header`/`banner` titles and the
+    ASCII banner, `accent*`/`button*` controls and the playing row,
+    `border-inactive` card fills and hairlines, `highlight` hover/press.
+    Foregrounds are pushed to readable contrast on `main` (light themes
+    too); the accent keeps 3:1, so it stays visible as a fill and as text.
+    """
+    pc = palette.ensure_contrast
+    bg = c.hex6(p["bg"])
+    text = pc(p["text"], bg, 7.0)
+    subtext = pc(p["subtext"], bg, 4.5)
+    accent = pc(p["accent"], bg, 3.0)
+    accent2 = pc(p["accent2"], bg, 3.0)
+    surface = c.hex6(p["surface"])
+    # Card fills and borders: a visible step from main, whatever the pack's surface.
+    border = surface if c.contrast(surface, bg) >= 1.12 else c.mix(bg, p["overlay"], 0.45)
+    s = {
+        "text": text,
+        "subtext": subtext,
+        "main": bg,
+        "main-elevated": surface,
+        "highlight": c.mix(bg, p["overlay"], 0.7),
+        "highlight-elevated": c.hex6(p["overlay"]),
+        "sidebar": bg,
+        "player": bg,
+        "card": surface,
+        "shadow": "000000" if dark else c.mix(p["overlay"], "#000000", 0.35),
+        "selected-row": subtext,
+        "button": accent,
+        "button-active": accent,
+        "button-disabled": pc(c.mix(p["overlay"], p["subtext"], 0.3), bg, 1.6),
+        "tab-active": surface,
+        "notification": accent2,
+        "notification-error": pc(p["urgent"], bg, 3.0),
+        "misc": c.hex6(p["overlay"]),
+        "accent": accent,
+        "accent-active": accent,
+        "accent-inactive": c.mix(bg, surface, 0.5),
+        "banner": accent,
+        "border-active": accent,
+        "border-inactive": border,
+        "header": pc(c.mix(p["subtext"], bg, 0.3), bg, 3.0),
+    }
+    return {k: v.lstrip("#").lower() for k, v in s.items()}
 
 
 def template_dir_default() -> Path:

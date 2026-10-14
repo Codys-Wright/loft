@@ -12,7 +12,7 @@ import signal
 import subprocess
 from pathlib import Path
 
-ALL = ("shell", "niri", "kitty", "ghostty", "gtk")
+ALL = ("shell", "niri", "kitty", "ghostty", "gtk", "spotify")
 # `--dev` targets the nested session; terminals and GTK settings belong to
 # the host desktop, so leave them alone unless asked.
 DEV = ("shell", "niri")
@@ -76,6 +76,17 @@ def gtk(ctx) -> None:
     light = ctx.theme.get("polarity") == "light"
     _run(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", "prefer-light" if light else "prefer-dark"])
     link_gtk_base(ctx.state_dir, "light" if light else "dark")
+
+
+def spotify(ctx) -> None:
+    # Loft's Spicetify install (cli/loft/spotify.py): the theme's scheme into
+    # colors.css, which loft-live.js swaps in live. No-op when not set up.
+    from . import spotify as sp
+
+    try:
+        sp.sync(sp.root_dir(), ctx.state_dir, ctx.current)
+    except (OSError, sp.SpotifyError):
+        pass
 
 
 def link_gtk_base(state_dir: Path, polarity: str) -> None:

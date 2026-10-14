@@ -12,6 +12,9 @@ Upstream layout (what this reads; everything else is never downloaded):
   sddm-themes/<Name>/                        SDDM greeter, qylock format (→ the pack's greeter/,
                                              declared as its lock design; its Background is
                                              the same file as the switcher's wallpaper)
+  Themes/<Name>/.config/spicetify/config-xpui.ini   the theme's Spotify scheme (`color_scheme`) …
+  .config/spicetify/Themes/text/color.ini    … in spicetify-themes' `text` theme (→ the pack's
+                                             apps/spicetify.ini, which `loft spotify` uses)
 
 Wallpapers: the switcher's (default), the SDDM background when it differs,
 and the shipped wallpapers no theme sets (e.g. the pexels fern), each given
@@ -37,7 +40,7 @@ import shutil
 from collections import Counter
 from pathlib import Path
 
-from .. import color, palette, vibes
+from .. import color, palette, spotify, vibes
 from .upstream import ImporterError, Upstream, literal
 
 NAME = "cozytile"
@@ -147,6 +150,17 @@ def parse_pywal(text: str) -> dict[str, str]:
     return out
 
 
+def spicetify_scheme(config_xpui: str, color_ini: str) -> tuple[str, dict[str, str]] | None:
+    """(name, colors) of the scheme a theme's config-xpui.ini selects, when
+    it uses the `text` theme and color.ini has it."""
+    cfg = parse_conf(config_xpui)
+    name = cfg.get("color_scheme", "")
+    if not name or cfg.get("current_theme", "text") != "text":
+        return None
+    schemes = spotify.parse_ini(color_ini)
+    return (name, schemes[name]) if schemes.get(name) else None
+
+
 def parse_conf(text: str) -> dict[str, str]:
     """key=value lines of an SDDM theme.conf (first section wins)."""
     out = {}
@@ -206,6 +220,8 @@ def _config_paths(theme: str) -> list[str]:
         f".config/rofi/settings/launcher/{low}.rasi",
         f"Themes/{theme}/.config/qtile/config.py",
         f"Themes/{theme}/.config/dunst/dunstrc",
+        f"Themes/{theme}/.config/spicetify/config-xpui.ini",
+        SPICETIFY_COLORS,
     ]
 
 
@@ -226,7 +242,7 @@ def prefetch(up: Upstream, themes: list[str]) -> None:
 
 def _palette_of(up: Upstream, theme: str) -> tuple[str, dict[str, str], dict[str, str], dict[str, str] | None]:
     """(polarity, palette, switcher, pywal) of a theme from its configs."""
-    script, rasi, qtile, dunst = _config_paths(theme)
+    script, rasi, qtile, dunst = _config_paths(theme)[:4]
     root = up.checkout(*map(literal, (script, rasi, qtile, dunst)))
     switcher = parse_switcher(_read(root, script))
     has_sddm = _has_sddm(up, theme)
@@ -252,6 +268,8 @@ def _palette_of(up: Upstream, theme: str) -> tuple[str, dict[str, str], dict[str
     )
     return polarity, pal, switcher, pywal
 
+
+SPICETIFY_COLORS = ".config/spicetify/Themes/text/color.ini"
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 
@@ -372,6 +390,18 @@ def install(theme: str, dest: Path, up: Upstream | None = None) -> dict:
                 theme_json["wallpaper"]["images"] = images[1:]
 
         (dest / "theme.json").write_text(json.dumps(theme_json, indent=2) + "\n")
+        # Spotify: the theme's Spicetify scheme (`loft spotify`; first section = the scheme).
+        up.checkout(*map(literal, _config_paths(theme)[4:]))
+        spice = spicetify_scheme(_read(root, _config_paths(theme)[4]), _read(root, SPICETIFY_COLORS))
+        if spice:
+            (dest / "apps").mkdir(exist_ok=True)
+            (dest / "apps" / "spicetify.ini").write_text(
+                spotify.format_ini(
+                    {spice[0]: spice[1]},
+                    f"Cozytile {theme}'s Spotify scheme for spicetify-themes' text theme\n"
+                    f"(from Themes/{theme}/.config/spicetify and {SPICETIFY_COLORS}).",
+                )
+            )
         manifest = {
             "name": pack_name(theme),
             "author": "Darkkal44",

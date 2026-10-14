@@ -17,7 +17,8 @@ A **theme pack** is a directory. The machine-readable spec is
   theme.json          # the core: palette + glass (required)
   wall.png …          # optional assets, referenced from theme.json
   wallpapers/         # optional wallpaper collection (images; videos allowed, flagged)
-  apps/<file>         # optional hand-written consumer files (override generated ones)
+  apps/<file>         # optional hand-written consumer files (override generated ones),
+                      #   e.g. apps/spicetify.ini: the pack's own Spotify scheme
   lock/               # optional lock screen / greeter design (lock/Main.qml, or declared by `lock`)
   locks/<name>/       # optional further lock designs (picked up automatically)
   greeter/            # optional greeter art (e.g. an imported SDDM theme), kept for the greeter
@@ -240,6 +241,28 @@ pack's, or the alias of a facet-model theme) writes:
 | `gtk.css` | GTK 3/4, libadwaita | `@import url("file://…/current/gtk.css");` from `~/.config/gtk-{3,4}.0/gtk.css`. Palette + accent, the window radius, traffic-light window buttons (put them on the left with `gtk-decoration-layout=close,minimize,maximize:` in `settings.ini`) | `gsettings … color-scheme prefer-dark/light` |
 | `walker.css` | walker | Loft's walker theme `@import`s it as `colors.css` | walker re-reads CSS on every open |
 | `noctalia.json` | Noctalia (transition only) | its `colors.json` | its own watcher |
+| `spicetify.ini` | Spotify (Spicetify, spicetify-themes' `text` theme; `programs.loft.spotify`) | color.ini sections `loft spotify` merges after the text theme's own schemes; the **first** is the theme's scheme (generated: `[loft]`) | the `spotify` hook writes the scheme into the patched Spotify's `xpui/colors.css`; Loft's `loft-live.js` extension swaps it in while Spotify runs |
+
+### `spicetify.ini`
+
+The generated `[loft]` scheme maps the palette onto every key of the text theme
+(`accent`, `accent-active`, `accent-inactive`, `banner`, `border-active`,
+`border-inactive`, `header`, `highlight`, `main`, `notification`,
+`notification-error`, `subtext`, `text`) and Spicetify's base colors (`main-elevated`,
+`highlight-elevated`, `sidebar`, `player`, `card`, `shadow`, `selected-row`, `button`,
+`button-active`, `button-disabled`, `tab-active`, `misc`), as `rrggbb`: `main` = bg (the
+text theme derives sidebar, player and cards from it), `text` / `subtext` pushed to 7:1 /
+4.5:1 on it, accents (`accent*`, `button*`, `banner`, `border-active`) = accent at ≥ 3:1,
+`border-inactive` (card fills, hairlines) = surface (or a step toward overlay when surface is
+too close to bg), `highlight` = bg → overlay, `header` = a dimmed subtext at ≥ 3:1,
+`notification` = accent2, `notification-error` = urgent. Light themes stay light
+(`render.spicetify_scheme`, `tests/test_spotify.py`).
+
+A pack replaces it with **`apps/spicetify.ini`**: one or more color.ini sections, the first
+being the scheme Spotify uses with the theme (keys it leaves out get Spicetify's defaults).
+The Cozytile importer writes one from the theme's Spicetify config (`[cozy]`, `[sakura]`,
+`[natura]`, `[everforest]`). Settings → Appearance → Spotify can also pin the colors or pick
+any of the text theme's own schemes (`loft spotify scheme NAME`).
 
 The templates live in [`templates/render/`](../templates/render) and use
 `${var}` placeholders (Python `string.Template`); the variables are computed in
@@ -270,7 +293,7 @@ installed theme is an error without `--force`.
 
 | Importer | Upstream (license) | Pack | Palette | Assets |
 |---|---|---|---|---|
-| `cozytile` | [Darkkal44/Cozytile](https://github.com/Darkkal44/Cozytile) (none: `NOASSERTION`) | `cozytile-<theme>` | Its own config: bg = the theme switcher's `wal -b` color (= qtile bar), surface = qtile widget pills, text = rofi foreground, accent = qtile workspace/widget foreground, accent2 = the rofi/qtile/SDDM highlight most distinct from the accent. A theme that loads a pywal JSON (Carbon: `e-ink.json`) takes bg/text/accent from its `special` colors | `sddm-themes/<Name>/` → `greeter/`, declared as the pack's `lock` (qylock format). Wallpapers: the switcher's (the default; upstream it is the same file as the SDDM `Background`, which is then referenced instead of copied), the SDDM background when it differs, and each `Wallpaper/` image no theme sets, given to the theme whose palette is closest to the image's colors (→ `wallpapers/`) |
+| `cozytile` | [Darkkal44/Cozytile](https://github.com/Darkkal44/Cozytile) (none: `NOASSERTION`) | `cozytile-<theme>` (+ `apps/spicetify.ini`: the theme's Spotify scheme for the text theme, from `Themes/<T>/.config/spicetify/config-xpui.ini` and `.config/spicetify/Themes/text/color.ini`) | Its own config: bg = the theme switcher's `wal -b` color (= qtile bar), surface = qtile widget pills, text = rofi foreground, accent = qtile workspace/widget foreground, accent2 = the rofi/qtile/SDDM highlight most distinct from the accent. A theme that loads a pywal JSON (Carbon: `e-ink.json`) takes bg/text/accent from its `special` colors | `sddm-themes/<Name>/` → `greeter/`, declared as the pack's `lock` (qylock format). Wallpapers: the switcher's (the default; upstream it is the same file as the SDDM `Background`, which is then referenced instead of copied), the SDDM background when it differs, and each `Wallpaper/` image no theme sets, given to the theme whose palette is closest to the image's colors (→ `wallpapers/`) |
 | `qylock` | [Darkkal44/qylock](https://github.com/Darkkal44/qylock) (GPL-3.0) | `qylock-<theme>` | `theme.conf` colors (`type=color` + `color` = bg, `accentColor`, `mainColor`, `containerColor`, `themeMode`; a lone `color` is the design's text color, or its accent when saturated), the rest from the background: a still, or a frame ~1 s into a video, quantized by median cut + k-means. No ffmpeg and a video: neutral dark palette | `themes/<theme>/` → `lock/qylock/` (+ `lock` in the manifest). Every background (theme.conf's, plus other images/videos ≥ 200 KB, e.g. osu's `background/A..G`, Genshin's dawn/day/dusk/night) is a wallpaper: stills referenced in place, videos as a frame in `wallpapers/` noting the video (no ffmpeg: the video, flagged) |
 
 Both fill roles the upstream lacks the same way (`cli/loft/palette.py`, shared with vibe matching):

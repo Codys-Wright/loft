@@ -388,6 +388,11 @@ Scope {
 
                     }
 
+                    // Appearance → Spotify (programs.loft.spotify)
+                    SpotifyCard {
+                        visible: root.section === "appearance" && (SpotifyTheme.configured || SpotifyTheme.setUp)
+                    }
+
                     WallpaperPage {
                         Layout.fillWidth: true
                         visible: root.section === "wallpaper"

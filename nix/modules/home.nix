@@ -60,6 +60,11 @@
         "LOFT_LIBRARY=${library}"
       ]
       ++ lib.optional (cfg.devSource != null) "LOFT_LAUNCHER_DIR=${cfg.devSource}/launcher"
+      # The `spotify` reload hook and Settings → Appearance → Spotify (nix/modules/spotify.nix).
+      ++ lib.optionals cfg.spotify.enable [
+        "LOFT_SPOTIFY_DIR=${config.xdg.dataHome}/loft/spotify"
+        "LOFT_SPOTIFY_CONFIG=${config.xdg.configHome}/loft/spotify.json"
+      ]
       # Quickshell is a Qt app with no platform theme: without this it falls
       # back to hicolor and the dock/bar show generic icons.
       ++ lib.optional (cfg.iconTheme != null) "QS_ICON_THEME=${cfg.iconTheme}";
@@ -83,9 +88,13 @@
       };
     in
     {
-      # studio-linux (Loft's old name): programs.studio-linux.* still works,
-      # with a deprecation warning, until consumers move to programs.loft.
-      imports =
+      # programs.loft.spotify (./spotify.nix), then studio-linux (Loft's old
+      # name): programs.studio-linux.* still works, with a deprecation
+      # warning, until consumers move to programs.loft.
+      imports = [
+        (import ./spotify.nix { inherit self; })
+      ]
+      ++
         map
           (
             path:
