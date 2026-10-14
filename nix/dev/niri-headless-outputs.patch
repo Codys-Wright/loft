@@ -1,0 +1,322 @@
+diff --git a/src/backend/headless.rs b/src/backend/headless.rs
+index 8b5ee82..9959cd0 100644
+--- a/src/backend/headless.rs
++++ b/src/backend/headless.rs
+@@ -5,6 +5,7 @@
+ 
+ use std::mem;
+ use std::sync::{Arc, Mutex};
++use std::time::Duration;
+ 
+ use anyhow::Context as _;
+ use niri_config::OutputName;
+@@ -13,19 +14,45 @@ use smithay::backend::egl::native::EGLSurfacelessDisplay;
+ use smithay::backend::egl::{EGLContext, EGLDisplay};
+ use smithay::backend::renderer::element::RenderElementStates;
+ use smithay::backend::renderer::gles::GlesRenderer;
++use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
+ use smithay::output::{Mode, Output, PhysicalProperties, Subpixel};
+ use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback;
+ use smithay::utils::Size;
+ use smithay::wayland::presentation::Refresh;
+ 
+ use super::{IpcOutputMap, OutputId, RenderResult};
+-use crate::niri::{Niri, RedrawState};
++use crate::niri::{Niri, RedrawState, State};
+ use crate::render_helpers::{resources, shaders};
+ use crate::utils::{get_monotonic_time, logical_output};
+ 
+ pub struct Headless {
+     renderer: Option<GlesRenderer>,
+     ipc_outputs: Arc<Mutex<IpcOutputMap>>,
++    /// Runtime use (`NIRI_HEADLESS_OUTPUTS`): pace frames at 60 Hz like a real
++    /// display, and connect / disconnect outputs on `output … on|off`.
++    paced: bool,
++    outputs: Vec<HeadlessOutput>,
++}
++
++struct HeadlessOutput {
++    n: u8,
++    size: (u16, u16),
++    output: Option<Output>,
++}
++
++const REFRESH: Duration = Duration::from_micros(16_667);
++
++/// `NIRI_HEADLESS_OUTPUTS=5120x1440,1440x2560,…`: one virtual output per size.
++pub fn parse_output_sizes(spec: &str) -> anyhow::Result<Vec<(u16, u16)>> {
++    spec.split(',')
++        .map(|s| {
++            let (w, h) = s
++                .trim()
++                .split_once('x')
++                .with_context(|| format!("bad output size {s:?}, expected WxH"))?;
++            Ok((w.parse()?, h.parse()?))
++        })
++        .collect()
+ }
+ 
+ impl Headless {
+@@ -33,32 +60,24 @@ impl Headless {
+         Self {
+             renderer: None,
+             ipc_outputs: Default::default(),
++            paced: false,
++            outputs: Vec::new(),
+         }
+     }
+ 
+-    pub fn init(&mut self, _niri: &mut Niri) {}
+-
+-    pub fn add_renderer(&mut self) -> anyhow::Result<()> {
+-        if self.renderer.is_some() {
+-            error!("add_renderer: renderer must not already exist");
+-            return Ok(());
++    /// A headless session at runtime (rather than in tests): a renderer for
++    /// screencopy, 60 Hz frame pacing, and these outputs.
++    pub fn start_runtime(&mut self, niri: &mut Niri, sizes: &[(u16, u16)]) -> anyhow::Result<()> {
++        self.paced = true;
++        self.add_renderer()?;
++        for (i, size) in sizes.iter().enumerate() {
++            let n = u8::try_from(i + 1).context("too many outputs")?;
++            self.add_output(niri, n, *size);
+         }
+-
+-        let mut renderer = unsafe {
+-            let display =
+-                EGLDisplay::new(EGLSurfacelessDisplay).context("error creating EGL display")?;
+-            let context = EGLContext::new(&display).context("error creating EGL context")?;
+-            GlesRenderer::new(context).context("error creating renderer")?
+-        };
+-
+-        resources::init(&mut renderer);
+-        shaders::init(&mut renderer);
+-
+-        self.renderer = Some(renderer);
+         Ok(())
+     }
+ 
+-    pub fn add_output(&mut self, niri: &mut Niri, n: u8, size: (u16, u16)) {
++    fn create_output(n: u8, size: (u16, u16)) -> Output {
+         let connector = format!("headless-{n}");
+         let make = "niri".to_string();
+         let model = "headless".to_string();
+@@ -88,6 +107,70 @@ impl Headless {
+             model: Some(model),
+             serial: Some(serial),
+         });
++        output
++    }
++
++    /// `output "headless-N" { off; }` (or `niri msg output headless-N off`)
++    /// unplugs it; `on` plugs it back in — a monitor hotplug.
++    pub fn on_output_config_changed(&mut self, niri: &mut Niri) {
++        if !self.paced {
++            return;
++        }
++        for o in &mut self.outputs {
++            let name = OutputName {
++                connector: format!("headless-{}", o.n),
++                make: Some("niri".into()),
++                model: Some("headless".into()),
++                serial: Some(o.n.to_string()),
++            };
++            let off = niri
++                .config
++                .borrow()
++                .outputs
++                .find(&name)
++                .is_some_and(|c| c.off);
++            match (&o.output, off) {
++                (Some(output), true) => {
++                    let output = output.clone();
++                    o.output = None;
++                    niri.remove_output(&output);
++                    niri.ipc_outputs_changed = true;
++                }
++                (None, false) => {
++                    let output = Self::create_output(o.n, o.size);
++                    o.output = Some(output.clone());
++                    niri.add_output(output, Some(REFRESH), false);
++                    niri.ipc_outputs_changed = true;
++                }
++                _ => (),
++            }
++        }
++    }
++
++    pub fn init(&mut self, _niri: &mut Niri) {}
++
++    pub fn add_renderer(&mut self) -> anyhow::Result<()> {
++        if self.renderer.is_some() {
++            error!("add_renderer: renderer must not already exist");
++            return Ok(());
++        }
++
++        let mut renderer = unsafe {
++            let display =
++                EGLDisplay::new(EGLSurfacelessDisplay).context("error creating EGL display")?;
++            let context = EGLContext::new(&display).context("error creating EGL context")?;
++            GlesRenderer::new(context).context("error creating renderer")?
++        };
++
++        resources::init(&mut renderer);
++        shaders::init(&mut renderer);
++
++        self.renderer = Some(renderer);
++        Ok(())
++    }
++
++    pub fn add_output(&mut self, niri: &mut Niri, n: u8, size: (u16, u16)) {
++        let output = Self::create_output(n, size);
+ 
+         let physical_properties = output.physical_properties();
+         self.ipc_outputs.lock().unwrap().insert(
+@@ -96,7 +179,7 @@ impl Headless {
+                 name: output.name(),
+                 make: physical_properties.make,
+                 model: physical_properties.model,
+-                serial: None,
++                serial: self.paced.then(|| n.to_string()),
+                 physical_size: None,
+                 modes: vec![niri_ipc::Mode {
+                     width: size.0,
+@@ -112,7 +195,16 @@ impl Headless {
+             },
+         );
+ 
+-        niri.add_output(output, None, false);
++        if self.paced {
++            self.outputs.push(HeadlessOutput {
++                n,
++                size,
++                output: Some(output.clone()),
++            });
++            niri.add_output(output, Some(REFRESH), false);
++        } else {
++            niri.add_output(output, None, false);
++        }
+     }
+ 
+     pub fn seat_name(&self) -> String {
+@@ -146,9 +238,25 @@ impl Headless {
+         }
+ 
+         output_state.frame_callback_sequence = output_state.frame_callback_sequence.wrapping_add(1);
++        debug!(target: "niri::headless_frame", "{}", output.name());
+ 
+         // FIXME: request redraw on unfinished animations remain
+ 
++        if self.paced {
++            // Like a display: the next frame comes a refresh interval later
++            // (redraws queued meanwhile wait for it, as for a KMS vblank).
++            output_state.redraw_state = RedrawState::WaitingForVBlank {
++                redraw_needed: false,
++            };
++            let out = output.clone();
++            niri.event_loop
++                .insert_source(Timer::from_duration(REFRESH), move |_, _, state: &mut State| {
++                    on_vblank(&mut state.niri, &out);
++                    TimeoutAction::Drop
++                })
++                .unwrap();
++        }
++
+         RenderResult::Submitted
+     }
+ 
+@@ -161,6 +269,26 @@ impl Headless {
+     }
+ }
+ 
++fn on_vblank(niri: &mut Niri, output: &Output) {
++    // Gone (unplugged) since the frame was submitted.
++    let Some(output_state) = niri.output_state.get_mut(output) else {
++        return;
++    };
++    let redraw_needed = match mem::replace(&mut output_state.redraw_state, RedrawState::Idle) {
++        RedrawState::WaitingForVBlank { redraw_needed } => redraw_needed,
++        other => {
++            output_state.redraw_state = other;
++            return;
++        }
++    };
++    output_state.frame_callback_sequence = output_state.frame_callback_sequence.wrapping_add(1);
++    if redraw_needed || output_state.unfinished_animations_remain {
++        niri.queue_redraw(output);
++    } else {
++        niri.send_frame_callbacks(output);
++    }
++}
++
+ impl Default for Headless {
+     fn default() -> Self {
+         Self::new()
+diff --git a/src/backend/mod.rs b/src/backend/mod.rs
+index 49fbc6b..34568f6 100644
+--- a/src/backend/mod.rs
++++ b/src/backend/mod.rs
+@@ -197,7 +197,7 @@ impl Backend {
+         match self {
+             Backend::Tty(tty) => tty.on_output_config_changed(niri),
+             Backend::Winit(_) => (),
+-            Backend::Headless(_) => (),
++            Backend::Headless(headless) => headless.on_output_config_changed(niri),
+         }
+     }
+ 
+diff --git a/src/ipc/server.rs b/src/ipc/server.rs
+index db71da6..836c429 100644
+--- a/src/ipc/server.rs
++++ b/src/ipc/server.rs
+@@ -388,6 +388,7 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
+                 // Make sure some logic like workspace clean-up has a chance to run before doing
+                 // actions.
+                 state.niri.advance_animations();
++                debug!(target: "niri::ipc_action", "{action:?}");
+                 state.do_action(action, false);
+                 let _ = tx.send_blocking(());
+             });
+diff --git a/src/main.rs b/src/main.rs
+index e80992e..1103e21 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -174,17 +174,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
+     // Increase the buffer size so that it's harder to crash a frozen client with a 1000 Hz mouse.
+     set_default_max_buffer_size(&display, 1024 * 1024);
+ 
++    // NIRI_HEADLESS_OUTPUTS=WxH,WxH,…: run on virtual outputs (no display,
++    // no input devices; software rendering for screenshots), e.g. for
++    // multi-monitor test sessions.
++    let headless_outputs = env::var("NIRI_HEADLESS_OUTPUTS")
++        .ok()
++        .filter(|s| !s.is_empty())
++        .map(|s| niri::backend::headless::parse_output_sizes(&s))
++        .transpose()
++        .unwrap();
++    env::remove_var("NIRI_HEADLESS_OUTPUTS");
++
+     let mut state = State::new(
+         config,
+         event_loop.handle(),
+         event_loop.get_signal(),
+         display,
+-        false,
++        headless_outputs.is_some(),
+         true,
+         cli.session,
+     )
+     .unwrap();
+ 
++    if let Some(sizes) = &headless_outputs {
++        let niri = &mut state.niri;
++        state
++            .backend
++            .headless()
++            .start_runtime(niri, sizes)
++            .expect("error starting the headless outputs");
++    }
++
+     // Set WAYLAND_DISPLAY for children.
+     let socket_name = state.niri.socket_name.as_deref().unwrap();
+     env::set_var("WAYLAND_DISPLAY", socket_name);

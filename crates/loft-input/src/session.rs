@@ -168,7 +168,8 @@ pub fn load(name: &str) -> Result<Target> {
         wayland_display: display,
         niri_socket: env.get("NIRI_SOCKET").map(PathBuf::from),
         niri_config,
-        nested: true,
+        // `loft-dev --outputs` runs niri on virtual outputs, not nested.
+        nested: env.get("LOFT_DEV_NESTED").is_none_or(|v| v != "0"),
         env,
     })
 }

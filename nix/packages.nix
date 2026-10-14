@@ -173,6 +173,16 @@
           '';
         };
 
+        # niri + nix/dev/niri-headless-outputs.patch: NIRI_HEADLESS_OUTPUTS=WxH,…
+        # runs niri on that many virtual outputs (its test backend, made usable at
+        # runtime: 60 Hz pacing, screencopy, `niri msg output headless-N off|on` as
+        # hotplug). niri's nested (winit) backend has exactly one output, so this is
+        # how `loft-dev --outputs` gets a multi-monitor session.
+        loft-niri-headless = pkgs.niri.overrideAttrs (old: {
+          patches = (old.patches or [ ]) ++ [ ./dev/niri-headless-outputs.patch ];
+          doCheck = false;
+        });
+
         loft-dev = pkgs.writeShellApplication {
           name = "loft-dev";
           runtimeInputs = runtimeDeps ++ [
@@ -196,6 +206,7 @@
                 "@KWIN_PLACE@"
                 "@SWAY@"
                 "@MESA_EGL_VENDOR@"
+                "@NIRI_HEADLESS@"
               ]
               [
                 (lib.getExe self'.packages.loft)
@@ -207,6 +218,7 @@
                 "${./dev/kwin-place.js}"
                 (lib.getExe' pkgs.sway-unwrapped "sway")
                 "${pkgs.mesa}/share/glvnd/egl_vendor.d/50_mesa.json"
+                (lib.getExe self'.packages.loft-niri-headless)
               ]
               (builtins.readFile ./dev/loft-dev.sh);
         };

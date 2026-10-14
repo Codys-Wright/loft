@@ -66,6 +66,29 @@ A named session is, by default:
   thumbnails, start the shell with `LOFT_DEV_PREVIEW_STILL=<a loft-shot PNG of the session>`
   in its environment: that still stands in for the display capture.
 
+### Several monitors: `--outputs`
+
+```sh
+loft-dev --session spaces --outputs 1440x2560,5120x1440,2560x1440 "$PWD"   # left to right
+loft-dev --session walls --outputs 5120x1440+1440+0,1440x2560+0+0          # with positions
+```
+
+niri's nested (winit) backend only ever has one output, so `--outputs` runs niri on
+**virtual outputs** instead: its own headless backend (made usable at runtime by
+`nix/dev/niri-headless-outputs.patch`, the `loft-niri-headless` package), with no host
+compositor at all. Each entry becomes `headless-1`, `headless-2`, … in that order, placed left
+to right unless `+X+Y` gives a position. Their identities are `niri headless 1`, … (so roles
+and `open-on-output` by identity work). Frames are paced at 60 Hz, clients render with shm
+(Mesa llvmpipe), and screenshots work as usual (`loft-shot --output headless-2`).
+
+- Unplug and replug a monitor: `niri msg output headless-3 off` / `… on` (niri's real hotplug
+  path: its workspaces move to the first monitor and come back).
+- `RUST_LOG=niri=info,niri::ipc_action=debug,niri::headless_frame=debug` in loft-dev's
+  environment logs every IPC action and every rendered frame per output, with timestamps
+  (how SPACES.md §3.1's frame measurements were made).
+- There's no input device: drive it with `loft-input` as usual. Mod is `mod-key` (the
+  session isn't nested), `bind` knows that.
+
 Run it in the background and wait for `session.env`:
 
 ```sh
@@ -239,6 +262,10 @@ loft-dev --stop demo
   - `zwp_virtual_keyboard_v1`: a US keymap on real evdev codes, plus spare keycodes for
     characters a US keyboard can't type.
   - Key combos, scripts and bind lookup are unit-tested (`nix flake check`).
+- `--outputs`: `nix/dev/niri-headless-outputs.patch` selects niri's test-only headless backend
+  when `NIRI_HEADLESS_OUTPUTS=WxH,…` is set, adds a renderer (EGL surfaceless, for
+  screencopy), paces frames with a 16.7 ms timer like a vblank, and turns `output … off|on`
+  into removing / re-adding the output.
 - `nix/dev/loft-dev.sh`: session dirs `$XDG_RUNTIME_DIR/loft-dev[-NAME]`, with
   `session.env` (NIRI_SOCKET, WAYLAND_DISPLAY, NIRI_PID, XDG_RUNTIME_DIR,
   DBUS_SESSION_BUS_ADDRESS, …). The headless host is `sway` with `WLR_BACKENDS=headless
