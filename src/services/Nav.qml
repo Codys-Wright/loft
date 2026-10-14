@@ -16,6 +16,8 @@ Singleton {
     property Item item: null
     // A text field has the keyboard (Enter/Space go to it, not the menu).
     property bool typing: false
+    // The Control Center's keyboard focus (a module or one of its buttons).
+    property Item ccFocus: null
 
     function rows() {
         const out = [];
