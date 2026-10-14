@@ -22,11 +22,11 @@ in parallel without touching each other.
 ## Know what the system is doing — wave 1 (system)
 | Feature | Status | How |
 |---|---|---|
-| System monitor (CPU/GPU/mem/temps, history graphs, energy-hungry apps) | partial (island page) | ring-buffer history in SystemStats, graphs, top processes from /proc |
-| Fan control | todo (read-only first) | hwmon `fan*_input` RPM; control via `pwm*` is hardware-specific → later |
-| Menu bar readouts | todo | configurable bar widgets (CPU, RAM, temp, GPU, net, battery) |
-| Network (live traffic, totals, local IP, speed test) | todo | /proc/net/dev, NetworkManager, librespeed-cli |
-| Alerts (sustained load, temps, memory pressure, low disk, low battery) | partial (island border) | notifications with hysteresis; statvfs for disks; UPower |
+| System monitor (CPU/GPU/mem/temps, history graphs, energy-hungry apps) | have | `systemMonitor`: SystemStats ring buffers (5 min) → Canvas graphs in a glass window (island "Open Monitor", bar readouts, `monitor toggle`, Ctrl+Shift+Esc); top processes from /proc/<pid>/stat + status (only while open) with Quit / Force Quit after a confirm |
+| Fan control | partial (read-only) | every hwmon `fan*_input` RPM + temps on Disks & Sensors, NVIDIA fan % via nvidia-smi; control via `pwm*` is hardware-specific → later |
+| Menu bar readouts | have | `barReadouts`: CPU, RAM, CPU temp, GPU, net up/down, battery (when present) in the status pill; chosen in Settings → System |
+| Network (live traffic, totals, local IP, speed test) | have | `network`: /proc/net/dev (physical interfaces summed), session totals, `ip -j addr`, librespeed-cli on button press |
+| Alerts (sustained load, temps, memory pressure, low disk, low battery) | have | `alerts`: island banners with hold time, hysteresis and a 10 min cooldown; PSI memory pressure, `df` every 5 min (re-alerts only when another fs fills), UPower; thresholds in Settings → System |
 
 ## Menu bar — wave 1 (menu bar)
 | Feature | Status | How |

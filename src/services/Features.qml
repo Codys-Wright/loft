@@ -24,10 +24,14 @@ Singleton {
         { id: "dock", label: "Dock", icon: "󱂬", group: "Desktop", description: "Pinned and running apps with magnification" },
         { id: "island", label: "Dynamic Island", icon: "󰟜", group: "Everyday", description: "Now playing, live activities, notifications, system pages" },
         { id: "controlcenter", label: "Control Center", icon: "󰒓", group: "Desktop", description: "Network, Bluetooth, toggles, now playing, volume, calendar" },
-        { id: "osd", label: "Volume display", icon: "󰕾", group: "Sound", description: "On-screen pill when volume changes" },
+        { id: "osd", label: "Volume display", icon: "󰄧", group: "Sound", description: "On-screen pill when volume changes" },
         { id: "switcher", label: "App switcher", icon: "󰕰", group: "Windows", description: "⌘Tab between apps" },
         { id: "wallpaperPicker", label: "Wallpaper picker", icon: "󰸉", group: "Desktop", description: "Browse and apply wallpapers" },
-        { id: "lock", label: "Lock screen", icon: "󰌾", group: "Desktop", core: true, description: "Session lock with the theme's design" }
+        { id: "lock", label: "Lock screen", icon: "󰌾", group: "Desktop", core: true, description: "Session lock with the theme's design" },
+        { id: "systemMonitor", label: "System Monitor", icon: "󰄧", group: "System", description: "History graphs, processes (quit / force quit), disks, sensors and fans" },
+        { id: "barReadouts", label: "Menu bar readouts", icon: "󰍛", group: "System", description: "CPU, memory, temperature, GPU, network and battery in the bar" },
+        { id: "network", label: "Network", icon: "󰛳", group: "System", description: "Live traffic, session totals, local addresses and a speed test" },
+        { id: "alerts", label: "Alerts", icon: "󰀦", group: "System", description: "Notifications for sustained load, heat, memory pressure, low disk and battery" }
     ]
 
     readonly property var presets: ({

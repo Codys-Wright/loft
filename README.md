@@ -105,4 +105,4 @@ studio-niri binds --conflicts             # keys bound more than once, and which
 studio-niri reset [input|layout.gaps|…]   # drop overrides and re-render
 ```
 
-Status: Phase 0 (dev loop), Phase 1 (theme engine + selector + Cozytile/qylock importers), the shell port (bar, dock, Control Center, Dynamic Island, OSD, switcher, notifications, wallpaper picker, Settings incl. niri Displays/Input/Layout/Keybinds), the Spotlight launcher and Phase 5 (lock + login screen). See [docs/PLAN.md](docs/PLAN.md). Themes: [studio-linux-themes](https://github.com/Codys-Wright/studio-linux-themes).
+Status: Phase 0 (dev loop), Phase 1 (theme engine + selector + Cozytile/qylock importers), the shell port (bar, dock, Control Center, Dynamic Island, OSD, switcher, notifications, wallpaper picker, Settings incl. niri Displays/Input/Layout/Keybinds), the Spotlight launcher, the System module (monitor, bar readouts, network, alerts; `qs ipc call monitor toggle`) and Phase 5 (lock + login screen). See [docs/PLAN.md](docs/PLAN.md). Themes: [studio-linux-themes](https://github.com/Codys-Wright/studio-linux-themes).

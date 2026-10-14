@@ -35,6 +35,11 @@ Singleton {
         command: ["studio", "theme", "list", "--json"]
         stdout: StdioCollector {
             onStreamFinished: {
+                // No output: the `studio` CLI isn't on PATH (or failed) — say so once.
+                if (text.trim() === "") {
+                    root.error = "Theme list unavailable (is the studio CLI on PATH?)";
+                    return;
+                }
                 try {
                     root.themes = JSON.parse(text);
                 } catch (e) {
