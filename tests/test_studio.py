@@ -144,6 +144,7 @@ class Manager(unittest.TestCase):
                 "XDG_DATA_HOME": str(self.tmp / "data"),
                 "STUDIO_STATE_DIR": str(self.state),
                 "STUDIO_HOOKS": "none",
+                "STUDIO_THEME_INDEX": "none",
             }
         )
         os.environ.pop("STUDIO_THEME_PATH", None)

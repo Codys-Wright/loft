@@ -1,4 +1,4 @@
-"""Palette derivation for importers: image sampling, quantization, role mapping.
+"""Palette derivation: image sampling, quantization, role mapping.
 
 Dependency choice: no new Python modules. Images are sampled through
 `ffmpeg` when it is on PATH (stills of any format *and* video frames, scaled
@@ -24,7 +24,7 @@ import subprocess
 import zlib
 from pathlib import Path
 
-from .. import color
+from . import color
 
 RGB = tuple[int, int, int]
 

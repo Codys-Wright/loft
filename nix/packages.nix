@@ -272,7 +272,7 @@
           for pack in ${cliSrc}/themes/*/; do
             pack="''${pack%/}"
             [ -L "$pack" ] && continue
-            ${lib.getExe self'.packages.studio} theme render "$pack" "$out/$(basename "$pack")"
+            STUDIO_THEME_INDEX=none ${lib.getExe self'.packages.studio} theme render "$pack" "$out/$(basename "$pack")"
           done
           ln -s "$(readlink ${cliSrc}/themes/default)" $out/default
         '';
