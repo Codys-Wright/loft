@@ -20,10 +20,12 @@ import qs.services
 // Scrolling capture: select an area, then scroll it yourself; `loft capture
 // scroll` grabs it a few times a second and stitches the frames by their
 // overlap (cli/loft/stitch.py), ScrollCaptureHud shows the growing image
-// beside the area with Done / Cancel. Manual only: there is no Auto Scroll
-// (docs/FEATURES.md says why).
+// beside the area with Auto / Cancel / Done. Auto (only when pressed):
+// loft-pointer moves the pointer into the area and turns the wheel until the
+// content ends; touching the mouse or any key stops it (ScrollCaptureHud).
 //
 // IPC: capture toggle|area|screen|window|scrolling|scrollDone|scrollCancel|
+//      scrollAuto|scrollStop|scrollAutoState|
 //      recordArea|recordScreen|text|color|annotateLast|pinLast|gifLast|
 //      trimLast|editLast|edit PATH|unpinAll
 //      camera toggle|on|off
@@ -83,6 +85,14 @@ Singleton {
     property int scrollFrames: 0
     property var scrollSegments: []
     property bool scrollFinishing: false
+    // Auto Scroll: "" | starting | running (the pointer is in place, the
+    // HUD guards it) | stopping; why it last stopped (end | stop | pointer |
+    // timeout | limit | error | unavailable | done | cancel).
+    property string scrollAuto: ""
+    property string scrollAutoReason: ""
+    // Briefly after the mouse stopped it, Auto ignores clicks: the click
+    // was meant for the Stop button that just turned back into Auto.
+    property bool scrollAutoCooling: false
     // Long-running post-processing (GIF export, trim) for the UI.
     property string busy: ""
 
@@ -321,6 +331,8 @@ Singleton {
         scrollFrames = 0;
         scrollSegments = [];
         scrollFinishing = false;
+        scrollAuto = "";
+        scrollAutoReason = "";
         scrolling = {
             screen: screen.name,
             rect: r,
@@ -343,6 +355,32 @@ Singleton {
         if (scrollProc.running)
             scrollProc.write("cancel\n");
         scrolling = null;
+        scrollAuto = "";
+    }
+
+    // Auto Scroll, from the HUD's Auto button (gx, gy: where the pointer
+    // was, global logical — it goes back there afterwards) or IPC.
+    function scrollAutoStart(gx, gy) {
+        if (!scrolling || scrollFinishing || scrollAuto !== "" || scrollAutoCooling || !scrollProc.running)
+            return;
+        scrollAuto = "starting";
+        scrollAutoReason = "";
+        const at = Number.isFinite(gx) && Number.isFinite(gy) ? ` ${Math.round(gx)} ${Math.round(gy)}` : "";
+        scrollProc.write(`auto${at}\n`);
+    }
+
+    // byPointer: the user moved the mouse (leave the pointer there).
+    function scrollAutoStop(byPointer) {
+        if (scrollAuto !== "starting" && scrollAuto !== "running")
+            return;
+        scrollAuto = "stopping";
+        scrollProc.write(byPointer ? "abort\n" : "stop\n");
+    }
+
+    Timer {
+        id: autoCooldown
+        interval: 1200
+        onTriggered: root.scrollAutoCooling = false
     }
 
     Process {
@@ -362,10 +400,25 @@ Singleton {
                     root.scrollFrameHeight = e.frameHeight;
                     root.scrollFrames = e.frames;
                     root.scrollSegments = e.segments;
+                } else if (e.event === "auto") {
+                    if (e.state === "stopped") {
+                        root.scrollAuto = "";
+                        root.scrollAutoReason = e.reason ?? "";
+                        if (e.reason === "pointer") {
+                            root.scrollAutoCooling = true;
+                            autoCooldown.restart();
+                        }
+                        if (e.reason === "error" || e.reason === "unavailable")
+                            root.failed("Auto Scroll failed", e.message);
+                    } else if (e.state === "stopping" || root.scrollAuto !== "stopping") {
+                        root.scrollAuto = e.state;
+                    }
                 } else if (e.event === "done") {
+                    root.scrollAuto = "";
                     root.scrolling = null;
                     root.shotDone(e.path);
                 } else if (e.event === "error") {
+                    root.scrollAuto = "";
                     root.scrolling = null;
                     root.failed("Scrolling capture failed", e.message);
                 }
@@ -375,6 +428,7 @@ Singleton {
             id: scrollErr
         }
         onExited: code => {
+            root.scrollAuto = "";
             if (root.scrolling) {
                 root.scrolling = null;
                 if (code !== 0)
@@ -794,6 +848,16 @@ Singleton {
         }
         function scrollHeight(): int {
             return root.scrollHeight;
+        }
+        // Auto Scroll without a place to put the pointer back.
+        function scrollAuto(): void {
+            root.scrollAutoStart(NaN, NaN);
+        }
+        function scrollStop(): void {
+            root.scrollAutoStop(false);
+        }
+        function scrollAutoState(): string {
+            return `${root.scrollAuto || "off"} ${root.scrollAutoReason}`.trim();
         }
         function recordArea(): void {
             root.capture("record", "area", 0);

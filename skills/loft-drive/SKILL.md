@@ -49,6 +49,9 @@ Batch steps with `loft-input -s NAME script <<'EOF'`, one command per line, with
   `bind --list` shows them all (Mod is ISO_Level3_Shift). Some useful ones: `mod+space`
   Spotlight, `mod+a` Control Center, `mod+comma` Settings, `mod+o` overview, `mod+return`
   terminal.
+- A `key` / `type` gives the focused app the virtual keyboard's keymap. After that, foot no
+  longer scrolls less / vim with the wheel. To test wheel scrolling in a pager, send it no keys
+  (use `scroll up N` to go back) or open a fresh foot.
 - The pointer is a real pointer to niri. Clicks, drags and dragging a window by its header bar
   all work. Mod+drag doesn't (it needs Mod held on a real keyboard).
 - niri reports positions only for floating windows. For tiled windows, find them on a

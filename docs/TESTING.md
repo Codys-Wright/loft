@@ -157,6 +157,14 @@ EOF
 A script has one command per line, the same syntax as the command line, with `#` comments and
 shell-style quotes. `shot ARGS…` runs `loft-shot` on the same session.
 
+### Virtual keys change the app's keymap
+
+The virtual keyboard uploads its own keymap, and niri hands the focused app the keymap of the
+keyboard it last used. After one `key` / `type` into foot, foot no longer turns wheel notches
+into arrow keys in full-screen programs (less, vim): the wheel does nothing there until you
+open a new foot. To test scrolling (e.g. scrolling capture's Auto) in `foot less FILE`, don't
+send keys to that foot. Go back to the top with `scroll up N` instead of `key g`.
+
 ### niri keybinds: use `bind`, not `key`
 
 niri never sees virtual-keyboard keys. smithay hands them straight to the focused app's
@@ -233,7 +241,9 @@ loft-dev --stop demo
 
 ## How it works (for maintainers)
 
-- `crates/loft-input`: the `loft-input` and `loft-shot` binaries.
+- `crates/loft-input`: the `loft-input` and `loft-shot` binaries, plus `loft-pointer` (the
+  product's Auto Scroll helper for scrolling capture: pointer motion + wheel notches on the
+  `--display` it is given, never anything else; its pacing and stop logic are unit-tested).
   - `zwlr_virtual_pointer_v1` without an output: niri maps absolute motion onto the bounding
     box of all outputs, so coordinates are global logical px (quarter-pixel precision).
   - `zwp_virtual_keyboard_v1`: a US keymap on real evdev codes, plus spare keycodes for

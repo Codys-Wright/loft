@@ -5,7 +5,8 @@
 #                   cozytile:/qylock: importers against local fake upstream repos, and
 #                   vibes (pack collections, ranking, index links), and the Utilities
 #                   helpers (ports, flake updates, cleaner, media tools), the capture
-#                   helpers (scrolling-capture stitcher, recording zooms) and Apps to
+#                   helpers (scrolling-capture stitcher, Auto Scroll's stop logic with a fake
+#                   loft-pointer, recording zooms) and Apps to
 #                   leave alone → xremap (tests/test_keys.py) — all offline
 #   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte
 #   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`
@@ -18,7 +19,8 @@
 #                   sleep lock: off before sleep, back on after, only what was on)
 #   loft-sleep-clippy  the same clippy gate for it
 #   loft-input      the test driver builds and its tests pass (keymaps, combos,
-#                   script parsing, bind lookup, screenshot geometry)
+#                   script parsing, bind lookup, screenshot geometry), and loft-pointer's
+#                   Auto Scroll pacing / stop / restore logic (motion + wheel only)
 #   loft-input-clippy  the same clippy gate for it
 #   clipboard-urlclean  Clean URL's tracking-parameter stripping (src/services/urlclean.js)
 #   wallpaper-sets  display roles + set resolution (src/services/wallsets.js), against the

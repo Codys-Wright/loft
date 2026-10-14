@@ -1,5 +1,5 @@
 """Capture helpers (cli/loft/capture.py): the scrolling-capture session loop
-with a fake grabber, the zoom curve and its ffmpeg expressions, finding zoom
+with a fake grabber, Auto Scroll (when it stops, with a fake loft-pointer), the zoom curve and its ffmpeg expressions, finding zoom
 segments in activity, and a real zoomed export of a generated video.
 """
 
@@ -7,13 +7,17 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
+import sys
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from loft import capture, stitch
 from test_stitch import W, document, frame
@@ -60,6 +64,207 @@ class ScrollSessionTest(unittest.TestCase):
                 )
             self.assertFalse(out.exists())
             self.assertIn('"cancelled"', buf.getvalue())
+
+
+class AutoStopTest(unittest.TestCase):
+    def test_end_of_content_needs_idle_frames_time_and_notches(self):
+        a = capture.AutoStop(0.0, idle_frames=4, idle_seconds=1.0, idle_notches=2, timeout=60)
+        t = 0.0
+        # Before the wheel turns nothing moves: never the end.
+        for _ in range(20):
+            t += 0.12
+            self.assertIsNone(a.frame("same", t))
+        a.notch()
+        t += 0.12
+        self.assertIsNone(a.frame("added", t))
+        # Idle frames, but the wheel turned only once since: keep going.
+        for _ in range(12):
+            t += 0.12
+            self.assertIsNone(a.frame("same", t))
+        a.notch()
+        a.notch()
+        t += 0.12
+        self.assertEqual(a.frame("same", t), "end")
+
+    def test_progress_resets_and_back_counts_as_idle(self):
+        a = capture.AutoStop(0.0, idle_frames=3, idle_seconds=0.5, idle_notches=1, timeout=60)
+        a.notch()
+        self.assertIsNone(a.frame("same", 0.2))
+        self.assertIsNone(a.frame("back", 0.4))
+        self.assertIsNone(a.frame("gap", 0.6), "a gap is new rows too")
+        a.notch()
+        self.assertIsNone(a.frame("same", 0.8))
+        self.assertIsNone(a.frame("same", 1.0))
+        self.assertEqual(a.frame("back", 1.2), "end")
+
+    def test_timeout(self):
+        a = capture.AutoStop(10.0, timeout=5)
+        self.assertIsNone(a.frame("added", 14.9))
+        self.assertEqual(a.frame("added", 15.0), "timeout")
+
+    def test_area_center_and_command(self):
+        self.assertEqual(capture.area_center("10,20 161x241"), (90, 140))
+        env = {"LOFT_POINTER": "/x/loft-pointer", "WAYLAND_DISPLAY": "wayland-7", "XDG_RUNTIME_DIR": "/run/s", "NIRI_SOCKET": "/run/n.sock"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            cmd = capture.pointer_command((90, 140), (5.5, 6), 250)
+        self.assertEqual(cmd[:6], ["/x/loft-pointer", "scroll", "--display", "/run/s/wayland-7", "--at", "90,140"])
+        self.assertIn("--niri-socket", cmd)
+        self.assertEqual(cmd[-2:], ["--restore", "5.5,6"])
+        with mock.patch.dict(os.environ, {"LOFT_POINTER": "/x/loft-pointer"}, clear=True):
+            with self.assertRaises(RuntimeError, msg="no display, no helper"):
+                capture.pointer_command((1, 2), None)
+
+
+class FakePointer:
+    """Stands in for loft-pointer: placed on the first poll, then one notch
+    per poll (the session polls once per frame)."""
+
+    def __init__(self, at, restore, pace, self_stop=None):
+        self.at, self.restore, self.pace = at, restore, pace
+        self.sent: list[str] = []
+        self.closed_with = None
+        self.placed = False
+        self.notches = 0
+        self.self_stop = self_stop
+
+    def fileno(self):
+        return None if self.closed_with else 0
+
+    def events(self):
+        if not self.placed:
+            self.placed = True
+            return [{"event": "placed", "x": self.at[0], "y": self.at[1]}]
+        if self.self_stop and self.notches >= 3:
+            return [{"event": "stopped", "reason": self.self_stop, "notches": self.notches, "restored": True}]
+        self.notches += 1
+        return [{"event": "notch", "n": self.notches}]
+
+    def send(self, line):
+        self.sent.append(line)
+
+    def close(self, cmd="stop"):
+        self.closed_with = cmd
+        return [{"event": "stopped", "reason": cmd, "notches": self.notches, "restored": cmd == "stop"}]
+
+
+class AutoScrollSessionTest(unittest.TestCase):
+    def run_session(self, doc, h, step, cmds, **pointer):
+        made: list[FakePointer] = []
+        clock = [0.0]
+
+        def factory(at, restore, pace):
+            made.append(FakePointer(at, restore, pace, **pointer))
+            return made[-1]
+
+        def grabber(geometry, path):
+            clock[0] += 0.12
+            off = min(made[0].notches * step, len(doc) - h) if made else 0
+            stitch.write_ppm(path, frame(doc[off : off + h]))
+            return True
+
+        td = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, td)
+        out = Path(td) / "auto.png"
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = capture.scroll_session(
+                "10,20 160x240", Path(td) / "w", out, grabber=grabber, commands=iter(cmds), helper_factory=factory, clock=lambda: clock[0], restore_delay=0
+            )
+        events = [json.loads(line) for line in buf.getvalue().splitlines()]
+        return code, events, made, out
+
+    def test_scrolls_to_the_end_by_itself_and_restores_the_pointer(self):
+        doc, h = document(900, seed=5), 240
+        code, events, made, out = self.run_session(doc, h, 60, [None, "auto 700 950"] + [None] * 60 + ["done"])
+        self.assertEqual(code, 0)
+        p = made[0]
+        self.assertEqual(p.at, (90, 140), "the middle of the area")
+        self.assertEqual(p.restore, (700.0, 950.0))
+        self.assertEqual(p.closed_with, "stop", "stop: the pointer goes back")
+        auto = [(e["state"], e.get("reason")) for e in events if e["event"] == "auto"]
+        self.assertEqual(auto, [("starting", None), ("running", None), ("stopping", "end"), ("stopped", "end")])
+        stopped = [e for e in events if e["event"] == "auto" and e["state"] == "stopped"][0]
+        self.assertTrue(stopped["restored"])
+        # It stopped soon after the content ran out (11 notches of 60 rows).
+        self.assertLess(stopped["notches"], 11 + 20)
+        self.assertEqual(events[-1]["event"], "done")
+        self.assertEqual(stitch.read_png(out).data, b"".join(doc), "continuous, top to bottom")
+
+    def test_abort_leaves_the_pointer_and_stop_restores_it(self):
+        doc = document(900, seed=6)
+        for cmd, reason, closed in (("abort", "pointer", "abort"), ("stop", "stop", "stop")):
+            code, events, made, _ = self.run_session(doc, 240, 40, [None, "auto", None, None, cmd, None, "cancel"])
+            self.assertEqual(code, 0)
+            self.assertEqual(made[0].closed_with, closed)
+            self.assertIsNone(made[0].restore)
+            last = [e for e in events if e["event"] == "auto"][-1]
+            self.assertEqual((last["state"], last["reason"]), ("stopped", reason))
+            self.assertEqual(last["restored"], closed == "stop")
+            self.assertEqual(events[-1]["event"], "cancelled")
+
+    def test_done_while_running_stops_it_first(self):
+        code, events, made, out = self.run_session(document(900, seed=7), 240, 40, [None, "auto", None, None, None, "done"])
+        self.assertEqual(code, 0)
+        self.assertEqual(made[0].closed_with, "stop")
+        kinds = [(e["event"], e.get("state")) for e in events]
+        self.assertLess(kinds.index(("auto", "stopped")), kinds.index(("done", None)))
+        self.assertTrue(out.exists())
+
+    def test_gaps_slow_it_down(self):
+        _, _, made, _ = self.run_session(document(2000, seed=8), 240, 300, [None, "auto"] + [None] * 5 + ["cancel"])
+        self.assertIn("interval 375", made[0].sent)
+
+    def test_helper_stopping_by_itself_and_missing_helper(self):
+        _, events, made, _ = self.run_session(document(900, seed=9), 240, 40, [None, "auto"] + [None] * 8 + ["cancel"], self_stop="timeout")
+        last = [e for e in events if e["event"] == "auto"][-1]
+        self.assertEqual((last["state"], last["reason"]), ("stopped", "timeout"))
+
+        def missing(*_a):
+            raise RuntimeError("loft-pointer is not installed")
+
+        buf = io.StringIO()
+        with tempfile.TemporaryDirectory() as td, redirect_stdout(buf):
+            capture.scroll_session(
+                "0,0 160x200",
+                Path(td) / "w",
+                Path(td) / "x.png",
+                grabber=lambda g, p: stitch.write_ppm(p, frame(document(300)[:200])) or True,
+                commands=iter([None, "auto", None, "cancel"]),
+                helper_factory=missing,
+            )
+        auto = [json.loads(line) for line in buf.getvalue().splitlines() if '"auto"' in line]
+        self.assertEqual(auto[-1]["reason"], "unavailable")
+
+
+class PointerHelperTest(unittest.TestCase):
+    """PointerHelper's pipes against a stand-in program (no Wayland)."""
+
+    def test_events_and_stop(self):
+        with tempfile.TemporaryDirectory() as td:
+            prog = Path(td) / "fake-pointer"
+            prog.write_text(
+                f"#!{sys.executable}\n"
+                "import json, sys\n"
+                "print(json.dumps({'event': 'placed', 'x': 1, 'y': 2}), flush=True)\n"
+                "print(json.dumps({'event': 'notch', 'n': 1}), flush=True)\n"
+                "for line in sys.stdin:\n"
+                "    if line.strip() in ('stop', 'abort'):\n"
+                "        print(json.dumps({'event': 'stopped', 'reason': line.strip(), 'notches': 1, 'restored': line.strip() == 'stop'}), flush=True)\n"
+                "        break\n"
+            )
+            prog.chmod(0o755)
+            with mock.patch.dict(os.environ, {"LOFT_POINTER": str(prog), "WAYLAND_DISPLAY": "wayland-test"}):
+                h = capture.start_pointer((1, 2), (3, 4), 250)
+            seen = []
+            for _ in range(100):
+                seen += h.events()
+                if len(seen) >= 2:
+                    break
+                time.sleep(0.02)
+            self.assertEqual([e["event"] for e in seen], ["placed", "notch"])
+            last = h.close("stop")
+            self.assertEqual(last[-1], {"event": "stopped", "reason": "stop", "notches": 1, "restored": True})
+            self.assertIsNone(h.fileno())
 
 
 class ZoomMathTest(unittest.TestCase):
