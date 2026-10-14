@@ -25,6 +25,8 @@ Singleton {
     readonly property var focusedWindow: windows.find(w => w.is_focused) ?? null
     readonly property var focusedWorkspace: workspaces.find(w => w.is_focused) ?? null
     property bool overviewOpen: false
+    // { names: [...], current_idx } (KeyboardLayoutsChanged / …Switched).
+    property var keyboardLayouts: ({ names: [], current_idx: 0 })
 
     // A screenshot was taken (niri's screenshot UI or actions); path may be "".
     signal screenshotTaken(string path)
@@ -139,6 +141,12 @@ Singleton {
                 m[e.id] = Object.assign({}, m[e.id], { is_urgent: e.urgent });
                 windowMap = m;
             }
+            break;
+        case "KeyboardLayoutsChanged":
+            keyboardLayouts = e.keyboard_layouts ?? { names: [], current_idx: 0 };
+            break;
+        case "KeyboardLayoutSwitched":
+            keyboardLayouts = Object.assign({}, keyboardLayouts, { current_idx: e.idx });
             break;
         case "OverviewOpenedOrClosed":
             overviewOpen = e.is_open;

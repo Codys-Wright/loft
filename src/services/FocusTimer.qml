@@ -22,9 +22,16 @@ Singleton {
         running = true;
     }
 
+    // A timer of a given length (Focus control: 25 / 50 min …).
+    function startFor(minutes) {
+        duration = minutes * 60;
+        start();
+    }
+
     function stop() {
         running = false;
         paused = false;
+        duration = Qt.binding(() => Settings.island.focusMinutes * 60);
     }
 
     function pause() {

@@ -16,7 +16,9 @@ RowLayout {
     readonly property var battery: UPower.displayDevice
     readonly property bool hasBattery: battery !== null && battery.ready && battery.isLaptopBattery
     // Battery only where there is one; GPU only where it can be read.
-    readonly property var shown: (Features.on("barReadouts") ? Settings.system.readouts : []).filter(k => k !== "battery" || hasBattery)
+    // Only these keys (the menu bar arranges each readout as its own item).
+    property var only: null
+    readonly property var shown: (Features.on("barReadouts") ? (only ?? Settings.system.readouts) : []).filter(k => k !== "battery" || hasBattery)
 
     function openMonitor(key) {
         if (!Features.on("systemMonitor"))
