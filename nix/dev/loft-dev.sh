@@ -112,6 +112,18 @@ session_pid() {
   echo "$pid"
 }
 
+# Helpers the session's shell started (nmcli monitor, inotifywait, `loft island
+# downloads --watch`, …) can outlive niri: end every process of this user whose
+# environment points at this session's state dir.
+reap_session_procs() {
+  local dir="$1" p
+  for p in /proc/[0-9]*; do
+    [ -O "$p" ] || continue
+    { tr '\0' '\n' < "$p/environ"; } 2>/dev/null | grep -qxF "LOFT_STATE_DIR=$dir" || continue
+    kill "${p#/proc/}" 2>/dev/null || true
+  done
+}
+
 stop_session() {
   local dir="$1" pid
   if pid="$(session_pid "$dir")"; then
@@ -119,6 +131,7 @@ stop_session() {
     for _ in $(seq 1 25); do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
     echo "$pid"
   fi
+  reap_session_procs "$dir"
   return 0
 }
 
