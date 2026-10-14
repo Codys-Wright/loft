@@ -28,7 +28,7 @@ Singleton {
         { id: "dockRecents", label: "Recent apps in Dock", icon: "󰄉", group: "Desktop", description: "A dock section with apps you used recently that aren't in the dock" },
         { id: "island", label: "Dynamic Island", icon: "󰟜", group: "Everyday", description: "Now playing, live activities, notifications, system pages" },
         { id: "controlcenter", label: "Control Center", icon: "󰒓", group: "Desktop", description: "Network, Bluetooth, toggles, now playing, volume, calendar" },
-        { id: "osd", label: "Volume display", icon: "󰄧", group: "Sound", description: "On-screen pill when volume changes" },
+        { id: "osd", label: "Volume display", icon: "󰄧", group: "Sound", description: "Volume, brightness and sound changes: in the Dynamic Island, or a pill above the Dock" },
         { id: "switcher", label: "App switcher (Loft)", icon: "󰕰", group: "Windows", default: false, description: "Loft's icon switcher — ⌘Tab uses niri's recent-windows switcher with live previews instead" },
         { id: "wallpaperPicker", label: "Wallpaper picker", icon: "󰸉", group: "Desktop", description: "Browse and apply wallpapers" },
         { id: "desktopMenu", label: "Desktop menu", icon: "󰍝", group: "Desktop", page: "DesktopMenuPage.qml", description: "Right-click the wallpaper: wallpaper, theme, appearance, displays, screenshot, terminal, lock, settings" },

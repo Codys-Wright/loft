@@ -26,6 +26,9 @@ Singleton {
     property bool probing: false
     property real probedAt: 0
 
+    // Loft changed a display's brightness (the HUD shows it: Hud.qml).
+    signal adjusted(real value)
+
     function refresh() {
         if (fake) {
             if (displays.length === 0)
@@ -42,6 +45,11 @@ Singleton {
     }
 
     function set(key, v) {
+        apply(key, v);
+        adjusted(Math.max(0.01, Math.min(1, v)));
+    }
+
+    function apply(key, v) {
         v = Math.max(0.01, Math.min(1, v));
         displays = displays.map(d => d.key === key ? Object.assign({}, d, { value: v }) : d);
         if (!fake) {
@@ -52,7 +60,8 @@ Singleton {
 
     function setAll(v) {
         for (const d of displays)
-            set(d.key, v);
+            apply(d.key, v);
+        adjusted(Math.max(0.01, Math.min(1, v)));
     }
 
     property var pending: ({})

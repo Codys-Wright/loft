@@ -17,7 +17,11 @@ import qs.services
 // near-black (default; content is always light on it, Theme.island*) or
 // the Liquid Glass material.
 //
-// Collapsed, in priority order: a notification banner (5 s; hovering holds
+// Collapsed, in priority order: what just changed (Hud: volume, mute,
+// brightness, sound announcements — the pill widens to an icon, a level bar
+// and the value, or an icon and a line, for 1.5 / 2.2 s; Settings → Dynamic
+// Island → Show changes in the Dynamic Island, else Osd.qml shows it), a
+// notification banner (5 s; hovering holds
 // it so its buttons can be clicked), a live activity (screen recording,
 // focus timer, timers, downloads — scroll to cycle when several run), the
 // next calendar event when it's close, now playing (art + equalizer), the
@@ -94,7 +98,13 @@ PanelWindow {
     // A banner under the pointer stays a banner (its buttons stay clickable);
     // the island expands once it's gone.
     readonly property bool expanded: pinned || (hover.hovered && banner === null)
-    readonly property bool bannering: banner !== null && !expanded
+    // A call (a "call" live activity) keeps the island to itself.
+    readonly property bool calling: liveActivities.includes("call")
+    // What just changed (Hud.qml), on the focused output's island: over
+    // everything collapsed, but not over an expanded island, a call, or a
+    // banner the pointer is on.
+    readonly property bool hudShowing: Hud.inIsland && Hud.onScreen(modelData.name) && !expanded && !calling && !(banner !== null && hover.hovered)
+    readonly property bool bannering: banner !== null && !expanded && !hudShowing
 
     // Unread = notifications arrived since the notifications page was last seen.
     property int seenCount: 0
@@ -108,8 +118,10 @@ PanelWindow {
     // A space switch (Spaces.activated): its icon and name for 1.2 s
     // (SPACES §6.3), over everything collapsed but a notification.
     property var spaceFlash: null
-    readonly property bool spaceShowing: spaceFlash !== null && !expanded && !bannering
-    readonly property real targetWidth: expanded ? 480 : bannering ? 460 : spaceShowing ? Math.max(190, spaceRow.implicitWidth + 40) : live !== "" ? 250 : showEvent ? 300 : playing ? 300 : agentMark ? 190 : 150
+    readonly property bool spaceShowing: spaceFlash !== null && !expanded && !bannering && !hudShowing
+    readonly property bool hudMessage: Hud.kind === "message"
+    readonly property real hudWidth: hudMessage ? Math.min(460, Math.max(200, hudMessageRow.implicitWidth + 44)) : 300
+    readonly property real targetWidth: expanded ? 480 : hudShowing ? hudWidth : bannering ? 460 : spaceShowing ? Math.max(190, spaceRow.implicitWidth + 40) : live !== "" ? 250 : showEvent ? 300 : playing ? 300 : agentMark ? 190 : 150
     readonly property real targetHeight: expanded ? 210 : bannering ? 84 : attached ? barHeight : 24
 
     // ── Look (Settings → Dynamic Island) ────────────────────────────────
@@ -304,7 +316,7 @@ PanelWindow {
             Item {
                 anchors.fill: parent
                 visible: opacity > 0
-                opacity: root.expanded || root.bannering || root.spaceShowing ? 0 : 1
+                opacity: root.expanded || root.bannering || root.spaceShowing || root.hudShowing ? 0 : 1
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -472,6 +484,93 @@ PanelWindow {
                 id: spaceTimer
                 interval: 1200
                 onTriggered: root.spaceFlash = null
+            }
+
+            // ── HUD: what just changed (Hud.qml) ────────────────────────
+            Item {
+                anchors.fill: parent
+                visible: opacity > 0
+                opacity: root.hudShowing ? 1 : 0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 150
+                    }
+                }
+
+                // Volume / brightness: icon, level bar, value.
+                RowLayout {
+                    anchors {
+                        fill: parent
+                        leftMargin: 14
+                        rightMargin: 14
+                    }
+                    visible: !root.hudMessage
+                    spacing: 10
+
+                    Icon {
+                        Layout.preferredWidth: 16
+                        text: Hud.levelIcon
+                        size: 14
+                        color: Hud.muted ? Theme.islandSubtext : Theme.islandText
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 4
+                        radius: 2
+                        color: Theme.withAlpha(Theme.islandText, 0.18)
+
+                        Rectangle {
+                            width: parent.width * Math.max(0, Math.min(1, Hud.value))
+                            height: parent.height
+                            radius: 2
+                            color: Hud.muted ? Theme.withAlpha(Theme.islandText, 0.35) : Theme.accent
+
+                            Behavior on width {
+                                NumberAnimation {
+                                    duration: 100
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        Layout.preferredWidth: 44
+                        horizontalAlignment: Text.AlignRight
+                        text: Hud.muted ? "Muted" : `${Math.round(Hud.value * 100)}%`
+                        color: Hud.muted ? Theme.islandSubtext : Theme.islandText
+                        font.family: Theme.fontUi
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                        font.features: { "tnum": 1 }
+                    }
+                }
+
+                // Announcements: icon + a line.
+                Row {
+                    id: hudMessageRow
+                    anchors.centerIn: parent
+                    visible: root.hudMessage
+                    spacing: 8
+
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: Hud.icon
+                        size: 14
+                        color: Theme.accent
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.min(implicitWidth, 380)
+                        text: Hud.text
+                        elide: Text.ElideRight
+                        color: Theme.islandText
+                        font.family: Theme.fontUi
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                    }
+                }
             }
 
             // ── Notification banner ─────────────────────────────────────
