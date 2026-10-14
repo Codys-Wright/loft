@@ -126,6 +126,19 @@ PanelWindow {
 
             Volume {}
 
+            Icon {
+                text: "󰒓"
+                size: 16
+                color: Panels.controlCenterOpen ? Theme.accent : Theme.text
+
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -6
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: Panels.toggleControlCenter(root.modelData.name)
+                }
+            }
+
             Text {
                 text: Qt.formatDateTime(clock.date, "ddd MMM d   h:mm AP")
                 color: Theme.text
@@ -134,6 +147,12 @@ PanelWindow {
                 font.weight: Font.Medium
             }
         }
+    }
+
+    // Caffeine (Control Center): keep the session from idling.
+    IdleInhibitor {
+        window: root
+        enabled: Panels.caffeine
     }
 
     SystemClock {

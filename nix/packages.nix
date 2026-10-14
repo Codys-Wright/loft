@@ -17,6 +17,7 @@
         quickshell
         niri
         foot # the demo session's terminal (Mod+Return); consumers bind their own
+        gammastep # Night Light
         coreutils
       ];
 
