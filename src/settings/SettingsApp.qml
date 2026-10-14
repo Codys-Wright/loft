@@ -20,6 +20,7 @@ Scope {
     readonly property var sections: [
         { id: "appearance", icon: "󰏘", label: "Appearance" },
         { id: "wallpaper", icon: "󰸉", label: "Wallpaper" },
+        { id: "lockscreen", icon: "󰌾", label: "Lock Screen" },
         { id: "dock", icon: "󱂬", label: "Dock", feature: "dock" },
         { id: "island", icon: "󰟜", label: "Dynamic Island", feature: "island" },
         { id: "displays", icon: "󰍹", label: "Displays" },
@@ -57,6 +58,12 @@ Scope {
 
         function features(): void {
             root.show("features");
+        }
+        function wallpaper(): void {
+            root.show("wallpaper");
+        }
+        function lockscreen(): void {
+            root.show("lockscreen");
         }
     }
 
@@ -359,31 +366,14 @@ Scope {
                             }
                         }
 
-                        // Wallpaper
-                        Card {
+                        WallpaperPage {
+                            Layout.fillWidth: true
                             visible: root.section === "wallpaper"
+                        }
 
-                            Row_ {
-                                label: "Current"
-                                hint: Settings.wallpaper.path || "The theme's wallpaper"
-                                Text {
-                                    text: "Choose…"
-                                    color: Theme.accent
-                                    font.family: Theme.fontUi
-                                    font.pixelSize: 13
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        anchors.margins: -6
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: Panels.wallpaperPickerOpen = true
-                                    }
-                                }
-                            }
-
-                            Row_ {
-                                label: "Folder"
-                                hint: Settings.wallpaper.directory
-                            }
+                        LockScreenPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "lockscreen"
                         }
 
                         // Dock

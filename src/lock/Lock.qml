@@ -12,8 +12,10 @@ import qs.services
 //   qs ipc call lock lock                       (Mod+Ctrl+Q, see niri/shell-binds.kdl.in)
 //   swayidle -w timeout 300 '<ipc> lock lock' before-sleep '<ipc> lock lock'
 //
-// Each surface shows the active theme pack's lock design (<pack>/lock/Main.qml)
-// when it has one, else the built-in MacLock (docs/THEME-FORMAT-LOCK.md).
+// Each surface shows, in order: the lock design chosen for this theme
+// (Settings → Lock Screen, Vibes.lockChoice; "builtin" forces MacLock), the
+// active theme pack's default design (manifest `lock`), else the built-in
+// MacLock (docs/THEME-FORMAT-LOCK.md). Vibes.previewLock() locks right away.
 Scope {
     id: root
 
@@ -41,19 +43,41 @@ Scope {
     readonly property string themeDir: Theme.file.substring(0, Theme.file.lastIndexOf("/"))
     property string packLockDir: ""
     property string packFormat: ""
-    // qylock designs are SDDM themes; their entry is Main.qml by convention.
-    // One that needs SDDM modules we don't provide fails to compile and the
-    // built-in design is used instead.
-    readonly property string packDesign: packLockDir !== "" ? packLockDir + "/Main.qml" : ""
+    // The design's entry file: the manifest's `main` (a qylock design's
+    // MainScript), else <dir>/Main.qml. One that needs SDDM modules we don't
+    // provide fails to compile and the built-in design is used instead.
+    property string packMain: ""
+    readonly property string packDesign: packLockDir !== "" ? (packMain || packLockDir + "/Main.qml") : ""
     property bool hasPackDesign: false
 
+    // The user's choice for this theme wins over the theme's default.
     function readManifest() {
+        const choice = Vibes.lockChoice;
+        if (choice) {
+            packLockDir = choice.builtin ? "" : choice.path;
+            packMain = choice.builtin ? "" : (choice.main ?? "");
+            packFormat = choice.builtin ? "" : (choice.format ?? "");
+            return;
+        }
         let lock = null;
         try {
             lock = JSON.parse(manifestView.text()).lock ?? null;
         } catch (e) {}
         packLockDir = lock?.path ?? "";
+        packMain = lock?.main ?? "";
         packFormat = lock?.format ?? "";
+    }
+
+    function designFailed(dir, message) {
+        Vibes.lockErrorDesign = dir;
+        Vibes.lockError = message;
+    }
+
+    Connections {
+        target: Vibes
+        function onLockRequested() {
+            root.lock();
+        }
     }
 
     // Present while locked. If the shell dies holding the lock, the
@@ -75,7 +99,11 @@ Scope {
         focusedScreen = "";
         manifestView.reload();
         readManifest();
-        packCheck.reload();
+        Vibes.lockError = "";
+        // Re-confirmed by packCheck when the design's entry file exists.
+        hasPackDesign = false;
+        if (packDesign !== "")
+            packCheck.reload();
         refreshCapsLock();
         state.locked = true;
         markerFile.setText(`${Date.now()}\n`); // changes every time: FileView skips identical writes

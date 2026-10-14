@@ -9,18 +9,60 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
-from . import color
+from . import color, palette
 
 ROLES = ("bg", "surface", "overlay", "text", "subtext", "accent", "accent2", "urgent", "ok", "warn")
 
 # Files and dirs never part of a pack's identity or an installed copy.
 IGNORED = {".git", ".github", "__pycache__", ".DS_Store"}
 
-# Top-level dirs the renderer never reads (lock/greeter designs, often with
-# large videos): left out of the render-cache digest so `apply` stays cheap.
-NOT_RENDERED = {"lock", "greeter"}
+# Top-level dirs the renderer never reads (lock/greeter designs and wallpaper
+# collections, often with large videos): only their file names and sizes go
+# into the render-cache digest, so `apply` stays cheap. (The rendered
+# manifest lists them, so adding or removing one still re-renders.)
+NOT_RENDERED = {"lock", "locks", "greeter", "wallpapers"}
+
+WALLPAPER_DIR = "wallpapers"
+LOCKS_DIR = "locks"
+IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif", ".jxl"}
+VIDEO_EXT = {".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
+PREVIEW_NAMES = ("preview", "screenshot")
+LOCK_FORMATS = ("studio", "qylock")
+
+
+def slug(text: str, fallback: str = "lock") -> str:
+    return re.sub(r"[^a-z0-9._-]+", "-", text.lower()).strip("-._") or fallback
+
+
+def media_kind(path: Path) -> str | None:
+    """'image' | 'video' | None, by extension, else by magic bytes."""
+    ext = path.suffix.lower()
+    if ext in VIDEO_EXT:
+        return "video"
+    if ext in IMAGE_EXT:
+        return "image"
+    kind = palette.sniff(path)
+    if kind == "video":
+        return "video"
+    return "image" if kind in ("png", "jpg", "webp", "gif") else None
+
+
+def read_kv(path: Path) -> dict[str, str]:
+    """key=value lines (metadata.desktop, theme.conf); first wins, keys as written."""
+    out: dict[str, str] = {}
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    for line in text.splitlines():
+        line = line.strip()
+        if "=" in line and not line.startswith(("#", ";", "[")):
+            k, v = line.split("=", 1)
+            out.setdefault(k.strip(), v.strip().strip('"'))
+    return out
 
 
 class PackError(Exception):
@@ -58,6 +100,147 @@ class Pack:
             return self.manifest["name"]
         return self.theme.get("name") or self.path.name
 
+    def abspath(self, p: str) -> Path:
+        q = Path(p).expanduser()
+        return q if q.is_absolute() else self.path / q
+
+    # ── wallpapers ──────────────────────────────────────────────────────
+
+    def wallpaper_entries(self) -> list[dict]:
+        """The pack's wallpaper collection, in order:
+        `wallpaper.image`, `wallpaper.images`, then `wallpapers/` (sorted).
+
+        Each entry: {path, kind ("image" | "video"), video?, preview?} with
+        absolute Paths. A still with a video (`{"path", "video"}` in
+        theme.json, or `wallpapers/x.jpg` next to `wallpapers/x.mp4`) is one
+        image entry that notes its video; a video without a still is a
+        "video" entry (listed, flagged: the shell's image layer can't show it).
+        """
+        w = self.theme.get("wallpaper")
+        w = w if isinstance(w, dict) else {}
+        raw: list = []
+        if isinstance(w.get("image"), str) and w["image"]:
+            raw.append(w["image"])
+        raw += [i for i in w.get("images", []) if isinstance(i, (str, dict))]
+        out: list[dict] = []
+        seen: dict[str, dict | None] = {}
+
+        def key(p: Path) -> str:
+            try:
+                return str(p.resolve())
+            except OSError:
+                return str(p)
+
+        def add(path: Path, video: Path | None = None, preview: Path | None = None) -> None:
+            k = key(path)
+            if k in seen:
+                # Listed twice (e.g. `image` and an `images` entry noting its
+                # video): one entry, with the extra details merged in.
+                e = seen[k]
+                if e is not None:
+                    if video is not None:
+                        e["video"] = video
+                    if preview is not None:
+                        e.setdefault("preview", preview)
+                return
+            if video is not None:
+                seen[key(video)] = None
+            kind = media_kind(path) or "image"
+            e: dict = {"path": path, "kind": kind}
+            if video is not None:
+                e["video"] = video
+            elif kind == "video":
+                e["video"] = path
+            if preview is not None:
+                e["preview"] = preview
+            seen[k] = e
+            out.append(e)
+
+        for item in raw:
+            if isinstance(item, str):
+                add(self.abspath(item))
+            elif isinstance(item.get("path"), str):
+                add(
+                    self.abspath(item["path"]),
+                    self.abspath(item["video"]) if isinstance(item.get("video"), str) else None,
+                    self.abspath(item["preview"]) if isinstance(item.get("preview"), str) else None,
+                )
+        wdir = self.path / WALLPAPER_DIR
+        if wdir.is_dir():
+            files = [(p, media_kind(p)) for p in sorted(wdir.iterdir()) if p.is_file() and not p.name.startswith(".")]
+            files = [(p, k) for p, k in files if k]
+            stills = {p.stem for p, k in files if k == "image"}
+            videos = {p.stem: p for p, k in files if k == "video"}
+            for p, k in files:
+                if k == "video" and p.stem in stills:
+                    continue  # shown through its still
+                if key(p) in seen:
+                    continue
+                add(p, videos.get(p.stem) if k == "image" else None)
+        return out
+
+    def default_wallpaper(self) -> dict | None:
+        """`wallpaper.image` when set, else the collection's first still."""
+        entries = self.wallpaper_entries()
+        w = self.theme.get("wallpaper")
+        if isinstance(w, dict) and isinstance(w.get("image"), str) and w["image"] and entries:
+            return entries[0]
+        return next((e for e in entries if e["kind"] == "image"), None)
+
+    # ── lock designs ────────────────────────────────────────────────────
+
+    def lock_entries(self) -> list[dict]:
+        """Lock designs, the default first: manifest `lock` (else the
+        conventional `lock/Main.qml`), then `locks`, then `locks/<dir>/`.
+
+        Each: {name, format, path, main, preview?, background?} (Paths)."""
+        m = self.manifest or {}
+        specs: list[dict] = []
+        if isinstance(m.get("lock"), dict) and m["lock"].get("path"):
+            specs.append(dict(m["lock"], _auto=False))
+        elif (self.path / "lock" / "Main.qml").is_file():
+            specs.append({"format": "studio", "path": "lock", "_auto": True})
+        specs += [dict(spec, _auto=False) for spec in m.get("locks", []) if isinstance(spec, dict) and spec.get("path")]
+        ldir = self.path / LOCKS_DIR
+        if ldir.is_dir():
+            for d in sorted(ldir.iterdir()):
+                if d.is_dir() and ((d / "Main.qml").is_file() or (d / "metadata.desktop").is_file()):
+                    specs.append({"path": str(d), "_auto": True, "_dirname": True})
+        out: list[dict] = []
+        seen_paths: set[str] = set()
+        names: set[str] = set()
+        for spec in specs:
+            path = self.abspath(spec["path"])
+            if str(path) in seen_paths:
+                continue
+            seen_paths.add(str(path))
+            meta = read_kv(path / "metadata.desktop")
+            fmt = spec.get("format") or ("qylock" if meta else "studio")
+            main = path / (meta.get("MainScript") or "Main.qml") if fmt == "qylock" else path / "Main.qml"
+            name = spec.get("name") or (
+                slug(meta["Name"]) if meta.get("Name") else slug(path.name) if spec.get("_dirname") else slug(self.name)
+            )
+            base, n = name, 2
+            while name in names:
+                name, n = f"{base}-{n}", n + 1
+            names.add(name)
+            e: dict = {"name": name, "format": fmt, "path": path, "main": main}
+            if isinstance(spec.get("preview"), str):
+                e["preview"] = self.abspath(spec["preview"])
+            else:
+                for stem in PREVIEW_NAMES:
+                    hit = next((p for p in sorted(path.glob(stem + ".*")) if p.suffix.lower() in IMAGE_EXT), None)
+                    if hit:
+                        e["preview"] = hit
+                        break
+            if fmt == "qylock":
+                conf = read_kv(path / (meta.get("ConfigFile") or "theme.conf"))
+                bg = conf.get("background", "")
+                if bg and (path / bg).is_file() and media_kind(path / bg) == "image":
+                    e["background"] = path / bg
+            out.append(e)
+        return out
+
     def files(self) -> list[Path]:
         out = []
         for p in sorted(self.path.rglob("*")):
@@ -70,11 +253,15 @@ class Pack:
     def digest(self, salt: str = "") -> str:
         """Content hash of the pack (plus renderer salt), for the render cache."""
         h = hashlib.sha256(salt.encode())
+        default = self.default_wallpaper()
+        copied = str(default["path"]) if default else ""
         for p in self.files():
-            if p.relative_to(self.path).parts[0] in NOT_RENDERED:
-                continue
-            h.update(str(p.relative_to(self.path)).encode() + b"\0")
-            h.update(p.read_bytes() + b"\0")
+            rel = p.relative_to(self.path)
+            h.update(str(rel).encode() + b"\0")
+            if rel.parts[0] in NOT_RENDERED and str(p) != copied:
+                h.update(str(p.stat().st_size).encode() + b"\0")
+            else:
+                h.update(p.read_bytes() + b"\0")
         return h.hexdigest()[:16]
 
     def validate(self, schema_path: Path, require_manifest: bool = False) -> None:
@@ -107,10 +294,19 @@ class Pack:
         if isinstance(img, str) and img and not img.startswith("/"):
             if not (self.path / img).is_file():
                 errors.append(f"theme.json: wallpaper/image: {img} not found in the pack")
-        lock = (self.manifest or {}).get("lock")
-        if isinstance(lock, dict) and isinstance(lock.get("path"), str) and not lock["path"].startswith("/"):
-            if not (self.path / lock["path"]).is_dir():
-                errors.append(f"manifest.json: lock/path: {lock['path']} not found in the pack")
+        w = self.theme.get("wallpaper") if isinstance(self.theme.get("wallpaper"), dict) else {}
+        images = w.get("images") if isinstance(w.get("images"), list) else []
+        for i, item in enumerate(images):
+            refs = [("", item)] if isinstance(item, str) else [(f"/{k}", item.get(k)) for k in ("path", "video", "preview")] if isinstance(item, dict) else []
+            for sub, ref in refs:
+                if isinstance(ref, str) and ref and not ref.startswith("/") and not (self.path / ref).is_file():
+                    errors.append(f"theme.json: wallpaper/images/{i}{sub}: {ref} not found in the pack")
+        m = self.manifest or {}
+        specs = [("lock", m.get("lock"))] + [(f"locks/{i}", spec) for i, spec in enumerate(m.get("locks", []) if isinstance(m.get("locks"), list) else [])]
+        for where, spec in specs:
+            if isinstance(spec, dict) and isinstance(spec.get("path"), str) and not spec["path"].startswith("/"):
+                if not (self.path / spec["path"]).is_dir():
+                    errors.append(f"manifest.json: {where}/path: {spec['path']} not found in the pack")
         if errors:
             raise PackError(f"{self.path}: invalid theme pack\n  " + "\n  ".join(errors))
 
@@ -187,12 +383,14 @@ def normalize(pack: Pack) -> tuple[dict, list[tuple[Path, str]]]:
         color.mix(pal["bg"], pal["accent"], 0.35),
         color.mix(pal["bg"], pal["accent2"], 0.6),
     ]
-    image = w.get("image", "")
-    if image and not image.startswith("/"):
+    # The default wallpaper: `wallpaper.image`, else the collection's first still.
+    default = pack.default_wallpaper()
+    image = str(default["path"]) if default else ""
+    if default and pack.path in default["path"].parents:
         # Copied next to theme.json so a rendered bundle is self-contained;
         # relative paths resolve against the rendered theme.json's directory.
-        dest = "wallpaper" + Path(image).suffix
-        assets.append((pack.path / image, dest))
+        dest = "wallpaper" + default["path"].suffix.lower()
+        assets.append((default["path"], dest))
         image = dest
     wallpaper = {"gradient": gradient, "image": image}
 
@@ -214,7 +412,28 @@ def normalize(pack: Pack) -> tuple[dict, list[tuple[Path, str]]]:
     return norm, assets
 
 
-def normalized_manifest(pack: Pack) -> dict:
+def wallpaper_json(e: dict, source: str, **extra) -> dict:
+    out = {"path": str(e["path"]), "source_pack": source, "kind": e["kind"]}
+    for k in ("video", "preview"):
+        if k in e:
+            out[k] = str(e[k])
+    out.update(extra)
+    return out
+
+
+def lock_json(e: dict, source: str, **extra) -> dict:
+    out = {"name": e["name"], "format": e["format"], "path": str(e["path"]), "main": str(e["main"]), "source_pack": source}
+    for k in ("preview", "background"):
+        if k in e:
+            out[k] = str(e[k])
+    out.update(extra)
+    return out
+
+
+def normalized_manifest(pack: Pack, curated: dict | None = None) -> dict:
+    """The manifest the shell reads: identity, plus every wallpaper and lock
+    design with absolute paths (the pack's own, then `curated` ones resolved
+    from other installed packs), and the defaults."""
     m = pack.manifest or {}
     out = {
         "name": pack.name,
@@ -226,15 +445,34 @@ def normalized_manifest(pack: Pack) -> dict:
     }
     if isinstance(m.get("upstream"), dict):
         out["upstream"] = m["upstream"]
-    lock = m.get("lock")
-    if isinstance(lock, dict) and lock.get("path"):
-        # The lock design is not copied into the rendered bundle: the loader
-        # reads it from the pack, so the path is made absolute here.
-        p = Path(lock["path"])
-        out["lock"] = {"format": lock.get("format", "qylock"), "path": str(p if p.is_absolute() else pack.path / p)}
-    elif (pack.path / "lock" / "Main.qml").is_file():
-        # A studio-format design (docs/THEME-FORMAT-LOCK.md) at the conventional place.
-        out["lock"] = {"format": "studio", "path": str(pack.path / "lock")}
+    # Lock designs and wallpapers are not copied into the rendered bundle:
+    # the loader and the shell read them from the pack (absolute paths).
+    curated = curated or {}
+    walls = [wallpaper_json(e, pack.name) for e in pack.wallpaper_entries()]
+    seen = {w["path"] for w in walls}
+    for w in curated.get("wallpapers", []):
+        if w["path"] not in seen:
+            seen.add(w["path"])
+            walls.append(dict(w, curated=True))
+    locks = [lock_json(e, pack.name) for e in pack.lock_entries()]
+    seen = {lk["path"] for lk in locks}
+    for lk in curated.get("locks", []):
+        if lk["path"] not in seen:
+            seen.add(lk["path"])
+            locks.append(dict(lk, curated=True))
+    default_wall = pack.default_wallpaper()
+    out["wallpapers"] = walls
+    out["locks"] = locks
+    out["defaults"] = {
+        "wallpaper": str(default_wall["path"]) if default_wall else "",
+        "lock": locks[0]["path"] if locks and not locks[0].get("curated") else "",
+    }
+    if out["defaults"]["lock"]:
+        d = locks[0]
+        # Shorthand for loaders that only know one design.
+        out["lock"] = {"name": d["name"], "format": d["format"], "path": d["path"], "main": d["main"]}
+    if isinstance(m.get("vibes"), dict):
+        out["vibes"] = m["vibes"]
     if (pack.path / "greeter").is_dir():
         out["greeter"] = {"path": str(pack.path / "greeter")}
     return out

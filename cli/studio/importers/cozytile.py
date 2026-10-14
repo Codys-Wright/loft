@@ -9,7 +9,13 @@ Upstream layout (what this reads; everything else is never downloaded):
   Themes/<Name>/.config/qtile/config.py      bar colors (bar bg, widget bg, widget fg = the accent)
   Themes/<Name>/.config/dunst/dunstrc        notification colors (fallback text/bg)
   Wallpaper/<file>, Wallpaper/e-ink.json     wallpapers, Carbon's pywal colorscheme
-  sddm-themes/<Name>/                        SDDM greeter (→ the pack's greeter/)
+  sddm-themes/<Name>/                        SDDM greeter, qylock format (→ the pack's greeter/,
+                                             declared as its lock design; its Background is
+                                             the same file as the switcher's wallpaper)
+
+Wallpapers: the switcher's (default), the SDDM background when it differs,
+and the shipped wallpapers no theme sets (e.g. the pexels fern), each given
+to the theme whose palette is closest to the image's own colors.
 
 Palette (dark themes): bg = the `wal -b` background (= qtile's bar color),
 surface = qtile's widget background, text = rofi foreground, accent = qtile's
@@ -31,8 +37,7 @@ import shutil
 from collections import Counter
 from pathlib import Path
 
-from .. import color
-from . import palette
+from .. import color, palette, vibes
 from .upstream import ImporterError, Upstream, literal
 
 NAME = "cozytile"
@@ -219,51 +224,152 @@ def prefetch(up: Upstream, themes: list[str]) -> None:
     up.checkout(*(pat for t in themes for pat in _asset_patterns(up, t, parse_switcher(_read(root, _config_paths(t)[0])))))
 
 
+def _palette_of(up: Upstream, theme: str) -> tuple[str, dict[str, str], dict[str, str], dict[str, str] | None]:
+    """(polarity, palette, switcher, pywal) of a theme from its configs."""
+    script, rasi, qtile, dunst = _config_paths(theme)
+    root = up.checkout(*map(literal, (script, rasi, qtile, dunst)))
+    switcher = parse_switcher(_read(root, script))
+    has_sddm = _has_sddm(up, theme)
+    extra = [literal(switcher["pywal_json"])] if switcher.get("pywal_json") else []
+    if has_sddm:
+        extra.append(literal(f"sddm-themes/{theme}/theme.conf"))
+    if extra:
+        up.checkout(*extra)
+    pywal = None
+    if switcher.get("pywal_json") and (root / switcher["pywal_json"]).is_file():
+        try:
+            pywal = parse_pywal(_read(root, switcher["pywal_json"]))
+        except (ValueError, AttributeError) as e:
+            raise ImporterError(f"{switcher['pywal_json']}: {e}") from e
+    sddm_conf = parse_conf(_read(root, f"sddm-themes/{theme}/theme.conf")) if has_sddm else {}
+    polarity, pal = derive(
+        rasi=parse_rasi(_read(root, rasi)),
+        qtile=parse_qtile(_read(root, qtile)),
+        dunst=parse_dunst(_read(root, dunst)),
+        switcher=switcher,
+        pywal=pywal,
+        sddm=sddm_conf,
+    )
+    return polarity, pal, switcher, pywal
+
+
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+def orphan_owners(
+    orphans: dict[str, list[tuple[str, float]]], palettes: dict[str, tuple[str, dict[str, str]]]
+) -> dict[str, list[str]]:
+    """Which themes get each wallpaper no theme script uses: the one whose
+    palette is closest to the image's own (vibes.palette_distance), or every
+    theme when the image couldn't be sampled. {orphan: [themes]}"""
+    out: dict[str, list[str]] = {}
+    for name, swatches in orphans.items():
+        if not swatches or not palettes:
+            out[name] = sorted(palettes)
+            continue
+        ipol, ipal = palette.scheme(swatches=swatches)
+        out[name] = [min(palettes, key=lambda t: (vibes.palette_distance(palettes[t][1], ipal, palettes[t][0], ipol), t))]
+    return out
+
+
+def _orphans(up: Upstream) -> dict[str, list[str]]:
+    """{Wallpaper/<file>: [themes]} for the shipped wallpapers no theme sets,
+    computed once per upstream (it reads every theme's configs)."""
+    cached = getattr(up, "_cozytile_orphans", None)
+    if cached is not None:
+        return cached
+    themes = list_themes(up)
+    # Batch the small config downloads: every theme's configs, then their
+    # SDDM theme.conf / pywal files, in two round trips.
+    root = up.checkout(*(literal(p) for t in themes for p in _config_paths(t)))
+    up.checkout(
+        *(literal(f"sddm-themes/{t}/theme.conf") for t in themes if _has_sddm(up, t)),
+        *(literal(j) for t in themes if (j := parse_switcher(_read(root, _config_paths(t)[0])).get("pywal_json"))),
+    )
+    palettes: dict[str, tuple[str, dict[str, str]]] = {}
+    used: set[str] = set()
+    for t in themes:
+        try:
+            pol, pal, switcher, _ = _palette_of(up, t)
+        except ImporterError:
+            continue
+        palettes[t] = (pol, pal)
+        used.update(switcher.get(k, "") for k in ("wallpaper", "pywal_json"))
+    try:
+        entries = up.ls("Wallpaper")
+    except ImporterError:
+        entries = []
+    files = [f"Wallpaper/{n}" for n, typ in entries if typ == "blob" and Path(n).suffix.lower() in IMAGE_SUFFIXES]
+    orphans = [f for f in files if f not in used]
+    swatches: dict[str, list[tuple[str, float]]] = {}
+    if orphans:
+        root = up.checkout(*map(literal, orphans))
+        for f in orphans:
+            swatches[f] = palette.quantize(palette.sample(root / f))
+    result = orphan_owners(swatches, palettes)
+    up._cozytile_orphans = result  # type: ignore[attr-defined]
+    return result
+
+
+def wallpaper_name(rel: str) -> str:
+    """A tidy file name for wallpapers/ ("pexels-… (1).jpg" → "pexels-…-1.jpg")."""
+    p = Path(rel)
+    stem = re.sub(r"[^a-z0-9._-]+", "-", p.stem.lower()).strip("-._") or "wallpaper"
+    return stem + p.suffix.lower()
+
+
 def install(theme: str, dest: Path, up: Upstream | None = None) -> dict:
-    """Write the pack for `theme` into dest (a new, empty directory)."""
+    """Write the pack for `theme` into dest (a new, empty directory).
+
+    Wallpapers: the one the theme switcher sets is the default (when the SDDM
+    theme's Background is the same file, the greeter's copy is referenced
+    instead of a second copy), the SDDM background if it differs, and every
+    wallpaper the rice ships that no theme sets, given to the theme whose
+    palette is closest to the image's colors (→ wallpapers/). The SDDM theme
+    (qylock format) is the pack's default lock design.
+    """
     own = up is None
     up = up or Upstream(URL)
     try:
         theme = resolve(up, theme)
-        script, rasi, qtile, dunst = _config_paths(theme)
-        root = up.checkout(*map(literal, (script, rasi, qtile, dunst)))
-        switcher = parse_switcher(_read(root, script))
+        polarity, pal, switcher, pywal = _palette_of(up, theme)
+        root = up.dir
         sddm_dir = f"sddm-themes/{theme}"
         has_sddm = _has_sddm(up, theme)
         up.checkout(*_asset_patterns(up, theme, switcher))
-
-        pywal = None
-        if switcher.get("pywal_json") and (root / switcher["pywal_json"]).is_file():
-            try:
-                pywal = parse_pywal(_read(root, switcher["pywal_json"]))
-            except (ValueError, AttributeError) as e:
-                raise ImporterError(f"{switcher['pywal_json']}: {e}") from e
         sddm_conf = parse_conf(_read(root, f"{sddm_dir}/theme.conf")) if has_sddm else {}
-        polarity, pal = derive(
-            rasi=parse_rasi(_read(root, rasi)),
-            qtile=parse_qtile(_read(root, qtile)),
-            dunst=parse_dunst(_read(root, dunst)),
-            switcher=switcher,
-            pywal=pywal,
-            sddm=sddm_conf,
-        )
+        orphans = [f for f, owners in _orphans(up).items() if theme in owners]
 
         dest.mkdir(parents=True, exist_ok=True)
         theme_json: dict = {"polarity": polarity, "palette": pal, "glass": palette.glass(polarity, pal)}
-
-        # Wallpaper: the one the theme switcher sets, else the greeter's.
-        wall_src = root / switcher["wallpaper"] if switcher.get("wallpaper") else None
-        if not (wall_src and wall_src.is_file()) and has_sddm:
-            bgname = sddm_conf.get("background", "")
-            wall_src = root / sddm_dir / bgname if bgname else None
-        if wall_src and wall_src.is_file():
-            ext = _image_ext(wall_src)
-            shutil.copyfile(wall_src, dest / f"wallpaper{ext}")
-            theme_json["wallpaper"] = {"image": f"wallpaper{ext}"}
-
         if has_sddm:
-            g = dest / "greeter"
-            shutil.copytree(root / sddm_dir, g, ignore=shutil.ignore_patterns(".gitkeep", ".git"))
+            shutil.copytree(root / sddm_dir, dest / "greeter", ignore=shutil.ignore_patterns(".gitkeep", ".git"))
+            manifest_lock = {"name": theme.lower(), "format": "qylock", "path": "greeter"}
+        greeter_bg = None
+        if has_sddm and sddm_conf.get("background") and (dest / "greeter" / sddm_conf["background"]).is_file():
+            greeter_bg = f"greeter/{sddm_conf['background']}"
+
+        images: list[str] = []
+        wall_src = root / switcher["wallpaper"] if switcher.get("wallpaper") else None
+        if wall_src and wall_src.is_file():
+            if greeter_bg and (dest / greeter_bg).read_bytes() == wall_src.read_bytes():
+                images.append(greeter_bg)
+                greeter_bg = None
+            else:
+                rel = f"wallpapers/{wallpaper_name(switcher['wallpaper'])}"
+                (dest / "wallpapers").mkdir(exist_ok=True)
+                shutil.copyfile(wall_src, dest / rel)
+                images.append(rel)
+        if greeter_bg:
+            images.append(greeter_bg)
+        for f in orphans:
+            if (root / f).is_file():
+                (dest / "wallpapers").mkdir(exist_ok=True)
+                shutil.copyfile(root / f, dest / "wallpapers" / wallpaper_name(f))
+        if images:
+            theme_json["wallpaper"] = {"image": images[0]}
+            if images[1:]:
+                theme_json["wallpaper"]["images"] = images[1:]
 
         (dest / "theme.json").write_text(json.dumps(theme_json, indent=2) + "\n")
         manifest = {
@@ -277,6 +383,8 @@ def install(theme: str, dest: Path, up: Upstream | None = None) -> dict:
             + ")",
             "upstream": {"importer": NAME, "url": up.url, "ref": up.ref, "commit": up.commit, "path": f"Themes/{theme}"},
         }
+        if has_sddm:
+            manifest["lock"] = manifest_lock
         (dest / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         return manifest
     finally:
@@ -288,8 +396,3 @@ def _has_sddm(up: Upstream, theme: str) -> bool:
     if not any(n == "sddm-themes" and t == "tree" for n, t in up.ls("")):
         return False
     return any(n == theme and t == "tree" for n, t in up.ls("sddm-themes"))
-
-
-def _image_ext(p: Path) -> str:
-    kind = palette.sniff(p)
-    return {"png": ".png", "jpg": ".jpg", "webp": ".webp", "gif": ".gif"}.get(kind, p.suffix.lower() or ".img")

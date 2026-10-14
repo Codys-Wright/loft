@@ -65,6 +65,14 @@
           ${../niri/shell-binds.kdl.in} > $out
       '';
 
+      # QML modules imported lock designs (qylock / SDDM themes) expect, so they
+      # load without a desktop session providing them.
+      lockQmlPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/qml") [
+        pkgs.kdePackages.qt5compat
+        pkgs.kdePackages.qtmultimedia
+        pkgs.kdePackages.sddm.unwrapped
+      ];
+
       python = pkgs.python3.withPackages (ps: [ ps.jsonschema ]);
 
       builtinRendered = self'.packages.studio-themes-builtin;
@@ -92,6 +100,7 @@
               export STUDIO_THEME_FILE="$state/current/theme.json"
             fi
             export STUDIO_UI_FONT="${uiFont}" STUDIO_ICON_FONT="${iconFont}"
+            export QML_IMPORT_PATH="${lockQmlPath}''${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
             # STUDIO_SHELL_SRC runs the QML from a checkout instead (hot reload);
             # the CLI's IPC hooks must target the same path.
             src="''${STUDIO_SHELL_SRC:-${../src}}"
@@ -185,7 +194,7 @@
             include optional=true "$root/niri/dev-local.kdl"
             include optional=true "$dir/overrides/niri.kdl"
             spawn-at-startup "env" "STUDIO_STATE_DIR=$dir" "STUDIO_LAUNCHER_DIR=$root/launcher" "studio-launcher" "service"
-            spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_NIRI_CONFIG=$dir/config.kdl" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "quickshell" "--path" "$root/src"
+            spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_NIRI_CONFIG=$dir/config.kdl" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "QML_IMPORT_PATH=${lockQmlPath}" "quickshell" "--path" "$root/src"
             EOF
 
             # Live everything, not just QML: `studio` runs the checkout's CLI,
@@ -293,7 +302,7 @@
           for pack in ${cliSrc}/themes/*/; do
             pack="''${pack%/}"
             [ -L "$pack" ] && continue
-            ${lib.getExe self'.packages.studio} theme render "$pack" "$out/$(basename "$pack")"
+            STUDIO_THEME_INDEX=none ${lib.getExe self'.packages.studio} theme render "$pack" "$out/$(basename "$pack")"
           done
           ln -s "$(readlink ${cliSrc}/themes/default)" $out/default
         '';
