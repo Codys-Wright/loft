@@ -26,7 +26,7 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: 3
-            color: Theme.withAlpha(Theme.text, 0.12)
+            color: Theme.withAlpha(Theme.islandText, 0.12)
         }
         Rectangle {
             width: Math.max(6, parent.width * Math.min(1, Math.max(0, bar.value)))
@@ -37,7 +37,7 @@ Item {
     }
 
     component Small: Text {
-        color: Theme.subtext
+        color: Theme.islandSubtext
         font.family: Theme.fontUi
         font.pixelSize: 11
         font.features: { "tnum": 1 }
@@ -52,7 +52,7 @@ Item {
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.Wrap
         text: !Settings.island.ai ? "AI usage is off (Settings → Dynamic Island)." : AiUsage.data === null ? "Reading Claude Code and Codex usage…" : "No Claude Code or Codex activity this week."
-        color: Theme.subtext
+        color: Theme.islandSubtext
         font.family: Theme.fontUi
         font.pixelSize: 12
     }
@@ -93,7 +93,7 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         text: col.modelData.name
-                        color: Theme.text
+                        color: Theme.islandText
                         font.family: Theme.fontUi
                         font.pixelSize: 12
                         font.weight: Font.DemiBold
@@ -101,7 +101,7 @@ Item {
                     }
                     Small {
                         text: col.d.sessions.length === 0 ? "idle" : col.d.sessions.length === 1 ? "1 running" : `${col.d.sessions.length} running`
-                        color: col.d.sessions.some(s => s.busy) ? Theme.ok : Theme.subtext
+                        color: col.d.sessions.some(s => s.busy) ? Theme.ok : Theme.islandSubtext
                     }
                 }
 
@@ -109,7 +109,7 @@ Item {
                     spacing: 6
                     Text {
                         text: AiUsage.tokens(col.d.today.total)
-                        color: Theme.text
+                        color: Theme.islandText
                         font.family: Theme.fontUi
                         font.pixelSize: 24
                         font.weight: Font.Light
@@ -170,7 +170,7 @@ Item {
                             width: sRow.implicitWidth + 14
                             height: 20
                             radius: 10
-                            color: Theme.withAlpha(Theme.text, 0.1)
+                            color: Theme.withAlpha(Theme.islandText, 0.1)
                             Row {
                                 id: sRow
                                 anchors.centerIn: parent
@@ -180,12 +180,12 @@ Item {
                                     width: 6
                                     height: 6
                                     radius: 3
-                                    color: modelData.busy ? Theme.ok : Theme.withAlpha(Theme.text, 0.35)
+                                    color: modelData.busy ? Theme.ok : Theme.withAlpha(Theme.islandText, 0.35)
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: modelData.project
-                                    color: Theme.text
+                                    color: Theme.islandText
                                     font.family: Theme.fontUi
                                     font.pixelSize: 10
                                 }

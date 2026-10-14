@@ -14,7 +14,7 @@ Item {
         id: btn
         property string icon
         property string label
-        property color tint: Theme.text
+        property color tint: Theme.islandText
         property bool on: false
         signal clicked
 
@@ -35,7 +35,7 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: btn.label
-                color: Theme.subtext
+                color: Theme.islandSubtext
                 font.family: Theme.fontUi
                 font.pixelSize: 10
             }
@@ -65,11 +65,11 @@ Item {
                 Layout.preferredWidth: 10
                 Layout.preferredHeight: 10
                 radius: 5
-                color: Capture.cameraState === "live" ? Theme.ok : Capture.cameraState === "starting" ? Theme.warn : Theme.subtext
+                color: Capture.cameraState === "live" ? Theme.ok : Capture.cameraState === "starting" ? Theme.warn : Theme.islandSubtext
             }
             Text {
                 text: "Camera"
-                color: Theme.text
+                color: Theme.islandText
                 font.family: Theme.fontUi
                 font.pixelSize: 16
                 font.weight: Font.DemiBold
@@ -90,7 +90,7 @@ Item {
                         return "Starting…";
                     }
                 }
-                color: Theme.subtext
+                color: Theme.islandSubtext
                 font.family: Theme.fontUi
                 font.pixelSize: 13
                 elide: Text.ElideRight

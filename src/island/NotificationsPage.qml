@@ -26,7 +26,7 @@ Item {
             Text {
                 Layout.fillWidth: true
                 text: `Notifications  ·  ${root.items.length}`
-                color: Theme.text
+                color: Theme.islandText
                 font.family: Theme.fontUi
                 font.pixelSize: 14
                 font.weight: Font.DemiBold
@@ -62,7 +62,7 @@ Item {
                 width: ListView.view.width
                 height: 52
                 radius: 14
-                color: mouse.containsMouse ? Theme.withAlpha(Theme.text, 0.12) : Theme.withAlpha(Theme.text, 0.06)
+                color: mouse.containsMouse ? Theme.withAlpha(Theme.islandText, 0.12) : Theme.withAlpha(Theme.islandText, 0.06)
 
                 RowLayout {
                     anchors {
@@ -84,7 +84,7 @@ Item {
                         Text {
                             Layout.fillWidth: true
                             text: `${row.modelData.appName}  ·  ${row.modelData.summary}`
-                            color: Theme.text
+                            color: Theme.islandText
                             font.family: Theme.fontUi
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
@@ -95,7 +95,7 @@ Item {
                             Layout.fillWidth: true
                             visible: text !== ""
                             text: row.modelData.body ?? ""
-                            color: Theme.subtext
+                            color: Theme.islandSubtext
                             font.family: Theme.fontUi
                             font.pixelSize: 11
                             elide: Text.ElideRight
@@ -106,7 +106,7 @@ Item {
                     Icon {
                         text: "󰅖"
                         size: 14
-                        color: Theme.subtext
+                        color: Theme.islandSubtext
 
                         MouseArea {
                             anchors.fill: parent

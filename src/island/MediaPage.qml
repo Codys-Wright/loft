@@ -59,20 +59,20 @@ Item {
         Icon {
             text: "󰎆"
             size: 18
-            color: Theme.subtext
+            color: Theme.islandSubtext
         }
 
         Text {
             text: "Nothing playing"
-            color: Theme.subtext
+            color: Theme.islandSubtext
             font.family: Theme.fontUi
             font.pixelSize: 13
         }
     }
 
     // Over the art the text is always light; without art it follows the theme.
-    readonly property color fg: art !== "" ? "white" : Theme.text
-    readonly property color fgDim: art !== "" ? Qt.rgba(1, 1, 1, 0.72) : Theme.subtext
+    readonly property color fg: art !== "" ? "white" : Theme.islandText
+    readonly property color fgDim: art !== "" ? Qt.rgba(1, 1, 1, 0.72) : Theme.islandSubtext
 
     ColumnLayout {
         anchors {

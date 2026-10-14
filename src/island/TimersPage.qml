@@ -63,7 +63,7 @@ Item {
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: 14
             text: "Timers"
-            color: Theme.text
+            color: Theme.islandText
             font.family: Theme.fontUi
             font.pixelSize: 16
             font.weight: Font.DemiBold
@@ -72,7 +72,7 @@ Item {
             visible: Timers.timers.length === 0
             Layout.alignment: Qt.AlignHCenter
             text: "Start one below, or: loft island timer 25m tea"
-            color: Theme.subtext
+            color: Theme.islandSubtext
             font.family: Theme.fontUi
             font.pixelSize: 11
         }
@@ -90,6 +90,7 @@ Item {
                     Layout.preferredWidth: 32
                     Layout.preferredHeight: 32
                     ProgressRing {
+                        trackColor: Theme.withAlpha(Theme.islandText, 0.15)
                         anchors.fill: parent
                         value: Timers.progress(row.modelData)
                         color: Theme.warn
@@ -111,14 +112,14 @@ Item {
                     Text {
                         Layout.fillWidth: true
                         text: Timers.title(row.modelData)
-                        color: Theme.subtext
+                        color: Theme.islandSubtext
                         font.family: Theme.fontUi
                         font.pixelSize: 11
                         elide: Text.ElideRight
                     }
                     Text {
                         text: Timers.display(row.modelData)
-                        color: row.modelData.paused ? Theme.subtext : Theme.warn
+                        color: row.modelData.paused ? Theme.islandSubtext : Theme.warn
                         font.family: Theme.fontUi
                         font.pixelSize: 22
                         font.weight: Font.Light

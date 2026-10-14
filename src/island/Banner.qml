@@ -57,7 +57,7 @@ Item {
             Layout.preferredHeight: 52
             radius: 14
             clip: true
-            color: Theme.withAlpha(Theme.text, 0.1)
+            color: Theme.withAlpha(Theme.islandText, 0.1)
 
             Image {
                 anchors.fill: parent
@@ -125,7 +125,7 @@ Item {
             Text {
                 Layout.fillWidth: true
                 text: root.notification?.appName ?? ""
-                color: Theme.subtext
+                color: Theme.islandSubtext
                 font.family: Theme.fontUi
                 font.pixelSize: 11
                 elide: Text.ElideRight
@@ -134,7 +134,7 @@ Item {
             Text {
                 Layout.fillWidth: true
                 text: root.notification?.summary ?? ""
-                color: Theme.text
+                color: Theme.islandText
                 font.family: Theme.fontUi
                 font.pixelSize: 14
                 font.weight: Font.DemiBold
@@ -145,7 +145,7 @@ Item {
                 Layout.fillWidth: true
                 visible: text !== ""
                 text: root.notification?.body ?? ""
-                color: Theme.text
+                color: Theme.islandText
                 opacity: 0.85
                 font.family: Theme.fontUi
                 font.pixelSize: 12
@@ -173,13 +173,13 @@ Item {
                     implicitWidth: actLabel.implicitWidth + 22
                     implicitHeight: 26
                     radius: 13
-                    color: actMouse.containsMouse ? Theme.withAlpha(Theme.text, 0.26) : Theme.withAlpha(Theme.text, index === 0 ? 0.18 : 0.1)
+                    color: actMouse.containsMouse ? Theme.withAlpha(Theme.islandText, 0.26) : Theme.withAlpha(Theme.islandText, index === 0 ? 0.18 : 0.1)
 
                     Text {
                         id: actLabel
                         anchors.centerIn: parent
                         text: modelData.text
-                        color: Theme.text
+                        color: Theme.islandText
                         font.family: Theme.fontUi
                         font.pixelSize: 11
                         font.weight: Font.DemiBold
