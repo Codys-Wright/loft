@@ -58,11 +58,13 @@ PanelWindow {
         id: panel
         width: root.panelWidth
         height: content.implicitHeight + 2 * root.gap
+        // Where the Control Center sits, with its motion: one curve for the
+        // slide and the fade.
         anchors {
             top: parent.top
             right: parent.right
-            topMargin: 50
-            rightMargin: 12
+            topMargin: 36
+            rightMargin: 10
         }
         opacity: root.shown ? 1 : 0
         focus: root.shown
@@ -80,7 +82,8 @@ PanelWindow {
         }
         Behavior on opacity {
             NumberAnimation {
-                duration: 220
+                duration: 320
+                easing.type: Easing.OutQuart
             }
         }
 
