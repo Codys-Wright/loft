@@ -114,7 +114,14 @@ windowcontrols > button {
   background: none;
   box-shadow: none;
 }
-windowcontrols > button > image {
+/* Over a base theme that draws its own lights as background images on the
+ * buttons (MacTahoe: PNGs per state, up to `.maximized headerbar windowcontrols
+ * button.maximize:backdrop:hover`), the :not()s lift this rule above all of them. */
+window headerbar windowcontrols > button:not(.loft-a):not(.loft-b):not(.loft-c):not(.loft-d) {
+  background-image: none;
+}
+windowcontrols > button > image,
+headerbar windowcontrols > button > image {
   padding: 0;
   border-radius: 100%;
   color: transparent;
@@ -138,6 +145,14 @@ windowcontrols:hover > button > image {
 windowcontrols > button:backdrop:not(:hover) > image {
   background-color: rgba(192, 202, 245, 0.22);
   background-image: none;
+}
+/* A button the compositor can't act on (niri has no minimize) is insensitive:
+ * grey, no glyph, like an unavailable light on macOS. */
+windowcontrols > button:disabled > image,
+windowcontrols:hover > button:disabled > image {
+  background-color: rgba(192, 202, 245, 0.22);
+  background-image: none;
+  color: transparent;
 }
 
 /* GTK 3: titlebuttons are the round part themselves. */
@@ -173,68 +188,471 @@ headerbar button.titlebutton:backdrop:not(:hover) {
 }
 
 
-/* ── Golden Gate glass sidebar: Nautilus (Files) ───────────────────────────
- * The sidebar is translucent and niri blurs what is behind the window (the
- * window rule in niri.kdl); the file view stays opaque. Edge to edge, no
- * shadow between the panes, colored sidebar icons, macOS-style rows. With the
- * traffic lights on the left (gtk-decoration-layout=close,minimize,maximize:)
- * they sit in the sidebar like Finder's. */
-window.nautilus-window,
-window.nautilus-window.background {
-  background-color: transparent;
+/* ── The palette over a base theme ─────────────────────────────────────────
+ * A GTK 4 base stylesheet (programs.loft.gtkBase, e.g. MacTahoe) paints many
+ * surfaces and controls with its own literal greys and its own blue instead of
+ * libadwaita's named colors, so the @define-colors above don't reach them.
+ * These rules put the theme's palette back. Each one repeats the selector of
+ * the base rule it replaces (same specificity, and this file comes later);
+ * under plain libadwaita they restate what Adwaita already does.
+ *
+ * Where a base rule is too specific to repeat, `:not(.loft-N)` (never matches
+ * anything) only raises this rule's specificity above it. */
+
+/* Windows are opaque. MacTahoe's blur build makes every .background 75%
+ * translucent for a compositor that blurs every window; niri blurs only the
+ * glass apps further down, so anywhere else the desktop would show through,
+ * unblurred, behind text. */
+.background,
+.background:backdrop {
+  background-color: @window_bg_color;
 }
-window.nautilus-window .sidebar-pane {
-  background-color: rgba(31, 34, 48, 0.36);
-  box-shadow: none;
-  border-right: 1px solid alpha(#c0caf5, 0.08);
+.background.view,
+.view,
+iconview,
+textview,
+textview > text,
+listview,
+list,
+.content-view,
+notebook > stack:not(:only-child),
+dialog-host > dialog.view sheet,
+popover > contents stack scrolledwindow:not(.view) > viewport {
+  background-color: @view_bg_color;
 }
-window.nautilus-window .sidebar-pane:backdrop {
-  background-color: rgba(31, 34, 48, 0.36);
+headerbar,
+.maximized headerbar,
+headerbar.default-decoration,
+searchbar:not(.inline) > revealer > box,
+menubar {
+  background-color: @headerbar_bg_color;
 }
-/* Edge to edge (Golden Gate), also over themes that float the sidebar as an
- * inset card (MacTahoe draws it with a box-shadow spread). */
-window.nautilus-window .sidebar-pane:dir(ltr),
-window.nautilus-window .sidebar-pane:dir(rtl),
-window.nautilus-window .sidebar-pane:backdrop:dir(ltr),
-window.nautilus-window .sidebar-pane:backdrop:dir(rtl) {
+headerbar:backdrop,
+.maximized headerbar:backdrop {
+  background-color: @headerbar_backdrop_color;
+}
+.sidebar,
+window.assistant .sidebar {
+  background-color: @sidebar_bg_color;
+}
+
+/* Popovers, menus and dialogs: the raised surface, opaque (niri doesn't blur
+ * popups, so a translucent menu would show the window under it). */
+popover > arrow,
+popover > contents,
+popover.menu > arrow,
+popover.menu.background > contents,
+.app-notification {
+  background-color: @popover_bg_color;
+  color: @popover_fg_color;
+}
+window.dialog.message.background,
+floating-sheet > sheet.background,
+bottom-sheet > sheet.background,
+dialog-host > dialog.background sheet {
+  background-color: @dialog_bg_color;
+}
+
+/* The accent: selection, checked and suggested controls, focus rings. */
+.view:selected,
+.view:selected:focus,
+iconview:selected,
+iconview:selected:focus,
+dialog-host > dialog.view sheet:selected,
+dialog-host > dialog.view sheet:selected:focus,
+columnview.view:selected,
+treeview.view:selected,
+gridview > child:selected,
+flowbox > flowboxchild:selected,
+calendar > grid > label.day-number:selected,
+calendar > header > button:active,
+datechooser button.circular.day:selected,
+popover > contents listview > row:selected,
+popover > contents list > row:selected,
+modelbutton.flat:active,
+modelbutton.flat:selected,
+popover.menu modelbutton:hover,
+popover.menu modelbutton:hover:focus,
+popover.menu box.circular-buttons button.circular.image-button.model:active:focus,
+popover.emoji-picker emoji:focus,
+popover.emoji-picker emoji:hover,
+emoji-completion-row:focus,
+emoji-completion-row:hover,
+.content-view .tile:active,
+.content-view .tile:selected,
+columnview.view acceleditor > label,
+treeview.view acceleditor > label,
+columnview.view.progressbar,
+treeview.view.progressbar,
+window.assistant .sidebar > label.highlight,
+headerbar entry selection:focus,
+columnview row:not(:selected) cell editablelabel.editing text selection,
+infobar.info > revealer > box,
+infobar.info:backdrop > revealer > box,
+infobar.question > revealer > box,
+infobar.question:backdrop > revealer > box,
+.entry-tag,
+#NautilusQueryEditor #NautilusQueryEditorTag,
+.floating-bar {
+  background-color: @accent_bg_color;
+  color: @accent_fg_color;
+}
+gridview > child:selected {
+  outline-color: shade(@accent_bg_color, 0.85);
+}
+popover.menu modelbutton:selected:active {
+  background-color: shade(@accent_bg_color, 0.9);
+}
+popover.menu box.inline-buttons button.image-button.model:selected,
+popover.background.entry-completion treeview.view:selected {
+  background-image: image(@accent_bg_color);
+}
+spinbutton > text > selection,
+entry > text > selection,
+label > selection,
+textview > text selection,
+textview > text selection:focus {
+  background-color: alpha(@accent_bg_color, 0.35);
+}
+rubberband,
+flowbox > rubberband,
+gridview > rubberband,
+.content-view > rubberband,
+columnview.view > rubberband,
+treeview.view > rubberband {
+  border: 1px solid @accent_bg_color;
+  background-color: alpha(@accent_bg_color, 0.25);
+}
+button:checked,
+button.suggested-action,
+menubutton.suggested-action,
+splitbutton.suggested-action {
+  background-color: @accent_bg_color;
+  color: @accent_fg_color;
+}
+button.suggested-action:hover {
+  background-color: mix(@accent_bg_color, white, 0.12);
+}
+button.suggested-action:active,
+button.suggested-action:checked {
+  background-color: shade(@accent_bg_color, 0.9);
+}
+button.suggested-action:disabled,
+headerbar button.suggested-action:disabled {
+  background-color: alpha(@window_fg_color, 0.06);
+  background-image: none;
+  color: alpha(@window_fg_color, 0.4);
+}
+button:checked:disabled {
+  background-color: alpha(@accent_bg_color, 0.25);
+  color: alpha(@accent_fg_color, 0.35);
+}
+button.suggested-action.flat,
+button.accent:checked,
+.accent,
+columnview.view > header > button:hover,
+treeview.view > header > button:hover,
+row.expander:checked image.expander-row-arrow:not(:disabled),
+placessidebar .navigation-sidebar > row.sidebar-new-bookmark-row,
+window.about .main-page .app-version,
+dialog.about .main-page .app-version {
+  color: @accent_color;
+}
+button.accent:checked {
+  background-color: alpha(@accent_bg_color, 0.1);
+}
+button.accent:checked:hover {
+  background-color: alpha(@accent_bg_color, 0.13);
+}
+button.accent:checked:active {
+  background-color: alpha(@accent_bg_color, 0.19);
+}
+link,
+button.link,
+link:active,
+button.link:active {
+  color: @accent_color;
+}
+link:hover,
+button.link:hover {
+  color: mix(@accent_color, @window_fg_color, 0.2);
+}
+entry:focus-within,
+spinbutton > text:focus-within,
+.linked > entry:focus-within:not(:only-child),
+.linked:not(.vertical):not(.path-bar) > entry:focus-within:not(:only-child),
+.linked.vertical > entry:focus-within:not(:only-child),
+treeview spinbutton:not(.vertical):focus-within,
+row spinbutton:not(.vertical):focus-within {
+  box-shadow: inset 0 0 0 2px alpha(@accent_color, 0.6);
+}
+headerbar entry:focus {
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.2), inset 0 0 0 2px alpha(@accent_color, 0.6);
+}
+columnview row:not(:selected) cell editablelabel.editing:focus-within {
+  outline: 2px solid @accent_bg_color;
+}
+entry > progress,
+entry progress > trough > progress,
+headerbar entry progress,
+treeview entry.flat:focus-within,
+treeview entry:focus-within {
+  border-color: @accent_bg_color;
+}
+switch:checked {
+  background-color: @accent_bg_color;
+}
+switch:checked:hover {
+  background-color: mix(white, @accent_bg_color, 0.8);
+}
+switch:checked:active {
+  background-color: mix(black, @accent_bg_color, 0.85);
+}
+switch:active > slider {
+  box-shadow: inset 1px 2px 1px -1px @accent_bg_color, inset -1px -1px 1px -1px white;
+}
+check:checked,
+check:indeterminate,
+radio:checked,
+radio:indeterminate,
+check:checked:active,
+check:indeterminate:active,
+radio:checked:active,
+radio:indeterminate:active {
+  background-color: @accent_bg_color;
+  color: @accent_fg_color;
+}
+check:checked:hover,
+check:indeterminate:hover,
+radio:checked:hover,
+radio:indeterminate:hover {
+  background-color: mix(white, @accent_bg_color, 0.75);
+}
+scale > trough > highlight,
+scale > trough > highlight:hover,
+scale > trough > highlight:active,
+.osd scale > trough highlight,
+progressbar > trough > progress {
+  background-color: @accent_bg_color;
+}
+scale > trough > highlight:disabled {
+  background-color: alpha(@accent_bg_color, 0.55);
+}
+scale > trough > fill {
+  background-color: alpha(@accent_bg_color, 0.5);
+}
+scale.horizontal:not(.marks-before):not(.marks-after) > trough > slider:active,
+scale.vertical:not(.marks-before):not(.marks-after) > trough > slider:active {
+  color: @accent_bg_color;
+}
+levelbar block:not(.empty),
+levelbar block.high {
+  border-color: @accent_bg_color;
+  background-color: @accent_bg_color;
+}
+.selection-mode headerbar,
+headerbar.selection-mode,
+.selection-mode headerbar:backdrop,
+headerbar.selection-mode:backdrop,
+.maximized .selection-mode headerbar,
+.maximized headerbar.selection-mode {
+  background-color: @accent_bg_color;
+  border-color: shade(@accent_bg_color, 0.9);
+  color: @accent_fg_color;
+}
+indicatorbin.needs-attention > indicator,
+indicatorbin.badge.needs-attention > indicator {
+  background: @accent_bg_color;
+}
+tabbar tabbox > revealer > indicator,
+dnd tab indicator {
+  background: alpha(@accent_bg_color, 0.5);
+}
+themeselector checkbutton.follow:checked,
+themeselector checkbutton.light:checked,
+themeselector checkbutton.dark:checked,
+panelthemeselector checkbutton.follow:checked,
+panelthemeselector checkbutton.light:checked,
+panelthemeselector checkbutton.dark:checked,
+themeswitcher checkbutton:checked {
+  box-shadow: inset 0 0 0 2px @accent_bg_color;
+}
+themeselector checkbutton.theme-selector radio:checked,
+panelthemeselector checkbutton.theme-selector radio:checked,
+themeswitcher .check {
+  background-color: @accent_bg_color;
+}
+/* MacTahoe colors these rows with its blue instead of their state. */
+row.entry.error,
+row.spin.error {
+  color: @error_color;
+}
+row.entry.warning,
+row.spin.warning {
+  color: @warning_color;
+}
+row.entry.success,
+row.spin.success {
+  color: @success_color;
+}
+
+/* ── Golden Gate sidebars, every libadwaita app ────────────────────────────
+ * Edge to edge: no inset card, no margin, no shadow (MacTahoe floats every
+ * .sidebar-pane as a rounded card and paints the content area with a 9000px
+ * box-shadow spread), a hairline toward the content, the theme's sidebar color,
+ * and macOS rows: a soft pill for the selection, text in the text color, icons
+ * in the accent. Opaque here: only the apps below are glass. */
+window .sidebar-pane:not(.loft-a):not(.loft-b):not(.loft-c):not(.loft-d):not(.loft-e) {
   margin: 0;
   border-radius: 0;
+  border: none;
   box-shadow: none;
+  background-image: none;
+  background-color: @sidebar_bg_color;
+  color: @sidebar_fg_color;
 }
-window.nautilus-window .sidebar-pane:dir(ltr) {
-  border-right: 1px solid alpha(#c0caf5, 0.08);
+window .sidebar-pane:dir(ltr):not(.end):not(.loft-a):not(.loft-b):not(.loft-c):not(.loft-d),
+window .sidebar-pane.end:dir(rtl):not(.loft-a):not(.loft-b):not(.loft-c):not(.loft-d) {
+  box-shadow: inset -1px 0 rgba(192, 202, 245, 0.1);
 }
+window .sidebar-pane:dir(rtl):not(.end):not(.loft-a):not(.loft-b):not(.loft-c):not(.loft-d),
+window .sidebar-pane.end:dir(ltr):not(.loft-a):not(.loft-b):not(.loft-c):not(.loft-d) {
+  box-shadow: inset 1px 0 rgba(192, 202, 245, 0.1);
+}
+.sidebar-pane banner > revealer > widget,
+.content-pane .sidebar-pane banner > revealer > widget,
+.sidebar-pane .content-pane banner > revealer > widget,
+.sidebar-pane banner > revealer > widget:backdrop,
+.content-pane .sidebar-pane banner > revealer > widget:backdrop,
+.sidebar-pane .content-pane banner > revealer > widget:backdrop {
+  background-color: mix(@accent_bg_color, @sidebar_bg_color, 0.7);
+}
+.sidebar-pane .navigation-sidebar > row {
+  color: @sidebar_fg_color;
+}
+.sidebar-pane .navigation-sidebar > row:hover {
+  background-color: rgba(192, 202, 245, 0.07);
+}
+.sidebar-pane .navigation-sidebar:not(.view) > row:selected,
+.sidebar-pane .navigation-sidebar:not(.view) > row:selected:focus-visible:focus-within {
+  background-color: rgba(192, 202, 245, 0.13);
+  color: @sidebar_fg_color;
+}
+.sidebar-pane .navigation-sidebar:not(.view) > row:selected:hover {
+  background-color: alpha(@sidebar_fg_color, 0.17);
+}
+.sidebar-pane .navigation-sidebar > row image {
+  color: @accent_color;
+}
+.sidebar-pane .navigation-sidebar > separator {
+  background: rgba(192, 202, 245, 0.1);
+}
+
+/* GTK's own file chooser (GTK 4 without the portal): same rows, accent icons. */
+placessidebar .navigation-sidebar > row image.sidebar-icon {
+  color: @accent_color;
+}
+filechooser paned.horizontal > separator {
+  background-image: image(rgba(192, 202, 245, 0.1));
+}
+
+/* ── Golden Gate glass sidebar: Nautilus (Files) and its file chooser ──────
+ * The window is transparent, the sidebar a tint of the theme's glass over the
+ * blur niri draws behind the window (the window rule in niri.kdl, by app id),
+ * and the file view opaque. GTK CSS can't match an app id and libadwaita gives
+ * windows no per-app class, so glass is opt-in per window class here plus the
+ * same app in niri.kdl. The file chooser GTK apps get through the portal
+ * (xdg-desktop-portal-gnome hands it to Nautilus: .nautilus-file-chooser) is a
+ * Nautilus window, so the same niri rule covers it. With the traffic
+ * lights on the left (gtk-decoration-layout=close,minimize,maximize:) they sit
+ * in the sidebar like Finder's. */
+window.nautilus-window,
+window.nautilus-window.background,
+window.nautilus-window.background:backdrop,
+window.nautilus-file-chooser,
+window.nautilus-file-chooser.background,
+window.nautilus-file-chooser.background:backdrop {
+  background-color: transparent;
+}
+window.nautilus-window .sidebar-pane:not(.loft-a):not(.loft-b):not(.loft-c):not(.loft-d):not(.loft-e),
+window.nautilus-file-chooser .sidebar-pane:not(.loft-a):not(.loft-b):not(.loft-c):not(.loft-d):not(.loft-e) {
+  background-color: rgba(31, 34, 48, 0.63);
+}
+/* Narrow window: libadwaita collapses the split view and drops the pane
+ * classes, so paint its children (the sidebar then slides over the file view,
+ * opaque). The glass rule above still wins while the panes sit side by side. */
+window.nautilus-window overlay-split-view toolbarview,
+window.nautilus-file-chooser overlay-split-view toolbarview {
+  background-color: @view_bg_color;
+}
+window.nautilus-window .sidebar-pane toolbarview,
 window.nautilus-window .sidebar-pane headerbar,
 window.nautilus-window .sidebar-pane toolbarview > .top-bar,
 window.nautilus-window .sidebar-pane .navigation-sidebar,
+window.nautilus-window .sidebar-pane placessidebar,
 window.nautilus-window .sidebar-pane scrolledwindow,
-window.nautilus-window .sidebar-pane viewport {
+window.nautilus-window .sidebar-pane viewport,
+window.nautilus-file-chooser .sidebar-pane toolbarview,
+window.nautilus-file-chooser .sidebar-pane headerbar,
+window.nautilus-file-chooser .sidebar-pane toolbarview > .top-bar,
+window.nautilus-file-chooser .sidebar-pane .navigation-sidebar,
+window.nautilus-file-chooser .sidebar-pane placessidebar,
+window.nautilus-file-chooser .sidebar-pane scrolledwindow,
+window.nautilus-file-chooser .sidebar-pane viewport {
   background: none;
   box-shadow: none;
 }
-window.nautilus-window .content-pane {
+/* Its split view carries .view, which would paint over the whole window. */
+window.nautilus-window .view,
+window.nautilus-file-chooser .view {
+  background-color: transparent;
+}
+window.nautilus-window .content-pane,
+window.nautilus-window .content-pane:backdrop,
+window.nautilus-file-chooser .content-pane,
+window.nautilus-file-chooser .content-pane:backdrop {
   background-color: @view_bg_color;
 }
-window.nautilus-window .sidebar-pane .navigation-sidebar > row {
+window.nautilus-window .sidebar-pane > separator.horizontal,
+window.nautilus-file-chooser .sidebar-pane > separator.horizontal {
+  background-color: rgba(192, 202, 245, 0.1);
+}
+window.nautilus-window .sidebar-pane .navigation-sidebar > row,
+window.nautilus-file-chooser .sidebar-pane .navigation-sidebar > row {
   min-height: 28px;
   margin: 1px 10px;
   padding: 0 8px;
   border-radius: 7px;
 }
-window.nautilus-window .sidebar-pane .navigation-sidebar > row:hover {
-  background-color: rgba(192, 202, 245, 0.07);
-}
-window.nautilus-window .sidebar-pane .navigation-sidebar > row:selected {
+/* MacTahoe colors the selected place with its blue (text on glass). */
+window.nautilus-window .sidebar-pane placessidebar .navigation-sidebar:not(.view) > row:selected,
+window.nautilus-file-chooser .sidebar-pane placessidebar .navigation-sidebar:not(.view) > row:selected {
   background-color: rgba(192, 202, 245, 0.13);
-  color: #c0caf5;
+  color: @sidebar_fg_color;
 }
-window.nautilus-window .sidebar-pane .navigation-sidebar > row image {
-  color: #7aa2f7;
+
+/* Selected files: the accent as a tint (MacTahoe: a grey wash), grey when the
+ * window is in the background, as in Finder. */
+window.nautilus-window .nautilus-list-view listview.view > row.activatable:selected,
+window.nautilus-window .nautilus-grid-view child.activatable:selected,
+window.nautilus-file-chooser .nautilus-list-view listview.view > row.activatable:selected,
+window.nautilus-file-chooser .nautilus-grid-view child.activatable:selected {
+  background-color: rgba(122, 162, 247, 0.32);
+  color: @view_fg_color;
 }
-window.nautilus-window .sidebar-pane .navigation-sidebar > row:selected image {
-  color: #7aa2f7;
+window.nautilus-window .nautilus-list-view listview.view > row.activatable:selected:hover,
+window.nautilus-window .nautilus-grid-view child.activatable:selected:hover,
+window.nautilus-file-chooser .nautilus-list-view listview.view > row.activatable:selected:hover,
+window.nautilus-file-chooser .nautilus-grid-view child.activatable:selected:hover {
+  background-color: rgba(122, 162, 247, 0.4);
 }
-window.nautilus-window .sidebar-pane .navigation-sidebar > separator {
-  margin: 6px 18px;
-  background: alpha(#c0caf5, 0.08);
+window.nautilus-window .nautilus-list-view listview.view > row.activatable:selected:backdrop,
+window.nautilus-window .nautilus-grid-view child.activatable:selected:backdrop,
+window.nautilus-file-chooser .nautilus-list-view listview.view > row.activatable:selected:backdrop,
+window.nautilus-file-chooser .nautilus-grid-view child.activatable:selected:backdrop {
+  background-color: rgba(192, 202, 245, 0.13);
+}
+window.nautilus-window .nautilus-grid-view child.activatable:selected,
+window.nautilus-file-chooser .nautilus-grid-view child.activatable:selected {
+  outline-color: transparent;
 }
