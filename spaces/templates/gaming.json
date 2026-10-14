@@ -1,0 +1,53 @@
+{
+  "$schema": "https://loft.dev/schema/space-1.json",
+  "kind": "space",
+  "id": "gaming",
+  "name": "Gaming",
+  "icon": "󰊗",
+  "order": 5,
+  "displays": {
+    "main": {
+      "workspace": "gaming",
+      "layout": {
+        "struts": {
+          "top": 0
+        },
+        "focus-ring": {
+          "off": true
+        },
+        "border": {
+          "off": true
+        }
+      },
+      "apps": [
+        {
+          "id": "steam",
+          "exec": [
+            "steam"
+          ],
+          "match": {
+            "appId": "^steam$"
+          },
+          "launch": false
+        }
+      ]
+    },
+    "right": {
+      "workspace": "stream",
+      "apps": []
+    },
+    "left": "keep",
+    "*": "keep"
+  },
+  "bar": {
+    "hidden": true
+  },
+  "dock": {
+    "visible": "hidden"
+  },
+  "focus": {
+    "dnd": true,
+    "allow": []
+  },
+  "startup": "never"
+}

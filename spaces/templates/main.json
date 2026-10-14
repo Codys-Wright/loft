@@ -1,0 +1,42 @@
+{
+  "$schema": "https://loft.dev/schema/space-1.json",
+  "kind": "space",
+  "id": "main",
+  "name": "Main",
+  "icon": "󰋜",
+  "order": 1,
+  "displays": {
+    "main": {
+      "workspace": "main",
+      "apps": [
+        {
+          "id": "files",
+          "exec": [
+            "nautilus",
+            "--new-window"
+          ],
+          "match": {
+            "appId": "^org\\.gnome\\.Nautilus$"
+          }
+        }
+      ]
+    },
+    "right": {
+      "workspace": "setup",
+      "apps": [
+        {
+          "id": "opendeck",
+          "exec": [
+            "opendeck"
+          ],
+          "match": {
+            "appId": "^opendeck$"
+          }
+        }
+      ]
+    },
+    "left": "keep",
+    "*": "keep"
+  },
+  "startup": "never"
+}

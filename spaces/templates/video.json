@@ -1,0 +1,46 @@
+{
+  "$schema": "https://loft.dev/schema/space-1.json",
+  "kind": "space",
+  "id": "video",
+  "name": "Video",
+  "icon": "󰕧",
+  "order": 3,
+  "displays": {
+    "main": {
+      "workspace": "video",
+      "apps": [
+        {
+          "id": "resolve",
+          "exec": [
+            "davinci-resolve"
+          ],
+          "match": {
+            "appId": "^resolve$"
+          },
+          "open": "maximized"
+        }
+      ]
+    },
+    "right": {
+      "workspace": "recording",
+      "apps": [
+        {
+          "id": "obs",
+          "exec": [
+            "obs"
+          ],
+          "match": {
+            "appId": "^(com\\.obsproject\\.Studio|obs|obs-studio)$"
+          },
+          "open": "maximized"
+        }
+      ]
+    },
+    "left": {
+      "workspace": "media",
+      "apps": []
+    },
+    "*": "keep"
+  },
+  "startup": "first-activate"
+}

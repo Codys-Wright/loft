@@ -18,6 +18,8 @@
 #   loft-pointer           Auto Scroll for scrolling capture (the same crate):
 #                          pointer motion + wheel notches over the capture area
 #
+# Both sessions include <state>/overrides/spaces.kdl once, after the theme
+# (`loft-niri space render`: the spaces' workspaces, rules and binds).
 # Both sessions include <state>/overrides/niri.kdl FIRST (niri uses the first
 # `output` block matching a monitor, so output overrides must come first) and
 # LAST (every other section merges, later wins). Both expose their entry
@@ -167,6 +169,7 @@
             include "${../niri}/base.kdl"
             include "${shellBinds}"
             include optional=true "$state/current/niri.kdl"
+            include optional=true "$state/overrides/spaces.kdl"
             include optional=true "$state/overrides/niri.kdl"
             spawn-at-startup "${lib.getExe self'.packages.loft-shell}"
             spawn-at-startup "${lib.getExe self'.packages.loft-launcher}" "service"
@@ -175,6 +178,16 @@
             exec niri --config "$dir/config.kdl" "$@"
           '';
         };
+
+        # niri + nix/dev/niri-headless-outputs.patch: NIRI_HEADLESS_OUTPUTS=WxH,…
+        # runs niri on that many virtual outputs (its test backend, made usable at
+        # runtime: 60 Hz pacing, screencopy, `niri msg output headless-N off|on` as
+        # hotplug). niri's nested (winit) backend has exactly one output, so this is
+        # how `loft-dev --outputs` gets a multi-monitor session.
+        loft-niri-headless = pkgs.niri.overrideAttrs (old: {
+          patches = (old.patches or [ ]) ++ [ ./dev/niri-headless-outputs.patch ];
+          doCheck = false;
+        });
 
         loft-dev = pkgs.writeShellApplication {
           name = "loft-dev";
@@ -199,6 +212,7 @@
                 "@KWIN_PLACE@"
                 "@SWAY@"
                 "@MESA_EGL_VENDOR@"
+                "@NIRI_HEADLESS@"
               ]
               [
                 (lib.getExe self'.packages.loft)
@@ -210,6 +224,7 @@
                 "${./dev/kwin-place.js}"
                 (lib.getExe' pkgs.sway-unwrapped "sway")
                 "${pkgs.mesa}/share/glvnd/egl_vendor.d/50_mesa.json"
+                (lib.getExe self'.packages.loft-niri-headless)
               ]
               (builtins.readFile ./dev/loft-dev.sh);
         };
@@ -364,6 +379,12 @@
               ../Cargo.toml
               ../Cargo.lock
               ../crates
+              # Spaces: built-in templates (compiled in), the shared wallsets
+              # role fixtures, instance fixtures, and base.kdl for `niri validate`.
+              ../spaces
+              ../tests/fixtures/wallsets
+              ../tests/fixtures/spaces
+              ../niri/base.kdl
             ];
           };
           cargoLock.lockFile = ../Cargo.lock;
@@ -442,6 +463,7 @@
               ../Cargo.toml
               ../Cargo.lock
               ../crates
+              ../spaces # loft-niri (a dependency) compiles the built-in spaces in
             ];
           };
           cargoLock.lockFile = ../Cargo.lock;

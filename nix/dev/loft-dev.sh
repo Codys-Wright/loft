@@ -10,6 +10,8 @@
 #                                            (an offscreen output of exactly
 #                                            WxH), its own runtime dir, D-Bus
 #                                            and state — for agents
+#   loft-dev --session NAME --outputs WxH,WxH,…   the same with several
+#                                            monitors (niri on virtual outputs)
 #   loft-dev --list | --stop NAME
 #
 # Each session lives in $XDG_RUNTIME_DIR/loft-dev (dev) or
@@ -19,7 +21,7 @@
 
 usage() {
   cat >&2 <<'EOF'
-usage: loft-dev [--session NAME] [--size WxH] [--headless | --on-host]
+usage: loft-dev [--session NAME] [--size WxH | --outputs WxH[+X+Y],…] [--headless | --on-host]
                 [--output NAME | --windowed]
                 [--isolated | --shared | --private-bus | --private-runtime]
                 [--share-audio] [CHECKOUT]
@@ -29,6 +31,12 @@ usage: loft-dev [--session NAME] [--size WxH] [--headless | --on-host]
   --session NAME     a named session (default `dev`); a session only ever
                      replaces itself, so parallel agents use distinct names
   --size WxH         the session's size (named sessions: default 1600x1000)
+  --outputs LIST     several monitors instead of one, e.g.
+                     1440x2560,5120x1440,2560x1440 (left to right) or with
+                     positions 5120x1440+1440+0,1440x2560+0+0,… — niri runs on
+                     virtual outputs headless-1, headless-2, … (in this order;
+                     identities "niri headless 1", …). Headless only.
+                     `niri msg output headless-2 off|on` unplugs / replugs one.
   --headless         run on an offscreen output (a headless wlroots host,
                      software rendering): exact size, never on screen, works
                      while the desktop is locked — the default for named sessions
@@ -50,6 +58,7 @@ EOF
 
 session=dev
 size=""
+outputs=""
 output=""
 windowed=0
 root=""
@@ -64,6 +73,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --session) [ $# -ge 2 ] || usage; session="$2"; shift 2 ;;
     --size) [ $# -ge 2 ] || usage; size="$2"; shift 2 ;;
+    --outputs) [ $# -ge 2 ] || usage; outputs="$2"; shift 2 ;;
     --output) [ $# -ge 2 ] || usage; output="$2"; shift 2 ;;
     --windowed) windowed=1; shift ;;
     --headless) headless=1; shift ;;
@@ -146,6 +156,27 @@ named=0
 [ -n "$headless" ] || headless=$named
 if [ -n "$size" ] && ! [[ "$size" =~ ^[0-9]+x[0-9]+$ ]]; then
   echo "loft-dev: --size wants WxH, e.g. 1600x1000" >&2; exit 2
+fi
+# --outputs: niri's own (patched) headless backend with one virtual output
+# per entry; the sway host can't help here, niri nested has one output.
+output_sizes=""
+output_kdl=""
+if [ -n "$outputs" ]; then
+  if [ -n "$size" ]; then echo "loft-dev: --size and --outputs don't mix" >&2; exit 2; fi
+  if [ "$headless" = 0 ]; then echo "loft-dev: --outputs is headless only" >&2; exit 2; fi
+  headless=1
+  n=0
+  IFS=, read -r -a out_specs <<< "$outputs"
+  for spec in "${out_specs[@]}"; do
+    n=$((n + 1))
+    if ! [[ "$spec" =~ ^([0-9]+x[0-9]+)(\+(-?[0-9]+)\+(-?[0-9]+))?$ ]]; then
+      echo "loft-dev: --outputs wants WxH or WxH+X+Y entries, got $spec" >&2; exit 2
+    fi
+    output_sizes="${output_sizes:+$output_sizes,}${BASH_REMATCH[1]}"
+    if [ -n "${BASH_REMATCH[2]}" ]; then
+      output_kdl+="output \"headless-$n\" { position x=${BASH_REMATCH[3]} y=${BASH_REMATCH[4]}; }"$'\n'
+    fi
+  done
 fi
 if [ -z "$size" ] && { [ "$named" = 1 ] || [ "$headless" = 1 ]; }; then size=1600x1000; fi
 # The headless host's sockets live in the session's runtime dir.
@@ -250,7 +281,17 @@ fi
 
 extra_kdl=""
 host_pid=""
-if [ "$headless" = 1 ]; then
+niri_bin=niri
+nested=1
+if [ -n "$output_sizes" ]; then
+  # niri on virtual outputs (nix/dev/niri-headless-outputs.patch): no host
+  # compositor at all; software rendering for screenshots (grim → screencopy).
+  niri_bin=@NIRI_HEADLESS@
+  nested=0
+  export NIRI_HEADLESS_OUTPUTS="$output_sizes"
+  export __EGL_VENDOR_LIBRARY_FILENAMES=@MESA_EGL_VENDOR@ LIBGL_ALWAYS_SOFTWARE=1
+  unset WAYLAND_DISPLAY WAYLAND_SOCKET DISPLAY NIRI_SOCKET
+elif [ "$headless" = 1 ]; then
   # A headless wlroots compositor (sway: WLR_BACKENDS=headless, pixman) is
   # the host: one offscreen output of exactly --size, niri fullscreen on it.
   # Everything renders in software (Mesa llvmpipe), so the session never
@@ -310,14 +351,18 @@ if [ "$named" = 1 ]; then
   launcher_env="\"XDG_CACHE_HOME=$dir/cache\" \"LOFT_SCRIPTS_DIR=$dir/scripts\" \"LOFT_LAUNCHER_DRYRUN=$dir/launcher-dryrun.log\" "
 fi
 
-# The theme fragment comes after base.kdl so it wins, then dev-local,
-# then the runtime overrides (also first: see the header comment).
+# The theme fragment comes after base.kdl so it wins, then dev-local, then
+# the spaces (`loft-niri space render`; included once: a workspace declared
+# twice exists twice), then the runtime overrides (also first: see the
+# header comment).
 cat > "$dir/config.kdl" <<EOF
 include optional=true "$dir/overrides/niri.kdl"
+$output_kdl
 include "$root/niri/base.kdl"
 include "$dir/shell-binds.kdl"
 include optional=true "$dir/current/niri.kdl"
 include optional=true "$root/niri/dev-local.kdl"
+include optional=true "$dir/overrides/spaces.kdl"
 include optional=true "$dir/overrides/niri.kdl"
 $extra_kdl
 spawn-at-startup "env" $launcher_env"LOFT_STATE_DIR=$dir" "LOFT_LAUNCHER_DIR=$root/launcher" "LOFT_SHELL_SRC=$root/src" "loft-launcher" "service"
@@ -339,8 +384,9 @@ export LOFT_SESSION="$session"
 
 mode=on-host
 [ "$headless" = 1 ] && mode=headless
+[ -n "$output_sizes" ] && mode="headless-outputs"
 echo "loft-dev: session $session ($mode), niri config $dir/config.kdl, shell from $root/src"
-niri --config "$dir/config.kdl" &
+"$niri_bin" --config "$dir/config.kdl" &
 niri_pid=$!
 trap 'kill $niri_pid 2>/dev/null; cleanup_host' INT TERM
 
@@ -364,6 +410,8 @@ display="$(basename "$sock" | cut -d. -f2)"
 {
   printf 'NIRI_SOCKET=%s\nWAYLAND_DISPLAY=%s\nNIRI_PID=%s\n' "$sock" "$display" "$niri_pid"
   printf 'LOFT_SESSION=%s\nLOFT_DEV_PID=%s\nLOFT_DEV_MODE=%s\n' "$session" "$$" "$mode"
+  printf 'LOFT_DEV_NESTED=%s\n' "$nested"
+  [ -n "$output_sizes" ] && printf 'LOFT_DEV_OUTPUTS=%s\n' "$outputs"
   printf 'LOFT_NIRI_CONFIG=%s\n' "$dir/config.kdl"
   printf 'XDG_RUNTIME_DIR=%s\n' "${XDG_RUNTIME_DIR:-}"
   [ -n "$host_pid" ] && printf 'LOFT_DEV_HOST_PID=%s\n' "$host_pid"

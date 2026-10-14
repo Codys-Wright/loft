@@ -1,0 +1,12 @@
+{
+  "$schema": "https://loft.dev/schema/space-1.json",
+  "kind": "space-instance",
+  "template": "project",
+  "id": "proj-loft",
+  "params": { "name": "loft", "dir": "~/Development/loft", "preview": "http://localhost:8080",
+              "docs": "https://quickshell.org/docs/", "editor": "zed" },
+  "order": 7,
+  "created": "2026-10-14T10:02:00Z",
+  "archived": false,
+  "overrides": { "wallpapers": { "main": "~/Pictures/loft.jpg" } }
+}

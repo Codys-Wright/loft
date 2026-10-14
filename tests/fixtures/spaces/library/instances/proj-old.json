@@ -1,0 +1,8 @@
+{
+  "$schema": "https://loft.dev/schema/space-1.json",
+  "kind": "space-instance",
+  "template": "project",
+  "params": { "name": "Old Thing", "dir": "/home/u/old" },
+  "order": 9,
+  "archived": true
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://loft.dev/schema/space-1.json",
+  "kind": "space",
+  "id": "task",
+  "name": "Task",
+  "icon": "󰄲",
+  "order": 6,
+  "displays": {
+    "main": {
+      "workspace": "task",
+      "apps": []
+    },
+    "left": {
+      "workspace": "notes",
+      "apps": []
+    },
+    "right": {
+      "workspace": "research",
+      "apps": []
+    },
+    "*": "keep"
+  },
+  "startup": "never"
+}

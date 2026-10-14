@@ -6,12 +6,15 @@
 #                   vibes (pack collections, ranking, index links), and the Utilities
 #                   helpers (ports, flake updates, cleaner, media tools), the capture
 #                   helpers (scrolling-capture stitcher, Auto Scroll's stop logic with a fake
-#                   loft-pointer, recording zooms) and Apps to
-#                   leave alone → xremap (tests/test_keys.py) — all offline
+#                   loft-pointer, recording zooms), Apps to leave alone → xremap
+#                   (tests/test_keys.py), spaces/templates and the instance fixtures against
+#                   schemas/space-1.json — all offline
 #   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte
 #   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`
-#   loft-niri       the crate builds and its tests pass (incl. `niri validate`)
+#   loft-niri       the crate builds and its tests pass (incl. `niri validate`; spaces:
+#                   roles over the wallsets fixtures, templates + instances, golden
+#                   spaces.kdl validated with base.kdl, activation plans)
 #   loft-niri-clippy  `cargo clippy --all-targets -D warnings`
 #   loft-appmenu    the global menu daemon builds and its tests pass
 #   loft-appmenu-clippy  the same clippy gate for it
@@ -47,6 +50,8 @@
           ../templates
           ../themes
           ../tests
+          ../schemas
+          ../spaces
         ];
       };
       check =

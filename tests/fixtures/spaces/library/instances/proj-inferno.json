@@ -1,0 +1,9 @@
+{
+  "$schema": "https://loft.dev/schema/space-1.json",
+  "kind": "space-instance",
+  "template": "project",
+  "params": { "name": "Inferno", "dir": "/home/u/Development/inferno", "preview": "cargo run -p inferno-gui",
+              "previewMatch": { "appId": "^inferno-gui$" }, "editor": "code" },
+  "order": 8,
+  "created": "2026-10-14T10:05:00Z"
+}
