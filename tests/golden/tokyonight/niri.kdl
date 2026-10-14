@@ -4,14 +4,19 @@
 // so it overrides only the theme-owned settings below.
 
 layout {
+    // shape.focus: "shadow" marks the focused window with its deeper shadow
+    // alone (no ring); "ring" and "both" draw the ring, focusRing.width wide.
     focus-ring {
+        on
+        width 2
         active-color "#7aa2f7cc"
         inactive-color "#00000000"
         urgent-color "#f7768e"
     }
 
-    // Colors only: whether the border is drawn stays the base/consumer's call.
+    // shape.border: drawn or not, and how wide.
     border {
+        off
         active-color "#7aa2f7"
         inactive-color "#414868"
         urgent-color "#f7768e"

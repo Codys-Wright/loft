@@ -62,7 +62,8 @@
   "shape": {
     "windowRadius": 12,
     "panelRadius": 18,
-    "controlRadius": 8
+    "controlRadius": 8,
+    "focus": "both"
   },
   "bar": {
     "adaptiveText": true,
@@ -70,5 +71,66 @@
   },
   "radii": {
     "window": 12
+  },
+  "motion": {
+    "speed": 1.0,
+    "minimal": false,
+    "durations": {
+      "instant": 90,
+      "fast": 160,
+      "normal": 260,
+      "slow": 420
+    },
+    "curves": {
+      "standard": [
+        0.2,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "emphasized": [
+        0.05,
+        0.7,
+        0.1,
+        1.0
+      ],
+      "exit": [
+        0.3,
+        0.0,
+        0.8,
+        0.15
+      ]
+    },
+    "spring": {
+      "damping": 0.82,
+      "stiffness": 380
+    }
+  },
+  "type": {
+    "ui": {
+      "family": null,
+      "size": 11,
+      "weight": "regular"
+    },
+    "mono": {
+      "family": null,
+      "size": 11
+    },
+    "display": {
+      "family": null
+    }
+  },
+  "icons": {
+    "theme": null,
+    "fallback": null,
+    "cursor": {
+      "theme": null,
+      "size": null
+    }
+  },
+  "a11y": {
+    "reduceMotion": false,
+    "reduceTransparency": false,
+    "increaseContrast": false
   }
 }

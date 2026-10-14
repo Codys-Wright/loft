@@ -130,7 +130,8 @@ Point your apps at the rendered fragments once; `apply` keeps them current:
 | GTK 3/4 | `@import url("file:///home/you/.local/state/loft/current/gtk.css");` in `~/.config/gtk-{3,4}.0/gtk.css` |
 | Spotify | `programs.loft.spotify.enable = true;` (below) |
 
-`LOFT_HOOKS=none|all|shell,niri,kitty,ghostty,gtk,spotify` picks the reload hooks. From a checkout,
+`LOFT_HOOKS=none|all|shell,niri,wallpapers,kitty,ghostty,gtk,spotify` picks the reload hooks
+(each runs only when its files changed; `loft theme apply --reload` runs them all). From a checkout,
 `python3 cli/loft …` runs the same CLI (the dev shell has `jsonschema`), and
 `nix flake check` runs the schema, unit, golden-render and `niri validate` checks.
 

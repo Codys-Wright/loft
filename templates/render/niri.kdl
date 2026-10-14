@@ -4,14 +4,18 @@
 // so it overrides only the theme-owned settings below.
 
 layout {
+${niri_gaps}    // shape.focus: "shadow" marks the focused window with its deeper shadow
+    // alone (no ring); "ring" and "both" draw the ring, focusRing.width wide.
     focus-ring {
+        ${niri_focus_ring}
         active-color "${focus_active}"
         inactive-color "${focus_inactive}"
         urgent-color "${urgent}"
     }
 
-    // Colors only: whether the border is drawn stays the base/consumer's call.
+    // shape.border: drawn or not, and how wide.
     border {
+        ${niri_border}
         active-color "${accent}"
         inactive-color "${overlay}"
         urgent-color "${urgent}"
@@ -52,7 +56,7 @@ window-rule {
     geometry-corner-radius ${window_radius}
     clip-to-geometry true
 }
-${niri_xray_rules}
+${niri_xray_rules}${niri_focus_rules}${niri_animations}
 
 // Glass sidebars (docs/DESIGN-GOLDEN-GATE.md): Loft's gtk.css makes these apps'
 // windows transparent and their sidebars a tint of the glass; niri blurs what is

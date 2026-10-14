@@ -110,7 +110,7 @@ class Render(unittest.TestCase):
         rc, _, err = loft("theme", "render", str(FIXTURE), str(self.tmp / "legacy"))
         self.assertEqual(rc, 0, err)
         theme = json.loads((self.tmp / "legacy" / "theme.json").read_text())
-        self.assertEqual(theme["shape"], {"windowRadius": 0, "panelRadius": 18, "controlRadius": 8})
+        self.assertEqual(theme["shape"], {"windowRadius": 0, "panelRadius": 18, "controlRadius": 8, "focus": "both"})
         self.assertEqual(theme["radii"], {"window": 0})
         self.assertEqual(theme["bar"], {"adaptiveText": True, "background": False})
         self.assertEqual(theme["glass"]["edgeDarken"], 0.18)  # light polarity
@@ -211,7 +211,7 @@ class Manager(unittest.TestCase):
         cur = self.state / "current"
         self.assertTrue(cur.is_symlink())
         first = cur.resolve()
-        self.assertEqual(first.parent, (self.state / "rendered" / "tokyonight").resolve())
+        self.assertEqual(first.parent, (self.state / "rendered" / "compositions").resolve())
         self.assertTrue((cur / "niri.kdl").is_file())
         self.assertEqual(loft("theme", "current")[1].strip(), "tokyonight")
 
@@ -222,7 +222,7 @@ class Manager(unittest.TestCase):
         loft("theme", "apply", "latte")
         self.assertEqual(loft("theme", "current")[1].strip(), "latte")
 
-    def test_edited_pack_rerenders_and_prunes(self):
+    def test_edited_pack_rerenders(self):
         pack = self.tmp / "mine"
         copy_pack(THEMES / "tokyonight", pack)
         loft("theme", "apply", str(pack))
@@ -233,7 +233,7 @@ class Manager(unittest.TestCase):
         loft("theme", "apply", str(pack))
         second = (self.state / "current").resolve()
         self.assertNotEqual(first, second)
-        self.assertFalse(first.exists())
+        self.assertTrue(first.exists())  # kept for switching back (GC: render/compose.py)
         self.assertIn("#ff0000", (second / "kitty.conf").read_text())
 
     def test_new_export_install_remove(self):
@@ -286,7 +286,7 @@ class Manager(unittest.TestCase):
 class Hooks(unittest.TestCase):
     def test_selection(self):
         self.assertEqual(hooks.selected(None, dev=False), list(hooks.ALL))
-        self.assertEqual(hooks.selected(None, dev=True), ["shell", "niri"])
+        self.assertEqual(hooks.selected(None, dev=True), ["shell", "niri", "wallpapers"])
         self.assertEqual(hooks.selected("none", dev=False), [])
         self.assertEqual(hooks.selected("kitty,gtk", dev=True), ["kitty", "gtk"])
         with self.assertRaises(ValueError):

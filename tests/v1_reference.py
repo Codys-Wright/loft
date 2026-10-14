@@ -1,4 +1,9 @@
-"""Render a theme pack into per-consumer config fragments.
+"""FROZEN: the v1 renderer as it was before the render units (phase B),
+kept only as the reference for the regression tests (tests/test_resolve.py:
+every byte it wrote is still written, apart from the documented additions).
+Do not change it; templates are frozen too (tests/fixtures/v1-templates/).
+
+Original docstring — render a theme pack into per-consumer config fragments.
 
 Templates (templates/render/*) are plain files with `${var}` placeholders
 (Python string.Template; `$$` is a literal `$`). All color math happens
@@ -12,14 +17,13 @@ identical whether it came from the store or was installed at runtime.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import shutil
 from pathlib import Path
 from string import Template
 
-from . import color, palette
-from .pack import Pack, normalize, normalized_manifest
+from loft import color, palette
+from loft.pack import Pack, normalize, normalized_manifest
 
 c = color
 
@@ -181,20 +185,10 @@ def spicetify_scheme(p: dict[str, str], dark: bool) -> dict[str, str]:
     return {k: v.lstrip("#").lower() for k, v in s.items()}
 
 
-def template_dir_default() -> Path:
-    return Path(__file__).resolve().parents[2] / "templates" / "render"
+TEMPLATES = Path(__file__).resolve().parent / "fixtures" / "v1-templates"
 
 
-def renderer_salt(template_dir: Path) -> str:
-    """Changes whenever templates or renderer code change (render cache key)."""
-    h = hashlib.sha256()
-    here = Path(__file__).resolve().parent
-    for p in sorted(template_dir.iterdir()) + [here / "render.py", here / "pack.py", here / "color.py", here / "palette.py"]:
-        h.update(p.name.encode() + b"\0" + p.read_bytes())
-    return h.hexdigest()
-
-
-def render(pack: Pack, outdir: Path, template_dir: Path, curated: dict | None = None) -> list[str]:
+def render(pack: Pack, outdir: Path, template_dir: Path = TEMPLATES, curated: dict | None = None) -> list[str]:
     """Write every consumer file for `pack` into outdir; return their names.
 
     `curated`: the pack's vibe links already resolved against the installed

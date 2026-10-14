@@ -227,13 +227,18 @@ loft wallpaper auto on|off|default
 
 ## Rendered bundle
 
-`loft theme render <theme|pack> <outdir>` (and `apply`, into
-`$LOFT_STATE_DIR/rendered/<name>/<hash>/`, where `<name>` is the v1 name: the
-pack's, or the alias of a facet-model theme) writes:
+`loft theme render <theme|pack> <outdir>` writes the files below; `apply` (and
+`preview`) render each **unit** once into `$LOFT_STATE_DIR/rendered/units/<unit>/<digest>/`
+and point `current` at a composition of symlinks, `rendered/compositions/<hash>/`, which
+also holds `resolved.json` (theme, variant, sources, customized kinds, unit digests).
+Only the hooks of units whose digest changed run
+([THEME-ARCHITECTURE.md §6](THEME-ARCHITECTURE.md#6-rendering-pipeline)). `theme.json`'s
+and `manifest.json`'s `name` is the v1 name: the pack's, or the alias of a facet-model theme.
 
 | File | Consumer | How it is used | Live reload on `apply` |
 |---|---|---|---|
 | `theme.json` | the shell | `$LOFT_THEME_FILE` = `<state>/current/theme.json` | `quickshell ipc … call theme reload` |
+| `wallpapers.json` | the shell's wallpaper layer and pickers (phase E) | the resolved Wallpapers facet: collection (absolute paths), default, gradient, sets, behavior, related, the user's arrangement | `quickshell ipc … call vibes refresh` |
 | `manifest.json` | the theme selector, lock loader, pickers | normalized manifest + `wallpapers` / `locks` / `defaults` with absolute paths (own, then curated) | — |
 | `niri.kdl` | niri | `include optional=true "<state>/current/niri.kdl"` after `base.kdl` | niri watches the include (by canonical path); `niri msg action load-config-file` makes it immediate |
 | `kitty.conf` | kitty | `include ~/.local/state/loft/current/kitty.conf` | `SIGUSR1` |
@@ -256,7 +261,7 @@ text theme derives sidebar, player and cards from it), `text` / `subtext` pushed
 `border-inactive` (card fills, hairlines) = surface (or a step toward overlay when surface is
 too close to bg), `highlight` = bg → overlay, `header` = a dimmed subtext at ≥ 3:1,
 `notification` = accent2, `notification-error` = urgent. Light themes stay light
-(`render.spicetify_scheme`, `tests/test_spotify.py`).
+(`render/spotify.py` `spicetify_scheme`, `tests/test_spotify.py`).
 
 A pack replaces it with **`apps/spicetify.ini`**: one or more color.ini sections, the first
 being the scheme Spotify uses with the theme (keys it leaves out get Spicetify's defaults).
@@ -266,7 +271,7 @@ any of the text theme's own schemes (`loft spotify scheme NAME`).
 
 The templates live in [`templates/render/`](../templates/render) and use
 `${var}` placeholders (Python `string.Template`); the variables are computed in
-`cli/loft/render.py`. A file in the pack's `apps/` replaces the generated file
+the unit modules of `cli/loft/render/` (one per file; shared rules in `render/look.py`). A file in the pack's `apps/` replaces the generated file
 of the same name (`theme.json` and `manifest.json` are always generated).
 Extra `apps/` files (for consumers without a template yet) are copied as is.
 

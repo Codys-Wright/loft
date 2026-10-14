@@ -7,7 +7,7 @@
   resolve.py     layers → one resolved document per kind (+ sources, errors)
   schema.py      the JSON Schema subset that checks resolved data (schemas/)
   appearance.py  <state>/appearance.json: selection, pins, customizations, saves
-  compat.py      resolved facets → today's v1 bundle (until phase B's units)
+  (rendering is cli/loft/render/: one module per render unit)
 """
 
 from .model import KINDS, Catalog, FacetError  # noqa: F401

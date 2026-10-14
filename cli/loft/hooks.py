@@ -1,5 +1,10 @@
 """Reload hooks run by `loft theme apply` after `current` is re-pointed.
 
+A hook is named after the render unit whose files it reloads (`spotify`
+reloads unit `spotify`'s spicetify.ini); apply runs a hook only when that
+unit's digest changed (render/compose.py), so a wallpaper-only change
+doesn't signal terminals or reload niri.
+
 Every hook is best effort: a consumer that isn't running (or isn't
 installed) is skipped silently, since it reads `current` when it starts.
 """
@@ -12,10 +17,10 @@ import signal
 import subprocess
 from pathlib import Path
 
-ALL = ("shell", "niri", "kitty", "ghostty", "gtk", "spotify")
+ALL = ("shell", "niri", "wallpapers", "kitty", "ghostty", "gtk", "spotify")
 # `--dev` targets the nested session; terminals and GTK settings belong to
 # the host desktop, so leave them alone unless asked.
-DEV = ("shell", "niri")
+DEV = ("shell", "niri", "wallpapers")
 
 
 def _run(argv: list[str]) -> bool:
@@ -50,10 +55,24 @@ def _signal_procs(names: tuple[str, ...], sig: int) -> int:
     return sent
 
 
+def _ipc(ctx, *call: str) -> bool:
+    return _run(["quickshell", "ipc", "--any-display", "--path", str(ctx.shell_path), "call", *call])
+
+
 def shell(ctx) -> None:
     # Re-pointing `current` is invisible to Quickshell's FileView watcher
     # (it follows the old target), so ask the shell to re-resolve the path.
-    _run(["quickshell", "ipc", "--any-display", "--path", str(ctx.shell_path), "call", "theme", "reload"])
+    _ipc(ctx, "theme", "reload")
+
+
+def wallpapers(ctx) -> None:
+    # The wallpaper layer and pickers re-read the theme's wallpapers.
+    _ipc(ctx, "vibes", "refresh")
+
+
+def preview(ctx, composition: Path | None) -> None:
+    """Point the shell (only) at a composition, or back at `current` (§6.3)."""
+    _ipc(ctx, "theme", "preview", str(composition) if composition is not None else "")
 
 
 def niri(ctx) -> None:
