@@ -12,7 +12,7 @@ nix run github:Codys-Wright/studio-linux      # try it: opens as a nested niri w
 
 ```sh
 nix run .#dev                       # nested niri window running ./src, ./niri, ./themes — hot reload on save
-nix run .#dev -- --output DP-1      # inside KDE: fullscreen + borderless on that monitor
+nix run .#dev -- --output DP-1      # inside KDE: fullscreen on that monitor (default: the rightmost)
 nix run .#studio -- --dev theme list
 nix run .#studio -- --dev theme apply latte   # recolors the running session live (checkout templates/themes)
 nix run .#shot -- out.png           # screenshot the dev session
@@ -23,8 +23,9 @@ Mod+O overview, Mod+Shift+E quit.
 
 ## Designing live
 
-`nix run .#dev -- --output DP-1` runs the whole desktop from this checkout in a nested niri
-window (fullscreen on that monitor). Re-running it replaces the session.
+`nix run .#dev` runs the whole desktop from this checkout in a nested niri window — inside
+KDE it goes fullscreen and borderless on the rightmost monitor (`--output NAME` picks one,
+`--windowed` keeps a normal window). Re-running it replaces the running session.
 
 | You edit | What happens |
 |---|---|

@@ -141,12 +141,14 @@
             self'.packages.studio-niri
           ];
           text = ''
-            usage() { echo "usage: studio-dev [--output NAME] [CHECKOUT]" >&2; exit 2; }
+            usage() { echo "usage: studio-dev [--output NAME | --windowed] [CHECKOUT]" >&2; exit 2; }
             output=""
+            windowed=0
             root=""
             while [ $# -gt 0 ]; do
               case "$1" in
                 --output) [ $# -ge 2 ] || usage; output="$2"; shift 2 ;;
+                --windowed) windowed=1; shift ;;
                 -h|--help) usage ;;
                 *) root="$1"; shift ;;
               esac
@@ -243,8 +245,13 @@
             fi
 
             # Inside KDE: put the window fullscreen + borderless on one monitor,
-            # so the nested session is a real full-size output.
-            if [ -n "$output" ]; then
+            # so the nested session is a real full-size output. Default: the
+            # rightmost enabled monitor (--output picks one, --windowed opts out).
+            if [ -z "$output" ] && [ "$windowed" = 0 ] && command -v kscreen-doctor >/dev/null; then
+              output="$(kscreen-doctor -j 2>/dev/null | jq -r '[.outputs[] | select(.enabled)] | max_by(.pos.x) | .name // empty' || true)"
+            fi
+            if [ -n "$output" ] && [ "$windowed" = 0 ]; then
+              echo "studio-dev: fullscreen on $output"
               qdbus="$(command -v qdbus || command -v qdbus6 || true)"
               if [ -z "$qdbus" ]; then
                 echo "studio-dev: --output needs KDE's qdbus; ignoring" >&2
