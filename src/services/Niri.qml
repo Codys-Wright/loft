@@ -26,6 +26,9 @@ Singleton {
     readonly property var focusedWorkspace: workspaces.find(w => w.is_focused) ?? null
     property bool overviewOpen: false
 
+    // A screenshot was taken (niri's screenshot UI or actions); path may be "".
+    signal screenshotTaken(string path)
+
     function workspacesOn(output) {
         return workspaces.filter(w => w.output === output);
     }
@@ -128,6 +131,9 @@ Singleton {
             break;
         case "OverviewOpenedOrClosed":
             overviewOpen = e.is_open;
+            break;
+        case "ScreenshotCaptured":
+            screenshotTaken(e.path ?? "");
             break;
         }
     }

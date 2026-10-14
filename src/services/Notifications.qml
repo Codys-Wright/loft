@@ -20,6 +20,11 @@ Singleton {
     readonly property var current: queue.length > 0 ? queue[0] : null
     readonly property var history: server.trackedNotifications.values
 
+    function clearHistory() {
+        for (const n of history.slice())
+            n.dismiss();
+    }
+
     function next() {
         queue = queue.slice(1);
     }

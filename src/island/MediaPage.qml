@@ -1,13 +1,31 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.components
 import qs.services
 
-// Island media page: big art, title/artist/source, scrubber, transport.
+// Island media page (One UI-style, as javiiervm did it): the album art
+// fills the page behind a dark veil; controls take an accent color picked
+// from the art.
 Item {
     id: root
 
     property var player: null
+    readonly property string art: player?.trackArtUrl ?? ""
+
+    // Brightest reasonably saturated color of the art, else the theme accent.
+    readonly property color artAccent: {
+        const cs = quantizer.colors.filter(c => c.hslSaturation > 0.25 && c.hslLightness > 0.35);
+        cs.sort((a, b) => b.hslLightness - a.hslLightness);
+        return cs.length ? cs[0] : Theme.accent;
+    }
+
+    ColorQuantizer {
+        id: quantizer
+        source: root.art
+        depth: 3
+        rescaleSize: 64
+    }
 
     // MPRIS position isn't pushed; poll it while visible.
     Timer {
@@ -17,82 +35,109 @@ Item {
         onTriggered: root.player.positionChanged()
     }
 
-    Text {
-        anchors.centerIn: parent
-        visible: !root.player
-        text: "Nothing playing"
-        color: Theme.subtext
-        font.family: Theme.fontUi
-        font.pixelSize: 14
+    Image {
+        anchors.fill: parent
+        visible: root.art !== ""
+        source: root.art
+        fillMode: Image.PreserveAspectCrop
+        asynchronous: true
+        opacity: 0.55
     }
 
-    RowLayout {
+    Rectangle {
         anchors.fill: parent
-        anchors.bottomMargin: 8
-        visible: root.player !== null
-        spacing: 16
+        visible: root.art !== ""
+        color: "black"
+        opacity: 0.45
+    }
 
-        Rectangle {
-            Layout.preferredWidth: 120
-            Layout.preferredHeight: 120
-            Layout.alignment: Qt.AlignVCenter
-            radius: 18
-            clip: true
-            color: Theme.withAlpha(Theme.text, 0.12)
+    Row {
+        anchors.centerIn: parent
+        visible: !root.player
+        spacing: 10
 
-            Image {
-                anchors.fill: parent
-                source: root.player?.trackArtUrl ?? ""
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-            }
+        Icon {
+            text: "󰎆"
+            size: 18
+            color: Theme.subtext
         }
 
-        ColumnLayout {
+        Text {
+            text: "Nothing playing"
+            color: Theme.subtext
+            font.family: Theme.fontUi
+            font.pixelSize: 13
+        }
+    }
+
+    // Over the art the text is always light; without art it follows the theme.
+    readonly property color fg: art !== "" ? "white" : Theme.text
+    readonly property color fgDim: art !== "" ? Qt.rgba(1, 1, 1, 0.72) : Theme.subtext
+
+    ColumnLayout {
+        anchors {
+            fill: parent
+            margins: 20
+            bottomMargin: 26
+        }
+        visible: root.player !== null
+        spacing: 4
+
+        Text {
             Layout.fillWidth: true
-            Layout.alignment: Qt.AlignVCenter
-            spacing: 4
+            text: root.player?.trackTitle || root.player?.identity || ""
+            color: root.fg
+            font.family: Theme.fontUi
+            font.pixelSize: 17
+            font.weight: Font.Bold
+            elide: Text.ElideRight
+        }
+
+        Text {
+            Layout.fillWidth: true
+            text: [root.player?.trackArtist, root.player?.identity].filter(s => s).join("  ·  ")
+            color: root.fgDim
+            font.family: Theme.fontUi
+            font.pixelSize: 12
+            elide: Text.ElideRight
+        }
+
+        Item {
+            Layout.fillHeight: true
+        }
+
+        // Scrubber with elapsed / total.
+        RowLayout {
+            Layout.fillWidth: true
+            visible: (root.player?.lengthSupported ?? false) && root.player.length > 0
+            spacing: 10
+
+            readonly property real progress: visible ? root.player.position / root.player.length : 0
 
             Text {
-                Layout.fillWidth: true
-                text: root.player?.trackTitle || ""
-                color: Theme.text
+                text: FocusTimer.format(Math.floor(root.player?.position ?? 0))
+                color: root.fgDim
                 font.family: Theme.fontUi
-                font.pixelSize: 15
-                font.weight: Font.DemiBold
-                elide: Text.ElideRight
+                font.pixelSize: 10
+                font.features: { "tnum": 1 }
             }
 
-            Text {
-                Layout.fillWidth: true
-                text: [root.player?.trackArtist, root.player?.identity].filter(s => s).join("  ·  ")
-                color: Theme.subtext
-                font.family: Theme.fontUi
-                font.pixelSize: 12
-                elide: Text.ElideRight
-            }
-
-            // Scrubber
             Item {
                 Layout.fillWidth: true
-                Layout.topMargin: 10
-                Layout.preferredHeight: 18
-                visible: (root.player?.lengthSupported ?? false) && root.player.length > 0
-
-                readonly property real progress: visible ? root.player.position / root.player.length : 0
+                Layout.preferredHeight: 16
 
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width
                     height: 4
                     radius: 2
-                    color: Theme.withAlpha(Theme.text, 0.18)
+                    color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22)
 
                     Rectangle {
-                        width: parent.width * Math.max(0, Math.min(1, parent.parent.progress))
+                        width: parent.width * Math.max(0, Math.min(1, parent.parent.parent.progress))
                         height: parent.height
                         radius: 2
-                        color: Theme.text
+                        color: root.artAccent
                     }
                 }
 
@@ -104,30 +149,39 @@ Item {
                 }
             }
 
-            RowLayout {
-                Layout.alignment: Qt.AlignHCenter
-                spacing: 26
+            Text {
+                text: FocusTimer.format(Math.floor(root.player?.length ?? 0))
+                color: root.fgDim
+                font.family: Theme.fontUi
+                font.pixelSize: 10
+                font.features: { "tnum": 1 }
+            }
+        }
 
-                Repeater {
-                    model: [
-                        { icon: "󰒮", act: () => root.player.previous(), enabled: root.player?.canGoPrevious ?? false },
-                        { icon: root.player?.isPlaying ? "󰏤" : "󰐊", act: () => root.player.togglePlaying(), enabled: root.player?.canTogglePlaying ?? false },
-                        { icon: "󰒭", act: () => root.player.next(), enabled: root.player?.canGoNext ?? false }
-                    ]
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 30
 
-                    delegate: Icon {
-                        required property var modelData
-                        text: modelData.icon
-                        size: 24
-                        opacity: modelData.enabled ? 1 : 0.35
+            Repeater {
+                model: [
+                    { icon: "󰒮", act: () => root.player.previous(), enabled: root.player?.canGoPrevious ?? false },
+                    { icon: root.player?.isPlaying ? "󰏤" : "󰐊", act: () => root.player.togglePlaying(), enabled: root.player?.canTogglePlaying ?? false, big: true },
+                    { icon: "󰒭", act: () => root.player.next(), enabled: root.player?.canGoNext ?? false }
+                ]
 
-                        MouseArea {
-                            anchors.fill: parent
-                            anchors.margins: -8
-                            enabled: parent.modelData.enabled
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: parent.modelData.act()
-                        }
+                delegate: Icon {
+                    required property var modelData
+                    text: modelData.icon
+                    size: modelData.big ? 30 : 22
+                    color: modelData.big ? root.artAccent : root.fg
+                    opacity: modelData.enabled ? 1 : 0.35
+
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -8
+                        enabled: parent.modelData.enabled
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: parent.modelData.act()
                     }
                 }
             }

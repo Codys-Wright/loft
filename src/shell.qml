@@ -1,6 +1,7 @@
 //@ pragma UseQApplication
 import QtQuick
 import Quickshell
+import qs.services
 import qs.background
 import qs.bar
 import qs.dock
@@ -11,6 +12,9 @@ import qs.switcher
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 ShellRoot {
+    // Background services are lazy singletons; touch them so they run from
+    // startup (screen time, Bluetooth banners).
+    readonly property var services: [AppUsage, DeviceEvents]
     Variants {
         model: Quickshell.screens
         Wallpaper {}

@@ -11,6 +11,7 @@ Singleton {
     id: root
 
     readonly property alias dock: settings.dock
+    readonly property alias island: settings.island
 
     FileView {
         path: Quickshell.env("STUDIO_SETTINGS_FILE") ?? ""
@@ -25,6 +26,13 @@ Singleton {
                 property list<string> pinned: ["org.gnome.Nautilus", "firefox", "kitty", "com.mitchellh.ghostty", "obsidian"]
                 property real iconSize: 48
                 property real magnification: 1.3
+            }
+
+            property JsonObject island: JsonObject {
+                // Alert border when a temperature (°C) or load (0..1) exceeds these.
+                property real maxTemp: 95
+                property real maxLoad: 0.92
+                property int focusMinutes: 25
             }
         }
     }

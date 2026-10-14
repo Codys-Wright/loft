@@ -189,6 +189,29 @@ PanelWindow {
                         PowerProfiles.profile = next;
                     }
                 }
+
+                ToggleTile {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.tileHeight
+                    icon: "󰑋"
+                    title: "Screen Record"
+                    active: Recorder.active
+                    subtitle: active ? FocusTimer.format(Recorder.elapsed) : "Focused display"
+                    onClicked: {
+                        Panels.controlCenterOpen = false;
+                        Recorder.active ? Recorder.stop() : Recorder.start();
+                    }
+                }
+
+                ToggleTile {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.tileHeight
+                    icon: "󰔟"
+                    title: "Focus Timer"
+                    active: FocusTimer.active
+                    subtitle: active ? FocusTimer.format(FocusTimer.remaining) : `${Settings.island.focusMinutes} min`
+                    onClicked: FocusTimer.active ? FocusTimer.stop() : FocusTimer.start()
+                }
             }
 
             MediaCard {
