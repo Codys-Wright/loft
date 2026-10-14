@@ -88,12 +88,9 @@ Singleton {
         function back(): void {
             root.ccExpanded = "";
         }
-        // Spotlight's Do Not Disturb / Keep Awake commands.
+        // Spotlight's Do Not Disturb command.
         function toggleDnd(): void {
             root.doNotDisturb = !root.doNotDisturb;
-        }
-        function toggleCaffeine(): void {
-            root.caffeine = !root.caffeine;
         }
         function edit(): void {
             if (!root.controlCenterOpen)

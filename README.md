@@ -178,6 +178,7 @@ commands, your script commands, answers and the web. Prefixes narrow it; `?` lis
 | `lock`, `shut down`, `restart`, `log out`, `sleep`, `empty trash` | ask first: the query becomes "Shut Down?" with one row, Enter runs it, Esc cancels. Sleep warns on NVIDIA machines (they may not wake) |
 | `dnd`, `caffeine`, `turn off displays` | Do Not Disturb, Keep Awake, displays off |
 | `settings wifi`, `wallpaper settings`, `keybinds` | every Settings page and Control Center module |
+| `themes`, `quick panel`, `port manager`, `flake updates`, `cleaner`, `system monitor` | Loft's panels and Utilities |
 | `maximize`, `float`, `center`, `overview`, `close window` | a curated set of niri window actions (all ~130 are under `;` → Niri Actions) |
 | `5 km to mi`, `72f to c`, `1 GiB in MB`, `15% of 80`, `2^10` | the calculator: Enter copies the answer, Ctrl+Enter just the number |
 | `100 usd in eur`, `$20 to ¥` | currencies (rates: below) |

@@ -34,7 +34,7 @@ func builtins() []*command {
 		{id: "sleep", title: "Sleep", kind: "System", icon: "system-suspend", keywords: []string{"suspend", "standby"}, cmd: "systemctl suspend", confirm: true, danger: true, note: sleepNote},
 		{id: "emptytrash", title: "Empty Trash", kind: "System", icon: "user-trash-full", keywords: []string{"trash", "bin", "recycle"}, cmd: "gio trash --empty", confirm: true, danger: true, note: trashNote},
 		{id: "dnd", title: "Toggle Do Not Disturb", kind: "System", icon: "notifications-disabled", keywords: []string{"dnd", "do not disturb", "focus", "silence", "notifications"}, cmd: "{ipc} controlcenter toggleDnd"},
-		{id: "caffeine", title: "Toggle Keep Awake", kind: "System", icon: "caffeine", keywords: []string{"caffeine", "amphetamine", "keep awake", "inhibit idle", "no sleep"}, cmd: "{ipc} controlcenter toggleCaffeine"},
+		{id: "caffeine", title: "Toggle Keep Awake", kind: "System", icon: "caffeine", keywords: []string{"caffeine", "amphetamine", "keep awake", "inhibit idle", "no sleep"}, cmd: "{ipc} keepawake toggle"},
 		{id: "displaysoff", title: "Turn Off Displays", kind: "System", icon: "video-display", keywords: []string{"monitors off", "screen off", "blank"}, cmd: "niri msg action power-off-monitors", delay: 400},
 
 		// ── Loft ────────────────────────────────────────────────────────
@@ -54,6 +54,12 @@ func builtins() []*command {
 		{id: "clearnotifications", title: "Clear Notifications", kind: "Loft", icon: "edit-clear-all", keywords: []string{"dismiss notifications"}, cmd: "{ipc} notifications clear"},
 		{id: "nextoutput", title: "Next Audio Output", kind: "Loft", icon: "audio-speakers", keywords: []string{"switch speakers", "headphones", "sound output"}, cmd: "{ipc} audio nextOutput"},
 		{id: "mutemic", title: "Toggle Microphone Mute", kind: "Loft", icon: "microphone-sensitivity-muted", keywords: []string{"mute mic", "unmute"}, cmd: "{ipc} mic toggleMute"},
+		{id: "quickpanel", title: "Quick Panel", kind: "Loft", icon: "view-app-grid", keywords: []string{"palette", "tools"}, cmd: "{ipc} quickpanel toggle", delay: 250},
+		{id: "utilities", title: "Utilities", kind: "Loft", icon: "applications-utilities", keywords: []string{"tools"}, cmd: "{ipc} utilities open"},
+		{id: "ports", title: "Port Manager", kind: "Loft", icon: "network-server", keywords: []string{"ports", "listening", "kill port"}, cmd: "{ipc} utilities ports"},
+		{id: "updates", title: "Flake Updates", kind: "Loft", icon: "system-software-update", keywords: []string{"update", "nix flake update", "upgrades"}, cmd: "{ipc} utilities updates"},
+		{id: "cleaner", title: "Cleaner", kind: "Loft", icon: "edit-clear", keywords: []string{"disk space", "nix store", "garbage"}, cmd: "{ipc} utilities cleaner"},
+		{id: "mediatools", title: "Media Tools", kind: "Loft", icon: "applications-multimedia", keywords: []string{"convert video", "compress", "ffmpeg"}, cmd: "{ipc} utilities media"},
 		{id: "help", title: "Spotlight Help", kind: "Loft", icon: "help-about", keywords: []string{"?", "help", "prefixes", "tips"}, query: "?"},
 
 		// ── Windows (niri) ──────────────────────────────────────────────
