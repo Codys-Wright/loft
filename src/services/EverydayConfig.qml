@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Io
 
 // Settings of the everyday window and power modules — Keep Awake, Cleaning
-// Mode, Quit on close, Quit protection and Arrange — editable in Settings →
+// Mode, Quit on close, Quit protection, Arrange and Sleep — editable in Settings →
 // Everyday. Runtime overrides like Settings.qml, in their own file
 // (<state>/overrides/everyday.json) so modules don't share one adapter.
 Singleton {
@@ -17,6 +17,7 @@ Singleton {
     readonly property alias keepAwake: cfg.keepAwake
     readonly property alias cleaning: cfg.cleaning
     readonly property alias quit: cfg.quit
+    readonly property alias sleep: cfg.sleep
 
     // List helpers for the per-app lists (quit.onClose, quit.protect,
     // keepAwake.apps): JsonAdapter lists only notify on reassignment.
@@ -80,6 +81,12 @@ Singleton {
                 property bool protectAll: false
                 // How long to hold, in ms.
                 property int holdMs: 1000
+            }
+
+            // Read by the loft-sleep user service (crates/loft-sleep).
+            property JsonObject sleep: JsonObject {
+                // Bluetooth off before the system sleeps, back on after.
+                property bool bluetoothOff: false
             }
         }
     }

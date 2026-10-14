@@ -173,6 +173,18 @@
           '';
         };
 
+        sleepWatcher = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = ''
+            Run `loft-sleep watch`, a user service that switches Bluetooth off
+            before the system sleeps and back on after the wake — only while
+            Settings → Everyday → "Turn Bluetooth off during sleep" is on (off
+            by default). It listens for logind's PrepareForSleep on the system
+            bus and talks to BlueZ as the user; no root.
+          '';
+        };
+
         theme = lib.mkOption {
           type = lib.types.str;
           default = "default";
@@ -238,6 +250,16 @@
         };
 
         systemd.user.services.loft-launcher = service "Loft launcher (walker + elephant)" "${lib.getExe sp.loft-launcher} service";
+
+        # Bluetooth off during sleep (crates/loft-sleep); idle until the
+        # setting is switched on.
+        systemd.user.services.loft-sleep = lib.mkIf cfg.sleepWatcher (
+          lib.recursiveUpdate
+            (service "Loft sleep watcher (Bluetooth off during sleep)" "${lib.getExe sp.loft-sleep} watch")
+            {
+              Service.RestartSec = 5;
+            }
+        );
 
         # studio-linux (Loft's old name): move its state, data and cache dirs
         # before anything writes the new ones (nix/migrate.sh), and link the

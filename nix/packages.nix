@@ -10,6 +10,8 @@
 #                          runtime overrides → <state>/overrides/niri.kdl, keybinds
 #   loft-appmenu           global menu daemon (crates/loft-appmenu): AppMenu registrar
 #                          + DBusMenu / org.gtk.Menus reader for the bar
+#   loft-sleep             sleep watcher (crates/loft-sleep): Bluetooth off before
+#                          sleep, back on after (user service, programs.loft)
 #   loft-input             test driver (crates/loft-input): loft-input (virtual
 #                          mouse + keyboard) and loft-shot (screenshots), see
 #                          docs/TESTING.md
@@ -127,6 +129,7 @@
             self'.packages.loft
             self'.packages.loft-niri
             self'.packages.loft-appmenu
+            self'.packages.loft-sleep # Settings → Everyday: `loft-sleep status`
           ];
           text = ''
             if [ -z "''${LOFT_THEME_FILE:-}" ]; then
@@ -177,6 +180,7 @@
             self'.packages.loft
             self'.packages.loft-niri
             self'.packages.loft-appmenu
+            self'.packages.loft-sleep
             self'.packages.loft-input # loft-input / loft-shot inside the session
             pkgs.dbus # dbus-run-session: the private bus of isolated sessions
           ];
@@ -394,6 +398,31 @@
             "loft-appmenu"
           ];
           meta.mainProgram = "loft-appmenu";
+        };
+
+        # Bluetooth off during sleep (crates/loft-sleep): a user service
+        # (programs.loft) listening for logind's PrepareForSleep.
+        loft-sleep = pkgs.rustPlatform.buildRustPackage {
+          pname = "loft-sleep";
+          version = "0.1.0";
+          src = lib.fileset.toSource {
+            root = ../.;
+            fileset = lib.fileset.unions [
+              ../Cargo.toml
+              ../Cargo.lock
+              ../crates
+            ];
+          };
+          cargoLock.lockFile = ../Cargo.lock;
+          cargoBuildFlags = [
+            "-p"
+            "loft-sleep"
+          ];
+          cargoTestFlags = [
+            "-p"
+            "loft-sleep"
+          ];
+          meta.mainProgram = "loft-sleep";
         };
 
         # Test driver for agents (crates/loft-input): `loft-input` — a

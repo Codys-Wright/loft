@@ -4,7 +4,8 @@
 #   theme-unit      tests/test_*.py: renderer + manager against scratch dirs, the
 #                   cozytile:/qylock: importers against local fake upstream repos, and
 #                   vibes (pack collections, ranking, index links), and the Utilities
-#                   helpers (ports, flake updates, cleaner, media tools) — all offline
+#                   helpers (ports, flake updates, cleaner, media tools), and Apps to
+#                   leave alone → xremap (tests/test_keys.py) — all offline
 #   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte
 #   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`
@@ -12,6 +13,9 @@
 #   loft-niri-clippy  `cargo clippy --all-targets -D warnings`
 #   loft-appmenu    the global menu daemon builds and its tests pass
 #   loft-appmenu-clippy  the same clippy gate for it
+#   loft-sleep      the sleep watcher builds and its tests pass (fake BlueZ adapters +
+#                   sleep lock: off before sleep, back on after, only what was on)
+#   loft-sleep-clippy  the same clippy gate for it
 #   loft-input      the test driver builds and its tests pass (keymaps, combos,
 #                   script parsing, bind lookup, screenshot geometry)
 #   loft-input-clippy  the same clippy gate for it
@@ -113,6 +117,19 @@
           doCheck = false;
           buildPhase = ''
             cargo clippy --offline -p loft-appmenu --all-targets -- -D warnings
+          '';
+          installPhase = "touch $out";
+        });
+
+        loft-sleep = self'.packages.loft-sleep;
+
+        loft-sleep-clippy = self'.packages.loft-sleep.overrideAttrs (old: {
+          pname = "loft-sleep-clippy";
+          nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.clippy ];
+          dontCargoBuild = true;
+          doCheck = false;
+          buildPhase = ''
+            cargo clippy --offline -p loft-sleep --all-targets -- -D warnings
           '';
           installPhase = "touch $out";
         });
