@@ -201,5 +201,56 @@ class CliTest(Scratch):
         self.assertEqual(json.loads(out[0])["count"], 0)
 
 
+class CaptureTest(unittest.TestCase):
+    """The preview's capture probe, against a fake compositor socket."""
+
+    @staticmethod
+    def global_event(name: int, iface: str, version: int) -> bytes:
+        import struct
+
+        raw = iface.encode() + b"\0"
+        raw += b"\0" * (-len(raw) % 4)
+        body = struct.pack("<II", name, len(iface) + 1) + raw + struct.pack("<I", version)
+        return struct.pack("<II", 2, ((8 + len(body)) << 16) | 0) + body
+
+    def serve(self, globals_):
+        import socket
+        import struct
+        import threading
+
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wayland-test")
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        srv.bind(path)
+        srv.listen(1)
+
+        def run():
+            c, _ = srv.accept()
+            c.recv(24)  # get_registry + sync
+            data = b"".join(self.global_event(i + 1, n, v) for i, (n, v) in enumerate(globals_))
+            data += struct.pack("<III", 3, (12 << 16) | 0, 1)  # wl_callback.done
+            c.sendall(data)
+            c.close()
+            srv.close()
+
+        threading.Thread(target=run, daemon=True).start()
+        return path
+
+    def test_reads_the_registry(self):
+        path = self.serve([("wl_compositor", 6), ("zwlr_screencopy_manager_v1", 3), ("zwp_linux_dmabuf_v1", 5)])
+        g = dock.wayland_globals(path)
+        self.assertEqual(g, {"wl_compositor": 6, "zwlr_screencopy_manager_v1": 3, "zwp_linux_dmabuf_v1": 5})
+
+    def test_support(self):
+        gpu = dock.capture_support({"zwlr_screencopy_manager_v1": 3, "zwp_linux_dmabuf_v1": 5})
+        self.assertTrue(gpu["screencopy"])
+        self.assertFalse(gpu["toplevel"])
+        soft = dock.capture_support({"zwlr_screencopy_manager_v1": 3, "zwp_linux_dmabuf_v1": 3})
+        self.assertFalse(soft["screencopy"])
+        self.assertIn("v3", soft["reason"])
+        self.assertTrue(dock.capture_support({"hyprland_toplevel_export_manager_v1": 1})["toplevel"])
+        self.assertFalse(dock.capture_support({})["screencopy"])
+
+
 if __name__ == "__main__":
     unittest.main()

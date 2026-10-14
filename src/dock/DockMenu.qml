@@ -16,6 +16,8 @@ import qs.everyday
 //            Hide Others · Quit (Alt: Force Quit)
 //   folder   Sort by ▸ · Display as ▸ · View content as ▸ · Open · Remove
 //   item     a stack item: Open · Show in Files · Quick Actions ▸ (Media Tools)
+//   window   a card in the window preview: Focus · Move to Desktop ▸ /
+//            Display ▸ · Hide / Show · Close Window
 //   trash    Open · Empty Trash…
 //   dock     Magnification · Position ▸ · recent apps · Dock Settings…
 Singleton {
@@ -88,6 +90,29 @@ Singleton {
         if (parked.length > 0)
             MenuState.hidden = MenuState.hidden.filter(x => !parked.some(w => w.id === x.id));
         return parked.length > 0;
+    }
+
+    // Bring one hidden (parked) window back where it was, without focusing it.
+    function unhide(w) {
+        const h = MenuState.hidden.find(x => x.id === w.id);
+        const back = h && Niri.workspaceMap[h.workspace] ? h.workspace : Niri.focusedWorkspace?.id;
+        if (back !== undefined)
+            Niri.action("MoveWindowToWorkspace", { window_id: w.id, reference: { Id: back }, focus: false });
+        MenuState.hidden = MenuState.hidden.filter(x => x.id !== w.id);
+    }
+
+    function moveWindow(w, wsId) {
+        Niri.action("MoveWindowToWorkspace", { window_id: w.id, reference: { Id: wsId }, focus: false });
+        MenuState.hidden = MenuState.hidden.filter(x => x.id !== w.id);
+    }
+
+    function moveWindowToOutput(w, output) {
+        Niri.action("MoveWindowToMonitor", { id: w.id, output: output });
+        MenuState.hidden = MenuState.hidden.filter(x => x.id !== w.id);
+    }
+
+    function closeWindow(w) {
+        Niri.action("CloseWindow", { id: w.id });
     }
 
     function newWindow(appId) {
@@ -253,6 +278,40 @@ Singleton {
                 items.push(sep(`s-${o}`));
         }
         return items;
+    }
+
+    // ── One window (a card in the dock preview) ──────────────────────────
+    function openWindow(screen, x, y, edge, id) {
+        MenuState.openContext(screen, x, y, edge, () => root.windowItems(id));
+    }
+
+    function windowItems(id) {
+        const w = Niri.windowMap[id];
+        if (!w)
+            return [];
+        const parked = isParked(w);
+        const outputs = [...new Set(Niri.workspaces.map(x => x.output ?? ""))].filter(o => o !== "");
+        const here = Niri.workspaceMap[w.workspace_id]?.output ?? "";
+        const desktops = [];
+        for (const o of outputs) {
+            if (outputs.length > 1)
+                desktops.push(header(`h-${o}`, o));
+            for (const ws of Niri.workspacesOn(o))
+                if (!MenuState.isParking(ws))
+                    desktops.push(radio(`ws-${ws.id}`, MenuState.wsLabel(ws), ws.id === w.workspace_id, () => root.moveWindow(w, ws.id)));
+            if (outputs.length > 1 && o !== outputs[outputs.length - 1])
+                desktops.push(sep(`s-${o}`));
+        }
+        return [
+            header("h-title", shorten(w.title || Apps.name(w.app_id), 48)),
+            { key: "focus", label: parked ? "Show and Focus" : "Focus", enabled: true, run: () => root.focus(w) },
+            sep("s-move"),
+            { key: "move-ws", label: "Move to Desktop", enabled: desktops.length > 0, submenu: true, children: desktops },
+            { key: "move-out", label: "Move to Display", enabled: outputs.length > 1, submenu: outputs.length > 1, children: outputs.map(o => radio(`out-${o}`, o, !parked && o === here, () => root.moveWindowToOutput(w, o))) },
+            sep("s-hide"),
+            parked ? { key: "show", label: "Show", enabled: true, run: () => root.unhide(w) } : { key: "hide", label: "Hide", enabled: true, run: () => MenuState.hideWindows([w]) },
+            { key: "close", label: "Close Window", enabled: true, run: () => root.closeWindow(w) }
+        ];
     }
 
     // ── Folder stacks ────────────────────────────────────────────────────

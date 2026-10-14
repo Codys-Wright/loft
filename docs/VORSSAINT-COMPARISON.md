@@ -22,16 +22,16 @@ Legend: ✅ have · 🟡 partial · 🔨 in progress · ⬜ todo · ➖ not appl
 
 | | Count |
 |---|---|
-| ✅ Have | 39 |
+| ✅ Have | 40 |
 | 🧩 Handled by niri / fleet | 9 |
 | 🟡 Partial | 4 |
-| 🔨 In progress | 1 |
+| 🔨 In progress | 0 |
 | ⬜ Todo | 3 |
 | ➖ Not applicable on Linux/NixOS | 9 |
 
-Of the 56 rows that apply on Linux: 48 are covered (✅ + 🧩), 5 more are partial or being
-built, 3 are still todo — and Loft adds a whole desktop's worth of features vorssaint
-doesn't need (bottom of this file).
+Of the 56 rows that apply on Linux: 49 are covered (✅ + 🧩), 4 more are partial, 3 are
+still todo — and Loft adds a whole desktop's worth of features vorssaint doesn't need
+(bottom of this file).
 
 ## Sound
 | vorssaint | Loft | How |
@@ -56,7 +56,7 @@ doesn't need (bottom of this file).
 |---|---|---|
 | App switcher (live previews, search) | 🧩 | niri's recent-windows switcher: ⌘Tab / ⌥Tab with live window previews, ⌘` within the app |
 | Window layout (snapping, move between displays, restore) | ✅ | Arrange ▸ in the app menu and dock menu, ⌘⌃A palette: floating windows snap to halves / thirds / ⅔ / quarters / fill / center; tiled ones get column widths ⅓ ½ ⅔ full, heights, center, join/split columns; move to display |
-| Dock Preview (hover → windows, switch/close/move) | 🔨 | Dock agent: window list in the right-click menu (titles) |
+| Dock Preview (hover → windows, switch/close/move) | ✅ | Hover (or click) an app: Liquid Glass cards per window with title, desktop / display, hidden state; click focuses anywhere, × closes, ⋯ / right-click moves to a desktop or display, hides. Thumbnails only where niri allows (floating / fullscreen windows; niri 26.04 has no per-window capture), else the app icon |
 | Dock clicks (minimize / hide / cycle) | ✅ | Click focuses, again cycles the app's windows; Hide via a parking workspace (niri has no minimize) |
 | Maximize without a new Space | 🧩 | niri maximize-column / fullscreen |
 | Fixed Space order | ➖ | niri workspaces never reorder by use |
@@ -150,7 +150,7 @@ vorssaint relies on macOS for these; on Linux Loft builds them, in the Golden Ga
 | Themes | Runtime theme engine, 46 themes (cozytile, qylock), live recolor of shell / niri / GTK / terminals / launcher; Liquid Glass slider, Reduce Transparency; theme architecture with facets + variants 🔨 |
 | Wallpapers | Library sorted by topic / color / tone / theme; **per-display and per-workspace wallpapers**, auto-matched by tone and colors, subject-aware crops, wallpaper sets in theme packs |
 | Lock & login | Lock screen with qylock designs; matching SDDM login theme |
-| Dock | Liquid Glass dock; per-display docks with auto-hide rules, right-click menus, Downloads stack 🔨 |
+| Dock | Liquid Glass dock; per-display docks with auto-hide rules, right-click menus, window previews, Downloads stack 🔨 |
 | Multi-monitor | Main / fallback display logic, status area follows fullscreen |
 | Spotlight | DuckDuckGo !bangs; Raycast-style quicklinks and script commands; time zones in the calculator |
 | Spaces | Functional desktops across all monitors (Main, Music, Video, per-project) 🔨 (design) |

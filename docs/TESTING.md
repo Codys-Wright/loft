@@ -60,6 +60,11 @@ A named session is, by default:
     Down / Sleep / Empty Trash are only logged to `<state>/launcher-dryrun.log`, never run.
 - **silent**: no audio server, so dragging the volume slider can't change the real volume.
   `--share-audio` links the host's PipeWire in, but only do that when the test is about audio.
+- **no screen capture**: niri runs on a software renderer here, so it offers dmabuf only at v3,
+  and Quickshell's ScreencopyView would end the shell with a protocol error (it always asks for
+  v4 feedback). The dock preview checks first (`loft dock capture`) and shows icons. To test its
+  thumbnails, start the shell with `LOFT_DEV_PREVIEW_STILL=<a loft-shot PNG of the session>`
+  in its environment: that still stands in for the display capture.
 
 Run it in the background and wait for `session.env`:
 

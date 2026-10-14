@@ -55,7 +55,7 @@ PanelWindow {
         return !!ws && Niri.windows.some(w => w.workspace_id === ws.id);
     }
     readonly property bool hideable: fullscreen || prefs.autoHide === "always" || (prefs.autoHide === "whenWindows" && occupied)
-    readonly property bool busy: winHover.hovered || menuOpen || stackOpenHere || dragging
+    readonly property bool busy: winHover.hovered || menuOpen || stackOpenHere || dragging || previewHere
     property bool dragging: false
     property bool summoned: false
     readonly property bool revealed: !hideable || summoned
@@ -322,7 +322,10 @@ PanelWindow {
                             edge: root.edge
                             iconSize: root.iconSize
                             magnify: slot.magnify
+                            previewOnClick: Previews.enabled && Previews.mode === "click"
                             onMenuRequested: alt => root.menuFor(slot, alt)
+                            onClicked: root.previewClicked(slot)
+                            onPreviewRequested: root.togglePreview(slot)
                         }
                     }
                     Component {
@@ -382,7 +385,7 @@ PanelWindow {
 
     // ── Name tag, menus, stacks ──────────────────────────────────────────
     property var hovered: null
-    readonly property string hoveredLabel: hovered && !menuOpen && !stackOpenHere ? (hovered.item?.label ?? "") : ""
+    readonly property string hoveredLabel: hovered && !menuOpen && !stackOpenHere && !previewHere ? (hovered.item?.label ?? "") : ""
 
     // A point of `item` in screen coordinates (the window hugs the bottom
     // of the screen, and its left or right edge).
@@ -412,6 +415,7 @@ PanelWindow {
 
     function menuFor(slot, alt) {
         DockData.openStack = null;
+        Previews.close();
         const p = tileAnchor(slot);
         const t = slot.tile;
         if (t.kind === "app")
@@ -428,8 +432,119 @@ PanelWindow {
             DockData.openStack = null;
             return;
         }
+        Previews.close();
         const p = tileAnchor(slot);
         DockData.openStack = { screen: modelData.name, index: index, x: p.x, y: p.y, edge: edge };
+    }
+
+    // ── Window preview (Previews, PreviewPopup) ──────────────────────────
+    // Hover mode: resting on a running app's icon for Previews.delay opens
+    // it; moving to another app's icon while it's open switches at once.
+    // Click mode: clicking an app with several windows toggles it. Either
+    // way it stays while the pointer is on the icon or the popover, and
+    // closes shortly after it leaves both. A click on the icon closes it
+    // and mutes that icon until the pointer moves off.
+    readonly property bool previewHere: Previews.current !== null && Previews.current.screen === modelData.name
+    property var previewMuted: null
+
+    function previewable(slot) {
+        // (A slot can be gone by now: the tiles changed.)
+        const t = slot?.tile;
+        return !!t && t.kind === "app" && DockData.windowsOf(t.id).length > 0;
+    }
+
+    function openPreview(slot) {
+        const p = tileAnchor(slot);
+        previewClose.stop();
+        Previews.current = { screen: modelData.name, appId: slot.tile.id, x: p.x, y: p.y, edge: edge };
+    }
+
+    function togglePreview(slot) {
+        previewOpen.stop();
+        if (previewHere && Previews.current.appId === slot.tile.id) {
+            Previews.close();
+            return;
+        }
+        // Snapshot first; the popover follows a moment later.
+        thumbs.capture(slot.tile.id);
+        previewOpen.slot = slot;
+        previewOpen.interval = 90;
+        previewOpen.restart();
+    }
+
+    function previewClicked(slot) {
+        if (!Previews.enabled || Previews.mode !== "hover")
+            return;
+        previewOpen.stop();
+        previewMuted = slot;
+        Previews.close();
+    }
+
+    onHoveredChanged: {
+        previewOpen.stop();
+        if (hovered !== previewMuted)
+            previewMuted = null;
+        const s = hovered;
+        if (!Previews.enabled || menuOpen || stackOpenHere)
+            return;
+        if (previewable(s) && s !== previewMuted) {
+            if (previewHere && Previews.current.appId === s.tile.id) {
+                previewClose.stop();
+                return;
+            }
+            if (Previews.mode === "hover") {
+                thumbs.capture(s.tile.id);
+                if (previewHere) {
+                    openPreview(s);
+                    return;
+                }
+                previewOpen.slot = s;
+                previewOpen.interval = Math.max(90, Previews.delay);
+                previewOpen.restart();
+                return;
+            }
+        }
+        if (previewHere)
+            previewClose.restart();
+    }
+
+    Connections {
+        target: Previews
+        function onHoveredChanged() {
+            if (Previews.hovered)
+                previewClose.stop();
+            else if (root.previewHere)
+                previewClose.restart();
+        }
+    }
+
+    Timer {
+        id: previewOpen
+        property var slot: null
+        onTriggered: {
+            if (slot && root.previewable(slot) && !root.menuOpen && !root.stackOpenHere)
+                root.openPreview(slot);
+        }
+    }
+    Timer {
+        id: previewClose
+        interval: 300
+        onTriggered: {
+            if (!root.previewHere || Previews.hovered)
+                return;
+            const t = root.hovered?.tile;
+            if (t && t.kind === "app" && t.id === Previews.current.appId)
+                return;
+            Previews.close();
+        }
+    }
+
+    WindowThumbs {
+        id: thumbs
+    }
+
+    PreviewPopup {
+        dock: root
     }
 
     GlassSurface {
