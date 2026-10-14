@@ -1,0 +1,10 @@
+// Per-workspace wallpapers (src/services/WorkspaceWallpapers.qml): the shell's
+// `loft:wallpaper@<ref>` background surfaces render behind workspace <ref> only
+// (a name, or a 1-based index on the output). Needs a niri with the
+// `place-within-workspace` layer rule (nix/niri/workspace-layers.patch, package
+// niri-loft): a stock niri rejects this file, so sessions include it only when
+// they run that niri, and then export LOFT_NIRI_WORKSPACE_LAYERS=1 to the shell.
+layer-rule {
+    match namespace="^loft:wallpaper@(.+)$"
+    place-within-workspace "$1"
+}

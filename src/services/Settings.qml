@@ -157,6 +157,10 @@ Singleton {
                 property real rotate: 0
                 // A different wallpaper of the collection per niri workspace.
                 property bool perWorkspace: false
+                // On a niri with per-workspace layers (niri-loft): each
+                // workspace's wallpaper slides with it and shows behind it in
+                // the overview (WorkspaceWallpapers). Off: swap on switch.
+                property bool moveWithWorkspaces: true
             }
 
             property var features: ({})

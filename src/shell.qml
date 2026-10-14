@@ -33,6 +33,13 @@ ShellRoot {
         Wallpaper {}
     }
 
+    // Per-workspace wallpaper surfaces on a niri with place-within-workspace:
+    // only the workspaces that can be on screen (WorkspaceWallpapers).
+    Variants {
+        model: WorkspaceWallpapers.keys
+        WorkspaceWallpaper {}
+    }
+
     Variants {
         model: Quickshell.screens
         Bar {}

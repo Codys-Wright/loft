@@ -93,6 +93,16 @@ ColumnLayout {
         }
 
         SettingsRow {
+            label: "Wallpapers move with workspaces"
+            hint: WorkspaceWallpapers.supported ? "Each workspace's wallpaper slides with it when you switch, and shows behind it in the overview" : "Needs Loft's niri (niri-loft, per-workspace layers); this niri swaps the wallpaper when you switch"
+            SettingsSwitch {
+                enabled: WorkspaceWallpapers.supported
+                checked: WorkspaceWallpapers.supported && Settings.wallpaper.moveWithWorkspaces
+                onToggled: on => Settings.wallpaper.moveWithWorkspaces = on
+            }
+        }
+
+        SettingsRow {
             label: "Folder"
             hint: Settings.wallpaper.directory + " · its images are ranked under Matching vibes"
             SettingsButton {
