@@ -8,6 +8,15 @@
 
 prefer-no-csd
 
+// Toolkits prefer Wayland (falling back to X11 via xwayland-satellite).
+// Explicit because a parent session can leak e.g. GDK_BACKEND=x11, which
+// pushes GTK clients onto XWayland — and layer-shell (the launcher) with it.
+environment {
+    GDK_BACKEND "wayland,x11"
+    QT_QPA_PLATFORM "wayland;xcb"
+    ELECTRON_OZONE_PLATFORM_HINT "auto"
+}
+
 hotkey-overlay {
     skip-at-startup
 }

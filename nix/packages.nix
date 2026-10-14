@@ -19,6 +19,9 @@
         foot # the demo session's terminal (Mod+Return); consumers bind their own
         gammastep # Night Light
         wf-recorder # Screen recording
+        walker # Spotlight launcher (frontend)
+        elephant # launcher data providers
+        jq
         coreutils
       ];
 
@@ -40,6 +43,7 @@
         include "base.kdl"
         include "shell-binds.kdl"
         spawn-at-startup "${lib.getExe self'.packages.studio-shell}"
+        spawn-at-startup "${lib.getExe self'.packages.studio-launcher}" "service"
         EOF
       '';
     in
@@ -62,7 +66,7 @@
 
         studio-session = pkgs.writeShellApplication {
           name = "studio-session";
-          runtimeInputs = runtimeDeps;
+          runtimeInputs = runtimeDeps ++ [ self'.packages.studio-launcher ];
           text = ''
             exec niri --config ${sessionConfig}/config.kdl "$@"
           '';
@@ -70,7 +74,7 @@
 
         studio-dev = pkgs.writeShellApplication {
           name = "studio-dev";
-          runtimeInputs = runtimeDeps;
+          runtimeInputs = runtimeDeps ++ [ self'.packages.studio-launcher ];
           text = ''
             usage() { echo "usage: studio-dev [--output NAME] [CHECKOUT]" >&2; exit 2; }
             output=""
@@ -105,6 +109,7 @@
             include "$root/niri/base.kdl"
             include "$dir/shell-binds.kdl"
             include optional=true "$root/niri/dev-local.kdl"
+            spawn-at-startup "env" "STUDIO_STATE_DIR=$dir" "STUDIO_LAUNCHER_DIR=$root/launcher" "studio-launcher" "service"
             spawn-at-startup "env" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "quickshell" "--path" "$root/src"
             EOF
 
@@ -147,6 +152,21 @@
 
             wait "$niri_pid"
           '';
+        };
+
+        studio-launcher = pkgs.writeShellApplication {
+          name = "studio-launcher";
+          runtimeInputs = with pkgs; [
+            walker
+            elephant
+            jq
+            coreutils
+          ];
+          text =
+            builtins.replaceStrings
+              [ "@LAUNCHER@" "@LAYERSHELL@" ]
+              [ "${../launcher}" "${pkgs.gtk4-layer-shell}/lib/libgtk4-layer-shell.so" ]
+              (builtins.readFile ../launcher/studio-launcher.sh);
         };
 
         studio = pkgs.writeShellApplication {

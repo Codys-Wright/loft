@@ -1,0 +1,45 @@
+# studio-linux walker config (merged over walker's defaults).
+theme = "studio"
+force_keyboard_focus = true
+close_when_open = true
+click_to_close = true
+selection_wrap = true
+# niri blurs behind the sheet (ext-background-effect-v1).
+ext_background_effect_blur = true
+blur_corner_radius = 26
+
+[placeholders]
+"default" = { input = "Spotlight Search", list = "No Results" }
+
+[providers]
+default = ["desktopapplications", "calc", "windows", "websearch", "niriactions"]
+empty = ["desktopapplications"]
+max_results = 40
+
+[[providers.prefixes]]
+prefix = ";"
+provider = "providerlist"
+
+[[providers.prefixes]]
+prefix = ">"
+provider = "runner"
+
+[[providers.prefixes]]
+prefix = "/"
+provider = "files"
+
+[[providers.prefixes]]
+prefix = "."
+provider = "symbols"
+
+[[providers.prefixes]]
+prefix = ":"
+provider = "clipboard"
+
+[[providers.prefixes]]
+prefix = "="
+provider = "calc"
+
+[[providers.prefixes]]
+prefix = "@"
+provider = "websearch"

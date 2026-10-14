@@ -1,6 +1,7 @@
 // Shell keybinds — generated from shell-binds.kdl.in (IPC command substituted).
 // Included by studio-session / studio-dev after base.kdl.
 binds {
+    Mod+Space hotkey-overlay-title="Spotlight" { spawn "studio-launcher" "open"; }
     Mod+Tab hotkey-overlay-title="Switch apps" { spawn @IPC@ "switcher" "next"; }
     Mod+Shift+Tab { spawn @IPC@ "switcher" "prev"; }
     Mod+A hotkey-overlay-title="Control Center" { spawn @IPC@ "controlcenter" "toggle"; }

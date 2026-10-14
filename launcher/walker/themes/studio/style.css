@@ -1,0 +1,168 @@
+/* studio — Spotlight-style walker theme.
+ *
+ * A Liquid Glass sheet in the upper third of the screen (niri blurs behind it
+ * via ext-background-effect; see config.toml). Colors come from colors.css,
+ * a symlink to the active studio theme's rendered walker.css, so applying a
+ * theme recolors the launcher on its next open (walker re-reads CSS). */
+@import "colors.css";
+
+* {
+  all: unset;
+  font-family: "Inter", "Adwaita Sans", sans-serif;
+}
+
+.box-wrapper {
+  background: @studio_glass;
+  border: 1px solid @studio_glass_border;
+  border-radius: 26px;
+  padding: 12px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.35);
+}
+
+.search-container {
+  padding: 6px 10px 10px 10px;
+  border-bottom: 1px solid @studio_glass_border;
+}
+
+.input {
+  font-size: 24px;
+  font-weight: 300;
+  color: @studio_text;
+  caret-color: @studio_accent;
+  padding: 6px 4px;
+}
+
+.input placeholder {
+  color: @studio_subtext;
+}
+
+.input selection {
+  background: @studio_selection;
+}
+
+.content-container {
+  padding-top: 8px;
+}
+
+.list,
+.placeholder,
+.elephant-hint,
+.preview-box {
+  color: @studio_text;
+}
+
+.placeholder,
+.elephant-hint {
+  color: @studio_subtext;
+  padding: 20px;
+}
+
+.item-box {
+  border-radius: 14px;
+  padding: 8px 12px;
+}
+
+child:selected .item-box,
+row:selected .item-box {
+  background: @studio_accent;
+  color: @studio_accent_text;
+}
+
+child:selected .item-subtext,
+row:selected .item-subtext {
+  color: @studio_accent_text;
+  opacity: 0.8;
+}
+
+.item-text {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.item-subtext {
+  font-size: 12px;
+  color: @studio_subtext;
+}
+
+.item-image {
+  margin-right: 10px;
+}
+
+.large-icons {
+  -gtk-icon-size: 34px;
+}
+
+.normal-icons {
+  -gtk-icon-size: 18px;
+}
+
+.item-image-text {
+  font-size: 28px;
+}
+
+.item-quick-activation {
+  background: @studio_selection;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.calc .item-text {
+  font-size: 26px;
+  font-weight: 300;
+}
+
+.symbols .item-image {
+  font-size: 24px;
+}
+
+.preview {
+  border: 1px solid @studio_glass_border;
+  border-radius: 14px;
+  color: @studio_text;
+  padding: 8px;
+}
+
+.keybinds {
+  padding-top: 10px;
+  border-top: 1px solid @studio_glass_border;
+  font-size: 11px;
+  color: @studio_subtext;
+}
+
+.keybind-button {
+  opacity: 0.6;
+}
+
+.keybind-button:hover {
+  opacity: 0.9;
+}
+
+.keybind-bind {
+  text-transform: lowercase;
+  opacity: 0.5;
+}
+
+.keybind-label {
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid @studio_glass_border;
+}
+
+.error {
+  padding: 10px;
+  border-radius: 12px;
+  background: @studio_urgent;
+  color: @studio_accent_text;
+}
+
+scrollbar {
+  opacity: 0;
+}
+
+popover {
+  background: @studio_glass;
+  border: 1px solid @studio_glass_border;
+  border-radius: 16px;
+  padding: 8px;
+}
