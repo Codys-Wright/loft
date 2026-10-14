@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/pack-2.json",
+  "title": "Loft pack (format 2)",
+  "description": "pack.json: identity, license, upstream. Facets live in facets/<kind>/*.json, themes in themes/*.json.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "format": {
+      "const": 2
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "name": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "license": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "upstream": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "id"
+  ]
+}

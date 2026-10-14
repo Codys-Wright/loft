@@ -1,5 +1,12 @@
 # Theme pack format
 
+> This is the **v1** pack format. The facet model in
+> [THEME-ARCHITECTURE.md](THEME-ARCHITECTURE.md) (facets, themes, variants) is
+> replacing it. v1 packs keep working unchanged: they load through the v1
+> adapter, and `loft theme apply` / `render` resolve every name through the
+> facet model. The built-ins `tokyonight` and `latte` are now aliases of the
+> `loft` theme (`loft@dark`, `loft@light`), which renders byte-identically.
+
 A **theme pack** is a directory. The machine-readable spec is
 [`themes/schema.json`](../themes/schema.json) (JSON Schema 2020-12;
 `loft theme validate <pack>` checks against it).
@@ -219,8 +226,9 @@ loft wallpaper auto on|off|default
 
 ## Rendered bundle
 
-`loft theme render <pack> <outdir>` (and `apply`, into
-`$LOFT_STATE_DIR/rendered/<name>/<hash>/`) writes:
+`loft theme render <theme|pack> <outdir>` (and `apply`, into
+`$LOFT_STATE_DIR/rendered/<name>/<hash>/`, where `<name>` is the v1 name: the
+pack's, or the alias of a facet-model theme) writes:
 
 | File | Consumer | How it is used | Live reload on `apply` |
 |---|---|---|---|

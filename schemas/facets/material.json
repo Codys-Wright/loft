@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/facets/material.json",
+  "title": "Loft material facet data (resolved)",
+  "description": "The `data` of a resolved facet: after fill, polar values and @color references (docs/THEME-ARCHITECTURE.md \u00a72, \u00a73.4). Facet documents may leave keys out and use {dark, light} / @refs.",
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "colorAlpha": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+    }
+  },
+  "type": "object",
+  "properties": {
+    "blur": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "xray": {
+          "type": "boolean"
+        },
+        "noise": {
+          "type": "number",
+          "minimum": 0
+        },
+        "saturation": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "glass": {
+      "type": "object",
+      "properties": {
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "tint": {
+          "$ref": "#/$defs/color"
+        },
+        "border": {
+          "$ref": "#/$defs/color"
+        },
+        "borderOpacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "edgeDarken": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "specular": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "terminals": {
+      "type": "object",
+      "properties": {
+        "opacity": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "blur": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "menuBar": {
+      "type": "object",
+      "properties": {
+        "background": {
+          "type": "boolean"
+        },
+        "adaptiveText": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

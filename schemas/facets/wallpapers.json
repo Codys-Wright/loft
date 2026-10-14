@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/facets/wallpapers.json",
+  "title": "Loft wallpapers facet data (resolved)",
+  "description": "The `data` of a resolved facet: after fill, polar values and @color references (docs/THEME-ARCHITECTURE.md \u00a72, \u00a73.4). Facet documents may leave keys out and use {dark, light} / @refs.",
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "colorAlpha": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+    }
+  },
+  "type": "object",
+  "properties": {
+    "collection": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "video": {
+                "type": "string",
+                "minLength": 1
+              },
+              "preview": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "enum": [
+                  "image",
+                  "video"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "path"
+            ]
+          }
+        ]
+      }
+    },
+    "dirs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "default": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "behavior": {
+      "type": "object",
+      "properties": {
+        "rotate": {
+          "type": "number",
+          "minimum": 0
+        },
+        "perWorkspace": {
+          "type": "boolean"
+        },
+        "auto": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "sets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "displays": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "workspaces": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ]
+      }
+    },
+    "related": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^wallpapers:"
+      }
+    },
+    "arrangement": {
+      "type": "object",
+      "properties": {
+        "wallpaper": {
+          "type": "string"
+        },
+        "displays": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "workspaces": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "sameAll": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        },
+        "auto": {
+          "type": "boolean"
+        },
+        "autoSeed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "activeSet": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "wallpapers",
+  "id": "default",
+  "name": "None",
+  "description": "Product default: every key a facet leaves out takes this value (fill)",
+  "data": {
+    "collection": [],
+    "dirs": [],
+    "default": null,
+    "behavior": {
+      "rotate": 0,
+      "perWorkspace": false,
+      "auto": null
+    },
+    "sets": [],
+    "related": [],
+    "arrangement": {}
+  }
+}

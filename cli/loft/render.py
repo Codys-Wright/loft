@@ -133,10 +133,20 @@ def render(pack: Pack, outdir: Path, template_dir: Path, curated: dict | None = 
 
     `curated`: the pack's vibe links already resolved against the installed
     packs (vibes.resolve), listed in the manifest after the pack's own."""
-    outdir = Path(outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
     norm, assets = normalize(pack)
-    vars_ = variables(norm, fonts_set="fonts" in pack.theme)
+    return write_bundle(
+        Path(outdir), norm, assets, normalized_manifest(pack, curated), "fonts" in pack.theme, template_dir, pack.path / "apps"
+    )
+
+
+def write_bundle(
+    outdir: Path, norm: dict, assets: list[tuple[Path, str]], manifest: dict, fonts_set: bool, template_dir: Path, apps: Path | None
+) -> list[str]:
+    """The rendered bundle: theme.json, manifest.json, every template, the
+    copied assets and the pack's apps/ overrides (shared by v1 packs and
+    resolved facets, facets/compat.py)."""
+    outdir.mkdir(parents=True, exist_ok=True)
+    vars_ = variables(norm, fonts_set=fonts_set)
     written = []
 
     def write(name: str, text: str) -> None:
@@ -144,7 +154,7 @@ def render(pack: Pack, outdir: Path, template_dir: Path, curated: dict | None = 
         written.append(name)
 
     write("theme.json", json.dumps(norm, indent=2) + "\n")
-    write("manifest.json", json.dumps(normalized_manifest(pack, curated), indent=2) + "\n")
+    write("manifest.json", json.dumps(manifest, indent=2) + "\n")
     for tpl in sorted(Path(template_dir).iterdir()):
         if tpl.is_file():
             write(tpl.name, Template(tpl.read_text(encoding="utf-8")).substitute(vars_))
@@ -153,8 +163,7 @@ def render(pack: Pack, outdir: Path, template_dir: Path, curated: dict | None = 
         shutil.copyfile(src, outdir / dest)
         written.append(dest)
 
-    apps = pack.path / "apps"
-    if apps.is_dir():
+    if apps is not None and apps.is_dir():
         for p in sorted(apps.rglob("*")):
             rel = p.relative_to(apps)
             # theme.json is the shell's contract and is always generated.

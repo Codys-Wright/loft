@@ -1,0 +1,9 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "motion",
+  "id": "calm",
+  "name": "Calm",
+  "data": {
+    "speed": 0.8
+  }
+}

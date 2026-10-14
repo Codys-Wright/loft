@@ -427,7 +427,14 @@ def normalize(pack: Pack) -> tuple[dict, list[tuple[Path, str]]]:
     This is what the shell reads (`current/theme.json`) and what every
     template renders from, so defaults live in exactly one place.
     """
-    t = pack.theme
+    return normalize_theme(pack.theme, pack.name, pack.path, pack.default_wallpaper())
+
+
+def normalize_theme(t: dict, name: str, root: Path | None, default: dict | None) -> tuple[dict, list[tuple[Path, str]]]:
+    """normalize() for a v1 theme.json dict: `default` is the default
+    wallpaper entry ({path, kind}); it is copied into the bundle when it
+    lives under `root` (the pack). The facet renderer (facets/compat.py)
+    builds `t` from resolved facets and comes through here too."""
     pal_in = t["palette"]
     polarity = t.get("polarity", "dark")
     dark = polarity != "light"
@@ -465,9 +472,8 @@ def normalize(pack: Pack) -> tuple[dict, list[tuple[Path, str]]]:
         color.mix(pal["bg"], pal["accent2"], 0.6),
     ]
     # The default wallpaper: `wallpaper.image`, else the collection's first still.
-    default = pack.default_wallpaper()
     image = str(default["path"]) if default else ""
-    if default and pack.path in default["path"].parents:
+    if default and root is not None and root in default["path"].parents:
         # Copied next to theme.json so a rendered bundle is self-contained;
         # relative paths resolve against the rendered theme.json's directory.
         dest = "wallpaper" + default["path"].suffix.lower()
@@ -498,7 +504,7 @@ def normalize(pack: Pack) -> tuple[dict, list[tuple[Path, str]]]:
     }
 
     norm = {
-        "name": pack.name,
+        "name": name,
         "polarity": polarity,
         "palette": pal,
         "ansi": ansi,
@@ -583,3 +589,110 @@ def normalized_manifest(pack: Pack, curated: dict | None = None) -> dict:
     if (pack.path / "greeter").is_dir():
         out["greeter"] = {"path": str(pack.path / "greeter")}
     return out
+
+
+# ── v1 adapter (docs/THEME-ARCHITECTURE.md §5.1) ────────────────────────────
+
+
+def v1_documents(pack: Pack) -> tuple[dict, list[dict]]:
+    """A v1 pack as facet-model documents: a theme named after the pack and
+    the facets it implies — colors, material, shape (always), typography (when
+    the pack declares fonts), wallpapers (when it has images or sets) and one
+    lock per design. Only keys the pack sets are written, so `fill` supplies
+    the same defaults normalize() does. Paths are absolute.
+
+    The theme also carries the manifest's identity (author, version, license,
+    source, description, upstream) and, under `v1`, what only a v1 bundle
+    has (manifest `vibes`, the `greeter/` dir, the pack path)."""
+    t, m, pid = pack.theme, pack.manifest or {}, pack.name
+
+    def pick(src, keys: dict) -> dict:
+        src = src if isinstance(src, dict) else {}
+        return {new: src[old] for old, new in keys.items() if old in src}
+
+    def facet(kind: str, data: dict, fid: str = pid, **meta) -> dict:
+        return {"kind": kind, "id": fid, "name": meta.pop("name", pid), "data": data, **meta}
+
+    g = t.get("glass") if isinstance(t.get("glass"), dict) else {}
+    facets: dict[str, str] = {}
+    docs: list[dict] = []
+
+    def add(doc: dict) -> None:
+        docs.append(doc)
+        facets.setdefault(doc["kind"], f"{doc['kind']}:{pid}/{doc['id']}")
+
+    w = t.get("wallpaper") if isinstance(t.get("wallpaper"), dict) else {}
+    colors = {"polarity": t.get("polarity", "dark"), "palette": dict(t["palette"]), "ansi": t.get("ansi")}
+    colors["gradient"] = list(w["gradient"]) if isinstance(w.get("gradient"), list) and w["gradient"] else None
+    add(facet("colors", colors, **({"source": m["source"]} if m.get("source") else {}), **({"license": m["license"]} if m.get("license") else {})))
+
+    material = {
+        "blur": pick(g, {"blur": "enabled", "xray": "xray", "noise": "noise", "saturation": "saturation"}),
+        "glass": pick(g, {k: k for k in ("tint", "opacity", "border", "borderOpacity", "edgeDarken", "specular")}),
+        "terminals": pick(g, {"terminalOpacity": "opacity"}),
+        "menuBar": pick(t.get("bar"), {"background": "background", "adaptiveText": "adaptiveText"}),
+    }
+    add(facet("material", {k: v for k, v in material.items() if v}))
+
+    sh = t.get("shape") if isinstance(t.get("shape"), dict) else {}
+    radius = pick(sh, {"panelRadius": "panel", "controlRadius": "control"})
+    legacy = t.get("radii", {}).get("window") if isinstance(t.get("radii"), dict) else None
+    if "windowRadius" in sh or legacy is not None:
+        radius["window"] = sh.get("windowRadius", legacy)
+    if "radius" in g:
+        radius["surface"] = g["radius"]
+    shape: dict = {"radius": radius} if radius else {}
+    if "shadow" in g:
+        shape["shadow"] = {"color": g["shadow"]}
+    add(facet("shape", shape))
+
+    if "fonts" in t:
+        f = t["fonts"] if isinstance(t["fonts"], dict) else {}
+        size = {"size": f["size"]} if "size" in f else {}
+        add(facet("typography", {
+            "ui": {**({"family": f["ui"]} if "ui" in f else {}), **size},
+            "mono": {**({"family": f["mono"]} if "mono" in f else {}), **size},
+            "applyTo": {"terminals": True},
+        }))  # fmt: skip
+
+    entries = pack.wallpaper_entries()
+    sets = pack.wallpaper_sets()
+    if entries or sets:
+        default = pack.default_wallpaper()
+        coll = []
+        for e in entries:
+            item = {"path": str(e["path"]), "kind": e["kind"]}
+            item.update({k: str(e[k]) for k in ("video", "preview") if k in e})
+            coll.append(item)
+        add(facet("wallpapers", {
+            "collection": coll,
+            "default": str(default["path"]) if default else None,
+            "sets": [{"name": s["name"], "displays": {r: str(p) for r, p in s["displays"].items()},
+                      "workspaces": {k: str(p) for k, p in s["workspaces"].items()}} for s in sets],
+        }))  # fmt: skip
+
+    for e in pack.lock_entries():
+        data = {"format": e["format"], "path": str(e["path"]), "main": str(e["main"])}
+        data.update({k: str(e[k]) for k in ("preview", "background") if k in e})
+        add(facet("lock", data, e["name"], name=e["name"]))
+
+    up = m.get("upstream") if isinstance(m.get("upstream"), dict) else None
+    theme = {
+        "kind": "theme",
+        "id": pid,
+        "name": pid,
+        "collection": up.get("importer", "installed") if up else "installed",
+        "facets": facets,
+    }
+    for k in ("author", "version", "license", "source", "description"):
+        if k in m:
+            theme[k] = m[k]
+    if up:
+        theme["upstream"] = up
+    v1: dict = {"path": str(pack.path)}
+    if isinstance(m.get("vibes"), dict):
+        v1["vibes"] = m["vibes"]
+    if (pack.path / "greeter").is_dir():
+        v1["greeter"] = str(pack.path / "greeter")
+    theme["v1"] = v1
+    return theme, docs

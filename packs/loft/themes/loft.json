@@ -1,0 +1,54 @@
+{
+  "$schema": "https://loft.dev/schema/theme-2.json",
+  "kind": "theme",
+  "id": "loft",
+  "name": "Loft",
+  "author": "Loft",
+  "description": "The default: Tokyo Night by night, Catppuccin Latte by day, on Liquid Glass",
+  "tags": [
+    "default",
+    "glass"
+  ],
+  "collection": "builtin",
+  "facets": {
+    "colors": "colors:tokyonight-night",
+    "material": "material:liquid-glass",
+    "motion": "motion:loft",
+    "shape": "shape:loft",
+    "typography": "typography:loft",
+    "icons": "icons:system",
+    "lock": "lock:loft",
+    "launcher": "launcher:spotlight"
+  },
+  "base": {
+    "id": "dark",
+    "name": "Dark",
+    "description": "Tokyo Night (night) palette with dark Liquid Glass \u2014 the default theme"
+  },
+  "variants": [
+    {
+      "id": "light",
+      "name": "Light",
+      "description": "Catppuccin Latte palette with light Liquid Glass",
+      "facets": {
+        "colors": "colors:catppuccin-latte",
+        "material": {
+          "patch": {
+            "glass": {
+              "tint": "#ffffff"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "appearance": {
+    "dark": "dark",
+    "light": "light"
+  },
+  "aliases": [
+    "tokyonight",
+    "latte@light",
+    "default"
+  ]
+}

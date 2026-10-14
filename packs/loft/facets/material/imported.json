@@ -1,0 +1,23 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "material",
+  "id": "imported",
+  "name": "Imported",
+  "description": "Glass for imported themes (palette.glass)",
+  "data": {
+    "glass": {
+      "opacity": {
+        "dark": 0.48,
+        "light": 0.52
+      },
+      "tint": {
+        "dark": "@bg",
+        "light": "@mix(bg,#ffffff,0.5)"
+      },
+      "borderOpacity": {
+        "dark": 0.12,
+        "light": 0.55
+      }
+    }
+  }
+}

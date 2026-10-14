@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/theme-2.json",
+  "title": "Loft theme document",
+  "description": "A named collection of facet selections with variants (docs/THEME-ARCHITECTURE.md \u00a73).",
+  "$defs": {
+    "selection": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^(colors|wallpapers|material|motion|shape|typography|icons|lock|launcher|sounds):([a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ref": {
+              "type": "string",
+              "pattern": "^(colors|wallpapers|material|motion|shape|typography|icons|lock|launcher|sounds):([a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$"
+            },
+            "inline": {
+              "type": "object"
+            },
+            "patch": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "minProperties": 1
+        }
+      ]
+    },
+    "variant": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "preview": {
+          "type": "string"
+        },
+        "extends": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "facets": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "colors",
+              "wallpapers",
+              "material",
+              "motion",
+              "shape",
+              "typography",
+              "icons",
+              "lock",
+              "launcher",
+              "sounds"
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/selection"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "preview": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "theme"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "collection": {
+          "type": "string"
+        },
+        "basedOn": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "facets": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "colors",
+              "wallpapers",
+              "material",
+              "motion",
+              "shape",
+              "typography",
+              "icons",
+              "lock",
+              "launcher",
+              "sounds"
+            ]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/selection"
+          }
+        },
+        "base": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]*$"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "id"
+          ]
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/variant"
+          }
+        },
+        "appearance": {
+          "type": "object",
+          "properties": {
+            "dark": {
+              "type": "string"
+            },
+            "light": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]*(@[a-z0-9][a-z0-9._-]*)?$"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "theme-extension"
+        },
+        "extends": {
+          "type": "string",
+          "pattern": "^theme:"
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/variant"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "extends",
+        "variants"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "polarity": "dark",
+  "palette": {
+    "bg": "#282738",
+    "surface": "#353446",
+    "overlay": "#5e5b69",
+    "text": "#efe6e4",
+    "subtext": "#b3adb0",
+    "accent": "#e5b9c6",
+    "accent2": "#cfb3e5",
+    "urgent": "#d6858e",
+    "ok": "#87d685",
+    "warn": "#d6af85"
+  },
+  "glass": {
+    "blur": true,
+    "xray": true,
+    "tint": "#282738",
+    "opacity": 0.48,
+    "border": "#ffffff",
+    "borderOpacity": 0.12,
+    "radius": 14
+  },
+  "wallpaper": {
+    "image": "greeter/Background.jpg"
+  }
+}

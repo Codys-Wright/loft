@@ -1,0 +1,38 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "shape",
+  "id": "default",
+  "name": "Golden Gate",
+  "description": "Product default: every key a facet leaves out takes this value (fill)",
+  "data": {
+    "radius": {
+      "window": 12,
+      "panel": 18,
+      "control": 8,
+      "surface": 14
+    },
+    "gaps": null,
+    "focus": "shadow",
+    "focusRing": {
+      "width": 2
+    },
+    "border": {
+      "enabled": false,
+      "width": 1
+    },
+    "shadow": {
+      "color": null,
+      "softness": 30,
+      "spread": 4,
+      "offset": {
+        "x": 0,
+        "y": 6
+      },
+      "opacity": {
+        "dark": 0.4,
+        "light": 0.18
+      },
+      "inactive": 0.4
+    }
+  }
+}

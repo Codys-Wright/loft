@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/facets/lock.json",
+  "title": "Loft lock facet data (resolved)",
+  "description": "The `data` of a resolved facet: after fill, polar values and @color references (docs/THEME-ARCHITECTURE.md \u00a72, \u00a73.4). Facet documents may leave keys out and use {dark, light} / @refs.",
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "colorAlpha": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+    }
+  },
+  "type": "object",
+  "properties": {
+    "format": {
+      "enum": [
+        "builtin",
+        "loft",
+        "qylock"
+      ]
+    },
+    "path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "main": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "preview": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "background": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "clock": {
+          "type": "boolean"
+        },
+        "nowPlaying": {
+          "type": "boolean"
+        },
+        "blur": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "wallpaper": {
+      "type": "string",
+      "minLength": 1
+    },
+    "greeter": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}

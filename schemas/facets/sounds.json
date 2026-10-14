@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/facets/sounds.json",
+  "title": "Loft sounds facet data (resolved)",
+  "description": "The `data` of a resolved facet: after fill, polar values and @color references (docs/THEME-ARCHITECTURE.md \u00a72, \u00a73.4). Facet documents may leave keys out and use {dark, light} / @refs.",
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "colorAlpha": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$"
+    }
+  },
+  "type": "object",
+  "properties": {
+    "theme": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "events": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "volumeFeedback": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}

@@ -73,13 +73,16 @@
         glib # gio: the dock's Trash (gio trash, empty) and trash:/// · gdbus: Show in Files
       ];
 
-      # The CLI's own tree: Python package + templates + built-in packs/schema.
+      # The CLI's own tree: Python package + templates + built-in packs/schema,
+      # the built-in v2 pack (packs/loft) and the facet schemas.
       cliSrc = lib.fileset.toSource {
         root = ../.;
         fileset = lib.fileset.unions [
           ../cli
           ../templates
           ../themes
+          ../packs
+          ../schemas
         ];
       };
 
@@ -333,7 +336,7 @@
           dontBuild = true;
           installPhase = ''
             mkdir -p $out/share/loft $out/bin
-            cp -r cli templates themes $out/share/loft/
+            cp -r cli templates themes packs schemas $out/share/loft/
             # Utilities + Media Tools: Spotlight finds them; "Open With" in any file manager.
             install -Dm644 -t $out/share/applications ${../applications}/*.desktop
             # Reload hooks call quickshell/niri; installs and importers use git;

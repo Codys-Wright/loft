@@ -1,0 +1,24 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "colors",
+  "id": "default",
+  "name": "Tokyo Night",
+  "description": "Product default: every key a facet leaves out takes this value (fill)",
+  "data": {
+    "polarity": "dark",
+    "palette": {
+      "bg": "#1a1b26",
+      "surface": "#24283b",
+      "overlay": "#414868",
+      "text": "#c0caf5",
+      "subtext": "#a9b1d6",
+      "accent": "#7aa2f7",
+      "accent2": "#bb9af7",
+      "urgent": "#f7768e",
+      "ok": "#9ece6a",
+      "warn": "#e0af68"
+    },
+    "ansi": null,
+    "gradient": null
+  }
+}

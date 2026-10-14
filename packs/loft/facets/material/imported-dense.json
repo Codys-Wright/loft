@@ -1,0 +1,23 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "material",
+  "id": "imported-dense",
+  "name": "Imported, dense",
+  "description": "Imported themes over a busy wallpaper (palette.glass busy)",
+  "data": {
+    "glass": {
+      "opacity": {
+        "dark": 0.55,
+        "light": 0.6
+      },
+      "tint": {
+        "dark": "@bg",
+        "light": "@mix(bg,#ffffff,0.5)"
+      },
+      "borderOpacity": {
+        "dark": 0.12,
+        "light": 0.55
+      }
+    }
+  }
+}

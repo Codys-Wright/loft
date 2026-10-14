@@ -1,0 +1,9 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "launcher",
+  "id": "spotlight",
+  "name": "Spotlight",
+  "data": {
+    "style": "spotlight"
+  }
+}

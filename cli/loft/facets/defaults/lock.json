@@ -1,0 +1,22 @@
+{
+  "$schema": "https://loft.dev/schema/facet-1.json",
+  "kind": "lock",
+  "id": "default",
+  "name": "Built-in",
+  "description": "Product default: every key a facet leaves out takes this value (fill)",
+  "data": {
+    "format": "builtin",
+    "path": null,
+    "main": null,
+    "preview": null,
+    "background": null,
+    "config": {},
+    "options": {
+      "clock": true,
+      "nowPlaying": true,
+      "blur": true
+    },
+    "wallpaper": "desktop",
+    "greeter": "same"
+  }
+}
