@@ -64,6 +64,9 @@ Scope {
         function features(): void {
             root.show("features");
         }
+        function desktopmenu(): void {
+            root.show("desktopmenu");
+        }
         function wallpaper(): void {
             root.show("wallpaper");
         }
@@ -75,9 +78,6 @@ Scope {
         }
         function menubar(): void {
             root.show("menubar");
-        }
-        function desktopmenu(): void {
-            root.show("desktopmenu");
         }
     }
 
