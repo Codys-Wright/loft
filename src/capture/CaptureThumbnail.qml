@@ -20,7 +20,7 @@ PanelWindow {
     readonly property bool shown: item !== null && onThisScreen
     readonly property bool isVideo: item?.kind === "video"
 
-    visible: (shown || Capture.busy !== "") && onThisScreen
+    visible: (shown || Capture.busy !== "") && onThisScreen && !Capture.panoramaRunning
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "loft:capture-thumbnail"
     exclusionMode: ExclusionMode.Ignore

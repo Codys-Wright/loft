@@ -14,6 +14,8 @@ PanelWindow {
     readonly property var pin: modelData
     // The screen it was pinned on (not following focus).
     screen: Quickshell.screens.find(s => s.name === pin.screen) ?? Quickshell.screens[0]
+    // Out of the way while a workspace panorama grabs the display.
+    visible: !Capture.panoramaRunning
 
     readonly property real natW: img.implicitWidth / (screen?.devicePixelRatio ?? 1)
     readonly property real natH: img.implicitHeight / (screen?.devicePixelRatio ?? 1)

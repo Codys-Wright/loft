@@ -6,7 +6,8 @@ import Quickshell.Io
 import qs.services
 
 // Capture and create (docs/FEATURES.md): the ⌘⇧5 selector, screenshots
-// (area / window / screen / scrolling), area + screen recording (Recorder),
+// (area / window / screen / scrolling / workspace panorama), area + screen
+// recording (Recorder),
 // text from screen (OCR + QR), the color picker, and what follows a capture
 // — the floating thumbnail, annotate (satty), pins, GIF export and the
 // recording editor (trim + zooms).
@@ -23,9 +24,17 @@ import qs.services
 // beside the area with Auto / Cancel / Done. Auto (only when pressed):
 // loft-pointer moves the pointer into the area and turns the wheel until the
 // content ends; touching the mouse or any key stops it (ScrollCaptureHud).
+// Scrolling goes down or sideways (scrollAxis: y | x, "auto" until the
+// first scroll decides; the HUD's ↕ / ↔ and Options → Scroll Direction).
+// Workspace panorama: `loft capture panorama` (cli/loft/panorama.py) visits
+// every column of the display's niri workspace through IPC, grabs each and
+// composites them side by side on the wallpaper — wider than the display.
+// The shell's own overlays (pins, the camera, the thumbnail) step aside
+// meanwhile (panoramaRunning).
 //
 // IPC: capture toggle|area|screen|window|scrolling|scrollDone|scrollCancel|
-//      scrollAuto|scrollStop|scrollAutoState|
+//      scrollAuto|scrollStop|scrollAutoState|scrollAxis AXIS|scrollAxisState|
+//      panorama [OUTPUT]|
 //      recordArea|recordScreen|text|color|annotateLast|pinLast|gifLast|
 //      trimLast|editLast|edit PATH|unpinAll
 //      camera toggle|on|off
@@ -51,7 +60,8 @@ Singleton {
 
     // ── State ───────────────────────────────────────────────────────────
     property bool selectorOpen: false
-    // Selector choice: shot | scroll | record | text | color, and its target.
+    // Selector choice: shot | scroll | panorama | record | text | color, and
+    // its target.
     property string mode: "shot"
     property string target: "area"
 
@@ -79,9 +89,14 @@ Singleton {
     // out } — and what the helper reported: the stitched size, the kept
     // frames and where their rows go ([{path, sy, h, y}], for the preview).
     property var scrolling: null
+    // The stitched image's size, and one frame's (the area's pixels).
     property int scrollWidth: 0
     property int scrollHeight: 0
+    property int scrollFrameWidth: 0
     property int scrollFrameHeight: 0
+    // y (down) | x (sideways) | auto (not decided yet: the first scroll
+    // decides); segments are {path, sy, h, y} for y, {path, sx, w, x} for x.
+    property string scrollAxis: "y"
     property int scrollFrames: 0
     property var scrollSegments: []
     property bool scrollFinishing: false
@@ -95,6 +110,12 @@ Singleton {
     property bool scrollAutoCooling: false
     // Long-running post-processing (GIF export, trim) for the UI.
     property string busy: ""
+
+    // Workspace panorama in progress: { screen, out }. Meanwhile the shell's
+    // own overlays hide (they would land in the grabs).
+    property var panorama: null
+    readonly property bool panoramaRunning: panorama !== null
+    property string lastPanoramaNotes: ""
 
     property bool cameraOn: false
     property string cameraScreen: ""
@@ -138,17 +159,19 @@ Singleton {
     function captureSelected() {
         cfg.lastMode = mode;
         cfg.lastTarget = target;
-        capture(mode, mode === "text" || mode === "color" || mode === "scroll" ? "area" : target, cfg.timer);
+        capture(mode, mode === "text" || mode === "color" || mode === "scroll" ? "area" : mode === "panorama" ? "screen" : target, cfg.timer);
     }
 
-    // mode: shot | scroll | record | text | color; target: area | window | screen.
+    // mode: shot | scroll | panorama | record | text | color; target: area |
+    // window | screen (panorama: screen = the focused display, or an output
+    // name).
     // Which capture kinds the enabled feature modules allow.
     function allowed(kind) {
         return kind === "color" ? Features.on("colorPicker") : kind === "text" ? Features.on("ocr") : Features.on("capture");
     }
 
     function capture(kind, where, delay) {
-        if (!allowed(kind) || selecting !== "" || scrolling !== null)
+        if (!allowed(kind) || selecting !== "" || scrolling !== null || panorama !== null)
             return;
         if (kind === "record" && Recorder.active) {
             Recorder.stop();
@@ -207,7 +230,9 @@ Singleton {
         pendingCapture = null;
         if (!p)
             return;
-        if (p.where === "area")
+        if (p.kind === "panorama")
+            startPanorama(p.where === "screen" ? (screenFocused?.name ?? "") : p.where);
+        else if (p.where === "area")
             freeze(p.kind);
         else if (p.kind === "record")
             Recorder.start({
@@ -328,6 +353,9 @@ Singleton {
         const geo = `${Math.round(screen.x + r.x)},${Math.round(screen.y + r.y)} ${r.width}x${r.height}`;
         scrollWidth = 0;
         scrollHeight = 0;
+        scrollFrameWidth = 0;
+        scrollFrameHeight = 0;
+        scrollAxis = cfg.scrollDirection === "x" || cfg.scrollDirection === "y" ? cfg.scrollDirection : "auto";
         scrollFrames = 0;
         scrollSegments = [];
         scrollFinishing = false;
@@ -338,7 +366,7 @@ Singleton {
             rect: r,
             out: newShotPath()
         };
-        scrollProc.command = ["loft", "capture", "scroll", "--geometry", geo, "--out", scrolling.out, "--work", `${tmp}/scroll-${Date.now()}`];
+        scrollProc.command = ["loft", "capture", "scroll", "--geometry", geo, "--out", scrolling.out, "--work", `${tmp}/scroll-${Date.now()}`, "--axis", scrollAxis];
         scrollProc.running = true;
     }
 
@@ -369,6 +397,19 @@ Singleton {
         scrollProc.write(`auto${at}\n`);
     }
 
+    // Scroll direction for this capture (and the next ones): y | x | auto.
+    // Anything already stitched the other way starts over from the last
+    // frame.
+    function scrollSetAxis(axis) {
+        if (!scrolling || scrollFinishing || !["y", "x", "auto"].includes(axis))
+            return;
+        cfg.scrollDirection = axis;
+        if (axis === scrollAxis)
+            return;
+        scrollAxis = axis;
+        scrollProc.write(`axis ${axis}\n`);
+    }
+
     // byPointer: the user moved the mouse (leave the pointer there).
     function scrollAutoStop(byPointer) {
         if (scrollAuto !== "starting" && scrollAuto !== "running")
@@ -395,11 +436,15 @@ Singleton {
                     return;
                 }
                 if (e.event === "frame") {
+                    root.scrollAxis = e.axis ?? "y";
                     root.scrollWidth = e.width;
                     root.scrollHeight = e.height;
+                    root.scrollFrameWidth = e.frameWidth ?? e.width;
                     root.scrollFrameHeight = e.frameHeight;
                     root.scrollFrames = e.frames;
                     root.scrollSegments = e.segments;
+                } else if (e.event === "axis") {
+                    root.scrollAxis = e.axis;
                 } else if (e.event === "auto") {
                     if (e.state === "stopped") {
                         root.scrollAuto = "";
@@ -433,6 +478,78 @@ Singleton {
                 root.scrolling = null;
                 if (code !== 0)
                     root.failed("Scrolling capture failed", scrollErr.text);
+            }
+        }
+    }
+
+    // ── Workspace panorama ──────────────────────────────────────────────
+    // Exclusive zones on the display, which niri keeps windows out of (its
+    // working area): the menu bar (Bar.qml: exclusiveZone = barHeight) and
+    // an always-shown dock (Dock.qml: iconSize + 2 × pad + margin, not under
+    // a fullscreen window). [left, right, top, bottom], logical px.
+    function exclusiveInsets(screen) {
+        const ins = [0, 0, 30, 0];
+        if (Features.on("dock") && screen) {
+            const d = DockData.profileFor(screen);
+            if (d.enabled && d.autoHide === "never" && !Displays.fullscreenOn(screen)) {
+                const zone = d.iconSize + 2 * 10 + 8;
+                ins[d.position === "left" ? 0 : d.position === "right" ? 1 : 3] += zone;
+            }
+        }
+        return ins;
+    }
+
+    function startPanorama(outputName) {
+        const screen = Quickshell.screens.find(s => s.name === outputName) ?? screenFocused;
+        if (!screen)
+            return;
+        thumbnail = null;
+        selectorOpen = false;
+        lastPanoramaNotes = "";
+        panorama = {
+            screen: screen.name,
+            out: newShotPath()
+        };
+        const args = ["loft", "capture", "panorama", screen.name, "--out", panorama.out, "--insets", exclusiveInsets(screen).join(","), "--radius", `${Math.max(0, Theme.windowRadius)}`];
+        const wall = cfg.panoramaBackground === "wallpaper" ? Vibes.wallpaperFor(screen.name) : "";
+        if (wall) {
+            const f = Vibes.focusFor(wall) ?? [0.5, 0.5];
+            args.push("--wallpaper", wall, "--focus", `${f[0]},${f[1]}`);
+        } else {
+            args.push("--backdrop", `${Theme.bg}`);
+        }
+        // Let the selector and the thumbnail unmap first.
+        panoProc.command = args;
+        panoStart.restart();
+    }
+
+    Timer {
+        id: panoStart
+        interval: 120
+        onTriggered: panoProc.running = true
+    }
+
+    Process {
+        id: panoProc
+        stdout: StdioCollector {
+            id: panoOut
+        }
+        stderr: StdioCollector {
+            id: panoErr
+        }
+        onExited: code => {
+            root.panorama = null;
+            let r = null;
+            try {
+                r = JSON.parse(panoOut.text.trim().split("\n").slice(-1)[0] || "null");
+            } catch (_) {}
+            if (code === 0 && r?.event === "done") {
+                root.lastPanoramaNotes = (r.notes ?? []).join("; ");
+                root.shotDone(r.path);
+            } else if (r?.reason === "empty") {
+                root.failed("Nothing to capture", "This desktop has no windows");
+            } else {
+                root.failed("Workspace capture failed", r?.message ?? panoErr.text);
             }
         }
     }
@@ -799,6 +916,11 @@ Singleton {
             property string ocrLanguage: "eng"
             // Color picker: hex | rgb | hsl | qml.
             property string colorFormat: "hex"
+            // Scrolling capture direction: auto (the first scroll decides) |
+            // y (down) | x (sideways).
+            property string scrollDirection: "auto"
+            // Workspace panorama background: wallpaper | plain (Theme.bg).
+            property string panoramaBackground: "wallpaper"
             property list<string> recentColors: []
             // Camera mirror: circle | rounded; size in px; mirrored.
             property string cameraShape: "circle"
@@ -859,6 +981,24 @@ Singleton {
         function scrollAutoState(): string {
             return `${root.scrollAuto || "off"} ${root.scrollAutoReason}`.trim();
         }
+        // y | x | auto, during a scrolling capture.
+        function scrollAxis(axis: string): void {
+            root.scrollSetAxis(axis);
+        }
+        function scrollAxisState(): string {
+            return root.scrolling ? root.scrollAxis : "";
+        }
+        function scrollWidth(): int {
+            return root.scrollWidth;
+        }
+        // One image of the whole niri workspace on a display ("" = the
+        // focused one): every column side by side.
+        function panorama(output: string): void {
+            root.capture("panorama", output || "screen", 0);
+        }
+        function panoramaState(): string {
+            return root.panorama ? "running" : `idle ${root.lastPanoramaNotes}`.trim();
+        }
         function recordArea(): void {
             root.capture("record", "area", 0);
         }
@@ -873,6 +1013,7 @@ Singleton {
         }
         function cancel(): void {
             root.cancel();
+            panoStart.stop();
             root.scrollCancel();
             root.selectorOpen = false;
         }

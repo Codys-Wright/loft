@@ -20,7 +20,7 @@ from pathlib import Path
 from unittest import mock
 
 from loft import capture, stitch
-from test_stitch import W, document, frame
+from test_stitch import W, H, crop_x, document, frame, wide
 
 
 class ScrollSessionTest(unittest.TestCase):
@@ -64,6 +64,73 @@ class ScrollSessionTest(unittest.TestCase):
                 )
             self.assertFalse(out.exists())
             self.assertIn('"cancelled"', buf.getvalue())
+
+
+class SidewaysSessionTest(unittest.TestCase):
+    """Scrolling capture sideways: --axis x, auto-detection, switching."""
+
+    def run_session(self, offsets, axis, cmds, w=240, helper_factory=None):
+        doc = wide(1400, seed=31)
+        it = iter(offsets)
+
+        def grabber(geometry, path):
+            stitch.write_ppm(path, crop_x(doc, next(it), w))
+            return True
+
+        td = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, td)
+        out = Path(td) / "wide.png"
+        buf = io.StringIO()
+        kw = {"helper_factory": helper_factory} if helper_factory else {}
+        with redirect_stdout(buf):
+            code = capture.scroll_session(f"0,0 {w}x{H}", Path(td) / "w", out, grabber=grabber, commands=iter(cmds), axis=axis, restore_delay=0, **kw)
+        return code, [json.loads(line) for line in buf.getvalue().splitlines()], out, doc
+
+    def test_axis_x_stitches_left_to_right(self):
+        offs = [0, 0, 100, 230, 230, 390]
+        code, events, out, doc = self.run_session(offs, "x", [None] * 6 + ["done"])
+        self.assertEqual(code, 0)
+        added = [e for e in events if e["event"] == "frame" and e["status"] == "added"]
+        self.assertEqual([e["width"] for e in added], [240, 340, 470, 630])
+        self.assertTrue(all(e["axis"] == "x" and e["height"] == H and "sx" in e["segments"][0] for e in added))
+        self.assertEqual((events[-1]["event"], events[-1]["axis"], events[-1]["width"]), ("done", "x", 630))
+        self.assertEqual(stitch.read_png(out).data, crop_x(doc, 0, 630).data)
+
+    def test_auto_detects_sideways(self):
+        offs = [0, 0, 80, 200, 330]
+        code, events, out, doc = self.run_session(offs, "auto", [None] * 5 + ["done"])
+        self.assertEqual(code, 0)
+        axis = [e for e in events if e["event"] == "axis"]
+        self.assertEqual([(e["axis"], e["detected"]) for e in axis], [("x", True)])
+        self.assertEqual(events[0]["axis"], "auto", "undecided until something moved")
+        self.assertEqual(stitch.read_png(out).data, crop_x(doc, 0, 570).data)
+
+    def test_switching_axis_starts_over_from_the_last_frame(self):
+        # Stitched 120 px down the wrong axis (y finds nothing: gaps), then
+        # the user picks Horizontal: it starts over from the last frame.
+        offs = [0, 100, 200, 300, 450]
+        code, events, out, doc = self.run_session(offs, "y", [None, None, None, "axis x", None, "done"])
+        self.assertEqual(code, 0)
+        ax = [e for e in events if e["event"] == "axis"][0]
+        self.assertEqual((ax["axis"], ax["restarted"]), ("x", True))
+        img = stitch.read_png(out)
+        self.assertEqual(img.data, crop_x(doc, 200, 490).data)
+
+    def test_auto_scroll_turns_the_horizontal_wheel(self):
+        made = []
+
+        def factory(at, restore, pace, axis="y"):
+            made.append(FakePointer(at, restore, pace, axis=axis))
+            return made[-1]
+
+        self.run_session([0, 0, 50, 50, 50, 50], "x", [None, "auto", None, None, "stop", "cancel"], helper_factory=factory)
+        self.assertEqual(made[0].axis, "x")
+
+        # Undecided ("auto") + Auto Scroll: it scrolls down (and says so).
+        made.clear()
+        _, events, _, _ = self.run_session([0, 0, 0, 0, 0], "auto", [None, "auto", None, "stop", "cancel"], helper_factory=factory)
+        self.assertEqual(made[0].axis, "y")
+        self.assertIn(("axis", "y", False), [(e["event"], e.get("axis"), e.get("detected")) for e in events])
 
 
 class AutoStopTest(unittest.TestCase):
@@ -110,6 +177,9 @@ class AutoStopTest(unittest.TestCase):
         self.assertEqual(cmd[:6], ["/x/loft-pointer", "scroll", "--display", "/run/s/wayland-7", "--at", "90,140"])
         self.assertIn("--niri-socket", cmd)
         self.assertEqual(cmd[-2:], ["--restore", "5.5,6"])
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(capture.pointer_command((1, 2), None, 250, axis="x")[-2:], ["--axis", "horizontal"])
+            self.assertNotIn("--axis", capture.pointer_command((1, 2), None, 250))
         with mock.patch.dict(os.environ, {"LOFT_POINTER": "/x/loft-pointer"}, clear=True):
             with self.assertRaises(RuntimeError, msg="no display, no helper"):
                 capture.pointer_command((1, 2), None)
@@ -119,8 +189,8 @@ class FakePointer:
     """Stands in for loft-pointer: placed on the first poll, then one notch
     per poll (the session polls once per frame)."""
 
-    def __init__(self, at, restore, pace, self_stop=None):
-        self.at, self.restore, self.pace = at, restore, pace
+    def __init__(self, at, restore, pace, self_stop=None, axis="y"):
+        self.at, self.restore, self.pace, self.axis = at, restore, pace, axis
         self.sent: list[str] = []
         self.closed_with = None
         self.placed = False
@@ -152,8 +222,8 @@ class AutoScrollSessionTest(unittest.TestCase):
         made: list[FakePointer] = []
         clock = [0.0]
 
-        def factory(at, restore, pace):
-            made.append(FakePointer(at, restore, pace, **pointer))
+        def factory(at, restore, pace, axis="y"):
+            made.append(FakePointer(at, restore, pace, axis=axis, **pointer))
             return made[-1]
 
         def grabber(geometry, path):
@@ -219,7 +289,7 @@ class AutoScrollSessionTest(unittest.TestCase):
         last = [e for e in events if e["event"] == "auto"][-1]
         self.assertEqual((last["state"], last["reason"]), ("stopped", "timeout"))
 
-        def missing(*_a):
+        def missing(*_a, **_k):
             raise RuntimeError("loft-pointer is not installed")
 
         buf = io.StringIO()

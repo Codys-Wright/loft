@@ -16,7 +16,9 @@ PanelWindow {
     // The screen it was opened on (it doesn't follow focus).
     screen: Quickshell.screens.find(s => s.name === Capture.cameraScreen) ?? Capture.screenFocused
 
-    visible: Capture.cameraOn
+    // Hidden (the camera pauses) while a workspace panorama grabs the
+    // display.
+    visible: Capture.cameraOn && !Capture.panoramaRunning
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "loft:camera"
     exclusionMode: ExclusionMode.Ignore

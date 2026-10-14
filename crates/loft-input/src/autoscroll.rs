@@ -3,7 +3,9 @@
 //! presses Auto in the HUD; it
 //!
 //! 1. moves the pointer to the centre of the capture area (`--at`),
-//! 2. turns the wheel down `--step` notches every `--interval-ms`,
+//! 2. turns the wheel `--step` notches every `--interval-ms` — down, or
+//!    right with `--axis horizontal` (wl_pointer horizontal_scroll: a
+//!    timeline, a wide table, a pager with `less -S`),
 //! 3. stops on `stop` (then moves the pointer back to `--restore`) or
 //!    `abort` (leaves it where it is: the user has the mouse) on stdin, on
 //!    EOF (the session went away), at `--timeout` or after `--max-notches`.
@@ -25,7 +27,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde_json::{Value, json};
 
 use crate::backend::{Axis, Backend, Wayland};
@@ -68,9 +70,12 @@ pub struct ScrollArgs {
     /// Where to put the pointer back after `stop` / --timeout / --max-notches.
     #[arg(long, allow_hyphen_values = true)]
     pub restore: Option<String>,
-    /// Notches per turn (1–10); negative scrolls up.
+    /// Notches per turn (1–10); negative scrolls up (or left).
     #[arg(long, default_value_t = 1, allow_hyphen_values = true)]
     pub step: i32,
+    /// Which wheel: vertical (down) or horizontal (right).
+    #[arg(long, value_enum, default_value_t = WheelAxis::Vertical)]
+    pub axis: WheelAxis,
     /// Time between turns, ms (50–5000).
     #[arg(long, default_value_t = 250)]
     pub interval_ms: u64,
@@ -82,6 +87,22 @@ pub struct ScrollArgs {
     pub max_notches: u32,
 }
 
+/// The wheel axis on the command line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum WheelAxis {
+    Vertical,
+    Horizontal,
+}
+
+impl From<WheelAxis> for Axis {
+    fn from(a: WheelAxis) -> Axis {
+        match a {
+            WheelAxis::Vertical => Axis::Vertical,
+            WheelAxis::Horizontal => Axis::Horizontal,
+        }
+    }
+}
+
 pub const MIN_INTERVAL: Duration = Duration::from_millis(50);
 pub const MAX_INTERVAL: Duration = Duration::from_millis(5000);
 
@@ -90,6 +111,7 @@ pub struct Plan {
     pub at: (f64, f64),
     pub restore: Option<(f64, f64)>,
     pub step: i32,
+    pub axis: Axis,
     pub interval: Duration,
     pub timeout: Duration,
     pub max_notches: u32,
@@ -124,6 +146,7 @@ impl Plan {
             at: parse_point(&a.at)?,
             restore: a.restore.as_deref().map(parse_point).transpose()?,
             step: a.step,
+            axis: a.axis.into(),
             interval,
             timeout: Duration::from_secs(a.timeout),
             max_notches: a.max_notches,
@@ -227,7 +250,7 @@ pub fn run(
             break Reason::MaxNotches;
         }
         if now >= next {
-            be.wheel(Axis::Vertical, plan.step)?;
+            be.wheel(plan.axis, plan.step)?;
             be.sync()?;
             notches += 1;
             emit(json!({"event": "notch", "n": notches}));
@@ -387,6 +410,7 @@ mod tests {
     enum Ev {
         Move(f64, f64),
         Wheel(i32),
+        HWheel(i32),
     }
 
     /// Records what reaches the "compositor"; anything but motion and wheel
@@ -409,8 +433,11 @@ mod tests {
             panic!("auto scroll must never click")
         }
         fn wheel(&mut self, a: Axis, n: i32) -> Result<()> {
-            assert_eq!(a, Axis::Vertical);
-            self.evs.push((self.clock.get(), Ev::Wheel(n)));
+            let ev = match a {
+                Axis::Vertical => Ev::Wheel(n),
+                Axis::Horizontal => Ev::HWheel(n),
+            };
+            self.evs.push((self.clock.get(), ev));
             Ok(())
         }
         fn smooth_scroll(&mut self, _: Axis, _: f64, _: bool) -> Result<()> {
@@ -460,6 +487,7 @@ mod tests {
             at: (800.0, 500.0),
             restore: Some((1200.0, 900.0)),
             step: 1,
+            axis: Axis::Vertical,
             interval: ms(250),
             timeout: Duration::from_secs(180),
             max_notches: 4000,
@@ -503,6 +531,33 @@ mod tests {
         assert_eq!(last["reason"], "stop");
         assert_eq!(last["notches"], 4);
         assert_eq!(last["restored"], true);
+    }
+
+    #[test]
+    fn horizontal_axis_turns_only_the_horizontal_wheel() {
+        let mut p = plan();
+        p.axis = Axis::Horizontal;
+        let (r, evs, _) = go(&p, vec![(ms(800), Input::Line("stop".into()))]);
+        assert_eq!(r, Reason::Stop);
+        // Only pointer motion (place + restore) and horizontal notches: the
+        // fake backend panics on a click, a key or smooth scrolling.
+        assert!(
+            evs.iter()
+                .all(|(_, e)| matches!(e, Ev::Move(..) | Ev::HWheel(1))),
+            "{evs:?}"
+        );
+        let notches: Vec<_> = evs
+            .iter()
+            .filter(|(_, e)| matches!(e, Ev::HWheel(_)))
+            .map(|(t, _)| *t)
+            .collect();
+        assert_eq!(notches, vec![ms(250), ms(500), ms(750)]);
+        assert_eq!(
+            evs.iter()
+                .filter(|(_, e)| matches!(e, Ev::Move(..)))
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -600,6 +655,33 @@ mod tests {
         assert_eq!(p.at, (100.0, -20.0));
         assert_eq!(p.restore, Some((5.0, 6.0)));
         assert_eq!(p.interval, ms(300));
+        assert_eq!(p.axis, Axis::Vertical, "vertical unless asked");
+        let cli = Cli::try_parse_from([
+            "loft-pointer",
+            "scroll",
+            "--display",
+            "w",
+            "--at",
+            "1,2",
+            "--axis",
+            "horizontal",
+        ])
+        .unwrap();
+        let Sub::Scroll(a) = cli.cmd;
+        assert_eq!(Plan::from_args(&a).unwrap().axis, Axis::Horizontal);
+        assert!(
+            Cli::try_parse_from([
+                "loft-pointer",
+                "scroll",
+                "--display",
+                "w",
+                "--at",
+                "1,2",
+                "--axis",
+                "diagonal",
+            ])
+            .is_err()
+        );
         assert!(
             Cli::try_parse_from(["loft-pointer", "scroll", "--at", "1,2"]).is_err(),
             "--display is required"

@@ -262,11 +262,38 @@ loft-input -s demo drag 330 72 1100 400 --duration 600 # by the header bar: niri
 loft-dev --stop demo
 ```
 
+## Capture tests: sideways scrolling and workspace panoramas
+
+Both run against your own session; point captures at a scratch dir first (the session's
+`<state>/overrides/capture.json`: `screenshotDir`, `recordingDir`, `copyToClipboard: false`).
+Run the CLI with the session's environment (`session.env`: `NIRI_SOCKET`, `WAYLAND_DISPLAY`)
+so every `niri msg` / `grim` / `loft-pointer` call reaches the session and nothing else.
+
+- **Sideways**: `loft-input -s NAME spawn foot less -S -#16 WIDE.txt` (long lines), `bind`
+  or `niri msg action maximize-column`, then `quickshell ipc … call capture scrolling`, drag
+  the area with `loft-input drag`, click into it (the pager gets the keys) and press `key Right`
+  a few times: the direction is detected (`capture scrollAxisState` → `x`), `scrollWidth` grows,
+  `scrollDone` writes the PNG. For Auto Scroll sideways use an app that takes the horizontal
+  wheel, e.g. Firefox with a throwaway profile (`--no-remote --profile SCRATCH`) on a wide
+  HTML table with a `position: sticky` first column (the track headers stay once):
+  `capture scrollAxis x`, `capture scrollAuto`, poll `scrollAutoState` until `off end`.
+- **Panorama**: spawn several `foot`s, give them different widths (`set-column-width`), stack
+  one (`consume-or-expel-window-left`), tab one (`toggle-column-tabbed-display`), float one
+  (`toggle-window-floating`), then `loft capture panorama --insets 0,0,30,76 --out X.png`
+  (or `capture panorama ""` through the shell). `--plan` prints the computed layout without
+  touching anything. Compare a `loft-shot` before and after: the view should come back.
+- The session's PATH has `<checkout>/target/debug` only if it existed when the session
+  started. After changing `loft-pointer`, either restart the session or link the fresh build
+  into the session's own `bin`: `ln -sf $PWD/target/debug/loft-pointer
+  $XDG_RUNTIME_DIR/loft-dev-NAME/bin/`.
+
 ## How it works (for maintainers)
 
 - `crates/loft-input`: the `loft-input` and `loft-shot` binaries, plus `loft-pointer` (the
-  product's Auto Scroll helper for scrolling capture: pointer motion + wheel notches on the
-  `--display` it is given, never anything else; its pacing and stop logic are unit-tested).
+  product's Auto Scroll helper for scrolling capture: pointer motion + wheel notches — vertical,
+  or horizontal with `--axis horizontal` — on the `--display` it is given, never anything else;
+  its pacing and stop logic, and that only motion and the chosen wheel reach the compositor,
+  are unit-tested).
   - `zwlr_virtual_pointer_v1` without an output: niri maps absolute motion onto the bounding
     box of all outputs, so coordinates are global logical px (quarter-pixel precision).
   - `zwp_virtual_keyboard_v1`: a US keymap on real evdev codes, plus spare keycodes for
