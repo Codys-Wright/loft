@@ -421,7 +421,7 @@ class Install(unittest.TestCase):
                 "STUDIO_QYLOCK_URL": qylock_repo(self.tmp / "qylock"),
             }
         )
-        for k in ("STUDIO_THEME_PATH", "STUDIO_DATA_DIR"):
+        for k in ("STUDIO_THEME_PATH", "STUDIO_DATA_DIR", "STUDIO_LIBRARY"):
             os.environ.pop(k, None)
         self.noff = mock.patch.object(palette, "have_ffmpeg", return_value=False)
         self.noff.start()
