@@ -39,6 +39,7 @@ Item {
             clock: clock,
             camera: privacy,
             inputSource: inputSource,
+            caffeine: keepAwake,
             overflow: overflow
         })
 
@@ -138,6 +139,14 @@ Item {
     Component {
         id: inputSource
         InputSourcePanel {
+            details: host.details
+            shown: host.shown
+            inMenu: host.inMenu
+        }
+    }
+    Component {
+        id: keepAwake
+        KeepAwakePanel {
             details: host.details
             shown: host.shown
             inMenu: host.inMenu

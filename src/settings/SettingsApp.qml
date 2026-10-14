@@ -35,6 +35,7 @@ Scope {
         { id: "clipboard", icon: "󰨸", badge: "yellow", label: "Clipboard & Files" },
         { id: "snippets", icon: "󱐋", badge: "brown", label: "Snippets", feature: "snippets" },
         { id: "spotlight", icon: "󰍉", badge: "blue", label: "Spotlight" },
+        { id: "everyday", icon: "󰅶", badge: "orange", label: "Everyday" },
         { id: "menubar", icon: "󰍜", badge: "graphite", label: "Menu Bar" },
         { id: "desktopmenu", icon: "󰍝", badge: "blue", label: "Desktop Menu", feature: "desktopMenu" },
         { id: "quickpanel", icon: "󰕮", badge: "orange", label: "Quick Panel", feature: "quickPanel" },
@@ -524,6 +525,11 @@ Scope {
                     SpotlightPage {
                         Layout.fillWidth: true
                         visible: root.section === "spotlight"
+                    }
+
+                    EverydayPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "everyday"
                     }
                 }
             }

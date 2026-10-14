@@ -121,9 +121,9 @@ PanelWindow {
         maxWidth: root.width / 2 - (Features.on("island") ? 160 : 12) - 10
     }
 
-    // Caffeine (Control Center): keep the session from idling.
+    // Keep Awake (services/KeepAwake.qml): keep the session from idling.
     IdleInhibitor {
         window: root
-        enabled: Panels.caffeine
+        enabled: KeepAwake.active
     }
 }

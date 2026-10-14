@@ -487,6 +487,19 @@ Singleton {
         return [(b.modifiers ?? []).map(m => names[m] ?? m).concat([b.trigger.length === 1 ? b.trigger.toUpperCase() : b.trigger])];
     }
 
+    // Close Window's chord: niri's close-window bind, else the shell's ⌘Q
+    // bind (`quit key`, everyday/QuitGuard.qml), which closes it too.
+    function closeShortcut() {
+        const own = niriShortcut("close-window");
+        if (own.length > 0)
+            return own;
+        const b = (NiriSettings.bindsData.binds ?? []).find(x => x.action === "spawn" && !x.shadowed && (x.args ?? []).some(a => / quit key\b/.test(String(a))) && (x.modifiers ?? []).length > 0 && x.trigger.length === 1);
+        if (!b)
+            return [];
+        const names = { Mod: "Super", Super: "Super", Ctrl: "Control", Control: "Control", Alt: "Alt", Shift: "Shift" };
+        return [(b.modifiers ?? []).map(m => names[m] ?? m).concat([b.trigger.toUpperCase()])];
+    }
+
     function appItems(w) {
         if (!w)
             return desktopItems();
@@ -526,6 +539,8 @@ Singleton {
                     Niri.action("MaximizeColumn");
                 } });
             items.push({ key: "center", label: "Center", enabled: true, shortcut: niriShortcut("center-column"), run: () => Niri.action("CenterWindow", { id: w.id }) });
+            if (Features.on("arrange"))
+                items.push({ key: "arrange", label: "Arrange", enabled: true, submenu: true, children: Arrange.items(w) });
         }
 
         if (AppMenu.pref("hideCommands")) {
@@ -537,7 +552,7 @@ Singleton {
         }
 
         items.push(sep("s-quit"));
-        items.push({ key: "close", label: "Close Window", enabled: true, shortcut: niriShortcut("close-window"), run: () => Niri.action("CloseWindow", { id: w.id }) });
+        items.push({ key: "close", label: "Close Window", enabled: true, shortcut: closeShortcut(), run: () => Niri.action("CloseWindow", { id: w.id }) });
         items.push({ key: "quit", label: own ? `Close ${name}` : `Quit ${name}`, enabled: true, run: () => root.quit(w) });
         return items;
     }

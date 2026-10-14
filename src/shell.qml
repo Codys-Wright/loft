@@ -19,6 +19,7 @@ import qs.monitor
 import qs.clipboard
 import qs.desktopmenu
 import qs.palette
+import qs.everyday
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 // Optional modules are gated by the feature registry (services/Features.qml).
@@ -162,4 +163,7 @@ ShellRoot {
         model: Features.on("radialMenu") ? Quickshell.screens : []
         RadialMenuWindow {}
     }
+
+    // Cleaning Mode, Keep Awake, Quit on close / protection, Arrange.
+    Everyday {}
 }

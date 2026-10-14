@@ -37,7 +37,8 @@ Singleton {
         { id: "sound", label: "Sound", icon: "󰕾", group: "Sound", feature: "soundControl", sizes: ["4x1"], bar: true, barDefault: true, kind: "panel" },
         { id: "nowPlaying", label: "Now Playing", icon: "󰎆", group: "Everyday", feature: "nowPlaying", sizes: ["2x2", "2x1", "4x1"], bar: true, barDefault: false, kind: "panel", activeOnly: "option" },
         { id: "battery", label: "Battery", icon: "󰁹", group: "System", feature: "batteryControl", sizes: ["1x1", "2x1"], bar: true, barDefault: true, kind: "panel", activeOnly: "option" },
-        { id: "caffeine", label: "Keep Awake", icon: "󰅶", group: "Desktop", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "toggle", activeOnly: "default" },
+        { id: "caffeine", label: "Keep Awake", icon: "󰅶", group: "Desktop", feature: "keepAwake", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "panel", activeOnly: "default" },
+        { id: "cleaning", label: "Cleaning Mode", icon: "󰃢", group: "Everyday", feature: "cleaningMode", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "action" },
         { id: "nightLight", label: "Night Light", icon: "󰖔", group: "Display", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "toggle", activeOnly: "default" },
         { id: "powerMode", label: "Power Mode", icon: "󰾅", group: "System", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "toggle" },
         { id: "focusTimer", label: "Focus Timer", icon: "󰔟", group: "Everyday", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "toggle", activeOnly: "default" },
@@ -67,7 +68,7 @@ Singleton {
         })
 
     // Bar items left to right (readouts first, the clock last).
-    readonly property var barDefaultOrder: ["readout.cpu", "readout.memory", "readout.cpuTemp", "readout.gpu", "readout.network", "readout.battery", "tray", "camera", "micMute", "record", "nowPlaying", "caffeine", "nightLight", "focusTimer", "powerMode", "screenshot", "colorPicker", "clipboard", "overview", "displays", "lock", "inputSource", "focus", "battery", "bluetooth", "wifi", "sound", "display", "spotlight", "controlcenter", "clock"]
+    readonly property var barDefaultOrder: ["readout.cpu", "readout.memory", "readout.cpuTemp", "readout.gpu", "readout.network", "readout.battery", "tray", "camera", "micMute", "record", "nowPlaying", "caffeine", "nightLight", "focusTimer", "powerMode", "cleaning", "screenshot", "colorPicker", "clipboard", "overview", "displays", "lock", "inputSource", "focus", "battery", "bluetooth", "wifi", "sound", "display", "spotlight", "controlcenter", "clock"]
 
     readonly property var ccDefaultLayout: [
         { id: "connectivity", size: "2x2" },
@@ -136,7 +137,7 @@ Singleton {
         case "battery":
             return hasBattery && UPower.onBattery;
         case "caffeine":
-            return Panels.caffeine;
+            return KeepAwake.active;
         case "nightLight":
             return NightLight.enabled;
         case "powerMode":
@@ -394,7 +395,7 @@ Singleton {
         case "focus":
             return FocusTimer.active ? FocusTimer.format(FocusTimer.remaining) : Panels.doNotDisturb ? "Do Not Disturb" : "Off";
         case "caffeine":
-            return Panels.caffeine ? "On" : "Off";
+            return KeepAwake.status;
         case "nightLight":
             return NightLight.enabled ? `${NightLight.temperature}K` : "Off";
         case "powerMode":

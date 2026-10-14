@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import qs.services
 import qs.menubar
+import qs.everyday
 
 // The dock's right-click menus, shown by the menu bar's own cascade
 // (MenuState.openContext → MenuOverlay/MenuPanel), so they look and behave
@@ -167,6 +168,10 @@ Singleton {
                     if (!Niri.overviewOpen)
                         Niri.toggleOverview();
                 } });
+            if (Features.on("arrange")) {
+                const aw = windows.find(w => w.is_focused) ?? windows.find(w => !isParked(w)) ?? windows[0];
+                items.push({ key: "arrange", label: "Arrange", enabled: true, submenu: true, children: Arrange.items(aw) });
+            }
             items.push({ key: "hide", label: "Hide", enabled: windows.some(w => !isParked(w)), run: () => MenuState.hideApp(appId) });
             const first = windows.find(w => !isParked(w)) ?? windows[0];
             const others = Niri.windows.filter(x => !DockData.sameApp(x.app_id, appId) && x.workspace_id === first.workspace_id);
@@ -201,6 +206,14 @@ Singleton {
             const login = DockData.openAtLogin(appId);
             items.push(check("login", "Open at Login", login, () => DockData.setOpenAtLogin(appId, !login)));
             items.push({ key: "show-files", label: "Show in Files", enabled: true, run: () => DockData.showInFiles(entry.id) });
+        }
+        // Quit on close / hold ⌘Q (Settings → Everyday).
+        if (!own && (Features.on("quitOnClose") || Features.on("quitProtection"))) {
+            items.push(sep("s-quit-opts"));
+            if (Features.on("quitOnClose"))
+                items.push(QuitOnClose.menuItem(appId));
+            if (Features.on("quitProtection"))
+                items.push(QuitGuard.menuItem(appId));
         }
 
         // Assign To: a niri window rule (open-on-workspace).

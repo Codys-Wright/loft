@@ -22,15 +22,15 @@ Legend: ✅ have · 🟡 partial · 🔨 in progress · ⬜ todo · ➖ not appl
 
 | | Count |
 |---|---|
-| ✅ Have | 26 |
-| 🧩 Handled by niri / fleet | 5 |
-| 🟡 Partial | 11 |
+| ✅ Have | 30 |
+| 🧩 Handled by niri / fleet | 8 |
+| 🟡 Partial | 7 |
 | 🔨 In progress | 2 |
-| ⬜ Todo | 12 |
+| ⬜ Todo | 9 |
 | ➖ Not applicable on Linux/NixOS | 9 |
 
-Of the 56 rows that apply on Linux: 29 are covered (✅ + 🧩), 13 more are partial or being
-built, 14 are still todo — and Loft adds a whole desktop's worth of features vorssaint
+Of the 56 rows that apply on Linux: 38 are covered (✅ + 🧩), 9 more are partial or being
+built, 9 are still todo — and Loft adds a whole desktop's worth of features vorssaint
 doesn't need (bottom of this file).
 
 ## Sound
@@ -55,13 +55,13 @@ doesn't need (bottom of this file).
 | vorssaint | Loft | How |
 |---|---|---|
 | App switcher (live previews, search) | 🟡 | ⌘Tab by app with icons + titles; niri has no window-thumbnail API yet |
-| Window layout (snapping, move between displays, restore) | 🟡 | niri binds + app menu Move to Display / Workspace; a snap menu is todo |
+| Window layout (snapping, move between displays, restore) | ✅ | Arrange ▸ in the app menu and dock menu, ⌘⌃A palette: floating windows snap to halves / thirds / ⅔ / quarters / fill / center; tiled ones get column widths ⅓ ½ ⅔ full, heights, center, join/split columns; move to display |
 | Dock Preview (hover → windows, switch/close/move) | 🔨 | Dock agent: window list in the right-click menu (titles) |
 | Dock clicks (minimize / hide / cycle) | 🔨 | Hide via a parking workspace (niri has no minimize) |
 | Maximize without a new Space | 🧩 | niri maximize-column / fullscreen |
 | Fixed Space order | ➖ | niri workspaces never reorder by use |
-| Quit on close | ⬜ | Quit an app when its last window closes (opt-in per app) |
-| Quit / close protection (⌘Q, ⌘W) | 🟡 | Quit confirms with several windows; hold-to-quit todo |
+| Quit on close | ✅ | Opt-in per app (Settings → Everyday, dock Options): SIGTERM a few seconds after the last window closes |
+| Quit / close protection (⌘Q, ⌘W) | 🟡 | Hold ⌘Q to quit (per app or all, pill with a ring); ⌘W can't be caught — it goes straight to the app |
 
 ## Keyboard and mouse
 | vorssaint | Loft | How |
@@ -72,9 +72,9 @@ doesn't need (bottom of this file).
 | Linear scrolling | ➖ | same as smooth scrolling |
 | Focus follows mouse | 🧩 | niri setting |
 | Scroll direction (independent) | 🧩 | niri per-device |
-| Scroll sideways while holding a key | ⬜ | Needs the input remapper |
-| Side buttons (Back / Forward) | 🟡 | niri can bind mouse buttons; presets todo |
-| Mouse button shortcuts | 🟡 | same |
+| Scroll sideways while holding a key | 🧩 | Shift+wheel in GTK, Firefox, Chromium, Electron; Alt+wheel in Qt |
+| Side buttons (Back / Forward) | 🧩 | Apps map buttons 8/9 to Back / Forward themselves |
+| Mouse button shortcuts | 🧩 | niri binds MouseBack / MouseForward / MouseMiddle (+ modifiers) |
 | Middle click (three-finger) | 🧩 | touchpad click method |
 | Apps to leave alone | ⬜ | Per-app exclusions for remaps |
 | Extra click filter / key debounce | ⬜ | Hardware-specific (later) |
@@ -102,7 +102,7 @@ doesn't need (bottom of this file).
 | Quick toggles | ✅ | Control Center controls (+ pin any to the menu bar) |
 | Radial menu | ✅ | Hold ⌃⌘Space or middle-button on the desktop: pointer-centered wheel, submenu rings, per-app profiles, release-to-activate |
 | Scratchpad (tabbed Markdown notes) | ✅ | |
-| Cleaning Mode | ⬜ | Lock input while cleaning |
+| Cleaning Mode | ✅ | Dark session lock on every display: no keys, clicks or shortcuts; hold Esc 3 s, timer or IPC to leave |
 
 ## Capture and create
 | vorssaint | Loft | How |
@@ -128,7 +128,7 @@ doesn't need (bottom of this file).
 ## Energy and display
 | vorssaint | Loft | How |
 |---|---|---|
-| Keep awake (timer, lid, apps, power, displays) | 🟡 | Caffeine toggle; rules todo |
+| Keep awake (timer, lid, apps, power, displays) | ✅ | 15 min … indefinitely; while apps are open, on power, a display connected; lid closed (logind) |
 | Displays (per-display brightness, hardware/software, dimming) | ✅ | Control Center Display: ddcutil / backlight per display |
 | Extra brightness (XDR) | ➖ | Apple hardware |
 | Bluetooth off on sleep | ⬜ | systemd sleep hook |
