@@ -7,6 +7,7 @@ import qs.dock
 import qs.controlcenter
 import qs.island
 import qs.osd
+import qs.switcher
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 ShellRoot {
@@ -38,5 +39,10 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         Osd {}
+    }
+
+    Variants {
+        model: Quickshell.screens
+        Switcher {}
     }
 }

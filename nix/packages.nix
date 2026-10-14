@@ -33,8 +33,11 @@
       sessionConfig = pkgs.runCommand "studio-niri-config" { } ''
         mkdir -p $out
         cp ${../niri}/*.kdl $out/
+        sed 's|@IPC@|"${lib.getExe pkgs.quickshell}" "ipc" "--path" "${../src}" "call"|g' \
+          ${../niri/shell-binds.kdl.in} > $out/shell-binds.kdl
         cat > $out/config.kdl <<EOF
         include "base.kdl"
+        include "shell-binds.kdl"
         spawn-at-startup "${lib.getExe self'.packages.studio-shell}"
         EOF
       '';
@@ -94,8 +97,12 @@
             # Kept across restarts; reset with `ln -sfn "$root/themes/NAME" "$dir/current"`.
             [ -e "$dir/current" ] || ln -sfn "$(realpath "$root/themes/default")" "$dir/current"
 
+            sed "s|@IPC@|\"quickshell\" \"ipc\" \"--path\" \"$root/src\" \"call\"|g" \
+              "$root/niri/shell-binds.kdl.in" > "$dir/shell-binds.kdl"
+
             cat > "$dir/config.kdl" <<EOF
             include "$root/niri/base.kdl"
+            include "$dir/shell-binds.kdl"
             include optional=true "$root/niri/dev-local.kdl"
             spawn-at-startup "env" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "quickshell" "--path" "$root/src"
             EOF
