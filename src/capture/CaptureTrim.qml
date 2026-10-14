@@ -214,10 +214,10 @@ PanelWindow {
         }
     }
 
-    BackgroundEffect.blurRegion: Theme.blur ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: panel
+        item: Theme.blur ? panel : null
         radius: panel.radius
     }
 

@@ -49,10 +49,10 @@ PanelWindow {
     implicitHeight: expanded ? panelHeight : hasItems ? 96 : Math.round(modelData.height * 0.4)
     color: "transparent"
 
-    BackgroundEffect.blurRegion: Theme.blur && expanded ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: panel
+        item: Theme.blur && expanded ? panel : null
         radius: panel.radius
     }
 

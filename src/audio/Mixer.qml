@@ -42,10 +42,10 @@ PanelWindow {
         inputsOpen = false;
     }
 
-    BackgroundEffect.blurRegion: Theme.blur && shown && !slide.running ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: backing
+        item: Theme.blur && shown && !slide.running ? backing : null
         radius: backing.radius
     }
 

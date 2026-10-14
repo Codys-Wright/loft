@@ -36,10 +36,10 @@ PanelWindow {
     color: "transparent"
 
     // Only once the panel stops scaling: the region follows geometry, not scale.
-    BackgroundEffect.blurRegion: Theme.blur && shown && panel.scale === 1 ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: panel
+        item: Theme.blur && shown && panel.scale === 1 ? panel : null
         radius: panel.radius
     }
 

@@ -32,10 +32,10 @@ PanelWindow {
     implicitHeight: 170
     color: "transparent"
 
-    BackgroundEffect.blurRegion: Theme.blur && open ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: panel
+        item: Theme.blur && open ? panel : null
         radius: panel.radius
     }
 

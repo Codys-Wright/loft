@@ -29,22 +29,22 @@ PanelWindow {
     }
     color: "transparent"
 
-    BackgroundEffect.blurRegion: Theme.blur && shown ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: panels.count > 0 && panels.itemAt(0)?.visible ? panels.itemAt(0) : null
+        item: Theme.blur && shown && panels.count > 0 && panels.itemAt(0)?.visible ? panels.itemAt(0) : null
         radius: 12
 
         Region {
-            item: panels.count > 1 && panels.itemAt(1)?.visible ? panels.itemAt(1) : null
+            item: Theme.blur && shown && panels.count > 1 && panels.itemAt(1)?.visible ? panels.itemAt(1) : null
             radius: 12
         }
         Region {
-            item: panels.count > 2 && panels.itemAt(2)?.visible ? panels.itemAt(2) : null
+            item: Theme.blur && shown && panels.count > 2 && panels.itemAt(2)?.visible ? panels.itemAt(2) : null
             radius: 12
         }
         Region {
-            item: panels.count > 3 && panels.itemAt(3)?.visible ? panels.itemAt(3) : null
+            item: Theme.blur && shown && panels.count > 3 && panels.itemAt(3)?.visible ? panels.itemAt(3) : null
             radius: 12
         }
     }

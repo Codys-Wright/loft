@@ -26,10 +26,10 @@ PanelWindow {
     color: "transparent"
     mask: Region {}
 
-    BackgroundEffect.blurRegion: Theme.blur && shown ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: pill
+        item: Theme.blur && shown && pill.scale === 1 ? pill : null
         radius: pill.radius
     }
 

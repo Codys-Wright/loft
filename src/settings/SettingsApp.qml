@@ -147,10 +147,10 @@ Scope {
         onVisibleChanged: if (!visible)
             Panels.settingsOpen = false
 
-        BackgroundEffect.blurRegion: Theme.blur ? blur : null
+        BackgroundEffect.blurRegion: blur
         Region {
             id: blur
-            item: chrome.surface
+            item: Theme.blur ? chrome.surface : null
             radius: chrome.radius
         }
 

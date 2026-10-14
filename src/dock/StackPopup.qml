@@ -82,10 +82,10 @@ PanelWindow {
         return "file://" + path.split("/").map(encodeURIComponent).join("/");
     }
 
-    BackgroundEffect.blurRegion: Theme.blur && shown ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: root.view === "fan" ? null : panel
+        item: Theme.blur && shown && root.view !== "fan" ? panel : null
         radius: panel.radius
     }
 

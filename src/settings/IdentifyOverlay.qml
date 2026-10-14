@@ -33,10 +33,10 @@ PanelWindow {
     // Click-through.
     mask: Region {}
 
-    BackgroundEffect.blurRegion: Theme.blur ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: card
+        item: Theme.blur ? card : null
         radius: card.radius
     }
 

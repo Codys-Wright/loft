@@ -237,13 +237,13 @@ PanelWindow {
     }
 
     // ── Blur behind the panel(s) ─────────────────────────────────────────
-    BackgroundEffect.blurRegion: Theme.blur && shown && !slide.running ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: backing
+        item: Theme.blur && shown && !slide.running ? backing : null
         radius: backing.radius
         Region {
-            item: root.editing ? gallery : null
+            item: Theme.blur && shown && !slide.running && root.editing ? gallery : null
             radius: gallery.radius
         }
     }

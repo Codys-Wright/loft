@@ -13,8 +13,8 @@ import qs.services
 //   FloatingWindow {
 //       id: window
 //       color: "transparent"
-//       BackgroundEffect.blurRegion: Theme.blur ? blur : null
-//       Region { id: blur; item: chrome.surface; radius: chrome.radius }
+//       BackgroundEffect.blurRegion: blur
+//       Region { id: blur; item: Theme.blur ? chrome.surface : null; radius: chrome.radius }
 //       WindowChrome {
 //           id: chrome
 //           hostWindow: window

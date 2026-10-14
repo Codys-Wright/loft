@@ -162,12 +162,11 @@ PanelWindow {
         bottomLeftRadius: pill.radius
         bottomRightRadius: pill.radius
     }
-    // Black needs no blur: the region empties rather than going null, which
-    // would leave the compositor blurring the last glass shape.
-    BackgroundEffect.blurRegion: Theme.blur ? blur : null
+    // Black needs no blur: the region empties (see GlassSurface).
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: root.black ? null : pill
+        item: Theme.blur && !root.black ? pill : null
         topLeftRadius: root.attached ? 0 : pill.radius
         topRightRadius: root.attached ? 0 : pill.radius
         bottomLeftRadius: pill.radius

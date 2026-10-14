@@ -240,14 +240,14 @@ PanelWindow {
         onTriggered: root.dragging = false
     }
 
-    BackgroundEffect.blurRegion: Theme.blur ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: shelf
+        item: Theme.blur ? shelf : null
         radius: shelf.radius
 
         Region {
-            item: nameTag.visible ? nameTag : null
+            item: Theme.blur && nameTag.visible ? nameTag : null
             radius: nameTag.radius
         }
     }
