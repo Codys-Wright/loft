@@ -324,8 +324,7 @@ def group_members(members: list[Member], hasher: Hasher) -> list[Group]:
         groups.append(g)
 
     def pair(base: Member, var: Member, vid: str, rule: str) -> None:
-        polar = vid in ("dark", "light")
-        bid = (base.polarity if polar and base.polarity != vid else base.short()) or base.short()
+        bid = _base_id(base, [vid])
         g = Group(
             theme=base.name, home=base.path.name, rule=rule, members=[], collection=base.importer or "installed",
             name=humanize(base.short()),
@@ -398,6 +397,59 @@ def _rel(path: Path, start: Path) -> str:
     return os.path.relpath(path, start)
 
 
+def assign_facets(
+    members: list[Member], shared: Shared, hasher: Hasher, *, pack_of=None, fid_of=None, root_of=None, shared_refs: dict | None = None,
+) -> list[tuple[str, str, str, dict, Member]]:  # fmt: skip
+    """Each member's facets: a built-in it equals (SHARED), the same facet as
+    an earlier member (equal colors; wallpapers with the same images), or its
+    own. Sets member.sel; returns the own ones as (pack, kind, id, document,
+    member), the document's paths relative to root_of(member).
+
+    pack_of(m): the pack the member's facets go into (default: its own, in
+    place); fid_of(m, kind, adapter id): their ids (default: the adapter's,
+    which keeps lock names and so the rendered manifest the same);
+    root_of(m): that pack's directory (default: the member's)."""
+    pack_of = pack_of or (lambda m: m.name)
+    fid_of = fid_of or (lambda m, kind, fid: fid)
+    root_of = root_of or (lambda m: m.path)
+    owned: dict[tuple[str, str], tuple[Member, dict]] = {}  # (kind, dedup key) → owner, adapter doc
+    for m in members:
+        for kind, docs in m.docs.items():
+            if kind == "lock":
+                for d in docs:
+                    owned[("lock", f"{m.name}/{d['id']}")] = (m, d)
+                m.sel["lock"] = f"lock:{pack_of(m)}/{fid_of(m, 'lock', docs[0]['id'])}"
+                continue
+            d = docs[0]
+            if kind in SHARED:
+                hit = shared.match(kind, d["data"], m.polarity, m.pal)
+                if hit is not False:
+                    if hit is not None:
+                        m.sel[kind] = hit
+                        if shared_refs is not None:
+                            shared_refs.setdefault(hit, []).append(m.name)
+                    continue
+                d = dict(d, data=shared.generalize(kind, d["data"], m.polarity, m.pal))
+            key = wallpapers_key(d["data"], hasher) if kind == "wallpapers" else canonical(d["data"])
+            if (kind, key) not in owned:
+                owned[(kind, key)] = (m, d)
+            owner, od = owned[(kind, key)]
+            m.sel[kind] = f"{kind}:{pack_of(owner)}/{fid_of(owner, kind, od['id'])}"
+    out = []
+    for (kind, _), (m, d) in owned.items():
+        root = root_of(m)
+        fid = fid_of(m, kind, d["id"])
+        doc = {"$schema": FACET_SCHEMA, "kind": kind, "id": fid, "name": _facet_label(m, kind, d)}
+        for k in ("description", "source", "license"):
+            if d.get(k):
+                doc[k] = d[k]
+        if kind == "colors" and (m.path / "apps").is_dir():
+            doc["apps"] = _rel(m.path / "apps", root)
+        doc["data"] = relativize(kind, d["data"], root)
+        out.append((pack_of(m), kind, fid, doc, m))
+    return out
+
+
 def build(packs_dir: Path, builtin: Path | None, plan: Plan, hasher: Hasher, root_for_writes: Path) -> None:
     """Steps 2-4 for the v1 packs in packs_dir (written under root_for_writes/Packs)."""
     shared = Shared(builtin)
@@ -417,42 +469,10 @@ def build(packs_dir: Path, builtin: Path | None, plan: Plan, hasher: Hasher, roo
                 plan.skipped.append(f"{d.name}: {e}")
     out_packs = root_for_writes / "Packs"
 
-    # Facets: shared built-ins, merged duplicates, or the pack's own.
-    owned: dict[tuple[str, str], tuple[Member, dict]] = {}  # (kind, dedup key) → owner, doc
-    for m in members:
-        for kind, docs in m.docs.items():
-            if kind == "lock":
-                for d in docs:
-                    owned[("lock", f"{m.name}/{d['id']}")] = (m, d)
-                m.sel["lock"] = f"lock:{m.name}/{docs[0]['id']}"
-                continue
-            d = docs[0]
-            if kind in SHARED:
-                hit = shared.match(kind, d["data"], m.polarity, m.pal)
-                if hit is not False:
-                    if hit is not None:
-                        m.sel[kind] = hit
-                        plan.shared_refs.setdefault(hit, []).append(m.name)
-                    continue
-                d = dict(d, data=shared.generalize(kind, d["data"], m.polarity, m.pal))
-            key = wallpapers_key(d["data"], hasher) if kind == "wallpapers" else canonical(d["data"])
-            if (kind, key) not in owned:
-                owned[(kind, key)] = (m, d)
-            owner, od = owned[(kind, key)]
-            m.sel[kind] = f"{kind}:{owner.name}/{od['id']}"
-
-    for (kind, _), (m, d) in owned.items():
-        root = m.path
-        doc = {"$schema": FACET_SCHEMA, "kind": kind, "id": d["id"], "name": _facet_label(m, kind, d)}
-        for k in ("description", "source", "license"):
-            if d.get(k):
-                doc[k] = d[k]
-        if kind == "colors" and (root / "apps").is_dir():
-            doc["apps"] = "apps"
-        doc["data"] = relativize(kind, d["data"], root)
-        plan.writes[out_packs / m.path.name / "facets" / kind / f"{d['id']}.json"] = doc
-        plan.facets.setdefault(kind, set()).add(f"{kind}:{m.name}/{d['id']}")
-    for ref, users in plan.shared_refs.items():
+    for pack, kind, fid, doc, m in assign_facets(members, shared, hasher, shared_refs=plan.shared_refs):
+        plan.writes[out_packs / m.path.name / "facets" / kind / f"{fid}.json"] = doc
+        plan.facets.setdefault(kind, set()).add(f"{kind}:{pack}/{fid}")
+    for ref in plan.shared_refs:
         plan.facets.setdefault(ref.split(":")[0], set()).add(ref)
 
     # pack.json for every converted pack.
@@ -504,7 +524,7 @@ def _facet_label(m: Member, kind: str, d: dict) -> str:
     return humanize(m.short())
 
 
-def theme_document(g: Group, home: Path) -> dict:
+def theme_document(g: Group, home: Path, v1: bool = True) -> dict:
     """The theme document of a group: the base's selections, each variant's
     differences, identity per member (variants carry what differs), the v1
     link per member (relative to the home pack) and the aliases."""
@@ -515,12 +535,13 @@ def theme_document(g: Group, home: Path) -> dict:
         out = {k: mf[k] for k in ("author", "version", "license", "source") if isinstance(mf.get(k), str)}
         if m.upstream:
             out["upstream"] = m.upstream
-        v1 = {"path": _rel(m.path, home)}
-        if (m.path / "greeter").is_dir():
-            v1["greeter"] = _rel(m.path / "greeter", home)
+        link: dict = {"path": _rel(m.path, home)} if v1 else {}
+        if v1 and (m.path / "greeter").is_dir():
+            link["greeter"] = _rel(m.path / "greeter", home)
         if isinstance(mf.get("vibes"), dict):
-            v1["vibes"] = mf["vibes"]
-        out["v1"] = v1
+            link["vibes"] = mf["vibes"]
+        if link:
+            out["v1"] = link
         return out
 
     def facets(m: Member) -> dict:
@@ -548,7 +569,7 @@ def theme_document(g: Group, home: Path) -> dict:
                 v["description"] = mf["description"]
             mi = ident(m)
             for k, val in mi.items():
-                if k == "v1" or bid.get(k) != val:
+                if (k == "v1" and v1) or bid.get(k) != val:
                     v[k] = val
             v["facets"] = sel
             variants.append(v)
@@ -568,7 +589,8 @@ def theme_document(g: Group, home: Path) -> dict:
         doc["aliases"] = aliases
     if "upstream" in bid:
         doc["upstream"] = bid["upstream"]
-    doc["v1"] = bid["v1"]
+    if "v1" in bid:
+        doc["v1"] = bid["v1"]
     return doc
 
 
@@ -785,7 +807,10 @@ def convert_state(plan: Plan, catalog: Catalog, locks: dict[str, str]) -> None:
                 "description": f"Saved set of {name} (migrated from shell.json perTheme)",
                 "data": {"collection": images, "sets": [{"name": s["name"], "displays": disp, "workspaces": work}]},
             }  # fmt: skip
-            sets_out[str(plan.new_root / "Wallpapers" / "Sets" / f"{sid}.json")] = doc
+            dest = plan.new_root / "Wallpapers" / "Sets" / f"{sid}.json"
+            if (dest.exists() or (plan.old_root / "Wallpapers" / "Sets" / f"{sid}.json").exists()):
+                continue  # an earlier run
+            sets_out[str(dest)] = doc
             changes.append(f"Wallpapers/Sets/{sid}.json  ← perTheme.{name}.sets[{s['name']}]")
 
     # The active selection, when appearance.json doesn't have one yet.
@@ -1128,3 +1153,122 @@ def undo(report: Path) -> list[str]:
             os.rename(b, a)
             done.append(f"moved {b} → {a}")
     return done
+
+
+# ── importers: fresh v1 builds → one v2 pack (§5.5 "Importers write v2") ────
+
+
+def _base_id(base: Member, vids: list[str]) -> str:
+    """The base's chip id: its polarity when the variants are the other one
+    (material-you + dark → light), else its own short name."""
+    if vids and all(v in ("dark", "light") for v in vids) and base.polarity not in vids:
+        return base.polarity
+    return base.short()
+
+
+def import_packs(mod, pid: str, built: list[tuple[Path, str | None]], out: Path, builtin: Path | None) -> dict:
+    """Turn freshly built v1 packs (an importer's `install`) into the v2
+    pack `out` (which may hold an earlier install, copied with hard links:
+    nothing in it is written in place). built: [(v1 dir, variant id or None
+    for the theme's base)], the base first. Assets move into the pack (a
+    rice: every member under <variant>/; otherwise the base at the root and
+    each variant under <variant>/), the facets go into facets/, the theme
+    into themes/<pid>.json (variants of an earlier install kept), and the v1
+    files are dropped. Returns the theme document."""
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    out = out.resolve()
+    shared, hasher = Shared(builtin), Hasher()
+    rice = bool(getattr(mod, "RICE", None))
+    tfile = out / "themes" / f"{pid}.json"
+    try:
+        old = json.loads(tfile.read_text()) if tfile.is_file() else None
+    except ValueError:
+        old = None
+    old_vids = [v.get("id") for v in (old or {}).get("variants") or [] if isinstance(v, dict)]
+    members: list[Member] = []
+    vids: list[str | None] = []
+    for v1dir, vid in built:
+        short = Pack(v1dir).name
+        short = short[len(mod.NAME) + 1 :] if short.startswith(mod.NAME + "-") else short
+        sub = (vid or short) if rice else (vid or "")
+        target = out / sub if sub else out
+        if sub:
+            shutil.rmtree(target, ignore_errors=True)
+        else:  # the base at the root: drop its previous assets, keep variants' dirs
+            keep = {PACK_JSON, "themes", "facets", *(v for v in old_vids if v), *(v for _, v in built if v)}
+            for c in list(out.iterdir()):
+                if c.name not in keep:
+                    shutil.rmtree(c) if c.is_dir() and not c.is_symlink() else c.unlink()
+        target.mkdir(parents=True, exist_ok=True)
+        for c in sorted(Path(v1dir).iterdir()):
+            os.rename(c, target / c.name)
+        members.append(load_member(Pack(target), shared))
+        vids.append(vid)
+
+    def fid(m: Member, kind: str, f: str) -> str:
+        return f if kind == "lock" else _slug(m.short())
+
+    for _pack, kind, f, doc, _m in assign_facets(members, shared, hasher, pack_of=lambda m: pid, fid_of=fid, root_of=lambda m: out):
+        write_doc(out / "facets" / kind / f"{f}.json", doc)
+
+    base = members[0]
+    var_ids = [v for v in vids[1:] if v] + [v for v in old_vids if v and v not in vids]
+    has_variants = bool(var_ids) or rice
+    g = Group(
+        theme=pid, home=pid, rule="rice" if rice else "declared" if has_variants else "single", members=[],
+        collection=mod.NAME, name=getattr(mod, "TITLE", None) if rice else humanize(base.short()),
+    )  # fmt: skip
+    g.name = g.name or humanize(pid)
+    bid = _base_id(base, [v for v in var_ids if v])
+    if has_variants:
+        g.base = {"id": bid, "name": humanize(bid)}
+    g.members = [(base, bid if has_variants else None, humanize(bid))] + [(m, v, humanize(v)) for m, v in zip(members[1:], vids[1:])]
+    doc = theme_document(g, out, v1=False)
+    if rice:
+        doc["description"] = f"{g.name}: " + ", ".join([humanize(bid)] + [humanize(v) for v in var_ids])
+    # Variants of an earlier install that weren't rebuilt now stay.
+    if old:
+        rebuilt = {v.get("id") for v in doc.get("variants") or []}
+        kept = [v for v in old.get("variants") or [] if isinstance(v, dict) and v.get("id") not in rebuilt and v.get("id") != bid]
+        if kept:
+            doc.setdefault("variants", []).extend(kept)
+            doc["aliases"] = list(dict.fromkeys([*(doc.get("aliases") or []), *(old.get("aliases") or [])]))
+            app = dict(old.get("appearance") or {})
+            app.update(doc.get("appearance") or {})
+            doc["appearance"] = app
+    if rice and doc.get("variants"):
+        order = [t.lower() for t in mod.RICE]
+        doc["variants"].sort(key=lambda v: order.index(v["id"]) if v["id"] in order else len(order))
+    write_doc(tfile, doc)
+    for m in members:
+        for f in ("theme.json", "manifest.json"):
+            (m.path / f).unlink(missing_ok=True)
+    mf = base.pack.manifest or {}
+    meta = {"$schema": PACK_SCHEMA, "format": 2, "id": pid, "name": g.name}
+    for k in ("author", "version", "license"):
+        if isinstance(mf.get(k), str):
+            meta[k] = mf[k]
+    up = {k: v for k, v in base.upstream.items() if k != "path"}
+    meta["source"] = up.get("url") or mf.get("source", "")
+    meta["description"] = doc["description"] if rice else mf.get("description", "")
+    if up:
+        meta["upstream"] = up
+    write_doc(out / PACK_JSON, meta)
+    return doc
+
+
+def installed_members(dest: Path) -> set[str]:
+    """Upstream themes a v2 pack holds (lower case), from its themes' upstream paths."""
+    out: set[str] = set()
+    tdir = Path(dest) / "themes"
+    for f in sorted(tdir.glob("*.json")) if tdir.is_dir() else []:
+        try:
+            doc = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        for d in [doc, *[v for v in doc.get("variants") or [] if isinstance(v, dict)]]:
+            up = d.get("upstream") if isinstance(d.get("upstream"), dict) else {}
+            if up.get("path"):
+                out.add(Path(up["path"]).name.lower())
+    return out

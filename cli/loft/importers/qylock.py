@@ -56,6 +56,17 @@ def pack_name(theme: str) -> str:
     return f"qylock-{slug}"
 
 
+def v2_group(theme: str, available: list[str]) -> tuple[str, str, str | None]:
+    """Format 2: `qylock-<theme>`, or the declared pairs (VARIANT_OF) as a
+    variant of their base's pack. (pack, base theme, variant id or None)."""
+    decl = VARIANT_OF.get(theme.lower())
+    if decl:
+        base = next((t for t in available if t.lower() == decl[0]), None)
+        if base is not None:
+            return pack_name(base), base, decl[1]
+    return pack_name(theme), theme, None
+
+
 def list_themes(up: Upstream) -> list[str]:
     up.dir  # noqa: B018 — fetch first, so fetch errors surface as they are
     try:

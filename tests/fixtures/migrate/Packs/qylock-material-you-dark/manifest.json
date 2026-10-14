@@ -1,0 +1,19 @@
+{
+  "name": "qylock-material-you-dark",
+  "author": "Darkkal44&Kaonaci",
+  "version": "0.0.0+f6561e2ceae3",
+  "license": "GPL-3.0",
+  "source": "https://github.com/Darkkal44/qylock/tree/f6561e2ceae33f26e5e660742a5df2f725cbe514/themes/material-you-dark",
+  "description": "Google Pixel / Material You inspired Lockscreen Theme (imported: palette from bg.png, theme.conf colors)",
+  "upstream": {
+    "importer": "qylock",
+    "url": "https://github.com/Darkkal44/qylock",
+    "ref": "HEAD",
+    "commit": "f6561e2ceae33f26e5e660742a5df2f725cbe514",
+    "path": "themes/material-you-dark"
+  },
+  "lock": {
+    "format": "qylock",
+    "path": "lock/qylock"
+  }
+}

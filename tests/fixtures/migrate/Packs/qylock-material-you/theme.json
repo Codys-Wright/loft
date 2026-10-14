@@ -1,0 +1,27 @@
+{
+  "polarity": "light",
+  "palette": {
+    "bg": "#eef6f0",
+    "surface": "#e2f0e6",
+    "overlay": "#bacbbe",
+    "text": "#2a4631",
+    "subtext": "#657b6a",
+    "accent": "#988a20",
+    "accent2": "#327651",
+    "urgent": "#b12e25",
+    "ok": "#25a021",
+    "warn": "#a98123"
+  },
+  "glass": {
+    "blur": true,
+    "xray": true,
+    "tint": "#f6fbf8",
+    "opacity": 0.6,
+    "border": "#ffffff",
+    "borderOpacity": 0.55,
+    "radius": 14
+  },
+  "wallpaper": {
+    "image": "lock/qylock/bg.png"
+  }
+}

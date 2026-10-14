@@ -60,6 +60,14 @@ def pack_name(theme: str) -> str:
     return f"cozytile-{theme.lower()}"
 
 
+def v2_group(theme: str, available: list[str]) -> tuple[str, str, str | None]:
+    """Format 2: every theme is a variant of `cozytile`; the base is the first
+    of RICE upstream has. (pack, base theme, variant id or None for the base)."""
+    order = [t for t in RICE if t in available] + sorted(t for t in available if t not in RICE)
+    base = order[0] if order else theme
+    return NAME, base, None if theme == base else theme.lower()
+
+
 def list_themes(up: Upstream) -> list[str]:
     up.dir  # noqa: B018 — fetch first, so fetch errors surface as they are
     try:

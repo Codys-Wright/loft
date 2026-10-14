@@ -47,7 +47,7 @@ from pathlib import Path
 
 from . import capture, cleaner, dock, hooks, importers, index, island, keys, library, media, ports, render, spotify, themecmds, updates, utilities, vibes, wallsets
 from .facets import FacetError
-from .pack import IGNORED, Pack, PackError, is_pack
+from .pack import IGNORED, Pack, PackError, is_any_pack, is_pack, is_pack_v2, pack_id, validate_v2
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 TAR_SUFFIXES = (".tar", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".tar.zst", ".tzst")
@@ -144,6 +144,43 @@ class Ctx:
             pack.validate(self.schema, require_manifest)
         except PackError as e:
             raise Fail(str(e)) from e
+
+    def validate_any(self, path: Path, others: list[Path] = ()) -> None:
+        """A v2 pack (pack.json: documents, files, its themes resolving
+        against `others`, the theme path and the built-ins), else a v1 pack."""
+        if not is_pack_v2(path):
+            self.validate(Pack(path), require_manifest=True)
+            return
+        errors = validate_v2(path, self.data_dir / "packs", [*others, *self.theme_path])
+        if errors:
+            raise Fail(f"{path}: invalid pack\n  " + "\n  ".join(errors))
+
+    def pack_dir(self, ref: str, user_only: bool = False) -> Path:
+        """An installed pack's directory: a path; a pack (dir) name or id on the
+        theme path (the user dirs only with user_only); or a theme / old name,
+        through the theme it names."""
+        p = Path(ref).expanduser()
+        if ("/" in ref or ref.startswith(".")) and is_any_pack(p):
+            return p.resolve()
+        dirs = self.user_dirs if user_only else self.theme_path
+        for d in dirs:
+            if is_any_pack(d / ref):
+                return (d / ref).resolve()
+        for d in dirs:
+            for sub in sorted(d.iterdir()) if d.is_dir() else []:
+                if sub.is_dir() and is_pack_v2(sub) and pack_id(sub) == ref:
+                    return sub.resolve()
+        try:
+            cat = themecmds.catalog(self)
+            theme, _ = cat.theme(ref)
+        except FacetError:
+            theme = None
+        if theme is not None and theme.root is not None:
+            root = Path(theme.root).resolve()
+            if any(_resolve(d) in root.parents for d in dirs if d.is_dir()):
+                return root
+        where = ":".join(map(str, dirs))
+        raise Fail(f"no installed pack or theme '{ref}' ({where})" + ("; built-in themes can't be removed" if user_only else ""))
 
 
 def _resolve(p: Path) -> Path:
@@ -269,9 +306,15 @@ def cmd_render(ctx: Ctx, args) -> None:
 def cmd_validate(ctx: Ctx, args) -> None:
     import importlib.util
 
-    if importlib.util.find_spec("jsonschema") is None:
-        raise Fail("validate needs the jsonschema python module (use the Nix-packaged loft)")
     for ref in args.packs:
+        p = Path(ref).expanduser()
+        if is_pack_v2(p) or (not is_pack(p) and "/" not in ref and any(is_pack_v2(d / ref) for d in ctx.theme_path)):
+            root = p if is_pack_v2(p) else ctx.pack_dir(ref)
+            ctx.validate_any(root)
+            print(f"ok  {pack_id(root)}  ({root})")
+            continue
+        if importlib.util.find_spec("jsonschema") is None:
+            raise Fail("validating a v1 pack needs the jsonschema python module (use the Nix-packaged loft)")
         pack = ctx.find(ref)
         ctx.validate(pack, require_manifest=True)
         print(f"ok  {pack.name}  ({pack.path})")
@@ -331,18 +374,20 @@ def cmd_new(ctx: Ctx, args) -> None:
     print(dest)
 
 
-def _find_pack_root(root: Path, subdir: str | None) -> Path:
+def _find_pack_roots(root: Path, subdir: str | None) -> list[Path]:
+    """The pack(s) to install: root itself, or the one pack inside it (tarballs
+    wrap it in a directory), or several v2 packs (a theme exported with the
+    packs it refers to)."""
     if subdir:
         root = root / subdir
-    if is_pack(root):
-        return root
-    # Tarballs usually wrap the pack in one top-level directory.
-    subs = [d for d in root.iterdir() if d.is_dir() and is_pack(d)] if root.is_dir() else []
-    if len(subs) == 1:
-        return subs[0]
+    if is_any_pack(root):
+        return [root]
+    subs = [d for d in sorted(root.iterdir()) if d.is_dir() and is_any_pack(d)] if root.is_dir() else []
+    if len(subs) == 1 or (subs and all(is_pack_v2(d) for d in subs)):
+        return subs
     if subs:
         raise Fail(f"several packs found ({', '.join(d.name for d in subs)}); pick one with --subdir")
-    raise Fail(f"no theme pack (theme.json) found in {root}")
+    raise Fail(f"no theme pack (pack.json or theme.json) found in {root}")
 
 
 def _is_git(ref: str) -> bool:
@@ -360,15 +405,21 @@ def _extract(archive: Path, into: Path) -> None:
 
 
 def _import(ctx: Ctx, args) -> None:
+    v1 = True if getattr(args, "v1", False) else None
+    if v1:
+        os.environ["LOFT_IMPORT_FORMAT"] = "1"  # --list too
+
     def validate(path: Path) -> None:
-        ctx.validate(Pack(path), require_manifest=True)
+        ctx.validate_any(path)
 
     try:
         if args.list:
             for theme, pack in importers.list_available(args.source):
                 print(f"{pack:28} {args.source.split(':', 1)[0]}:{theme}")
             return
-        importers.install(args.source, ctx.user_themes, force=args.force, validate=validate, index=ctx.index())
+        importers.install(
+            args.source, ctx.user_themes, force=args.force, validate=validate, index=ctx.index(), v1=v1, builtin=ctx.data_dir / "packs"
+        )
     except importers.ImporterError as e:
         raise Fail(str(e)) from e
 
@@ -404,38 +455,129 @@ def cmd_install(ctx: Ctx, args) -> None:
         else:
             raise Fail(f"'{ref}' is not a pack directory, tarball or git URL")
 
-        pack = Pack(_find_pack_root(root, args.subdir))
-        ctx.validate(pack, require_manifest=True)
-        name = pack.name
-        if not NAME.match(name) or name == "default":
-            raise Fail(f"pack name '{name}' is not a valid theme name")
-        dest = ctx.user_themes / name
-        if dest.exists():
-            if not args.force:
-                raise Fail(f"{name} is already installed ({dest}); use --force to replace it")
-            shutil.rmtree(dest)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        _copy_pack(pack.path, dest)
-    print(f"loft: installed {name} → {dest}")
+        roots = _find_pack_roots(root, args.subdir)
+        names = []
+        for r in roots:
+            ctx.validate_any(r, others=[r.parent] if len(roots) > 1 else [])
+            name = pack_id(r)
+            if not NAME.match(name) or name == "default":
+                raise Fail(f"pack name '{name}' is not a valid theme name")
+            if (ctx.user_themes / name).exists() and not args.force:
+                raise Fail(f"{name} is already installed ({ctx.user_themes / name}); use --force to replace it")
+            names.append(name)
+        for r, name in zip(roots, names):
+            dest = ctx.user_themes / name
+            if dest.exists():
+                shutil.rmtree(dest)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            _copy_pack(r, dest)
+            print(f"loft: installed {name} → {dest}")
+
+
+def _theme_names(ctx: Ctx, pack_root: Path) -> set[str]:
+    """What a pack's themes are known by: theme ids and every alias name (rendered/<name>)."""
+    if not is_pack_v2(pack_root):
+        return {Pack(pack_root).name} if is_pack(pack_root) else set()
+    out: set[str] = set()
+    for f in sorted((pack_root / "themes").glob("*.json")) if (pack_root / "themes").is_dir() else []:
+        try:
+            doc = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        out.add(doc.get("id") or f.stem)
+        out.update(str(a).partition("@")[0] for a in doc.get("aliases") or [])
+    return out
+
+
+def _deps(ctx: Ctx, pack_root: Path) -> list[Path]:
+    """Other installed packs whose facets this pack's themes refer to
+    (a migrated theme like cozytile uses the five cozytile-* packs)."""
+    if not is_pack_v2(pack_root):
+        return []
+    cat = themecmds.catalog(ctx, [pack_root])
+    pid = pack_id(pack_root)
+    out: list[Path] = []
+    for t in [t for t in cat.themes() if t.pack == pid]:
+        for sels in [t.doc.get("facets") or {}, *[v.get("facets") or {} for v in t.variants()]]:
+            for kind, sel in sels.items():
+                ref = sel if isinstance(sel, str) else sel.get("ref") if isinstance(sel, dict) else None
+                if not ref:
+                    continue
+                try:
+                    f = cat.facet(ref, kind, pid)
+                except FacetError:
+                    continue
+                root = cat.pack_root(f.pack)
+                if f.pack not in (pid, "loft", "user") and root is not None and root not in out:
+                    out.append(Path(root))
+    return out
+
+
+def cmd_update(ctx: Ctx, args) -> None:
+    """Re-import packs that came from an importer (pack.json / manifest
+    `upstream.importer`), at the upstream's HEAD or --ref."""
+    roots = [ctx.pack_dir(n, user_only=True) for n in args.names] if args.names else [
+        d for u in ctx.user_dirs if u.is_dir() for d in sorted(u.iterdir()) if d.is_dir() and is_any_pack(d)
+    ]  # fmt: skip
+    refs: dict[str, list[str]] = {}
+    for r in roots:
+        meta = json.loads((r / ("pack.json" if is_pack_v2(r) else "manifest.json")).read_text()) if (r / ("pack.json" if is_pack_v2(r) else "manifest.json")).is_file() else {}
+        imp = (meta.get("upstream") or {}).get("importer")
+        if imp not in importers.REGISTRY:
+            if args.names:
+                raise Fail(f"{r.name}: not from an importer (nothing to update from)")
+            continue
+        from . import migrate
+
+        members = sorted(migrate.installed_members(r)) if is_pack_v2(r) else [Path((meta.get("upstream") or {}).get("path", r.name)).name]
+        refs.setdefault(imp, []).extend(m for m in members if m not in refs.get(imp, []))
+    if not refs:
+        print("loft: nothing to update (no packs from an importer)")
+        return
+    for imp, themes in refs.items():
+        args.source = f"{imp}:{','.join(themes)}" + (f"@{args.ref}" if args.ref else "")
+        args.force, args.list = True, False
+        _import(ctx, args)
 
 
 def cmd_remove(ctx: Ctx, args) -> None:
-    dest = next((d / args.name for d in ctx.user_dirs if is_pack(d / args.name)), None)
-    if dest is None:
-        where = ":".join(map(str, ctx.user_dirs))
-        raise Fail(f"'{args.name}' is not an installed theme ({where}); built-in themes can't be removed")
-    shutil.rmtree(dest)
-    # Drop its render cache unless it's what `current` shows right now.
-    rendered = ctx.state_dir / "rendered" / args.name
+    dest = ctx.pack_dir(args.name, user_only=True)
+    # A pack another installed theme uses (a migrated cozytile-sakura holds
+    # cozytile@sakura's facets) goes only with that theme.
+    users = [
+        d for u in ctx.user_dirs if u.is_dir() for d in sorted(u.iterdir())
+        if d.is_dir() and _resolve(d) != dest and is_pack_v2(d) and dest in [_resolve(x) for x in _deps(ctx, d)]
+    ]  # fmt: skip
+    if users:
+        what = ""
+        try:
+            t, v = themecmds.catalog(ctx).theme(args.name)
+            what = f" ({args.name} is {t.id}{'@' + v if v else ''} now)"
+        except FacetError:
+            pass
+        raise Fail(f"{dest.name} is used by {', '.join(d.name for d in users)}{what}: remove that with --with-deps")
+    deps = [d for d in _deps(ctx, dest) if any(_resolve(u) in d.parents for u in ctx.user_dirs if u.is_dir())]
+    targets = [dest] + (deps if args.with_deps else [])
     cur = ctx.current.resolve() if ctx.current.is_symlink() else None
-    if rendered.is_dir() and not (cur and rendered.resolve() in cur.parents):
-        shutil.rmtree(rendered)
-    print(f"loft: removed {args.name}")
+    for t in targets:
+        names = _theme_names(ctx, t) | {t.name}
+        shutil.rmtree(t)
+        # Drop its render caches unless one is what `current` shows right now.
+        for n in sorted(names):
+            rendered = ctx.state_dir / "rendered" / n
+            if rendered.is_dir() and not (cur and rendered.resolve() in cur.parents):
+                shutil.rmtree(rendered)
+        print(f"loft: removed {t.name}")
+    if deps and not args.with_deps:
+        print("loft: its themes also used " + ", ".join(d.name for d in deps) + " (remove them too with --with-deps)")
 
 
 def cmd_export(ctx: Ctx, args) -> None:
-    pack = ctx.find(args.name)
-    out = Path(args.output or f"{pack.name}.tar.gz")
+    root = ctx.pack_dir(args.name)
+    name = pack_id(root)
+    # A v2 pack goes with the packs its themes refer to (not the built-ins).
+    extra = _deps(ctx, root)
+    out = Path(args.output or f"{name}.tar.gz")
     mode = {
         ".gz": "w:gz",
         ".tgz": "w:gz",
@@ -458,9 +600,13 @@ def cmd_export(ctx: Ctx, args) -> None:
 
     try:
         with tarfile.open(out, mode) as tf:
-            tf.add(pack.path, arcname=pack.name, filter=clean)
+            tf.add(root, arcname=name, filter=clean)
+            for d in extra:
+                tf.add(d, arcname=pack_id(d), filter=clean)
     except tarfile.CompressionError as e:
         raise Fail(f"{out}: {e} (try .tar.gz)") from e
+    if extra:
+        print(f"loft: with {', '.join(pack_id(d) for d in extra)} (its themes use them)", file=sys.stderr)
     print(out)
 
 
@@ -1009,13 +1155,21 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--list", action="store_true", help="list what IMPORTER: can install")
     s.add_argument("--subdir", help="pack directory inside the repo/tarball")
     s.add_argument("--force", action="store_true", help="replace an installed pack of the same name")
+    s.add_argument("--v1", action="store_true", help="importers: one v1 pack per upstream theme (what the shell's picker lists until it reads themes)")
     s.set_defaults(fn=cmd_install)
 
-    s = sub.add_parser("remove", help="remove an installed pack")
+    s = sub.add_parser("update", help="re-import packs that came from an importer (cozytile:, qylock:)")
+    s.add_argument("names", nargs="*", metavar="PACK", help="packs or themes (default: every one from an importer)")
+    s.add_argument("--ref", help="upstream git ref (default: HEAD)")
+    s.add_argument("--v1", action="store_true", help=argparse.SUPPRESS)
+    s.set_defaults(fn=cmd_update)
+
+    s = sub.add_parser("remove", help="remove an installed pack (by pack, theme or old name)")
     s.add_argument("name")
+    s.add_argument("--with-deps", action="store_true", help="also the installed packs its themes use (a migrated cozytile: cozytile-*)")
     s.set_defaults(fn=cmd_remove)
 
-    s = sub.add_parser("export", help="archive a pack for sharing")
+    s = sub.add_parser("export", help="archive a pack for sharing (v2: with the packs its themes use)")
     s.add_argument("name")
     s.add_argument("-o", "--output", help="archive path (default: NAME.tar.gz)")
     s.set_defaults(fn=cmd_export)
