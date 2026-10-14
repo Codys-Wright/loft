@@ -1,7 +1,7 @@
 # Spaces: functional desktops across every display
 
-Status: **P0–P2 implemented** on the `spaces` branch (test infra, spikes, model, roles,
-`spaces.kdl` render, activation in `loft-niri space …`); P3–P8 are spec. See §10 for
+Status: **P0–P3 implemented** (test infra, spikes, model, roles, `spaces.kdl` render,
+activation, and spin-up / restore in `loft-niri space …`); P4–P8 are spec. See §10 for
 the status and §3.4 for what the spikes measured. It is designed together with
 [THEME-ARCHITECTURE.md](THEME-ARCHITECTURE.md), which defines how a space can carry a
 theme or its own wallpapers, and it reuses the display-role model of the `wallsets`
@@ -93,6 +93,7 @@ and Gaming.
     "editor":  { "type": "enum",   "values": ["zed", "code", "nvim"], "default": "zed" }
   },
   "instance": { "id": "proj-${slug(name)}", "name": "Project: ${name}", "workspace": "${slug(name)}" },
+  "cwd": "${dir}",
   "displays": {
     "main": { "apps": [
       { "id": "editor", "when": "${editor == 'zed'}", "exec": ["zeditor", "${dir}"],
@@ -104,8 +105,8 @@ and Gaming.
     ] },
     "right": { "apps": [
       { "id": "preview", "when": "${isUrl(preview)}",
-        "exec": ["chromium", "--app=${preview}", "--class=loft.${id}.preview", "--user-data-dir=${state}/browser/${id}"],
-        "match": { "appId": "^loft\\.${id}\\.preview$" }, "open": "maximized" },
+        "exec": ["chromium", "--app=${preview}", "--class=loft.${id}.preview", "--user-data-dir=${profiles}/${id}/preview"],
+        "match": { "appId": "^chrome-${re(chromeApp(preview))}-Default$" }, "open": "maximized" },
       { "id": "preview-cmd", "when": "${preview && !isUrl(preview)}",
         "exec": ["kitty", "--class", "loft.${id}.run", "--directory", "${dir}", "--hold", "sh", "-c", "${preview}"],
         "match": { "appId": "^loft\\.${id}\\.run$" }, "width": 0.33 },
@@ -113,8 +114,8 @@ and Gaming.
     ] },
     "left": { "apps": [
       { "id": "docs", "when": "${docs}",
-        "exec": ["chromium", "--app=${docs}", "--class=loft.${id}.docs", "--user-data-dir=${state}/browser/${id}"],
-        "match": { "appId": "^loft\\.${id}\\.docs$" }, "open": "maximized" }
+        "exec": ["chromium", "--app=${docs}", "--class=loft.${id}.docs", "--user-data-dir=${profiles}/${id}/docs"],
+        "match": { "appId": "^chrome-${re(chromeApp(docs))}-Default$" }, "open": "maximized" }
     ] }
   },
   "dock": { "pinned": ["dev.zed.Zed", "kitty", "chromium"], "mode": "prepend" },
@@ -123,15 +124,27 @@ and Gaming.
 ```
 
 - Interpolation `${…}` sees the params, plus `id`, `state` (`~/.local/state/loft`),
-  `home`, and the helpers `slug`, `basename`, `isUrl`. `when` drops an app whose
-  condition is empty or false.
+  `home`, `profiles` (browser profiles: `$LOFT_SPACES_PROFILES`, else
+  `${state}/browser`), and the helpers `slug`, `basename`, `isUrl`, `re` (a regex
+  literal) and `chromeApp` (below). `when` drops an app whose condition is empty or
+  false.
+- `cwd` (on the space or on one app) is where apps are spawned; `~` is expanded there
+  and at the start of `exec` arguments.
 - `launch: false` gathers an existing window and never spawns one. That's for a native
   preview window that `preview-cmd` (e.g. `dx serve`, `cargo run`) opens.
-- Apps whose command can set its app-id (`kitty --class`, Chromium `--class` with a
-  per-instance `--user-data-dir`) are matched **exactly**, which is the reliable path.
-  Editors that reuse one process (Zed, VS Code) are matched by app-id + title. That's
-  why the default browser for preview and docs is Chromium `--app`, not Firefox
-  (open question Q5).
+- Apps whose command can set its app-id (`kitty --class`) are matched **exactly**,
+  which also gives them `spaces.kdl` window rules. Editors that reuse one process (Zed,
+  VS Code) are matched by app-id + title. Every spawned app is also identified by its
+  systemd scope (§4), which is what really tells two instances apart.
+- **Chromium `--app` ignores `--class` on Wayland** (measured with Chromium 155): an app
+  window's app-id is `chrome-<host>_<path, / → _>-Default`, without the port
+  (`http://127.0.0.1:9/` → `chrome-127.0.0.1__-Default`). `chromeApp(url)` computes the
+  middle part, so the template matches what Chromium really reports. That app-id isn't
+  unique (two projects on `localhost` share it), so the preview and docs are told apart
+  by their scope and claims, and they get no window rule: they're moved into place
+  after they map. Each gets its **own** profile (`${profiles}/${id}/preview`,
+  `…/docs`): with one profile per instance, the docs window would hand off to the
+  preview's browser process and land in the preview's scope.
 
 ### 2.3 An instance
 
@@ -189,7 +202,10 @@ activate(space S, from display F):
 - Windows keep their focus history per workspace, so the last-focused window on
   `target` gets keyboard focus. That is the editor in a Project, REAPER in Music.
 - Activating the space that is already active refocuses `main` and restores any `keep`
-  displays that were switched away by hand ("bring the space back").
+  displays that were switched away by hand ("bring the space back"). Each activation
+  records what the space's `keep` displays show (by identity) in `runtime.json`
+  `memory`, and activating the active space focuses those workspaces again when they
+  are still on that display (P3).
 - Fast path: the niri binds call `loft-niri space focus <id>` (Rust, `crates/loft-niri`,
   which already speaks niri IPC). It runs in about 5 ms, whereas a Python CLI or
   `qs ipc` call spawns an interpreter. The shell sees `WorkspaceActivated` events and
@@ -297,37 +313,72 @@ outputs `headless-N` (identity `niri headless N`), 60 Hz frame pacing, screencop
 
 ## 4. Spinning up and restoring apps
 
-`loft space open <id>` (and the first activation of a space with `startup:
-"first-activate"`) runs, per display in plan order and per app in column order:
+`loft-niri space open <id>` (and the first activation of a space with `startup:
+"first-activate"`) runs, per display in plan order and per app in column order
+(`crates/loft-niri/src/spaces/{apps,launch,runtime}.rs`):
 
-1. **Find**: a live window matching `match` (`appId` regex, `title` regex, optional
-   `cwd`: the window's `pid` → `/proc/<pid>/cwd` under `${dir}`) that no other space
-   instance has claimed. Claims live in `~/.local/state/loft/spaces/runtime.json`
-   (`window id → instance/app`).
+1. **Find**, strongest first:
+   1. the window this instance/app **claimed** before (claims live in
+      `~/.local/state/loft/spaces/runtime.json`, `window id → instance/app`);
+   2. a window whose process sits in the app's **scope** (its pid's
+      `/proc/<pid>/cgroup` names `loft-space-<instance>-<app>.scope`);
+   3. `match`: the `appId` and `title` regexes and the `cwd` prefix (the window's
+      `pid` → `/proc/<pid>/cwd` under the path), all that are given.
+
+   A window claimed by another instance or app, or sitting in another app's scope, is
+   never taken by 3, so two Project instances never steal each other's windows. Among
+   several candidates, one already on the app's workspace wins, then the oldest.
 2. **Spawn** when nothing matches and `launch` isn't false: `systemd-run --user --scope
-   --unit loft-space-<instance>-<app> -- <exec>`, in `${dir}`. The scope's cgroup tags
-   every descendant, so a window whose `pid` sits in that cgroup is this app's, even
-   through wrappers and forks. Apps that hand off to an already-running process (Zed,
-   VS Code, a browser without `--user-data-dir`) are matched by app-id + title, with a
-   10 s timeout (a toast says "Couldn't find the editor window").
-3. **Place**: `MoveWindowToWorkspace { window_id, reference: Name(ws), focus: false }`,
-   then the width (`SetWindowWidth { id, change: SetProportion(67.0) }`, or
-   `"open": "maximized"` → `MaximizeColumn` / `"fullscreen"`).
-4. **Order**: once every app of a workspace is placed, for each window in declared
-   order run `FocusWindow { id }` and `MoveColumnToIndex { index }`, then focus the
-   first app of `main`. This happens once, at spin-up. Restoring later never re-orders
-   columns you have moved.
-5. **Rules where possible**: for apps with an exact app-id (`loft.<id>.*`) Loft also
+   --unit loft-space-<instance>-<app>.scope -- <exec>`, in the app's `cwd`. The scope's
+   cgroup tags every descendant, so a window whose `pid` sits in that cgroup is this
+   app's, even through wrappers and forks. An **active** unit of that name means the app
+   is already running (its window may still be coming), so it's never started twice,
+   even when two `open`s race. Apps that hand off to an already-running process (Zed,
+   VS Code) leave the scope empty and are found by app-id + title. Loft waits up to 10 s
+   (`--timeout`) and reports "Couldn't find the editor window" for the rest (P4 turns it
+   into a toast). Without a reachable user manager the command is spawned directly and
+   its pid's descendants stand in for the scope.
+3. **Place**: `MoveWindowToWorkspace { window_id, reference: Name(ws), focus: false }`
+   when the window is elsewhere. A window claimed just now, or one that had to move, is
+   also sized: `SetWindowWidth { id, change: SetProportion(67.0) }` for `width: 0.67`,
+   `"open": "maximized"` → `SetProportion(100)` (niri's `MaximizeColumn` is a toggle
+   and takes no window id; a full-width column is the same thing, set idempotently),
+   `"fullscreen"` → `FullscreenWindow` and `"floating"` → `MoveWindowToFloating`, these
+   two only for a window claimed just now and not already in that state. A window that
+   stayed where it was keeps whatever you did to it.
+4. **Order**: when a workspace got a new window (spun up, newly claimed, or moved in by
+   a gather or a fold) and its declared apps aren't left to right in declared order,
+   `FocusWindow { id }` + `MoveColumnToIndex { index }` for each, then focus the first
+   app of `main`. Columns you rearranged with nothing moving in stay as you left them.
+5. **Rules where possible**: for apps with an exact app-id (`^loft\.…$`) Loft also
    writes niri window rules into `spaces.kdl` (`open-on-workspace`,
-   `default-column-width`, `open-focused false`). niri then places them at map time with
-   no visible jump, and steps 3–4 become no-ops.
+   `default-column-width`, `open-focused false`, `open-maximized`, …), following the
+   current layout (a `columns` fold targets main's workspace, `skip` writes none). niri
+   then places them at map time with no visible jump, and steps 3–4 become no-ops.
+
+The **`columns` fold** (§3.3) puts the folded roles' apps on main's workspace: `left` /
+`top` roles before main's apps, the others after. There they are columns of their
+`width`, or half the display (`apps::FOLD_WIDTH`), never maximized or fullscreen. When
+the display comes back, `gather` moves them back to their own workspace at their
+declared size.
+
+**Lifetime** (§12.4): `runtime.json`'s claims and `opened` list belong to one niri
+session (boot id + niri's socket path, which carries niri's pid), because window ids
+only mean something inside one niri process. After a reboot or niri restart the
+instances' workspaces come back from `spaces.kdl`, and each space spins up on its first
+activation (`startup: "first-activate"`, the default). `startup: "login"` spaces are
+opened by `loft-niri space startup` (for the session's autostart), `"never"` only by an
+explicit `open`.
 
 | Command | Effect |
 |---|---|
-| `loft space close <id>` | `CloseWindow` for each claimed window (apps may ask to save), then `UnsetWorkspaceName` on its workspaces so niri drops them when empty. The instance file stays. |
-| `loft space archive <id>` | close + `archived: true` (hidden from the switcher, listed under "Archived"). |
-| `loft space open <id>` | restore an instance: steps 1–5 (find first, so already-open windows are gathered, not duplicated). |
-| `loft space gather <id>` | find + place only, no spawning: pull matching windows back into the space. |
+| `loft-niri space focus <id>` | activate (§3); on the space's first activation in a session, spin it up (`--no-open`: don't) |
+| `loft-niri space open <id>` | restore a space: steps 1–5 (find first, so already-open windows are gathered, not duplicated), then activate it (`--no-focus`: don't) |
+| `loft-niri space gather <id>` | find + place only, no spawning: pull matching windows back into the space |
+| `loft-niri space close <id>` | `CloseWindow` for each window the space claimed or that sits in one of its scopes (apps may ask to save), then, for instances, `UnsetWorkspaceName` on its workspaces so niri drops them when empty. The instance file stays. Its claims and `opened` are forgotten. |
+| `loft-niri space apps <id>` | which window is which app right now, and how it was matched; changes nothing |
+| `loft-niri space startup` | open the `startup: "login"` spaces without switching to them |
+| `loft space archive <id>` | close + `archived: true` (hidden from the switcher, listed under "Archived"); P6 |
 
 ## 5. Per-space settings
 
@@ -443,7 +494,9 @@ template.
   instances/proj-loft.json  proj-inferno.json
 repo: spaces/templates/{project,main,music,video,communication,gaming,task}.json   built-in starting points
 ~/.local/state/loft/
-  spaces/runtime.json                    claims (window → instance/app), active space, last focus per space
+  spaces/runtime.json                    {session, claims: {window: {space, app}}, opened: [ids],
+                                         active, memory: {space: {keep: {identity: workspace}}}}
+  browser/<instance>/{preview,docs}      Chromium profiles ($LOFT_SPACES_PROFILES overrides)
   overrides/spaces.kdl                   generated (loft-niri spaces render; validated with `niri validate`)
   appearance.json                        "space": "<id>" while a space with a theme is active
 ```
@@ -552,6 +605,8 @@ loft space import-niri <config.kdl>          # §8 proposal, read-only
 loft-niri space focus|ensure|move-window <id|n>    # the fast path (P2, implemented)
 loft-niri space next | prev | order | list [--archived] | render [--dry-run] [--no-binds]
 loft-niri space plan <id|n> [--move-window] [--from-file STATE.json]   # the action list, not sent
+loft-niri space open <id> [--no-focus] [--timeout S] | close | gather | apps <id>   # §4 (P3)
+loft-niri space startup                                # open the `startup: "login"` spaces
 ```
 
 ## 10. Implementation plan
@@ -584,10 +639,31 @@ loft-niri space plan <id|n> [--move-window] [--from-file STATE.json]   # the act
   moves and space order), `spaces/live.rs` (pipelined IPC), and `loft-niri space …`.
   Exercised live in a 3-output session: activating each space, next/prev, move-window,
   unplug/fold/replug, runtime-created instances, multi-round creation, render + order.
-- **Not done in P2:** "activating the active space restores `keep` displays that were
-  switched by hand" (§3.1) needs per-space memory of what the keep displays showed,
-  which belongs in P3's `runtime.json`. `columns` fold only skips the workspace; moving
-  the apps in is P3.
+- **Not done in P2** (both done in P3): "activating the active space restores `keep`
+  displays that were switched by hand" (§3.1); moving a `columns` fold's apps into main.
+- **P3 done** (branch `spaces-p3`). `spaces/apps.rs` (pure: a space on a layout → its
+  apps with workspace, column, cwd, unit; matching by claim → scope → regex/cwd;
+  placement and column order as action lists; `/proc` cgroup / cwd / lineage),
+  `spaces/runtime.rs` (`runtime.json`: session-scoped claims and `opened`, per-space
+  keep memory, locked read-modify-write), `spaces/launch.rs` (systemd scopes, waiting,
+  `open` / `gather` / `close` / `apps` / `startup`, and `focus` with memory + lazy
+  spin-up), `plan::activate_with` + `keep_shown`, fold-aware window rules in
+  `spaces.kdl`, `${profiles}` + `chromeApp()` for the Chromium apps. Unit tests: specs
+  per layout and fold, matching order, two Project instances with one folder basename
+  (claims, scopes, cwd), golden placement / order / fold action lists, toggles not
+  repeated, keep-display restore, runtime sessions, rules per fold, Chromium app-ids.
+  Exercised live in a 3-output session (`--outputs
+  3440x1440+1440+0,1440x2560+0+0,2560x1440+4880+0`, fake `kitty --class` apps, real
+  scopes through `LOFT_SPACES_SYSTEMD_RUNTIME_DIR`): open (≈1 s for four apps), a second
+  instance side by side without stealing, focus (5 ms once open), gather after a manual
+  move, keep-display restore, unplug → `columns` fold → replug → gather back, close,
+  niri restart → lazy spin-up on first focus with `spaces.kdl` rules placing the exact
+  app-ids, the no-scope fallback (`LOFT_SPACES_NO_SCOPES=1`), and Chromium `--app`
+  preview + docs with scratch profiles.
+- **Not done in P3:** `loft space archive` (P6's Python CLI); re-gathering on output
+  changes is P4's to trigger (`space gather <active>` after Displays.qml sees outputs
+  change); the "Couldn't find the window" toast is P4's (the note is in `--json`'s
+  `notes`).
 - **Decisions taken while implementing** (each noted where it applies): `target` vs
   `focus`, `layout` on the binding, binds by id, `space order` after render, Comms' id
   is `comms` (file `comms.json`, name "Communication").
@@ -598,6 +674,14 @@ loft-niri space plan <id|n> [--move-window] [--from-file STATE.json]   # the act
   ultrawide), `plan()` golden action lists (focus order, keep, fold stack / columns,
   focus stay / main), template interpolation, matching (cgroup vs title fallback), claim
   conflicts between two Project instances.
+- **Test sessions and scopes**: a `loft-dev` session has its own `XDG_RUNTIME_DIR`, so
+  the systemd user manager isn't reachable from inside it and spin-up falls back to
+  unscoped spawns. `LOFT_SPACES_SYSTEMD_RUNTIME_DIR=/run/user/$UID` lets `systemctl` /
+  `systemd-run` reach it (the app gets the session's runtime dir and bus back through
+  `env`), and `LOFT_SPACES_UNIT_PREFIX=<session>` names the scopes apart from real
+  ones. Point `LOFT_SPACES_DIR` at a scratch library with fake apps (`kitty --class
+  loft.<id>.<app> --title … sh -c 'exec sleep 1d'`) and `LOFT_SPACES_PROFILES` at a
+  scratch dir. Remove leftover test scopes with `systemctl --user stop <unit>` by name.
 - **Headless, multi-output** (`loft-dev --session spaces --outputs
   5120x1440,1440x2560,2560x1440`): activate each space and assert the active workspace
   per output from `loft-input --session spaces info` / `niri msg -j workspaces`; spin up

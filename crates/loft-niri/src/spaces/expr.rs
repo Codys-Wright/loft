@@ -7,8 +7,9 @@
 //! Expressions: identifiers (the params, `id`, `state`, `home`), string
 //! literals ('…' or "…"), numbers, `true` / `false` / `null`, `==` / `!=`,
 //! `!`, `&&` / `||` (JavaScript semantics: they return an operand),
-//! parentheses, and the helpers `slug(s)`, `basename(path)`, `isUrl(s)` and
-//! `re(s)` (s as a regex literal).
+//! parentheses, and the helpers `slug(s)`, `basename(path)`, `isUrl(s)`,
+//! `re(s)` (s as a regex literal) and `chromeApp(url)` (Chromium's app-id
+//! for an `--app` window).
 
 use anyhow::{Result, bail};
 use serde_json::{Map, Value};
@@ -57,6 +58,26 @@ pub fn basename(s: &str) -> String {
 pub fn is_url(s: &str) -> bool {
     let l = s.trim_start().to_ascii_lowercase();
     l.starts_with("http://") || l.starts_with("https://")
+}
+
+/// The app-id Chromium gives an `--app=URL` window on Wayland, minus the
+/// `chrome-` prefix and `-<profile>` suffix: `<host>_<path>` with `/` → `_`
+/// (no port, query or fragment). Chromium ignores `--class` for app
+/// windows, so this is what a template can match them by.
+/// `http://localhost:8080/docs` → `localhost__docs`.
+pub fn chrome_app(url: &str) -> String {
+    let rest = url.trim().split_once("://").map_or(url.trim(), |(_, r)| r);
+    let rest = rest.split(['?', '#']).next().unwrap_or("");
+    let (authority, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, "/"),
+    };
+    let host = authority.rsplit('@').next().unwrap_or("");
+    let host = match host.rsplit_once(':') {
+        Some((h, port)) if port.chars().all(|c| c.is_ascii_digit()) => h,
+        _ => host,
+    };
+    format!("{host}_{path}").replace('/', "_")
 }
 
 /// Interpolate every string in `v` (recursively).
@@ -307,6 +328,7 @@ fn call(name: &str, args: &[Value]) -> Result<Value> {
         "basename" => Value::String(basename(&s)),
         "isUrl" => Value::Bool(is_url(&s)),
         "re" => Value::String(crate::render::regex_literal(&s)),
+        "chromeApp" => Value::String(chrome_app(&s)),
         _ => bail!("unknown function `{name}`"),
     })
 }
@@ -400,4 +422,17 @@ mod tests {
         assert!(eval("name name", &c).is_err());
         assert!(interpolate_str("${name", &c).is_err());
     }
+
+    #[test]
+    fn chromium_app_ids() {
+        // As Chromium 155 names them (measured in a test session).
+        assert_eq!(chrome_app("http://127.0.0.1:9/"), "127.0.0.1__");
+        assert_eq!(chrome_app("file:///tmp/x/docs.html"), "__tmp_x_docs.html");
+        assert_eq!(
+            chrome_app("https://quickshell.org/docs/?q=1#top"),
+            "quickshell.org__docs_"
+        );
+        assert_eq!(chrome_app("http://localhost:8080"), "localhost__");
+    }
+
 }

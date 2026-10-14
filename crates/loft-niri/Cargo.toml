@@ -16,5 +16,6 @@ clap = { version = "4.6.7", features = ["derive"] }
 kdl = { version = "6.7.1", default-features = false, features = ["v1", "span"] }
 # Must speak the IPC of the niri we ship (nixpkgs niri 26.04).
 niri-ipc = "=26.4.0"
+regex = { version = "1", default-features = false, features = ["std", "perf", "unicode"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

@@ -150,7 +150,35 @@ enum SpaceCmd {
         archived: bool,
     },
     /// Activate a space (id, or its position 1…9): every display it binds.
-    Focus { space: String },
+    /// Activating the active space again brings back `keep` displays that
+    /// were switched by hand; the first activation in a session spins the
+    /// space's apps up (`startup: "first-activate"`).
+    Focus {
+        space: String,
+        /// Don't spin up apps, even on the first activation.
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// Restore a space: gather its open windows, start the missing apps
+    /// (in systemd scopes), place them, order the columns once, activate.
+    Open {
+        space: String,
+        /// Don't activate the space (apps still go to its workspaces).
+        #[arg(long)]
+        no_focus: bool,
+        /// Seconds to wait for spawned apps' windows.
+        #[arg(long, default_value_t = 10)]
+        timeout: u64,
+    },
+    /// Close the space's windows (claimed or in its scopes); an instance's
+    /// workspaces lose their names. The instance file stays.
+    Close { space: String },
+    /// Pull matching windows back into the space; nothing is started.
+    Gather { space: String },
+    /// Which window is which app of the space (changes nothing).
+    Apps { space: String },
+    /// Open the spaces whose `startup` is `login` (session autostart).
+    Startup,
     /// Create / move the space's workspaces where they belong; no switching.
     Ensure { space: String },
     /// Print the actions `focus` would send, without sending them.
@@ -642,7 +670,7 @@ fn space_cmd(
     cmd: SpaceCmd,
 ) -> Result<()> {
     use loft_niri::spaces::model::{Binding, Catalog, Env, library_dir};
-    use loft_niri::spaces::{live, plan, render as srender, roles};
+    use loft_niri::spaces::{launch, live, plan, render as srender, roles};
 
     let dir = opts.spaces_dir.or_else(library_dir);
     let cat = Catalog::load(dir.as_deref(), &Env::from_process(&paths.state));
@@ -650,6 +678,7 @@ fn space_cmd(
         eprintln!("loft-niri: spaces: {p}");
     }
     let main = opts.main.or_else(|| live::main_from_settings(&paths.state));
+    let lopts = |main: Option<String>| launch::Opts::from_env(&paths.state, main);
     let find = |key: &str| {
         cat.find(key).with_context(|| {
             let ids: Vec<_> = cat.active().iter().map(|s| s.id.clone()).collect();
@@ -722,7 +751,45 @@ fn space_cmd(
                 },
             );
         }
-        SpaceCmd::Focus { space } => report(&live::focus(&cat, find(&space)?, main)?),
+        SpaceCmd::Focus { space, no_open } => {
+            let s = find(&space)?;
+            let r = launch::focus(&cat, s, &lopts(main), !no_open)?;
+            print(j, &serde_json::to_value(&r)?, || r.text());
+        }
+        SpaceCmd::Open {
+            space,
+            no_focus,
+            timeout,
+        } => {
+            let s = find(&space)?;
+            let mut o = lopts(main);
+            o.timeout = std::time::Duration::from_secs(timeout);
+            let r = launch::open(&cat, s, &o, !no_focus)?;
+            print(j, &serde_json::to_value(&r)?, || r.text());
+        }
+        SpaceCmd::Close { space } => {
+            let r = launch::close(find(&space)?, &lopts(main))?;
+            print(j, &serde_json::to_value(&r)?, || {
+                format!("{} actions sent", r.actions.len())
+            });
+        }
+        SpaceCmd::Gather { space } => {
+            let r = launch::gather(&cat, find(&space)?, &lopts(main))?;
+            print(j, &serde_json::to_value(&r)?, || r.text());
+        }
+        SpaceCmd::Apps { space } => {
+            let r = launch::inspect(find(&space)?, &lopts(main))?;
+            print(j, &serde_json::to_value(&r)?, || r.text());
+        }
+        SpaceCmd::Startup => {
+            let rs = launch::startup(&cat, &lopts(main))?;
+            print(j, &serde_json::to_value(&rs)?, || {
+                rs.iter()
+                    .map(|r| format!("{}:\n{}", r.space, r.text()))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            });
+        }
         SpaceCmd::Ensure { space } => {
             let s = find(&space)?;
             let order = cat.active();
@@ -741,7 +808,8 @@ fn space_cmd(
             let forward = matches!(cmd, SpaceCmd::Next);
             let st = live::read_state(main.clone())?;
             let s = plan::step(&st, &cat, forward).context("no spaces")?;
-            report(&live::focus(&cat, s, main)?)
+            let r = launch::focus(&cat, s, &lopts(main), true)?;
+            print(j, &serde_json::to_value(&r)?, || r.text());
         }
         SpaceCmd::Plan {
             space,
