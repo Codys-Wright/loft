@@ -31,10 +31,10 @@ PanelWindow {
     color: "transparent"
 
     // Only once the wheel stops scaling: the region follows geometry, not scale.
-    BackgroundEffect.blurRegion: Theme.blur && shown && wheel.scale === 1 ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: wheel.disc
+        item: Theme.blur && shown && wheel.scale === 1 ? wheel.disc : null
         shape: RegionShape.Ellipse
     }
 

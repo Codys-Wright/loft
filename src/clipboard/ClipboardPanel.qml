@@ -33,10 +33,10 @@ PanelWindow {
     }
     color: "transparent"
 
-    BackgroundEffect.blurRegion: Theme.blur && open ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: panel
+        item: Theme.blur && open ? panel : null
         radius: panel.radius
     }
 
@@ -211,7 +211,7 @@ PanelWindow {
         height: Math.min(520, parent.height - 160)
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.round(parent.height * 0.42 - height / 2)
-        radius: 26
+        radius: Theme.panelRadius + 8
         strength: 1.6
 
         // Swallow clicks so they don't reach the close area.

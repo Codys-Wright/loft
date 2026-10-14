@@ -61,13 +61,13 @@ PanelWindow {
             intersection: Intersection.Subtract
         }
     }
-    BackgroundEffect.blurRegion: Theme.blur ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: pill
+        item: Theme.blur ? pill : null
         radius: pill.radius
         Region {
-            item: strip.visible ? strip : null
+            item: Theme.blur && strip.visible ? strip : null
             radius: strip.radius
         }
     }

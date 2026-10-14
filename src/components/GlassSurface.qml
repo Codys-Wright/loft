@@ -9,6 +9,13 @@ import qs.services
 // Glass slider (Theme.glass) sets fill, tint and text shadow together, and
 // Reduce transparency (Theme.reduceTransparency) turns it into a flat opaque
 // fill — no surface picks its own opacity.
+//
+// The window's blur: `BackgroundEffect.blurRegion: blur` always, and the
+// Region's `item` turns null when the glass is gone (blur off, panel hidden,
+// mid-animation). Never set blurRegion itself to null: that left the
+// compositor blurring the last shape, a faint patch with no glass over it.
+// A Region follows its item's x/y/size only, not opacity, scale or a moving
+// parent, so drop the item while the surface fades, scales or slides.
 Rectangle {
     id: root
 

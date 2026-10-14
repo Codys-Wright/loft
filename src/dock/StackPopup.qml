@@ -82,10 +82,10 @@ PanelWindow {
         return "file://" + path.split("/").map(encodeURIComponent).join("/");
     }
 
-    BackgroundEffect.blurRegion: Theme.blur && shown ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: root.view === "fan" ? null : panel
+        item: Theme.blur && shown && root.view !== "fan" ? panel : null
         radius: panel.radius
     }
 
@@ -218,6 +218,7 @@ PanelWindow {
                     AppIcon {
                         anchors.fill: parent
                         sources: DockData.fileIcons(fr.modelData)
+                        glyph: fr.modelData.dir ? "󰉋" : "󰈔"
                     }
                     DragProxy {
                         id: fproxy
@@ -362,6 +363,7 @@ PanelWindow {
                     AppIcon {
                         anchors.fill: parent
                         sources: DockData.fileIcons(gcell.modelData)
+                        glyph: gcell.modelData.dir ? "󰉋" : "󰈔"
                     }
                     DragProxy {
                         id: gproxy
@@ -383,7 +385,9 @@ PanelWindow {
                     }
                     horizontalAlignment: Text.AlignHCenter
                     text: gcell.modelData.name
-                    wrapMode: Text.WrapAnywhere
+                    // Break between words when there are any ("Reference
+                    // Images", not "Reference Image|s").
+                    wrapMode: Text.Wrap
                     maximumLineCount: 2
                     elide: Text.ElideRight
                     color: Theme.text
@@ -436,6 +440,7 @@ PanelWindow {
                     AppIcon {
                         anchors.fill: parent
                         sources: DockData.fileIcons(lc.modelData, false)
+                        glyph: lc.modelData.dir ? "󰉋" : "󰈔"
                         pixelSize: 40
                     }
                     DragProxy {

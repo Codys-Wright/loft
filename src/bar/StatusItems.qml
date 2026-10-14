@@ -211,7 +211,7 @@ Item {
         BarExtra {
             controlId: "record"
             screenName: root.screenName
-            glyph: Recorder.active ? "" : "󰑋"
+            glyph: Recorder.active ? "" : "󰻃"
             label: Recorder.active ? `   ${FocusTimer.format(Recorder.elapsed)}` : ""
             // The stop square, as on macOS.
             Rectangle {

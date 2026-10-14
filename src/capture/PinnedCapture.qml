@@ -36,10 +36,10 @@ PanelWindow {
     implicitHeight: Math.max(40, Math.round(natH * zoom)) + 12
     color: "transparent"
 
-    BackgroundEffect.blurRegion: Theme.blur ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: frame
+        item: Theme.blur ? frame : null
         radius: frame.radius
     }
 

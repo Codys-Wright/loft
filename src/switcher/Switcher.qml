@@ -32,10 +32,10 @@ PanelWindow {
     implicitHeight: 170
     color: "transparent"
 
-    BackgroundEffect.blurRegion: Theme.blur && open ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: panel
+        item: Theme.blur && open ? panel : null
         radius: panel.radius
     }
 
@@ -140,14 +140,11 @@ PanelWindow {
                         border.width: current ? 1 : 0
                         border.color: Theme.glassBorder
 
-                        Image {
+                        AppIcon {
                             anchors.centerIn: parent
                             width: 72
                             height: 72
-                            source: Apps.icon(cell.modelData.appId)
-                            sourceSize: Qt.size(128, 128)
-                            fillMode: Image.PreserveAspectFit
-                            mipmap: true
+                            appId: cell.modelData.appId
                         }
 
                         // Window count badge for apps with several windows.

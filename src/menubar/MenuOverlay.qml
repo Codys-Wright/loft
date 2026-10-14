@@ -39,26 +39,26 @@ PanelWindow {
     margins.top: barHeight
     color: "transparent"
 
-    BackgroundEffect.blurRegion: Theme.blur && shown ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: root.menuMode ? (panels.count > 0 ? panels.itemAt(0) : null) : root.extraMode ? extraPanel : card
+        item: Theme.blur && shown ? (root.menuMode ? (panels.count > 0 ? panels.itemAt(0) : null) : root.extraMode ? extraPanel : card) : null
         radius: root.cardMode ? card.radius : root.extraMode ? extraPanel.radius : 12
 
         Region {
-            item: root.menuMode && panels.count > 1 ? panels.itemAt(1) : null
+            item: Theme.blur && shown && root.menuMode && panels.count > 1 ? panels.itemAt(1) : null
             radius: 12
         }
         Region {
-            item: root.menuMode && panels.count > 2 ? panels.itemAt(2) : null
+            item: Theme.blur && shown && root.menuMode && panels.count > 2 ? panels.itemAt(2) : null
             radius: 12
         }
         Region {
-            item: root.menuMode && panels.count > 3 ? panels.itemAt(3) : null
+            item: Theme.blur && shown && root.menuMode && panels.count > 3 ? panels.itemAt(3) : null
             radius: 12
         }
         Region {
-            item: root.menuMode && panels.count > 4 ? panels.itemAt(4) : null
+            item: Theme.blur && shown && root.menuMode && panels.count > 4 ? panels.itemAt(4) : null
             radius: 12
         }
     }

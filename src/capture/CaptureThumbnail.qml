@@ -39,10 +39,10 @@ PanelWindow {
     mask: Region {
         item: root.shown ? card : busy
     }
-    BackgroundEffect.blurRegion: Theme.blur ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: root.shown ? card : busy
+        item: Theme.blur ? (root.shown ? card : busy) : null
         radius: root.shown ? card.radius : busy.radius
     }
 

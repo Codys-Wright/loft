@@ -31,7 +31,7 @@ Singleton {
         { id: "capture:area", label: "Screenshot Area", icon: "󰩭", group: "Capture", feature: "capture" },
         { id: "capture:window", label: "Screenshot Window", icon: "󰖯", group: "Capture", feature: "capture" },
         { id: "capture:screen", label: "Screenshot Screen", icon: "󰍹", group: "Capture", feature: "capture" },
-        { id: "capture:recordArea", label: "Record Area", icon: "󰑋", group: "Capture", feature: "capture", kind: "toggle" },
+        { id: "capture:recordArea", label: "Record Area", icon: "󰻃", group: "Capture", feature: "capture", kind: "toggle" },
         { id: "capture:recordScreen", label: "Record Screen", icon: "󰻃", group: "Capture", feature: "capture", kind: "toggle" },
         { id: "capture:text", label: "Copy Text (OCR)", icon: "󱄽", group: "Capture", feature: "ocr" },
         { id: "capture:color", label: "Color Picker", icon: "󰈊", group: "Capture", feature: "colorPicker" },

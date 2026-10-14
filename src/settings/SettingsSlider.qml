@@ -29,7 +29,8 @@ Item {
     Rectangle {
         id: track
         anchors.verticalCenter: parent.verticalCenter
-        width: parent.width - 56
+        // Room for the value; a long one ("750 items") takes more.
+        width: parent.width - Math.max(56, valueLabel.implicitWidth + 14)
         height: 6
         radius: 3
         color: Theme.withAlpha(Theme.text, 0.15)
@@ -76,6 +77,7 @@ Item {
     }
 
     Text {
+        id: valueLabel
         anchors {
             right: parent.right
             verticalCenter: parent.verticalCenter

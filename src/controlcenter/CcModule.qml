@@ -404,6 +404,7 @@ GlassSurface {
                     on: sc.on
                     onClicked: sc.ccToggle()
                 }
+                // Long names wrap to a second line (macOS), never "Screen Reco…".
                 Text {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.maximumWidth: mod.width - 8
@@ -411,6 +412,13 @@ GlassSurface {
                     color: Theme.subtext
                     font.family: Theme.fontUi
                     font.pixelSize: 9
+                    // Always two lines tall, so the discs of a row line up.
+                    Layout.preferredHeight: Math.ceil(font.pixelSize * 2.2)
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignTop
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: 2
+                    lineHeight: 0.9
                     elide: Text.ElideRight
                 }
             }

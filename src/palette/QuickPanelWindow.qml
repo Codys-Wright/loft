@@ -36,10 +36,10 @@ PanelWindow {
     color: "transparent"
 
     // Only once the panel stops scaling: the region follows geometry, not scale.
-    BackgroundEffect.blurRegion: Theme.blur && shown && panel.scale === 1 ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: panel
+        item: Theme.blur && shown && panel.scale === 1 ? panel : null
         radius: panel.radius
     }
 
@@ -190,7 +190,7 @@ PanelWindow {
         // it; kept on screen.
         x: Math.round(Math.max(12, Math.min(root.width - width - 12, (root.atPointer ? px : root.width / 2) - width / 2)))
         y: Math.round(Math.max(40, Math.min(root.height - height - 12, root.atPointer && QuickPanel.pointerY >= 0 ? py - 34 : root.height * 0.38 - height / 2)))
-        radius: 24
+        radius: Theme.panelRadius + 8
         strength: 1.6
         transformOrigin: Item.Top
 

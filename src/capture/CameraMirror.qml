@@ -39,10 +39,10 @@ PanelWindow {
         item: frame
         radius: root.shapeRadius
     }
-    BackgroundEffect.blurRegion: Theme.blur ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: frame
+        item: Theme.blur ? frame : null
         radius: root.shapeRadius
     }
 

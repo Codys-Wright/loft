@@ -21,6 +21,7 @@ DockTile {
         anchors.fill: parent
         visible: !root.asStack || root.newest.length === 0
         sources: DockData.folderIcons(root.folder.path ?? "")
+        glyph: root.folder.path === "xdg:DOWNLOAD" ? "󰉍" : "󰉋"
     }
 
     // Stack: up to three items, the newest on top, fanned a little.
@@ -50,6 +51,7 @@ DockTile {
                 anchors.fill: parent
                 anchors.margins: modelData.thumb !== undefined ? 3 : 0
                 sources: DockData.fileIcons(modelData)
+                glyph: modelData.dir ? "󰉋" : "󰈔"
             }
         }
     }

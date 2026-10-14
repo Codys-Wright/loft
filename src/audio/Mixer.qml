@@ -42,10 +42,10 @@ PanelWindow {
         inputsOpen = false;
     }
 
-    BackgroundEffect.blurRegion: Theme.blur && shown && !slide.running ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: backing
+        item: Theme.blur && shown && !slide.running ? backing : null
         radius: backing.radius
     }
 
@@ -58,11 +58,13 @@ PanelWindow {
         id: panel
         width: root.panelWidth
         height: content.implicitHeight + 2 * root.gap
+        // Where the Control Center sits, with its motion: one curve for the
+        // slide and the fade.
         anchors {
             top: parent.top
             right: parent.right
-            topMargin: 50
-            rightMargin: 12
+            topMargin: 36
+            rightMargin: 10
         }
         opacity: root.shown ? 1 : 0
         focus: root.shown
@@ -80,14 +82,16 @@ PanelWindow {
         }
         Behavior on opacity {
             NumberAnimation {
-                duration: 220
+                duration: 320
+                easing.type: Easing.OutQuart
             }
         }
 
         GlassSurface {
             id: backing
             anchors.fill: parent
-            radius: 28
+            // The Control Center's shape: panel and module radii.
+            radius: Theme.panelRadius + 8
         }
 
         MouseArea {
@@ -142,7 +146,7 @@ PanelWindow {
                 id: outputTile
                 Layout.fillWidth: true
                 implicitHeight: outputCol.implicitHeight + 24
-                radius: 22
+                radius: Theme.panelRadius
                 showHighlight: false
 
                 readonly property PwNode sink: Sound.defaultSink
@@ -256,7 +260,7 @@ PanelWindow {
             GlassSurface {
                 Layout.fillWidth: true
                 implicitHeight: Math.min(appsCol.implicitHeight, 430) + 24
-                radius: 22
+                radius: Theme.panelRadius
                 showHighlight: false
 
                 Flickable {
@@ -304,7 +308,7 @@ PanelWindow {
                 visible: Features.on("micTools") && Sound.sources.length > 0
                 Layout.fillWidth: true
                 implicitHeight: micCol.implicitHeight + 24
-                radius: 22
+                radius: Theme.panelRadius
                 showHighlight: false
 
                 readonly property PwNode source: Sound.defaultSource

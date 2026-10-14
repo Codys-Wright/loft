@@ -15,11 +15,13 @@ Item {
     property var notification: null
 
     readonly property string imageSource: notification?.image ? notification.image : ""
+    // A themed icon only when the icon theme has it (or the generic one):
+    // otherwise "" and a bell glyph, never Qt's magenta "missing" pattern.
     readonly property string iconSource: {
         const icon = notification?.appIcon ?? "";
         if (icon.startsWith("/") || icon.startsWith("file:"))
             return icon.startsWith("/") ? "file://" + icon : icon;
-        return Quickshell.iconPath(icon || "dialog-information", "dialog-information");
+        return (icon !== "" ? Quickshell.iconPath(icon, true) : "") || Quickshell.iconPath("dialog-information", true);
     }
     readonly property string file: notification?.file ?? ""
     readonly property string glyph: notification?.glyph ?? ""
@@ -69,18 +71,19 @@ Item {
 
             IconImage {
                 anchors.centerIn: parent
-                visible: root.imageSource === "" && root.glyph === ""
+                visible: root.imageSource === "" && root.glyph === "" && root.iconSource !== ""
                 implicitSize: 36
                 source: root.iconSource
             }
 
-            // Loft's own banners can bring a glyph (no icon theme needed).
+            // Loft's own banners can bring a glyph (no icon theme needed);
+            // a missing icon falls back to a bell.
             Icon {
                 anchors.centerIn: parent
-                visible: root.imageSource === "" && root.glyph !== ""
-                text: root.glyph
+                visible: root.imageSource === "" && (root.glyph !== "" || root.iconSource === "")
+                text: root.glyph !== "" ? root.glyph : "󰂚"
                 size: 26
-                color: root.notification?.glyphColor ?? Theme.accent
+                color: root.glyph !== "" ? (root.notification?.glyphColor ?? Theme.accent) : Theme.islandSubtext
             }
 
             // Drag the file out (text/uri-list), like the dock's stacks.
@@ -149,7 +152,8 @@ Item {
                 opacity: 0.85
                 font.family: Theme.fontUi
                 font.pixelSize: 12
-                elide: Text.ElideMiddle
+                // A file's name keeps its end (the extension, the size).
+                elide: root.file !== "" ? Text.ElideMiddle : Text.ElideRight
                 maximumLineCount: 1
             }
         }

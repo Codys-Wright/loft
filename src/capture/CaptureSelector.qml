@@ -44,17 +44,17 @@ PanelWindow {
             item: swatches.visible ? swatches : null
         }
     }
-    BackgroundEffect.blurRegion: Theme.blur ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: bar
+        item: Theme.blur ? bar : null
         radius: bar.radius
         Region {
-            item: root.optionsOpen ? options : null
+            item: Theme.blur && root.optionsOpen ? options : null
             radius: options.radius
         }
         Region {
-            item: swatches.visible ? swatches : null
+            item: Theme.blur && swatches.visible ? swatches : null
             radius: swatches.radius
         }
     }

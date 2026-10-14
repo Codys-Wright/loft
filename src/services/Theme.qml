@@ -81,10 +81,43 @@ Singleton {
     // Dark under light text, a light glow under dark text.
     readonly property color textShadow: luminance(text) > 0.3 ? withAlpha("#000000", 0.75 * textShadowStrength) : withAlpha("#ffffff", 0.45 * textShadowStrength)
 
+    // Legibility floor ("improved contrast"): below the theme's default the
+    // glass thins out, but an outer surface (strength ≥ 1: panels, menus,
+    // windows) never gets so clear that its palette text drops under 3:1 —
+    // the text shadow carries it the rest of the way — over the worst
+    // wallpaper among the screens (the darkest for dark text, the lightest
+    // for light text). Text keeps the palette's colors; only the fill stops
+    // thinning out, so dark text never sits on clear glass over a dark photo.
+    readonly property real legibleAlpha: {
+        if (reduceTransparency || glass >= glassDefault)
+            return 0;
+        const darkText = luminance(paletteText) < 0.3;
+        let worst = null;
+        for (const t of Object.values(WallpaperTone.tones)) {
+            const m = t?.mean ?? null;
+            if (m !== null && (worst === null || (darkText ? luminance(m) < luminance(worst) : luminance(m) > luminance(worst))))
+                worst = m;
+        }
+        if (worst === null)
+            return 0;
+        const ok = a => contrast(paletteText, mix(worst, glassTint, a)) >= 3;
+        if (ok(glassOpacity))
+            return 0;
+        let lo = glassOpacity, hi = 0.97;
+        for (let i = 0; i < 10; i++) {
+            const mid = (lo + hi) / 2;
+            if (ok(mid))
+                hi = mid;
+            else
+                lo = mid;
+        }
+        return hi;
+    }
+
     // Fill of a glass surface of the given strength (1 = as the theme says;
     // panels and windows use more).
     function glassAlpha(strength) {
-        return reduceTransparency ? 1 : Math.min(0.97, glassOpacity * strength);
+        return reduceTransparency ? 1 : Math.min(0.97, Math.max(glassOpacity * strength, strength >= 1 ? legibleAlpha : 0));
     }
     function fillFor(strength) {
         return reduceTransparency ? flatFill(strength) : withAlpha(glassTint, glassAlpha(strength));

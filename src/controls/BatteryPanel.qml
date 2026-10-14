@@ -28,10 +28,11 @@ ColumnLayout {
 
     PanelHeader {
         title: "Battery"
-        trailing: `${Math.round(Controls.batteryPercent)}%`
+        trailing: Controls.hasBattery ? `${Math.round(Controls.batteryPercent)}%` : ""
         subtitle: {
-            if (!root.dev)
-                return "";
+            // Opened by IPC on a desktop: say so, not "Fully charged · 0%".
+            if (!Controls.hasBattery)
+                return "No battery";
             if (!UPower.onBattery)
                 return root.dev.timeToFull > 0 ? `${root.hm(root.dev.timeToFull)} until full` : "Fully charged";
             return root.dev.timeToEmpty > 0 ? `${root.hm(root.dev.timeToEmpty)} remaining` : "Calculating…";

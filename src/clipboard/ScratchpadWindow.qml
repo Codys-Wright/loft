@@ -30,10 +30,10 @@ FloatingWindow {
 
     property bool preview: false
 
-    BackgroundEffect.blurRegion: Theme.blur ? blur : null
+    BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: frame
+        item: Theme.blur ? frame : null
         radius: frame.radius
     }
 

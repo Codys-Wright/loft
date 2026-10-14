@@ -38,10 +38,10 @@ PanelWindow {
     readonly property color textColor: Theme.barTextFor(modelData.name)
     readonly property color shadowColor: Theme.barShadowFor(modelData.name)
 
-    BackgroundEffect.blurRegion: Theme.blur && Theme.barBackground ? barRegion : null
+    BackgroundEffect.blurRegion: barRegion
     Region {
         id: barRegion
-        item: bar
+        item: Theme.blur && Theme.barBackground ? bar : null
     }
 
     // Soft shadow under everything on a transparent bar (titles, icons).
