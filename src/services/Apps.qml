@@ -7,6 +7,11 @@ import Quickshell
 Singleton {
     id: root
 
+    // The shell's own windows (Quickshell's app-id) present as studio apps.
+    readonly property var own: ({
+            "org.quickshell": { name: "Settings", icon: "preferences-system" }
+        })
+
     // niri app_id → DesktopEntry (or null). Cached; lookups are heuristic.
     property var cache: ({})
 
@@ -19,11 +24,15 @@ Singleton {
     }
 
     function name(appId) {
+        if (own[appId])
+            return own[appId].name;
         const e = entry(appId);
         return e?.name || prettify(appId);
     }
 
     function icon(appId) {
+        if (own[appId])
+            return Quickshell.iconPath(own[appId].icon, "application-x-executable");
         const e = entry(appId);
         return Quickshell.iconPath(e?.icon || appId || "", "application-x-executable");
     }

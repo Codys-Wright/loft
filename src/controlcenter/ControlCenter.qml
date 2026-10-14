@@ -244,6 +244,26 @@ PanelWindow {
             Calendar {
                 Layout.fillWidth: true
             }
+
+            Text {
+                Layout.alignment: Qt.AlignRight
+                Layout.rightMargin: 8
+                text: "Settings…"
+                color: Theme.accent
+                font.family: Theme.fontUi
+                font.pixelSize: 12
+                font.weight: Font.Medium
+
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -6
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        Panels.controlCenterOpen = false;
+                        Panels.settingsOpen = true;
+                    }
+                }
+            }
         }
     }
 }

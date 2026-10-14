@@ -10,6 +10,7 @@ import qs.island
 import qs.osd
 import qs.switcher
 import qs.wallpaper
+import qs.settings
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 ShellRoot {
@@ -55,4 +56,6 @@ ShellRoot {
         model: Quickshell.screens
         WallpaperPicker {}
     }
+
+    SettingsApp {}
 }

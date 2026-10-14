@@ -19,8 +19,8 @@ PanelWindow {
     required property ShellScreen modelData
     screen: modelData
 
-    property bool open: false
     readonly property bool onThisScreen: (Niri.focusedWorkspace?.output ?? modelData.name) === modelData.name
+    readonly property bool open: Panels.wallpaperPickerOpen && onThisScreen
 
     visible: open
     WlrLayershell.layer: WlrLayer.Overlay
@@ -76,7 +76,7 @@ PanelWindow {
         focus: root.open
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape)
-                root.open = false;
+                Panels.wallpaperPickerOpen = false;
             else if (event.key === Qt.Key_Right)
                 list.incrementCurrentIndex();
             else if (event.key === Qt.Key_Left)
@@ -199,8 +199,7 @@ PanelWindow {
         target: "wallpaper"
 
         function toggle(): void {
-            if (root.onThisScreen)
-                root.open = !root.open;
+            Panels.wallpaperPickerOpen = !Panels.wallpaperPickerOpen;
         }
 
         function next(): void {

@@ -74,6 +74,14 @@ window-rule {
     clip-to-geometry true
 }
 
+// The shell's own windows float, like macOS utility windows.
+window-rule {
+    match title="^Studio Settings$"
+    open-floating true
+    // Match the glass frame so the focus ring and blur follow its corners.
+    geometry-corner-radius 24
+}
+
 // Global blur quality for everything that requests it (the shell's glass
 // surfaces request it themselves through ext-background-effect).
 blur {

@@ -10,6 +10,8 @@ Singleton {
     id: root
 
     property bool controlCenterOpen: false
+    property bool wallpaperPickerOpen: false
+    property bool settingsOpen: false
     property bool doNotDisturb: false
     // Inhibit idle (screen blank / lock) — applied by the bar's IdleInhibitor.
     property bool caffeine: false
