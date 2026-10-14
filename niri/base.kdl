@@ -27,9 +27,15 @@ hotkey-overlay {
 screenshot-path null
 
 input {
+    // The window-manager key is one no app binds: ISO_Level3_Shift (Mod5).
+    // Right Alt is it natively (lv3:ralt_switch); with the keyboard layer
+    // (studio-keys) holding Esc or Caps Lock is too, and Super stays Cmd.
+    mod-key "ISO_Level3_Shift"
+    mod-key-nested "ISO_Level3_Shift"
     keyboard {
         xkb {
             layout "us"
+            options "lv3:ralt_switch"
         }
     }
     focus-follows-mouse max-scroll-amount="0%"

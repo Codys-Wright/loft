@@ -58,7 +58,10 @@
           Restart = "on-failure";
           RestartSec = 2;
         };
-        Install.WantedBy = [ "graphical-session.target" ];
+        # Started by niri's session unit, not graphical-session.target — other
+        # desktops (Plasma, GNOME) reach that target too, and must not get
+        # a second bar.
+        Install.WantedBy = [ "niri.service" ];
       };
     in
     {

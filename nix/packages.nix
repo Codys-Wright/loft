@@ -287,6 +287,24 @@
           '';
         };
 
+        # The keyboard layer (keyboard/keys.nix): Esc / Caps tap = Escape,
+        # hold = the window-manager key; Super = Cmd for apps. Needs read
+        # access to /dev/input and /dev/uinput (the input + uinput groups).
+        studio-keys =
+          let
+            keys = import ../keyboard/keys.nix { inherit lib; };
+            config = name: cfg: pkgs.writeText name (builtins.toJSON cfg);
+          in
+          pkgs.writeShellApplication {
+            name = "studio-keys";
+            text = ''
+              if [ "''${1:-}" = "--dual-role-only" ]; then
+                exec ${pkgs.xremap}/bin/xremap --watch=device --mouse ${config "keys-dual.json" (keys { appKeys = false; })}
+              fi
+              exec ${pkgs.xremap.niri}/bin/xremap --watch=device --mouse ${config "keys.json" (keys { })}
+            '';
+          };
+
         studio-launcher = pkgs.writeShellApplication {
           name = "studio-launcher";
           runtimeInputs = with pkgs; [
