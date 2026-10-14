@@ -21,7 +21,8 @@ import qs.services
 // it so its buttons can be clicked), a live activity (screen recording,
 // focus timer, timers, downloads — scroll to cycle when several run), the
 // next calendar event when it's close, now playing (art + equalizer), the
-// time — with a mark while AI agents run. The border pulses on system alerts
+// time — with a mark while AI agents run. A space switch shows the space's
+// icon and name for a moment (Spaces.activated). The border pulses on system alerts
 // (overheating / overload) and turns white for unread notifications.
 //
 // Hover expands it into a carousel of pages (IslandPages: order and which
@@ -104,7 +105,11 @@ PanelWindow {
 
     readonly property bool showEvent: live === "" && soonEvent !== null
     readonly property bool agentMark: Settings.island.aiIndicator && AiUsage.enabled && AiUsage.sessions.length > 0
-    readonly property real targetWidth: expanded ? 480 : bannering ? 460 : live !== "" ? 250 : showEvent ? 300 : playing ? 300 : agentMark ? 190 : 150
+    // A space switch (Spaces.activated): its icon and name for 1.2 s
+    // (SPACES §6.3), over everything collapsed but a notification.
+    property var spaceFlash: null
+    readonly property bool spaceShowing: spaceFlash !== null && !expanded && !bannering
+    readonly property real targetWidth: expanded ? 480 : bannering ? 460 : spaceShowing ? Math.max(190, spaceRow.implicitWidth + 40) : live !== "" ? 250 : showEvent ? 300 : playing ? 300 : agentMark ? 190 : 150
     readonly property real targetHeight: expanded ? 210 : bannering ? 84 : attached ? barHeight : 24
 
     // ── Look (Settings → Dynamic Island) ────────────────────────────────
@@ -299,7 +304,7 @@ PanelWindow {
             Item {
                 anchors.fill: parent
                 visible: opacity > 0
-                opacity: root.expanded || root.bannering ? 0 : 1
+                opacity: root.expanded || root.bannering || root.spaceShowing ? 0 : 1
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -427,6 +432,46 @@ PanelWindow {
                         }
                     }
                 }
+            }
+
+            // ── Space switch ────────────────────────────────────────────
+            Item {
+                anchors.fill: parent
+                visible: opacity > 0
+                opacity: root.spaceShowing ? 1 : 0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 150
+                    }
+                }
+
+                Row {
+                    id: spaceRow
+                    anchors.centerIn: parent
+                    spacing: 8
+
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.spaceFlash?.icon || "󰕰"
+                        size: 14
+                        color: Theme.accent
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.spaceFlash?.name ?? ""
+                        color: Theme.islandText
+                        font.family: Theme.fontUi
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                    }
+                }
+            }
+
+            Timer {
+                id: spaceTimer
+                interval: 1200
+                onTriggered: root.spaceFlash = null
             }
 
             // ── Notification banner ─────────────────────────────────────
@@ -581,6 +626,16 @@ PanelWindow {
         target: Niri
         function onScreenshotTaken() {
             shutter.restart();
+        }
+    }
+
+    Connections {
+        target: Spaces
+        function onActivated(space) {
+            if (!space)
+                return;
+            root.spaceFlash = { icon: space.icon, name: space.name };
+            spaceTimer.restart();
         }
     }
 

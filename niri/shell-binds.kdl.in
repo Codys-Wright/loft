@@ -37,6 +37,14 @@ binds {
     Mod+Q cooldown-ms=100 hotkey-overlay-title="Close Window (hold to quit protected apps)" { spawn "sh" "-c" "\"$@\" quit key || niri msg action close-window" "loft-quit" @IPC@; }
     Alt+F4 cooldown-ms=100 hotkey-overlay-title=null { spawn "sh" "-c" "\"$@\" quit key || niri msg action close-window" "loft-quit" @IPC@; }
     Mod+Ctrl+A hotkey-overlay-title="Arrange Window" { spawn @IPC@ "arrange" "open"; }
+    // Spaces (docs/SPACES.md §6.2): the switcher, and previous / next space
+    // (macOS Ctrl+←/→). next / prev go straight to loft-niri (one pipelined
+    // IPC connection, ~5 ms); the shell sees the switch in niri's events and
+    // shows the island banner. The generated spaces.kdl (included later)
+    // binds Mod+1…9, Mod+Shift+1…9 and these two again, identically.
+    Mod+Ctrl+S hotkey-overlay-title="Space Switcher" { spawn @IPC@ "spaces" "switcher"; }
+    Mod+Ctrl+Left hotkey-overlay-title="Previous Space" { spawn "loft-niri" "space" "prev"; }
+    Mod+Ctrl+Right hotkey-overlay-title="Next Space" { spawn "loft-niri" "space" "next"; }
 }
 
 // ⌘Tab: niri's recent-windows switcher (live previews). xremap sends a

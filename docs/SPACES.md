@@ -1,8 +1,8 @@
 # Spaces: functional desktops across every display
 
-Status: **P0–P3 implemented** (test infra, spikes, model, roles, `spaces.kdl` render,
-activation, and spin-up / restore in `loft-niri space …`); P4–P8 are spec. See §10 for
-the status and §3.4 for what the spikes measured. It is designed together with
+Status: **P0–P4 implemented** (test infra, spikes, model, roles, `spaces.kdl` render,
+activation, spin-up / restore in `loft-niri space …`, and the shell); P5–P8 are spec.
+See §10 for the status and §3.4 for what the spikes measured. It is designed together with
 [THEME-ARCHITECTURE.md](THEME-ARCHITECTURE.md), which defines how a space can carry a
 theme or its own wallpapers, and it reuses the display-role model of the `wallsets`
 branch. Names are the Loft names (`loft`, `loft-niri`, `~/.local/state/loft`).
@@ -455,13 +455,13 @@ space never changes the global theme selection: leaving it re-applies the global
 | Mod+1 … Mod+9 | activate the space at that position (singletons and active instances, in `order`) |
 | Mod+Shift+1 … 9 | move the focused window to that space's workspace on the **same role** as the display it is on (else `main`), without following |
 | Mod+Ctrl+Left / Right | previous / next space (macOS Ctrl+←/→) |
-| Mod+Ctrl+Space | space switcher overlay (the app switcher's layout, `src/switcher/`, listing spaces with their windows) |
+| Mod+Ctrl+S | space switcher overlay (`src/switcher/SpaceSwitcher.qml`: spaces with their ⌘N keys, type to filter) |
 | Mod+Alt+PageUp / PageDown | niri's own per-output workspace up / down (the escape hatch) |
 
 These are generated into `spaces.kdl` as `spawn "loft-niri" "space" "focus" "music"` and
 so on, by space **id** rather than position, so a stale `spaces.kdl` never switches to the
 wrong space. Mod+Ctrl+Space is already the Radial Menu (`niri/shell-binds.kdl.in`), so
-the space switcher overlay needs another key (P6, open question Q-S4). Plain Mod+PageUp / PageDown stop meaning "the next niri workspace on this output":
+the space switcher overlay is **Mod+Ctrl+S** (Q-S4, implemented in P4). Plain Mod+PageUp / PageDown stop meaning "the next niri workspace on this output":
 with spaces they move between spaces too, so the displays never get out of step.
 
 ### 6.3 Spotlight, island, overview
@@ -664,6 +664,34 @@ loft-niri space startup                                # open the `startup: "log
   changes is P4's to trigger (`space gather <active>` after Displays.qml sees outputs
   change); the "Couldn't find the window" toast is P4's (the note is in `--json`'s
   `notes`).
+- **P4 done** (branch `spaces-p4`). `src/services/Spaces.qml`: the index from `loft-niri
+  space list --json`; the active space = the owner of the main display's active
+  workspace, else of the focused one, else the last one, re-derived once niri's events
+  have been quiet for 140 ms and never while the shell's own activation runs (§3.4's
+  intermediate focus events); `activated(space, previous)`. IPC `spaces focus <id|n> |
+  next | prev | list | active | switcher | reload`. Bar: `bar/Workspaces.qml` is the §6.1
+  indicator (pill → the switcher instead of a menu for now; the menu's New / Edit /
+  Close / Theme items are P6). Switcher overlay `switcher/SpaceSwitcher.qml` on
+  **Mod+Ctrl+S**; **Mod+Ctrl+←/→** spawn `loft-niri space prev/next` (both in
+  `niri/shell-binds.kdl.in`; spaces.kdl rebinds the arrows identically). Island banner
+  (1.2 s) on every switch, the OSD pill without the island. §5 applied on activation:
+  `dock` (pinned replace/prepend/append, visible show/autohide/hidden →
+  `DockData.profileFor`), `menubar.extras` (`Controls.barShown`; Control Center always
+  stays), `bar.hidden` (on outputs showing one of the space's workspaces), `focus`
+  (DND + allow list by app name, restored on leave unless changed by hand). `theme`:
+  `Spaces.applyTheme()` is the P5 hook (logs only). The shell runs loft-niri with
+  `--json` off the UI thread: `notes` of an activation ("Couldn't find the … window")
+  become an island banner; a first activation's spin-up stops holding the derivation
+  back after 1.5 s. Outputs changing: `space render`, `space ensure <active>`, `space
+  gather <active>`, only once `overrides/spaces.kdl` exists (nothing is
+  rendered behind a user who hasn't opted in). Settings → Spaces: read-only list,
+  Activate, Open (shown once `loft-niri space open` exists, P3). Feature id `spaces`.
+- **Not done in P4:** notes of activations the niri binds run (Mod+N, ⌃⌘← →
+  spawn loft-niri directly) don't reach the shell; `space startup` belongs in the
+  session's autostart (fleet / loft-session, P8), not wired; `dock.displays` per role (the shell has no role resolution; it
+  would need roles in `space list`); the fold "+1" badge (§3.3); after a replug,
+  `ensure` puts workspaces back but the returning display shows its first workspace,
+  not the active space's (re-activating would warp the pointer; left to the user).
 - **Decisions taken while implementing** (each noted where it applies): `target` vs
   `focus`, `layout` on the binding, binds by id, `space order` after render, Comms' id
   is `comms` (file `comms.json`, name "Communication").

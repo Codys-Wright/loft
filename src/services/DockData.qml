@@ -44,17 +44,25 @@ Singleton {
     // ── Dock profiles ────────────────────────────────────────────────────
     // Everything a dock shows and how it behaves, in one shape:
     //   { pinned, folders, trash, recentCount, iconSize, magnification,
-    //     bounce, indicators, enabled, autoHide, position }
+    //     bounce, indicators, enabled, autoHide, position, hidden }
     // Read it through profileFor(screen), never Settings.dock directly.
-    // Today the layers are Settings.dock (defaults) ← its displays[identity]
-    // (enabled / autoHide / position). A Space can later add a layer with
-    // the same shape (e.g. Settings.spaces[name].dock, and its own
-    // displays map) between the two — only this function changes.
+    // The layers: Settings.dock (defaults) ← the active space's `dock`
+    // (Spaces.dock, SPACES §5: pinned replace / prepend / append, visible
+    // show / autohide / hidden) ← the display's own prefs (enabled /
+    // position; its auto-hide only while the space says nothing).
     function profileFor(screen) {
         const d = Settings.dock;
         const disp = displayPrefs(screen);
+        const sp = Spaces.dock;
+        let pinned = Array.from(d.pinned);
+        if (sp && Array.isArray(sp.pinned)) {
+            const own = Array.from(sp.pinned);
+            const rest = pinned.filter(p => !own.some(o => sameApp(o, p)));
+            pinned = sp.mode === "append" ? rest.concat(own) : sp.mode === "prepend" ? own.concat(rest) : own;
+        }
+        const visible = sp?.visible ?? "";
         return {
-            pinned: Array.from(d.pinned),
+            pinned: pinned,
             folders: Array.from(d.folders),
             trash: d.trash,
             recentCount: d.recentCount,
@@ -63,7 +71,9 @@ Singleton {
             bounce: d.bounce,
             indicators: d.indicators,
             enabled: disp.enabled,
-            autoHide: disp.autoHide,
+            autoHide: visible === "show" ? "never" : visible === "autohide" ? "always" : disp.autoHide,
+            // A space's `visible: "hidden"`: no dock, no edge to summon it.
+            hidden: visible === "hidden",
             position: disp.position
         };
     }

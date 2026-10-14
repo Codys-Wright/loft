@@ -21,6 +21,7 @@ Singleton {
     // id, label, icon, group, description, default (on unless false), core (can't be turned off)
     readonly property var modules: [
         { id: "bar", label: "Menu bar", icon: "󰍜", group: "Desktop", core: true, description: "App menu, workspaces, tray, status, date" },
+        { id: "spaces", label: "Spaces", icon: "󰕰", group: "Desktop", page: "SpacesPage.qml", default: false, description: "Functional desktops across every display: the bar's space indicator, ⌘⌃S switcher, ⌘⌃← →, per-space dock, menu bar and Focus" },
         { id: "dock", label: "Dock", icon: "󱂬", group: "Desktop", description: "Pinned and running apps with magnification" },
         { id: "dockStacks", label: "Dock folders & Trash", icon: "󰉍", group: "Desktop", description: "Downloads (and any folder) as a stack in the dock — fan, grid or list — and the Trash" },
         { id: "dockPreview", label: "Dock window previews", icon: "󰖯", group: "Desktop", description: "Hover (or click) an app in the dock: its windows as cards — focus, close, move, hide" },

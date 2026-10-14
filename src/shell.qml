@@ -27,7 +27,7 @@ import qs.utilities
 ShellRoot {
     // Background services are lazy singletons; touch them so they run from
     // startup (screen time, Bluetooth banners).
-    readonly property var services: [AppUsage, DeviceEvents, Shortcuts]
+    readonly property var services: [AppUsage, DeviceEvents, Shortcuts, Spaces]
     Variants {
         model: Quickshell.screens
         Wallpaper {}
@@ -70,6 +70,12 @@ ShellRoot {
     Variants {
         model: Features.on("switcher") ? Quickshell.screens : []
         Switcher {}
+    }
+
+    // The space switcher (Mod+Ctrl+S; services/Spaces.qml).
+    Variants {
+        model: Features.on("spaces") ? Quickshell.screens : []
+        SpaceSwitcher {}
     }
 
     Variants {

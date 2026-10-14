@@ -13,14 +13,16 @@ import qs.services
 // wallpaper, light or dark from the wallpaper under the bar on this output
 // (Theme.barTextFor / barShadowFor, WallpaperTone), with a soft shadow.
 // "Show menu bar background" (Theme.barBackground) brings back the glass
-// strip. Left: the OS mark, the focused app (bold) and workspaces. Right:
-// status, Control Center, date.
+// strip. Left: the OS mark, the focused app (bold) and the space indicator.
+// Right: status, Control Center, date.
 PanelWindow {
     id: root
 
     required property ShellScreen modelData
     screen: modelData
 
+    // A space can hide the bar on its displays (Gaming: `bar.hidden`).
+    visible: !Spaces.barHiddenOn(modelData.name)
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "loft:bar"
     anchors {
@@ -98,10 +100,12 @@ PanelWindow {
             maxWidth: root.width / 2 - (Features.on("island") ? 160 : 12) - 14 - left.spacing - workspaces.implicitWidth
         }
 
+        // The space indicator (spaces on) or the workspace dots.
         Workspaces {
             id: workspaces
-            visible: workspaces.workspaces.length > 0
+            visible: workspaces.implicitWidth > 0
             output: root.modelData.name
+            window: root
         }
     }
 
