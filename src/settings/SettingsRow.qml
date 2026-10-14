@@ -39,7 +39,8 @@ Item {
             color: row.hintColor
             font.family: Theme.fontUi
             font.pixelSize: 11
-            elide: Text.ElideMiddle
+            // Footnotes wrap (System Settings) rather than lose their middle.
+            wrapMode: Text.Wrap
         }
     }
 
