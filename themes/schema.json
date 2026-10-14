@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Codys-Wright/studio-linux/blob/main/themes/schema.json",
-  "title": "studio-linux theme pack",
-  "description": "theme.json (the core) and manifest.json of a studio-linux theme pack. See docs/THEME-FORMAT.md.",
+  "$id": "https://github.com/Codys-Wright/loft/blob/main/themes/schema.json",
+  "title": "loft theme pack",
+  "description": "theme.json (the core) and manifest.json of a Loft theme pack. See docs/THEME-FORMAT.md.",
   "$ref": "#/$defs/theme",
   "$defs": {
     "color": {
@@ -59,7 +59,7 @@
       "required": ["path"],
       "properties": {
         "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$", "description": "Unique in the pack; vibes refer to it as <pack>:<name>. Default: metadata.desktop's Name, else the pack name (or the locks/<dir> name)" },
-        "format": { "enum": ["studio", "qylock"], "description": "studio: Main.qml against docs/THEME-FORMAT-LOCK.md. qylock: an SDDM-API QML theme dir (metadata.desktop, theme.conf, MainScript). Default: qylock when the dir has metadata.desktop" },
+        "format": { "enum": ["loft", "qylock"], "description": "loft: Main.qml against docs/THEME-FORMAT-LOCK.md. qylock: an SDDM-API QML theme dir (metadata.desktop, theme.conf, MainScript). Default: qylock when the dir has metadata.desktop" },
         "path": { "type": "string", "description": "Directory relative to the pack (or absolute)" },
         "preview": { "type": "string", "description": "A screenshot for pickers (default: preview.* / screenshot.* in the design dir)" }
       }

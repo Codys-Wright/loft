@@ -4,11 +4,11 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// The theme + wallpaper library (~/Documents/Themes, $STUDIO_LIBRARY):
-// `studio library sort --json` regenerates its Colors / Tones / Themes views
+// The theme + wallpaper library (~/Documents/Themes, $LOFT_LIBRARY):
+// `loft library sort --json` regenerates its Colors / Tones / Themes views
 // and prints the index the Wallpaper page browses — every image with its
 // topic or pack, color families, tone and a cached thumbnail, plus the
-// images that go with each installed theme (cli/studio/library.py).
+// images that go with each installed theme (cli/loft/library.py).
 // Loaded on demand (the Wallpaper page asks when it opens); sorting an
 // unchanged library only checks its links.
 Singleton {
@@ -86,7 +86,7 @@ Singleton {
 
     Process {
         id: proc
-        command: ["studio", "library", "sort", "--json"]
+        command: ["loft", "library", "sort", "--json"]
         stdout: StdioCollector {
             onStreamFinished: {
                 if (text.trim() === "")
@@ -95,7 +95,7 @@ Singleton {
                     root.data = JSON.parse(text);
                     root.error = "";
                 } catch (e) {
-                    root.error = `bad output from studio library sort: ${e}`;
+                    root.error = `bad output from loft library sort: ${e}`;
                 }
             }
         }

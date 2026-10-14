@@ -1,4 +1,4 @@
-"""Unit tests for wallpaper sets (cli/studio/wallsets.py, `studio wallpaper …`):
+"""Unit tests for wallpaper sets (cli/loft/wallsets.py, `loft wallpaper …`):
 display roles and set resolution (the fixture shared with
 tests/wallsets.test.js), image framing, auto picks, pack `wallpaperSets`
 (format, validation, render, export) and the CLI against a scratch state.
@@ -16,10 +16,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from studio import palette, wallsets
-from studio.pack import Pack, PackError, normalized_manifest
+from loft import palette, wallsets
+from loft.pack import Pack, PackError, normalized_manifest
 from test_importers import make_png
-from test_vibes import HAVE_JSONSCHEMA, ROOT, studio, write
+from test_vibes import HAVE_JSONSCHEMA, ROOT, loft, write
 
 FIXTURE = json.loads((ROOT / "tests" / "fixtures" / "wallsets" / "layouts.json").read_text())
 CODY = FIXTURE["cases"][0]["layout"]
@@ -131,7 +131,7 @@ class Framing(unittest.TestCase):
 
 
 class Plan(unittest.TestCase):
-    """`studio wallpaper …` over a scratch theme path and state."""
+    """`loft wallpaper …` over a scratch theme path and state."""
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -141,11 +141,11 @@ class Plan(unittest.TestCase):
         os.environ.update(
             {
                 "HOME": str(self.tmp / "home"),
-                "STUDIO_STATE_DIR": str(self.state),
-                "STUDIO_HOOKS": "none",
-                "STUDIO_THEME_PATH": str(self.packs),
-                "STUDIO_THEME_INDEX": "none",
-                "STUDIO_LIBRARY": "none",
+                "LOFT_STATE_DIR": str(self.state),
+                "LOFT_HOOKS": "none",
+                "LOFT_THEME_PATH": str(self.packs),
+                "LOFT_THEME_INDEX": "none",
+                "LOFT_LIBRARY": "none",
             }
         )
         self.noff = mock.patch.object(palette, "have_ffmpeg", return_value=False)
@@ -189,7 +189,7 @@ class Plan(unittest.TestCase):
         shutil.rmtree(self.tmp)
 
     def run_ok(self, *argv) -> str:
-        rc, out, err = studio(*argv)
+        rc, out, err = loft(*argv)
         self.assertEqual(rc, 0, err)
         return out
 
@@ -291,10 +291,10 @@ class Plan(unittest.TestCase):
         self.assertEqual([(s["name"], s["origin"]) for s in sets["sets"]], [("pair", "pack"), ("trio", "pack"), ("mine", "user")])
         self.assertEqual(sets["activeSet"], "mine")
         # Delete: saved ones only.
-        self.assertEqual(studio("wallpaper", "set", "delete", "trio", "--theme", "night")[0], 1)
+        self.assertEqual(loft("wallpaper", "set", "delete", "trio", "--theme", "night")[0], 1)
         self.run_ok("wallpaper", "set", "delete", "mine", "--theme", "night")
         self.assertNotIn("activeSet", self.shell()["perTheme"]["night"])
-        self.assertEqual(studio("wallpaper", "set", "apply", "nope", *lay)[0], 1)
+        self.assertEqual(loft("wallpaper", "set", "apply", "nope", *lay)[0], 1)
 
     def test_shuffle_and_auto_cli(self):
         write(self.state / "overrides" / "shell.json", {"dock": {"iconSize": 40}, "perTheme": {"night": {"rotate": 5}}})
@@ -340,7 +340,7 @@ class PackFormat(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.saved = dict(os.environ)
-        os.environ.update({"HOME": str(self.tmp / "home"), "STUDIO_THEME_INDEX": "none", "STUDIO_LIBRARY": "none", "STUDIO_STATE_DIR": str(self.tmp / "state")})
+        os.environ.update({"HOME": str(self.tmp / "home"), "LOFT_THEME_INDEX": "none", "LOFT_LIBRARY": "none", "LOFT_STATE_DIR": str(self.tmp / "state")})
         d = self.tmp / "p"
         write(d / "manifest.json", {"name": "p", "author": "t", "version": "1.0.0", "license": "CC0-1.0"})
         write(d / "wallpapers" / "a.png", blob(0.5, 0.5))
@@ -370,7 +370,7 @@ class PackFormat(unittest.TestCase):
 
     def test_render(self):
         out = self.tmp / "out"
-        rc, _, err = studio("theme", "render", str(self.dir), str(out))
+        rc, _, err = loft("theme", "render", str(self.dir), str(out))
         self.assertEqual(rc, 0, err)
         m = json.loads((out / "manifest.json").read_text())
         self.assertEqual(m["wallpaperSets"][0]["name"], "desk")
@@ -396,26 +396,26 @@ class PackFormat(unittest.TestCase):
 
     @unittest.skipUnless(HAVE_JSONSCHEMA, "needs jsonschema")
     def test_schema(self):
-        rc, out, err = studio("theme", "validate", str(self.dir))
+        rc, out, err = loft("theme", "validate", str(self.dir))
         self.assertEqual(rc, 0, err)
         bad = json.loads(json.dumps(self.theme))
         bad["wallpaperSets"][0]["extra"] = 1
         write(self.dir / "theme.json", bad)
-        rc, _, err = studio("theme", "validate", str(self.dir))
+        rc, _, err = loft("theme", "validate", str(self.dir))
         self.assertEqual(rc, 1)
         self.assertIn("wallpaperSets/0", err)
 
     def test_export_carries_set_images(self):
-        os.environ["STUDIO_THEME_PATH"] = str(self.tmp)
+        os.environ["LOFT_THEME_PATH"] = str(self.tmp)
         out = self.tmp / "p.tar.gz"
-        rc, _, err = studio("theme", "export", "p", "-o", str(out))
+        rc, _, err = loft("theme", "export", "p", "-o", str(out))
         self.assertEqual(rc, 0, err)
         with tarfile.open(out) as tf:
             names = tf.getnames()
         self.assertIn("p/sets/b.png", names)
         self.assertIn("p/wallpapers/a.png", names)
         # …and installs back as a valid pack.
-        rc, _, err = studio("theme", "install", str(out))
+        rc, _, err = loft("theme", "install", str(out))
         self.assertEqual(rc, 0, err)
 
 

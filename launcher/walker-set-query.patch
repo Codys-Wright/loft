@@ -4,7 +4,7 @@
                  let mut resp = SubscribeResponse::new();
                  resp.merge_from_bytes(&payload)?;
  
-+                // studio-linux: "menus:%SETQUERY%<text>" replaces the query
++                // Loft: "menus:%SETQUERY%<text>" replaces the query
 +                // text (cursor at the end) instead of opening a menu — how an
 +                // elephant provider moves the launcher into a sub-search
 +                // ("!nixpk" + Enter → "!nixpkgs ").

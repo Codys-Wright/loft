@@ -1,0 +1,20 @@
+[package]
+name = "loft-niri"
+version = "0.1.0"
+description = "Loft niri settings backend: live outputs, runtime overrides → KDL, keybind listing"
+edition.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "loft-niri"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+# niri's config is KDL v1 (knuffel); parse it with kdl's v1 support.
+kdl = { version = "6.7.1", default-features = false, features = ["v1", "span"] }
+# Must speak the IPC of the niri we ship (nixpkgs niri 26.04).
+niri-ipc = "=26.4.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"

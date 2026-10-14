@@ -17,7 +17,7 @@ PanelWindow {
 
     visible: NiriSettings.identifying
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:identify"
+    WlrLayershell.namespace: "loft:identify"
     exclusionMode: ExclusionMode.Ignore
     anchors {
         top: true

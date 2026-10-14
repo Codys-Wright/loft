@@ -31,7 +31,7 @@ PanelWindow {
     readonly property real depth: thickness + margin + iconSize * (mag - 1) + (vertical ? 240 : 48)
 
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.namespace: "studio:dock"
+    WlrLayershell.namespace: "loft:dock"
     anchors {
         bottom: true
         top: root.vertical
@@ -101,7 +101,7 @@ PanelWindow {
         screen: root.modelData
         visible: root.hideable && !root.revealed
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.namespace: "studio:dock-hotzone"
+        WlrLayershell.namespace: "loft:dock-hotzone"
         exclusionMode: ExclusionMode.Ignore
         anchors {
             bottom: root.edge === "bottom" || root.vertical

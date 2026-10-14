@@ -22,7 +22,7 @@ PanelWindow {
 
     visible: job !== null && Capture.screenFocused?.name === modelData.name
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:capture-trim"
+    WlrLayershell.namespace: "loft:capture-trim"
     WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 560

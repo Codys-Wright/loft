@@ -7,7 +7,7 @@ import "wallsets.js" as WallSets
 
 // The active theme's vibe set and the user's choices from it.
 //
-// `studio theme vibes --json` lists the theme's own wallpapers and lock
+// `loft theme vibes --json` lists the theme's own wallpapers and lock
 // designs, curated ones from linked packs, then every other installed pack's
 // (and the wallpaper folder's images) ranked by palette closeness
 // (docs/THEME-FORMAT.md, "Vibes"). Re-read on theme switch and on demand.
@@ -16,7 +16,7 @@ import "wallsets.js" as WallSets
 // brings back that theme's wallpaper / rotation / lock; a key a theme never
 // set falls back to the global Settings value.
 //
-// Wallpaper, per screen and its active workspace (cli/studio/wallsets.py has
+// Wallpaper, per screen and its active workspace (cli/loft/wallsets.py has
 // the rules and the CLI): the workspace's choice > the pack's set for it >
 // with Auto on, an auto pick related to the display's image (all but the
 // display's first workspace) > the display's base: its choice, the theme's
@@ -193,7 +193,7 @@ Singleton {
     readonly property var userSets: (has("sets") ? choices.sets : []).filter(s => s && s.name)
     readonly property string activeSet: has("activeSet") ? choices.activeSet : ""
     readonly property int autoSeed: has("autoSeed") ? choices.autoSeed : 0
-    // `studio wallpaper plan --json`: auto picks, the candidate pool, framing, sets.
+    // `loft wallpaper plan --json`: auto picks, the candidate pool, framing, sets.
     property var plan: null
     property bool planning: false
     // Auto: the theme's choice, else on when the theme has enough matching images.
@@ -210,17 +210,17 @@ Singleton {
     readonly property string targetTone: plan?.tone ?? ""
 
     // The live layout, as wallsets.js and the CLI take it (+ `active` per workspace).
-    // Tests only: STUDIO_FAKE_DISPLAYS = {outputs, main?, workspaces} (the same
+    // Tests only: LOFT_FAKE_DISPLAYS = {outputs, main?, workspaces} (the same
     // shape, with `active`) stands in for the screens, so a one-output test
     // session can show the multi-display page and sets; nothing is drawn on them.
     readonly property var fakeLayout: {
-        const v = Quickshell.env("STUDIO_FAKE_DISPLAYS") ?? "";
+        const v = Quickshell.env("LOFT_FAKE_DISPLAYS") ?? "";
         if (v === "")
             return null;
         try {
             return JSON.parse(v);
         } catch (e) {
-            console.warn(`Vibes: STUDIO_FAKE_DISPLAYS: ${e}`);
+            console.warn(`Vibes: LOFT_FAKE_DISPLAYS: ${e}`);
             return null;
         }
     }
@@ -399,7 +399,7 @@ Singleton {
         planning = true;
         const mine = Object.assign({}, choices);
         mine.wallpaper = chosenWallpaper;
-        planProc.command = ["studio", "wallpaper", "plan", "--json", "--theme", theme, "--layout", JSON.stringify(planLayout), "--choices", JSON.stringify(mine)];
+        planProc.command = ["loft", "wallpaper", "plan", "--json", "--theme", theme, "--layout", JSON.stringify(planLayout), "--choices", JSON.stringify(mine)];
         planProc.running = true;
     }
 
@@ -412,7 +412,7 @@ Singleton {
                 try {
                     root.plan = JSON.parse(text);
                 } catch (e) {
-                    console.warn(`Vibes: bad output from studio wallpaper plan: ${e}`);
+                    console.warn(`Vibes: bad output from loft wallpaper plan: ${e}`);
                 }
             }
         }
@@ -479,7 +479,7 @@ Singleton {
             return;
         }
         loading = true;
-        proc.command = ["studio", "theme", "vibes", "--json", "--dir", folder];
+        proc.command = ["loft", "theme", "vibes", "--json", "--dir", folder];
         proc.running = true;
     }
     property bool pending: false
@@ -493,7 +493,7 @@ Singleton {
                 try {
                     root.data = JSON.parse(text);
                 } catch (e) {
-                    console.warn(`Vibes: bad output from studio theme vibes: ${e}`);
+                    console.warn(`Vibes: bad output from loft theme vibes: ${e}`);
                 }
             }
         }

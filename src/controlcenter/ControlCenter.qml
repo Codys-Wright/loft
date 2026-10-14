@@ -26,7 +26,7 @@ PanelWindow {
 
     visible: shown || slide.running
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:controlcenter"
+    WlrLayershell.namespace: "loft:controlcenter"
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors {

@@ -5,14 +5,14 @@ import Quickshell
 import Quickshell.Io
 
 // What the dock knows beyond niri: recent files per app (recently-used.xbel
-// + editor workspaces, via `studio dock recents`), Open at Login (XDG
-// autostart, `studio dock autostart`), Assign To (niri window rules in
-// overrides/niri.json, written through studio-niri), docked folders and the
+// + editor workspaces, via `loft dock recents`), Open at Login (XDG
+// autostart, `loft dock autostart`), Assign To (niri window rules in
+// overrides/niri.json, written through loft-niri), docked folders and the
 // Trash (DockFolder), and which stack popup is open.
 Singleton {
     id: root
 
-    readonly property string stateDir: Quickshell.env("STUDIO_STATE_DIR") || `${Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state"}/studio-linux`
+    readonly property string stateDir: Quickshell.env("LOFT_STATE_DIR") || `${Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state"}/loft`
     readonly property string dataHome: Quickshell.env("XDG_DATA_HOME") || Quickshell.env("HOME") + "/.local/share"
 
     // ── Same app? Pins may be desktop ids, windows carry niri app ids ─────
@@ -137,7 +137,7 @@ Singleton {
 
     Process {
         id: recentsProc
-        command: ["studio", "dock", "recents", "--limit", "10"]
+        command: ["loft", "dock", "recents", "--limit", "10"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -175,7 +175,7 @@ Singleton {
     }
 
     function setOpenAtLogin(appId, on) {
-        Quickshell.execDetached(["sh", "-c", 'studio dock autostart set "$1" "$2" >/dev/null; true', "studio-dock", entryId(appId), on ? "on" : "off"]);
+        Quickshell.execDetached(["sh", "-c", 'loft dock autostart set "$1" "$2" >/dev/null; true', "loft-dock", entryId(appId), on ? "on" : "off"]);
         // Optimistic; re-read shortly.
         const l = loginItems.filter(i => i !== entryId(appId));
         if (on)
@@ -186,7 +186,7 @@ Singleton {
 
     Process {
         id: loginList
-        command: ["studio", "dock", "autostart", "list"]
+        command: ["loft", "dock", "autostart", "list"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -206,7 +206,7 @@ Singleton {
     // xdg-desktop-autostart.target already does).
     Process {
         id: autostartRun
-        command: ["studio", "dock", "autostart", "run", "--once", Quickshell.env("NIRI_SOCKET") || "session"]
+        command: ["loft", "dock", "autostart", "run", "--once", Quickshell.env("NIRI_SOCKET") || "session"]
     }
 
     // ── Assign To (niri window rules) ────────────────────────────────────
@@ -338,8 +338,8 @@ Singleton {
     readonly property bool trashFull: (trash?.count ?? 0) > 0
 
     function emptyTrash() {
-        // The home trash only (`studio dock trash --empty`), never other volumes'.
-        Quickshell.execDetached(["studio", "dock", "trash", "--empty"]);
+        // The home trash only (`loft dock trash --empty`), never other volumes'.
+        Quickshell.execDetached(["loft", "dock", "trash", "--empty"]);
     }
 
     function trashFiles(urls) {
@@ -349,7 +349,7 @@ Singleton {
     }
 
     function openTrash() {
-        Quickshell.execDetached(["sh", "-c", 'gio open trash:/// 2>/dev/null || xdg-open "$1"', "studio-dock", trash?.path || `${root.dataHome}/Trash/files`]);
+        Quickshell.execDetached(["sh", "-c", 'gio open trash:/// 2>/dev/null || xdg-open "$1"', "loft-dock", trash?.path || `${root.dataHome}/Trash/files`]);
     }
 
     // Icon candidates for a listed file (AppIcon.sources): its thumbnail,
@@ -389,13 +389,13 @@ Singleton {
     function openWith(appId, path) {
         const e = Apps.entry(appId);
         if (e)
-            Quickshell.execDetached(["sh", "-c", 'studio dock open "$1" "$2" >/dev/null 2>&1 || xdg-open "$2"', "studio-dock", e.id, path]);
+            Quickshell.execDetached(["sh", "-c", 'loft dock open "$1" "$2" >/dev/null 2>&1 || xdg-open "$2"', "loft-dock", e.id, path]);
         else
             openFile(path);
     }
 
     function showInFiles(pathOrId) {
-        Quickshell.execDetached(["studio", "dock", "show", pathOrId]);
+        Quickshell.execDetached(["loft", "dock", "show", pathOrId]);
     }
 
     // Which stack popup is open: { screen, index, x, y, edge } or null.

@@ -14,7 +14,7 @@ PanelWindow {
 
     visible: Capture.countdown > 0 && Capture.screenFocused?.name === modelData.name
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:capture-countdown"
+    WlrLayershell.namespace: "loft:capture-countdown"
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 180
     implicitHeight: 180

@@ -2,7 +2,7 @@
 
 A **theme pack** is a directory. The machine-readable spec is
 [`themes/schema.json`](../themes/schema.json) (JSON Schema 2020-12;
-`studio theme validate <pack>` checks against it).
+`loft theme validate <pack>` checks against it).
 
 ```
 <name>/
@@ -21,7 +21,7 @@ A **theme pack** is a directory. The machine-readable spec is
 ```json
 {
   "name": "tokyonight",
-  "author": "studio-linux",
+  "author": "Loft",
   "version": "1.0.0",
   "license": "Apache-2.0",
   "source": "https://github.com/folke/tokyonight.nvim",
@@ -51,16 +51,16 @@ Optional keys:
 
 A pack can ship several designs. The default comes first: `lock` (a
 shorthand for one entry), else the conventional `lock/Main.qml` (format
-`studio`), then `locks`, then every `locks/<dir>/` holding a `Main.qml` or a
+`loft`), then `locks`, then every `locks/<dir>/` holding a `Main.qml` or a
 `metadata.desktop`. `name` (unique in the pack, how vibes refer to it)
 defaults to `metadata.desktop`'s `Name`, else the pack name (or the
 `locks/<dir>` name). `format` defaults to `qylock` when the directory has a
-`metadata.desktop`, else `studio`. `preview` (a screenshot for the pickers)
+`metadata.desktop`, else `loft`. `preview` (a screenshot for the pickers)
 defaults to `preview.*` / `screenshot.*` inside the design; without one the
 pickers draw a small card in the source pack's colors over the design's
 background (qylock `theme.conf` `background`, else the pack's wallpaper).
 
-`path` is relative to the pack (or absolute). Format `studio` is a
+`path` is relative to the pack (or absolute). Format `loft` is a
 `Main.qml` against [THEME-FORMAT-LOCK.md](THEME-FORMAT-LOCK.md). Format `qylock` is an
 SDDM-API QML theme directory as qylock ships them: `metadata.desktop`
 (`MainScript`, default `Main.qml`), `theme.conf` (the design's own settings:
@@ -86,7 +86,7 @@ falls back to the built-in one (the page shows why).
 ## theme.json
 
 Only `palette` is required; every other key has a default. The normalized
-`theme.json` written by `studio theme render` has every key filled in, and
+`theme.json` written by `loft theme render` has every key filled in, and
 that is what the shell reads.
 
 | Key | Type | Default | Meaning |
@@ -143,7 +143,7 @@ still. Old packs with a single `wallpaper.image` are unchanged.
 
 The shell shows, per screen and its active niri workspace (all stored per
 theme in `overrides/shell.json` `perTheme.<theme>`, so switching back restores
-them; `cli/studio/wallsets.py` has the rules):
+them; `cli/loft/wallsets.py` has the rules):
 
 1. the workspace's own choice (`workspaces`: `{"<name>" | "<identity>#<idx>": path}`),
    then the pack's set for it (below) — skipped for a display set to "Use for
@@ -157,7 +157,7 @@ them; `cli/studio/wallsets.py` has the rules):
    workspace *n* shows the collection's *n*-th) on, one from the collection;
 5. the default.
 
-Auto picks (`studio wallpaper plan`) come from the theme's vibe set (own,
+Auto picks (`loft wallpaper plan`) come from the theme's vibe set (own,
 curated, then matches scoring ≥ 0.6 — the library's theme-view floor), only
 in the theme's tone bucket (Dark / Medium / Light from the library's
 classifier: the default wallpaper's tone, else by polarity; never the
@@ -192,71 +192,71 @@ Settings → Displays names), `left` / `right` / `top` / `bottom` of it
 `landscape`), the ordinal `display-1..N` (by x, then y), and `*` (any). A
 display takes the first of its roles the set names, in that order. Workspace
 keys are a niri workspace name or `<role>#<idx>`. Paths are relative to the
-pack (or absolute); `studio theme validate` checks they exist and that role
+pack (or absolute); `loft theme validate` checks they exist and that role
 names are known, the rendered `manifest.json` lists the sets with absolute
-paths, and `studio theme export` carries the images like any pack file.
+paths, and `loft theme export` carries the images like any pack file.
 
 While the user has made no choice for the theme (no `wallpaper`, `displays`
 or `workspaces`), the shell applies the pack's set that names the most
 displays of a multi-display layout. Applying any set (Settings → Wallpaper →
-Sets, `studio wallpaper set apply NAME`, IPC `wallpaper applySet NAME`)
+Sets, `loft wallpaper set apply NAME`, IPC `wallpaper applySet NAME`)
 writes its images as display and workspace choices; *Save as Set…* /
-`studio wallpaper set save NAME` captures what is on screen (each display's
+`loft wallpaper set save NAME` captures what is on screen (each display's
 image under its primary role, workspaces that differ under their name or
 `<role>#<idx>`) into `perTheme.<theme>.sets`, or with `--pack DIR` into a
 pack's `theme.json` (images copied into its `wallpapers/`).
 
 ```sh
-studio wallpaper plan [--theme T]            # what every display / workspace shows, and why
-studio wallpaper sets                        # the pack's and saved sets
-studio wallpaper set apply|save|show|delete NAME [--pack DIR]
-studio wallpaper shuffle                     # new auto picks
-studio wallpaper auto on|off|default
+loft wallpaper plan [--theme T]              # what every display / workspace shows, and why
+loft wallpaper sets                          # the pack's and saved sets
+loft wallpaper set apply|save|show|delete NAME [--pack DIR]
+loft wallpaper shuffle                       # new auto picks
+loft wallpaper auto on|off|default
 # --layout '{outputs: [{name, identity, x, y, width, height}], main, workspaces: [{output, idx, name}]}'
 # (default: ask niri) and --choices JSON (default: shell.json) make it work without a session.
 ```
 
 ## Rendered bundle
 
-`studio theme render <pack> <outdir>` (and `apply`, into
-`$STUDIO_STATE_DIR/rendered/<name>/<hash>/`) writes:
+`loft theme render <pack> <outdir>` (and `apply`, into
+`$LOFT_STATE_DIR/rendered/<name>/<hash>/`) writes:
 
 | File | Consumer | How it is used | Live reload on `apply` |
 |---|---|---|---|
-| `theme.json` | the shell | `$STUDIO_THEME_FILE` = `<state>/current/theme.json` | `quickshell ipc … call theme reload` |
+| `theme.json` | the shell | `$LOFT_THEME_FILE` = `<state>/current/theme.json` | `quickshell ipc … call theme reload` |
 | `manifest.json` | the theme selector, lock loader, pickers | normalized manifest + `wallpapers` / `locks` / `defaults` with absolute paths (own, then curated) | — |
 | `niri.kdl` | niri | `include optional=true "<state>/current/niri.kdl"` after `base.kdl` | niri watches the include (by canonical path); `niri msg action load-config-file` makes it immediate |
-| `kitty.conf` | kitty | `include ~/.local/state/studio-linux/current/kitty.conf` | `SIGUSR1` |
-| `ghostty.conf` | Ghostty | `config-file = ?~/.local/state/studio-linux/current/ghostty.conf` | `SIGUSR2` |
+| `kitty.conf` | kitty | `include ~/.local/state/loft/current/kitty.conf` | `SIGUSR1` |
+| `ghostty.conf` | Ghostty | `config-file = ?~/.local/state/loft/current/ghostty.conf` | `SIGUSR2` |
 | `gtk.css` | GTK 3/4, libadwaita | `@import url("file://…/current/gtk.css");` from `~/.config/gtk-{3,4}.0/gtk.css`. Palette + accent, the window radius, traffic-light window buttons (put them on the left with `gtk-decoration-layout=close,minimize,maximize:` in `settings.ini`) | `gsettings … color-scheme prefer-dark/light` |
-| `walker.css` | walker | studio's walker theme `@import`s it as `colors.css` | walker re-reads CSS on every open |
+| `walker.css` | walker | Loft's walker theme `@import`s it as `colors.css` | walker re-reads CSS on every open |
 | `noctalia.json` | Noctalia (transition only) | its `colors.json` | its own watcher |
 
 The templates live in [`templates/render/`](../templates/render) and use
 `${var}` placeholders (Python `string.Template`); the variables are computed in
-`cli/studio/render.py`. A file in the pack's `apps/` replaces the generated file
+`cli/loft/render.py`. A file in the pack's `apps/` replaces the generated file
 of the same name (`theme.json` and `manifest.json` are always generated).
 Extra `apps/` files (for consumers without a template yet) are copied as is.
 
 ## Importers
 
-`studio theme install <importer>:<theme>` converts an upstream theme into a
+`loft theme install <importer>:<theme>` converts an upstream theme into a
 pack at install time (nothing third-party is vendored in this repo):
 
 ```sh
-studio theme install --list cozytile:              # what an importer offers
-studio theme install cozytile:all                  # cozytile-cozy, -sakura, -natura, -everforest, -carbon
-studio theme install qylock:pixel-sakura,forest    # qylock-pixel-sakura, qylock-forest
-studio theme install qylock:field@<branch|tag|full sha>   # pin the upstream tree
-studio theme install --force cozytile:sakura       # replace an installed pack
+loft theme install --list cozytile:                # what an importer offers
+loft theme install cozytile:all                    # cozytile-cozy, -sakura, -natura, -everforest, -carbon
+loft theme install qylock:pixel-sakura,forest      # qylock-pixel-sakura, qylock-forest
+loft theme install qylock:field@<branch|tag|full sha>     # pin the upstream tree
+loft theme install --force cozytile:sakura         # replace an installed pack
 ```
 
 Fetching is git, blob-less and sparse: one depth-1 fetch of the trees (a few
 hundred KB, also what `--list` reads), then only the files a theme needs.
-`STUDIO_<IMPORTER>_URL` overrides the upstream repo (mirrors, tests). Packs
+`LOFT_<IMPORTER>_URL` overrides the upstream repo (mirrors, tests). Packs
 are built in a staging dir, validated against the schema, then moved into
-the library's `Packs/` (`~/Documents/Themes/Packs`, `$STUDIO_LIBRARY`) when
-it exists, else `~/.local/share/studio-linux/themes/`. `all` skips installed packs; a single
+the library's `Packs/` (`~/Documents/Themes/Packs`, `$LOFT_LIBRARY`) when
+it exists, else `~/.local/share/loft/themes/`. `all` skips installed packs; a single
 installed theme is an error without `--force`.
 
 | Importer | Upstream (license) | Pack | Palette | Assets |
@@ -264,7 +264,7 @@ installed theme is an error without `--force`.
 | `cozytile` | [Darkkal44/Cozytile](https://github.com/Darkkal44/Cozytile) (none: `NOASSERTION`) | `cozytile-<theme>` | Its own config: bg = the theme switcher's `wal -b` color (= qtile bar), surface = qtile widget pills, text = rofi foreground, accent = qtile workspace/widget foreground, accent2 = the rofi/qtile/SDDM highlight most distinct from the accent. A theme that loads a pywal JSON (Carbon: `e-ink.json`) takes bg/text/accent from its `special` colors | `sddm-themes/<Name>/` → `greeter/`, declared as the pack's `lock` (qylock format). Wallpapers: the switcher's (the default; upstream it is the same file as the SDDM `Background`, which is then referenced instead of copied), the SDDM background when it differs, and each `Wallpaper/` image no theme sets, given to the theme whose palette is closest to the image's colors (→ `wallpapers/`) |
 | `qylock` | [Darkkal44/qylock](https://github.com/Darkkal44/qylock) (GPL-3.0) | `qylock-<theme>` | `theme.conf` colors (`type=color` + `color` = bg, `accentColor`, `mainColor`, `containerColor`, `themeMode`; a lone `color` is the design's text color, or its accent when saturated), the rest from the background: a still, or a frame ~1 s into a video, quantized by median cut + k-means. No ffmpeg and a video: neutral dark palette | `themes/<theme>/` → `lock/qylock/` (+ `lock` in the manifest). Every background (theme.conf's, plus other images/videos ≥ 200 KB, e.g. osu's `background/A..G`, Genshin's dawn/day/dusk/night) is a wallpaper: stills referenced in place, videos as a frame in `wallpapers/` noting the video (no ffmpeg: the video, flagged) |
 
-Both fill roles the upstream lacks the same way (`cli/studio/palette.py`, shared with vibe matching):
+Both fill roles the upstream lacks the same way (`cli/loft/palette.py`, shared with vibe matching):
 overlay and subtext are mixed from surface/text/bg; urgent/ok/warn are red,
 green and yellow hues nudged toward the accent; text and accents are pushed
 to 4.5:1 / 3:1 contrast against bg only when they fall short; polarity
@@ -272,17 +272,17 @@ follows bg's luminance. The result is an ordinary pack: edit its
 `theme.json` afterwards like any other.
 
 Image sampling uses `ffmpeg` when it is on PATH (any image format, video
-frames; the Nix-packaged `studio` has it) and otherwise a small pure-Python
+frames; the Nix-packaged `loft` has it) and otherwise a small pure-Python
 PNG decoder, so a bare `python3` with no extra modules still imports PNG
 backgrounds.
 
 Vibe links the themes index declares for an imported pack (see below) are
 written into its `manifest.json` `vibes`, so they hold offline too.
 
-An importer is a module registered in `cli/studio/importers/__init__.py`
+An importer is a module registered in `cli/loft/importers/__init__.py`
 with `list_themes`, `resolve`, `pack_name`, `install(theme, dest, up)` and an
 optional batched `prefetch`; the themes index
-([studio-linux-themes](https://github.com/Codys-Wright/studio-linux-themes)
+([loft-themes](https://github.com/Codys-Wright/loft-themes)
 `index.json`, `"importers"`) names them by that key.
 
 ## Vibes
@@ -290,12 +290,12 @@ optional batched `prefetch`; the themes index
 Which wallpapers and lock designs go with a theme:
 
 ```sh
-studio theme vibes cozytile-sakura                 # text; default: the current theme
-studio theme vibes --json --dir ~/Pictures/Wallpapers --limit 20   # what the shell's pickers read
+loft theme vibes cozytile-sakura                   # text; default: the current theme
+loft theme vibes --json --dir ~/Pictures/Wallpapers --limit 20     # what the shell's pickers read
 ```
 
 1. **own**: the pack's wallpapers and lock designs;
-2. **curated**: refs in the manifest's `vibes`, plus the [themes index](https://github.com/Codys-Wright/studio-linux-themes)
+2. **curated**: refs in the manifest's `vibes`, plus the [themes index](https://github.com/Codys-Wright/loft-themes)
    `"vibes"` groups (`{"name", "packs": [...], "wallpapers"?, "locks"?}`: every
    member gets the others' assets). Refs are `<pack>:<file>` (wallpapers, a
    path in that pack), `<pack>:<lock name>`, or `<pack>` for all of its. Only
@@ -314,18 +314,18 @@ of its pack's palette vs the theme's and its image vs the theme's default
 wallpaper (a lock: its background, else its pack's wallpaper; a theme with
 no wallpaper stands in with its palette). Below ~15 is the same vibe, 30+
 unrelated. Image swatches are cached by content hash in
-`$STUDIO_STATE_DIR/cache/palettes.json`.
+`$LOFT_STATE_DIR/cache/palettes.json`.
 
-The index is read from `$STUDIO_THEME_INDEX` (a path, `file://` or http(s)
+The index is read from `$LOFT_THEME_INDEX` (a path, `file://` or http(s)
 URL; `none` turns it off), by default the GitHub raw URL, cached a day in
-`$STUDIO_STATE_DIR/cache/index.json`; unreachable means no index links, never
+`$LOFT_STATE_DIR/cache/index.json`; unreachable means no index links, never
 an error.
 
 ## Authoring
 
 ```sh
-studio theme new mytheme --from latte   # → ~/.local/share/studio-linux/themes/mytheme
-$EDITOR ~/.local/share/studio-linux/themes/mytheme/theme.json
-studio theme apply mytheme              # re-renders when the pack changed
-studio theme export mytheme -o mytheme.tar.zst
+loft theme new mytheme --from latte     # → ~/.local/share/loft/themes/mytheme
+$EDITOR ~/.local/share/loft/themes/mytheme/theme.json
+loft theme apply mytheme                # re-renders when the pack changed
+loft theme export mytheme -o mytheme.tar.zst
 ```

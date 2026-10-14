@@ -24,7 +24,7 @@ PanelWindow {
     onShownChanged: optionsOpen = false
 
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:capture-selector"
+    WlrLayershell.namespace: "loft:capture-selector"
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors.bottom: true

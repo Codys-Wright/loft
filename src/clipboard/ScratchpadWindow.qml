@@ -15,7 +15,7 @@ FloatingWindow {
     id: window
 
     visible: Scratchpad.open
-    title: "Studio Scratchpad"
+    title: "Loft Scratchpad"
     implicitWidth: 680
     implicitHeight: 540
     color: "transparent"

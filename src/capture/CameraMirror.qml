@@ -18,7 +18,7 @@ PanelWindow {
 
     visible: Capture.cameraOn
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.namespace: "studio:camera"
+    WlrLayershell.namespace: "loft:camera"
     exclusionMode: ExclusionMode.Ignore
     anchors {
         bottom: true

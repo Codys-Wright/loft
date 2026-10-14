@@ -27,7 +27,7 @@ PanelWindow {
 
     visible: shown || fade.running
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:osd"
+    WlrLayershell.namespace: "loft:osd"
     exclusionMode: ExclusionMode.Ignore
     anchors.bottom: true
     margins.bottom: 130

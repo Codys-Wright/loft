@@ -22,7 +22,7 @@ PanelWindow {
     property point pos: Qt.point(((screen?.width ?? 1280) - natW * zoom) / 2 + (pin.id % 6) * 24, ((screen?.height ?? 800) - natH * zoom) / 2 + (pin.id % 6) * 24)
 
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.namespace: "studio:capture-pin"
+    WlrLayershell.namespace: "loft:capture-pin"
     exclusionMode: ExclusionMode.Ignore
     anchors {
         top: true

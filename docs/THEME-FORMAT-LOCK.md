@@ -1,7 +1,7 @@
 # Theme packs: lock / login design (`lock/`)
 
 A theme pack can bring its own lock screen and login screen design. It's
-optional: without one, studio's built-in macOS-style design is used, colored
+optional: without one, Loft's built-in macOS-style design is used, colored
 by the pack's `theme.json`.
 
 ```
@@ -17,8 +17,8 @@ The **same `lock/Main.qml` runs in both places**:
 
 | Host | Where the pack comes from | Read |
 |---|---|---|
-| Lock screen (Quickshell, `src/lock/`) | the user's active theme: the directory of `$STUDIO_THEME_FILE`, normally `~/.local/state/studio-linux/current` | at every lock, so `studio theme apply` switches it with no restart |
-| Login screen (SDDM theme `studio`, `lock/sddm/`) | `packDir` from the SDDM theme's `theme.conf`, default `/var/lib/studio-linux/greeter` (machine-wide) | when the greeter starts |
+| Lock screen (Quickshell, `src/lock/`) | the user's active theme: the directory of `$LOFT_THEME_FILE`, normally `~/.local/state/loft/current` | at every lock, so `loft theme apply` switches it with no restart |
+| Login screen (SDDM theme `loft`, `lock/sddm/`) | `packDir` from the SDDM theme's `theme.conf`, default `/var/lib/loft/greeter` (machine-wide) | when the greeter starts |
 
 A design that fails to compile falls back to the built-in one, so a broken
 pack never leaves a screen without a password field.
@@ -33,11 +33,11 @@ that picker. The design's `theme.conf` is the one in its own directory.
 ## The contract
 
 A design gets these names in scope (no imports needed). They're a subset of
-SDDM's greeter API plus one studio object, so a design written for SDDM, such
+SDDM's greeter API plus one Loft object, so a design written for SDDM, such
 as a [qylock](https://github.com/Darkkal44/qylock) theme, works mostly
 unchanged, and a design written against `lock` works in both hosts.
 
-### `lock`: studio-native (preferred)
+### `lock`: loft-native (preferred)
 
 | Member | Type | Meaning |
 |---|---|---|
@@ -74,7 +74,7 @@ and anything outside the shell's QML import path (the lock runs with
 qtdeclarative, qtwayland and Quickshell's modules; SDDM with what its
 `extraPackages` add). qylock themes that import those need compatibility
 modules on the import path. That belongs to the qylock importer
-(`studio theme install qylock:…`, Phase 1b).
+(`loft theme install qylock:…`, Phase 1b).
 
 ## A minimal design
 
@@ -120,5 +120,5 @@ Rectangle {
   it the greeter still works, with the built-in palette.
 - **Trust:** a design is QML running in the shell (lock) or greeter process.
   Install packs you trust. The greeter only reads packs from a root-owned
-  directory, which `studio theme apply --greeter` writes through its polkit
+  directory, which `loft theme apply --greeter` writes through its polkit
   helper.

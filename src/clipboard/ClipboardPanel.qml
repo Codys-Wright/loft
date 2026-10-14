@@ -22,7 +22,7 @@ PanelWindow {
 
     visible: open
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:clipboard"
+    WlrLayershell.namespace: "loft:clipboard"
     WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors {

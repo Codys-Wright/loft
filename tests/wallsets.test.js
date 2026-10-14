@@ -1,7 +1,7 @@
 // Unit tests for src/services/wallsets.js (display roles, wallpaper sets),
 // run by `nix flake check` (wallpaper-sets):
 //   node tests/wallsets.test.js src/services/wallsets.js tests/fixtures/wallsets/layouts.json
-// The fixture is shared with tests/test_wallsets.py (cli/studio/wallsets.py).
+// The fixture is shared with tests/test_wallsets.py (cli/loft/wallsets.py).
 const fs = require("fs");
 const assert = require("assert");
 

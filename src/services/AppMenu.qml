@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Io
 
 // The global menu (File / Edit / View … of the focused app), from the
-// studio-appmenu daemon (crates/studio-appmenu): it owns
+// loft-appmenu daemon (crates/loft-appmenu): it owns
 // com.canonical.AppMenu.Registrar — so Qt apps export their menubar over
 // DBusMenu instead of drawing it — and finds GTK menubars by introspection.
 // niri has no appmenu protocol, so menus are matched to windows by pid.
@@ -141,9 +141,9 @@ Singleton {
             registrar = ev.status.registrar;
         else if (ev.error) {
             lastError = ev.error;
-            console.warn(`studio-appmenu: ${ev.error}`);
+            console.warn(`loft-appmenu: ${ev.error}`);
         } else
-            console.warn(`studio-appmenu: ${line}`);
+            console.warn(`loft-appmenu: ${line}`);
     }
 
     onFrozenChanged: sync()
@@ -168,13 +168,13 @@ Singleton {
 
     Process {
         id: proc
-        command: [Quickshell.env("STUDIO_APPMENU_BIN") || "studio-appmenu"]
+        command: [Quickshell.env("LOFT_APPMENU_BIN") || "loft-appmenu"]
         stdinEnabled: true
         stdout: SplitParser {
             onRead: line => root.handle(line)
         }
         stderr: SplitParser {
-            onRead: line => console.warn(`studio-appmenu: ${line}`)
+            onRead: line => console.warn(`loft-appmenu: ${line}`)
         }
         onRunningChanged: {
             if (running) {

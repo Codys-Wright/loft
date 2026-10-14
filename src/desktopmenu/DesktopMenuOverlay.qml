@@ -18,7 +18,7 @@ PanelWindow {
 
     visible: shown
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:desktopmenu"
+    WlrLayershell.namespace: "loft:desktopmenu"
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors {

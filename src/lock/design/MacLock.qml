@@ -2,7 +2,7 @@ import QtQuick
 import qs.services
 import qs.components
 
-// studio's default lock / login design (macOS-style): date + big clock up
+// Loft's default lock / login design (macOS-style): date + big clock up
 // top, an optional accessory (now playing) under it, and a frosted card
 // with avatar, name and password pill in the lower middle.
 //

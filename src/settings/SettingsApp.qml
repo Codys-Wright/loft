@@ -6,9 +6,9 @@ import Quickshell.Wayland
 import qs.components
 import qs.services
 
-// Studio Settings: a floating glass window (like macOS System Settings) that
+// Loft Settings: a floating glass window (like macOS System Settings) that
 // edits the runtime overrides (Settings → overrides/shell.json). Everything
-// applies live; `studio save` will promote it into Nix defaults.
+// applies live; `loft save` will promote it into Nix defaults.
 // Open with Cmd+, (Mod+Comma), the Control Center, or IPC settings toggle.
 Scope {
     id: root
@@ -122,7 +122,7 @@ Scope {
     FloatingWindow {
         id: window
         visible: root.open
-        title: "Studio Settings"
+        title: "Loft Settings"
         implicitWidth: 880
         implicitHeight: 640
         color: "transparent"
@@ -480,8 +480,8 @@ Scope {
                         visible: root.section === "about"
 
                         Row_ {
-                            label: "studio-linux"
-                            hint: "niri + Quickshell · github.com/Codys-Wright/studio-linux"
+                            label: "loft"
+                            hint: "niri + Quickshell · github.com/Codys-Wright/loft"
                         }
                         Row_ {
                             label: "Settings file"

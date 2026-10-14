@@ -25,7 +25,7 @@ PanelWindow {
 
     visible: open
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:switcher"
+    WlrLayershell.namespace: "loft:switcher"
     WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: Math.max(240, row.implicitWidth + 40)

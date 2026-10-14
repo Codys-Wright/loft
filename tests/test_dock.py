@@ -1,4 +1,4 @@
-"""Unit tests for the dock helpers (cli/studio/dock.py): Exec parsing, recent
+"""Unit tests for the dock helpers (cli/loft/dock.py): Exec parsing, recent
 files per app (recently-used.xbel), docked folders, the trash and Open at
 Login — all against scratch XDG dirs, never the real ones.
 """
@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from studio import dock
+from loft import dock
 
 
 def xbel(entries) -> str:
@@ -34,7 +34,7 @@ def xbel(entries) -> str:
 
 class Scratch(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="studio-dock-"))
+        self.tmp = Path(tempfile.mkdtemp(prefix="loft-dock-"))
         self.home = self.tmp / "home"
         self.data = self.tmp / "data"
         self.config = self.tmp / "config"
@@ -182,7 +182,7 @@ class AutostartTest(Scratch):
 
 class CliTest(Scratch):
     def test_cli_prints_json(self):
-        from studio import cli
+        from loft import cli
 
         out = []
         with mock.patch("builtins.print", lambda s, *a, **k: out.append(s)):

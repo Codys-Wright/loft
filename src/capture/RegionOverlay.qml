@@ -21,7 +21,7 @@ PanelWindow {
 
     visible: purpose !== "" && frame !== ""
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:capture"
+    WlrLayershell.namespace: "loft:capture"
     WlrLayershell.keyboardFocus: visible && primary ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors {

@@ -24,7 +24,7 @@ PanelWindow {
 
     visible: open
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:wallpaper-picker"
+    WlrLayershell.namespace: "loft:wallpaper-picker"
     WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors {

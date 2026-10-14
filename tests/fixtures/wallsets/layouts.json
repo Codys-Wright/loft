@@ -1,5 +1,5 @@
 {
-  "comment": "Display roles and wallpaper-set resolution, shared by tests/test_wallsets.py (cli/studio/wallsets.py) and tests/wallsets.test.js (src/services/wallsets.js): both implementations must agree.",
+  "comment": "Display roles and wallpaper-set resolution, shared by tests/test_wallsets.py (cli/loft/wallsets.py) and tests/wallsets.test.js (src/services/wallsets.js): both implementations must agree.",
   "cases": [
     {
       "name": "three displays: portrait left, ultrawide main, landscape right",

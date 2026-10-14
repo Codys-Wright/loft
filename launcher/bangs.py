@@ -6,7 +6,7 @@ list as a JS array) and writes the data file of the `bangs` elephant provider
 first (r = DuckDuckGo's usage rank), one entry per trigger, with the search
 term placeholder rewritten to %TERM%.
 
-A few studio additions and fixes (EXTRAS) are applied on top: current NixOS
+A few Loft additions and fixes (EXTRAS) are applied on top: current NixOS
 search URLs and the Nix tools DuckDuckGo lacks (noogle, Home Manager options).
 
 usage: python3 bangs.py bang.ts out.json

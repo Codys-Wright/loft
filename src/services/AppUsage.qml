@@ -5,12 +5,12 @@ import Quickshell
 import Quickshell.Io
 
 // Screen time per app for today, measured in-shell from niri's focus events
-// (no daemon). Persisted to $STUDIO_STATE_DIR/app-usage.json so it survives
+// (no daemon). Persisted to $LOFT_STATE_DIR/app-usage.json so it survives
 // shell reloads; resets at midnight.
 Singleton {
     id: root
 
-    readonly property string stateDir: Quickshell.env("STUDIO_STATE_DIR") || `${Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state"}/studio-linux`
+    readonly property string stateDir: Quickshell.env("LOFT_STATE_DIR") || `${Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state"}/loft`
 
     // appId → seconds, for `day`.
     property var seconds: ({})

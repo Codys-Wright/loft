@@ -6,7 +6,7 @@ import qs.services
 
 // Settings → Wallpaper → Displays & Workspaces: a wallpaper per display and
 // per workspace, auto-matched images, and wallpaper sets (Vibes.qml,
-// cli/studio/wallsets.py).
+// cli/loft/wallsets.py).
 //
 // The diagram draws the displays at their real relative positions, sizes and
 // orientation with what each shows now; click one to pick for it. The strip

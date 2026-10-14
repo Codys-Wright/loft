@@ -1,4 +1,4 @@
-// studio-linux base niri config.
+// Loft base niri config.
 //
 // Consumers `include` this first and override anything after it — includes
 // are positional, so later settings win. Theme-owned settings (focus ring /
@@ -29,7 +29,7 @@ screenshot-path null
 input {
     // The window-manager key is one no app binds: ISO_Level3_Shift (Mod5).
     // Right Alt is it natively (lv3:ralt_switch); with the keyboard layer
-    // (studio-keys) holding Esc or Caps Lock is too, and Super stays Cmd.
+    // (loft-keys) holding Esc or Caps Lock is too, and Super stays Cmd.
     mod-key "ISO_Level3_Shift"
     mod-key-nested "ISO_Level3_Shift"
     keyboard {
@@ -101,9 +101,9 @@ window-rule {
 // The shell's own windows float, like macOS utility windows. Their glass
 // frame uses the same window radius as everything else.
 window-rule {
-    match title="^Studio Settings$"
+    match title="^Loft Settings$"
     match title="^System Monitor$"
-    match title="^Studio Scratchpad$"
+    match title="^Loft Scratchpad$"
     open-floating true
 }
 

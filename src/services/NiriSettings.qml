@@ -4,9 +4,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// niri settings for the Settings app, through the `studio-niri` backend
-// (crates/studio-niri). Runtime changes are stored in
-// $STUDIO_STATE_DIR/overrides/niri.json and rendered into overrides/niri.kdl,
+// niri settings for the Settings app, through the `loft-niri` backend
+// (crates/loft-niri). Runtime changes are stored in
+// $LOFT_STATE_DIR/overrides/niri.json and rendered into overrides/niri.kdl,
 // which the session includes; the user's own KDL is never edited (PLAN §4.1).
 //
 //   outputs   live outputs (modes, scale, transform, position, VRR, identity)
@@ -14,7 +14,7 @@ import Quickshell.Io
 //             config, default, file, line, kind, min, max, options }
 //   binds     every keybind in the config tree, with source and shadowing
 //
-// Setters send one JSON batch to `studio-niri apply`, which records, renders,
+// Setters send one JSON batch to `loft-niri apply`, which records, renders,
 // validates with `niri validate`, swaps the fragment in and reloads niri.
 Singleton {
     id: root
@@ -103,7 +103,7 @@ Singleton {
         const [job, ...rest] = queue;
         queue = rest;
         runner.job = job;
-        runner.command = ["studio-niri", "--json", "apply", JSON.stringify(job.batch)];
+        runner.command = ["loft-niri", "--json", "apply", JSON.stringify(job.batch)];
         runner.running = true;
     }
 
@@ -124,7 +124,7 @@ Singleton {
                 } catch (e) {
                     r = { ok: false, error: text.trim() || `${e}` };
                 }
-                root.error = r.ok ? "" : (r.error ?? "studio-niri failed");
+                root.error = r.ok ? "" : (r.error ?? "loft-niri failed");
                 const done = runner.job?.done;
                 if (done)
                     done(r);
@@ -132,7 +132,7 @@ Singleton {
         }
         onExited: code => {
             if (code !== 0 && root.error === "")
-                root.error = `studio-niri exited with ${code}`;
+                root.error = `loft-niri exited with ${code}`;
             root.refresh();
             root.next();
         }
@@ -140,7 +140,7 @@ Singleton {
 
     Process {
         id: outputsProc
-        command: ["studio-niri", "--json", "outputs"]
+        command: ["loft-niri", "--json", "outputs"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -156,7 +156,7 @@ Singleton {
 
     Process {
         id: showProc
-        command: ["studio-niri", "--json", "show"]
+        command: ["loft-niri", "--json", "show"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -177,7 +177,7 @@ Singleton {
 
     Process {
         id: bindsProc
-        command: ["studio-niri", "--json", "binds"]
+        command: ["loft-niri", "--json", "binds"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {

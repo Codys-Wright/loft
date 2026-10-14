@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// One watched folder for the dock (DockData): `studio dock folder …` (sorted entries
+// One watched folder for the dock (DockData): `loft dock folder …` (sorted entries
 // with kinds, icons, cached thumbnails) re-run whenever inotify reports a
 // change. `trash` mode only counts ($XDG_DATA_HOME/Trash/files).
 Scope {
@@ -25,7 +25,7 @@ Scope {
             again = true;
             return;
         }
-        list.command = trash ? ["studio", "dock", "trash"] : ["studio", "dock", "folder", spec, "--sort", sort, "--limit", String(limit)];
+        list.command = trash ? ["loft", "dock", "trash"] : ["loft", "dock", "folder", spec, "--sort", sort, "--limit", String(limit)];
         list.running = true;
     }
     property bool again: false

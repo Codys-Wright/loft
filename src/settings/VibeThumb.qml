@@ -10,7 +10,7 @@ Item {
     id: thumb
 
     property string image: ""
-    // A small cached copy of `image` (studio's <state>/cache/thumbs), shown when set.
+    // A small cached copy of `image` (Loft's <state>/cache/thumbs), shown when set.
     property string thumbnail: ""
     property string title
     property string subtitle

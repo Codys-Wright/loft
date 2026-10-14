@@ -2,7 +2,7 @@
 
 // Wallpaper sets: display roles from the live layout, sets resolved onto it,
 // and the arrangement on screen captured as a set. The same rules as
-// cli/studio/wallsets.py (the CLI's `studio wallpaper set …`); both are
+// cli/loft/wallsets.py (the CLI's `loft wallpaper set …`); both are
 // tested against tests/fixtures/wallsets/layouts.json (tests/wallsets.test.js).
 //
 // A layout is { outputs: [{ name, identity, x, y, width, height }] (logical),

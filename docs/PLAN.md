@@ -1,12 +1,12 @@
-# studio-linux — Plan
+# Loft — Plan
 
 > **Status:** draft for discussion (2026-10-13).
 >
-> **studio-linux** is a desktop for creative work, music production and
+> **Loft** is a desktop for creative work, music production and
 > programming: niri + our own Quickshell shell, a macOS-inspired Liquid Glass
 > design language, fully themeable at runtime. It's a standalone flake (you
 > can `nix run` it) that the NixOS fleet (`~/.flake`, Codys-Wright/nix-config)
-> consumes as an input. Themes live in a separate repo, **studio-linux-themes**.
+> consumes as an input. Themes live in a separate repo, **loft-themes**.
 >
 > The fleet's [`docs/desktop-design.md`](https://github.com/Codys-Wright/nix-config/blob/main/docs/desktop-design.md)
 > holds Cody's personal workflow: workspaces, monitors, per-app placement.
@@ -38,7 +38,7 @@ our own Quickshell shell:
    switch that recolors the shell, niri, terminals, GTK, launcher, lock screen,
    greeter and wallpaper. We also build our own theme selector.
 5. **A theme manager, outside the NixOS build.** Themes are packs you
-   *install* at runtime (`studio theme install …`), author yourself, and share
+   *install* at runtime (`loft theme install …`), author yourself, and share
    (a git repo or tarball). The NixOS build ships only the engine and a small
    default set. Adding all 39 qylock themes must never be needed to build a
    machine.
@@ -66,43 +66,43 @@ our own Quickshell shell:
 
 ### What lives where
 
-| studio-linux (this repo, public) | studio-linux-themes (public) | nix-config fleet (`~/.flake`) |
+| Loft (this repo, public) | loft-themes (public) | nix-config fleet (`~/.flake`) |
 |---|---|---|
-| Shell (QML), `studio` CLI (theme engine, manager, importers, save-back), lock/greeter loaders + vendored qylock shim, walker Spotlight layout, nirimod package | Our authored theme packs + `index.json` (packs + `qylock:*` / `cozytile:*` importer entries) | Host and personal layer: monitors/outputs, named workspaces + app rules (`desktop-design.md`), REAPER/Dante rules, xremap keyboard (until shared, see §5), which hosts/users get studio-linux, *personal* default settings and theme |
-| **Base niri config**: layout, animations, blur rules, mac-like binds, startup of studio services. Shipped as KDL fragments for the consumer to `include` | | `niri/_config/config.kdl` `include`s the studio base, then adds host fragments |
+| Shell (QML), `loft` CLI (theme engine, manager, importers, save-back), lock/greeter loaders + vendored qylock shim, walker Spotlight layout, nirimod package | Our authored theme packs + `index.json` (packs + `qylock:*` / `cozytile:*` importer entries) | Host and personal layer: monitors/outputs, named workspaces + app rules (`desktop-design.md`), REAPER/Dante rules, xremap keyboard (until shared, see §5), which hosts/users get Loft, *personal* default settings and theme |
+| **Base niri config**: layout, animations, blur rules, mac-like binds, startup of Loft services. Shipped as KDL fragments for the consumer to `include` | | `niri/_config/config.kdl` `include`s the Loft base, then adds host fragments |
 | Built-in themes: the default + a couple of basics (a build needs only these) | Everything else, installed at runtime | |
-| NixOS + home-manager modules | | den aspect `fleet.desktop._.studio` wraps those modules (input declared inline, the dendritic idiom) |
+| NixOS + home-manager modules | | den aspect `fleet.desktop._.loft` wraps those modules (input declared inline, the dendritic idiom) |
 
 Open boundary question: should the creative-workflow *opinions* (semantic
 workspaces music/code/video, workflow profiles such as music mode with fixed
-FPS or gaming mode with no effects) become studio-linux features with
+FPS or gaming mode with no effects) become Loft features with
 defaults? Or stay personal in the fleet? *Leaning:* the **mechanisms**
-(profiles, per-workspace wallpaper, run-or-raise) go in studio-linux, and the
+(profiles, per-workspace wallpaper, run-or-raise) go in Loft, and the
 **specific assignments** stay in the fleet.
 
 ### Flake outputs
 
 ```
 packages.<sys>.default          # session launcher (below)
-packages.<sys>.studio-shell     # QML + quickshell wrapper with all runtime deps
-packages.<sys>.studio           # CLI: theme engine/manager/importers, diff/save, greeter helper
-packages.<sys>.studio-lock      # loader lock + loader SDDM theme + qylock shim
-packages.<sys>.studio-themes-builtin
+packages.<sys>.loft-shell       # QML + quickshell wrapper with all runtime deps
+packages.<sys>.loft             # CLI: theme engine/manager/importers, diff/save, greeter helper
+packages.<sys>.loft-lock        # loader lock + loader SDDM theme + qylock shim
+packages.<sys>.loft-themes-builtin
 packages.<sys>.nirimod
-apps.<sys>.default              # nix run github:Codys-Wright/studio-linux
+apps.<sys>.default              # nix run github:Codys-Wright/loft
 apps.<sys>.dev                  # nix run .#dev — from a checkout, hot-reload from ./src
-nixosModules.default            # programs.studio-linux: niri, SDDM loader theme, polkit helper, gstreamer, portals
-homeManagerModules.default      # programs.studio-linux: shell service, walker/elephant, theme state + consumers, settings
+nixosModules.default            # programs.loft: niri, SDDM loader theme, polkit helper, gstreamer, portals
+homeManagerModules.default      # programs.loft: shell service, walker/elephant, theme state + consumers, settings
 templates.theme                 # nix flake init -t …#theme → a new theme pack
 checks.<sys>.*                  # qmllint, theme render golden tests, a NixOS VM test that boots to the shell
 ```
 
-**`nix run github:Codys-Wright/studio-linux`**
+**`nix run github:Codys-Wright/loft`**
 - Inside a Wayland or X session, it opens a **nested niri window**.
 - On a bare TTY, it starts a full session.
-- Either way it runs studio's base niri config, the shell, walker and the
+- Either way it runs Loft's base niri config, the shell, walker and the
   default theme, all from the store. State goes to a throwaway
-  `$XDG_STATE_HOME/studio-linux-run`, so trying it never touches your real
+  `$XDG_STATE_HOME/loft-run`, so trying it never touches your real
   setup. Inside the nested window, Mod = Alt.
 
 **`nix run .#dev`** (from a checkout)
@@ -115,13 +115,13 @@ checks.<sys>.*                  # qmllint, theme render golden tests, a NixOS VM
 ### Module options sketch (home-manager)
 
 ```nix
-programs.studio-linux = {
+programs.loft = {
   enable = true;
   theme = "tokyonight";                 # default theme (built-in or a pack path)
   extraThemes = [ ];                    # optional: pin packs into the build if you WANT to
-  settings = lib.importJSON ./studio.json;   # consumer defaults (save-back target, §4.1)
-  saveTarget = "${config.home.homeDirectory}/.flake/users/cody/_data/studio.json";  # null = no save-back
-  dev.source = null;                    # e.g. "~/Development/studio-linux" → live symlinks (cody)
+  settings = lib.importJSON ./loft.json;     # consumer defaults (save-back target, §4.1)
+  saveTarget = "${config.home.homeDirectory}/.flake/users/cody/_data/loft.json";    # null = no save-back
+  dev.source = null;                    # e.g. "~/Development/loft" → live symlinks (cody)
   niri.includeBase = true;              # write the base fragments for the consumer's config to include
 };
 ```
@@ -187,16 +187,16 @@ There are three layers, and the later layers win:
 
 ```
  1. product defaults          2. consumer defaults             3. runtime overrides
-    (studio-linux repo)          (fleet: module options/JSON)     (~/.local/state/studio-linux/overrides)
+    (Loft repo)                  (fleet: module options/JSON)     (~/.local/state/loft/overrides)
     shell/defaults.json   ⊕      settings = importJSON …    ⊕     shell.json, theme-<name>.json
     built-in themes              theme = "…"                       (settings UI, theme selector, CLI)
            ▲                            ▲                                   │
-           │  studio save --upstream    │  studio save (default)            │
+           │  loft save --upstream      │  loft save (default)              │
            └────────────────────────────┴───────────────────────────────────┘
 ```
 
-- **Defaults are JSON data, not Nix code**, both in studio-linux (product
-  defaults) and in the consumer (`settings = lib.importJSON ./studio.json`).
+- **Defaults are JSON data, not Nix code**, both in Loft (product
+  defaults) and in the consumer (`settings = lib.importJSON ./loft.json`).
   That makes save-back a *data* merge (JSON → JSON plus a `git diff`), never
   Nix code generation.
 - **Effective value = product ⊕ consumer ⊕ overrides.** The home-manager
@@ -204,29 +204,29 @@ There are three layers, and the later layers win:
   that plus the overrides through `FileView` + `JsonAdapter` with
   `watchChanges`, so a write to an override file applies live. The settings
   UI and the theme selector only ever write to `overrides/`.
-- **`studio diff` / `studio save`** (the save-back tool):
-  - `studio diff` shows runtime overrides against the effective defaults.
-  - `studio save [--shell] [--theme <name>]` merges overrides into
+- **`loft diff` / `loft save`** (the save-back tool):
+  - `loft diff` shows runtime overrides against the effective defaults.
+  - `loft save [--shell] [--theme <name>]` merges overrides into
     **`saveTarget`** (the consumer's JSON, e.g. a file in `~/.flake`), then
     clears what it promoted. This is the normal path: *my* preferences go to
     *my* config.
-  - `studio save --upstream` writes to a studio-linux checkout instead, which
+  - `loft save --upstream` writes to a Loft checkout instead, which
     changes the product defaults.
-  - `studio save --as-theme <new>` snapshots the tweaked theme as a new
+  - `loft save --as-theme <new>` snapshots the tweaked theme as a new
     **pack**. That pack can stay local, be exported, or be PR'd to
-    studio-linux-themes.
+    loft-themes.
   - It refuses when the target file has uncommitted changes, and prints the
     `git diff` for review. It never commits on its own.
 - **niri config.** The consumer's own KDL (the fleet's `_config/`) is already
   live-symlinked, so nirimod and hand edits change the repo directly, and
-  save-back there is just `git diff`. studio's base fragments are
+  save-back there is just `git diff`. Loft's base fragments are
   read-only defaults the consumer overrides *after* its `include`. Only the
   theme-owned fragment (colors, blur, radii) goes through the theme pipeline.
 - **Machines and users without a checkout** (`saveTarget = null`) get the same
   layering and can change things at runtime. There is just nowhere to save
   back to.
 
-### 4.2 Theme system: engine, packs, manager (`studio-linux` theme engine)
+### 4.2 Theme system: engine, packs, manager (`loft` theme engine)
 
 **Design language vs theme.** The *design language* (component shapes,
 layout, glass treatment, animation) belongs to the shell and is mac-like. A
@@ -250,17 +250,17 @@ license, source + the files above). Packs are shared as a git repo, a tarball,
 or a subdirectory of either.
 
 **One renderer, runtime-first.** Themes can arrive after the build, so
-rendering can't live only in Nix. `studio theme render` is a runtime program,
+rendering can't live only in Nix. `loft theme render` is a runtime program,
 and the per-consumer templates ship with it in the store:
 
 | Consumer | Generated from the theme | Live reload |
 |---|---|---|
 | Shell (Quickshell) | `theme.json` as-is | `FileView watchChanges` (instant) |
-| niri | `niri.kdl`: focus ring, borders, shadows, **blur rules on/off + xray**, radii | `include optional=true "~/.local/state/studio-linux/current/niri.kdl"`; niri polls every include by canonical path, so re-pointing `current` is noticed (*verified in niri 26.04 source*); `apply` also runs `niri msg action load-config-file` to skip the ≤500 ms poll |
+| niri | `niri.kdl`: focus ring, borders, shadows, **blur rules on/off + xray**, radii | `include optional=true "~/.local/state/loft/current/niri.kdl"`; niri polls every include by canonical path, so re-pointing `current` is noticed (*verified in niri 26.04 source*); `apply` also runs `niri msg action load-config-file` to skip the ≤500 ms poll |
 | kitty | `kitty.conf` (colors, `background_blur`) | `include` + `kill -SIGUSR1` |
 | Ghostty | `ghostty.conf` | `config-file = ?…` + `SIGUSR2` (*verified: GTK apprt reloads config on SIGUSR2*) |
 | GTK 3/4 | `gtk.css` (`@define-color`), color-scheme | `@import` + `gsettings set … color-scheme` |
-| walker | `walker.css` (`@define-color studio_*`) | CSS is re-read on every open (confirmed in source) |
+| walker | `walker.css` (`@define-color loft_*`) | CSS is re-read on every open (confirmed in source) |
 | Lock / greeter | pack `lock/` or the default design + palette | Read at lock time; greeter, see §4.5 |
 | Wallpaper | path | swww/awww transition (feeds xray blur) |
 | Noctalia (transition period only) | `colors.json` | its own watcher |
@@ -272,26 +272,26 @@ Nix calls the *same* renderer at build time for the built-in packs, so
 
 | Location | Contents | Written by |
 |---|---|---|
-| store: `pkgs.studio-themes-builtin` (rendered) | A small built-in set: the default + a couple of light/dark basics | NixOS build (the only themes a build needs) |
-| `~/.local/share/studio themes/<name>/` | Installed and user-authored packs | `studio theme install/new/import` |
-| `/var/lib/studio-linux/themes/<name>/` | Packs promoted for the **greeter** (sddm must read them) | polkit-allowed helper (§4.5) |
-| `~/.local/state/studio-linux/rendered/<name>/<hash>/` | Render cache, keyed by pack content + renderer/template hash | `studio theme apply` |
-| `~/.local/state/studio-linux/current` | Symlink to the active rendered theme (swapped atomically) | `studio theme apply` |
+| store: `pkgs.loft-themes-builtin` (rendered) | A small built-in set: the default + a couple of light/dark basics | NixOS build (the only themes a build needs) |
+| `~/.local/share/loft themes/<name>/` | Installed and user-authored packs | `loft theme install/new/import` |
+| `/var/lib/loft/themes/<name>/` | Packs promoted for the **greeter** (sddm must read them) | polkit-allowed helper (§4.5) |
+| `~/.local/state/loft/rendered/<name>/<hash>/` | Render cache, keyed by pack content + renderer/template hash | `loft theme apply` |
+| `~/.local/state/loft/current` | Symlink to the active rendered theme (swapped atomically) | `loft theme apply` |
 
-**Theme manager CLI** (`studio theme`; the shell's selector is a GUI over the same commands):
+**Theme manager CLI** (`loft theme`; the shell's selector is a GUI over the same commands):
 
 ```
-studio theme list [--installed|--available]      # local packs + index entries
-studio theme vibes [<name>] [--json] [--dir DIR]  # wallpapers + lock designs that fit (own, curated, ranked)
-studio theme apply <name>                        # render (cached) → swap current → reload hooks
-studio theme install <git-url|tarball|path>      # any pack
-studio theme install qylock:<theme> | qylock:all # importer: sparse-checkout that theme dir
-studio theme install cozytile:<theme> | cozytile:all
-studio theme install --list qylock:              # what an importer offers
-studio theme new <name> [--from <theme>]         # scaffold a pack to author
-studio theme edit <name>                         # live token editing (selector does this too)
-studio theme export <name> [-o pack.tar.zst]     # share
-studio theme remove <name>
+loft theme list [--installed|--available]        # local packs + index entries
+loft theme vibes [<name>] [--json] [--dir DIR]    # wallpapers + lock designs that fit (own, curated, ranked)
+loft theme apply <name>                          # render (cached) → swap current → reload hooks
+loft theme install <git-url|tarball|path>        # any pack
+loft theme install qylock:<theme> | qylock:all # importer: sparse-checkout that theme dir
+loft theme install cozytile:<theme> | cozytile:all
+loft theme install --list qylock:                # what an importer offers
+loft theme new <name> [--from <theme>]           # scaffold a pack to author
+loft theme edit <name>                           # live token editing (selector does this too)
+loft theme export <name> [-o pack.tar.zst]       # share
+loft theme remove <name>
 ```
 
 **Importers** convert upstream themes into packs at install time. Nothing
@@ -308,12 +308,12 @@ third-party is committed here or built into a machine:
   wallpaper, SDDM art → `greeter/`. Cozytile's SDDM themes are themselves
   qylock-format, so `greeter/` could also be declared as the pack's `lock`.
 
-**Index for sharing:** `studio theme` reads one or more index URLs (JSON:
+**Index for sharing:** `loft theme` reads one or more index URLs (JSON:
 name → source, preview image). The default index is a repo of ours listing
 our own packs plus the qylock/cozytile importer entries. Anyone can host one.
 
 **Overrides and save-back** (§4.1): per-token tweaks go to
-`overrides/theme-<name>.json`. `studio save --as-theme <new>` writes
+`overrides/theme-<name>.json`. `loft save --as-theme <new>` writes
 a new **pack**. That pack can either stay installed locally, be exported for
 sharing, or, with `--builtin`, be copied into this repo's `themes/` so Nix
 ships it as a default.
@@ -326,7 +326,7 @@ the runtime layer drives, so the two don't fight.
 
 - The shell requests blur through `ext-background-effect`. Whether Quickshell
   0.3.1 exposes this needs **verification**. If not, use niri `layer-rule`
-  matches on our layer namespaces (`studio:bar`, `studio:dock`, …)
+  matches on our layer namespaces (`loft:bar`, `loft:dock`, …)
   with `background-effect { blur true }` plus the correct
   `geometry-corner-radius`.
 - Use the default **xray** blur for the bar, dock and background-ish layers
@@ -338,9 +338,9 @@ the runtime layer drives, so the two don't fight.
   The gaming and focus workflow profiles in `desktop-design.md` should force it
   off.
 
-### 4.4 Shell (`studio-shell`)
+### 4.4 Shell (`loft-shell`)
 
-**Source:** `src/` in this repo (QML), packaged as `studio-shell`, a
+**Source:** `src/` in this repo (QML), packaged as `loft-shell`, a
 `quickshell` wrapper with every runtime dependency on PATH.
 
 **Runs as** a systemd user service bound to `graphical-session.target`, not a
@@ -369,7 +369,7 @@ src/
   theme-selector/
 ```
 
-### 4.5 Lock screen and greeter (`studio-lock`)
+### 4.5 Lock screen and greeter (`loft-lock`)
 
 - **One static loader, runtime designs.** NixOS installs a single SDDM theme
   and a single Quickshell lock, both thin *loaders*, plus qylock's vendored
@@ -381,13 +381,13 @@ src/
   and as the **Quickshell lock screen** (`WlSessionLock` + PAM).
   - Installing or switching lock designs never needs a rebuild, and SDDM's
     configured theme name never changes.
-  - qylock themes (`studio theme install qylock:…`) drop straight in, because
+  - qylock themes (`loft theme install qylock:…`) drop straight in, because
     they are already in this format.
 - **Lock** follows the user's current theme from
-  `~/.local/state/studio-linux/current`.
+  `~/.local/state/loft/current`.
 - **Greeter** runs as `sddm` before login, so it reads
-  `/var/lib/studio-linux/greeter` (a symlink to a pack under
-  `/var/lib/studio-linux/themes/`). `studio theme apply --greeter` (or a
+  `/var/lib/loft/greeter` (a symlink to a pack under
+  `/var/lib/loft/themes/`). `loft theme apply --greeter` (or a
   "use for login screen too" toggle in the selector) copies the pack there
   through a narrow polkit-allowed helper, not Cozytile's blanket `sudo tee`.
   The Nix default theme is used until then. *Multi-user note:* the greeter
@@ -395,7 +395,7 @@ src/
 - Integration: replace `theme = "MacTahoe-Dark"` in `sddm.nix` (otherwise a
   conflicting definition). Add qt6 multimedia/svg/5compat + gstreamer to the
   greeter's `extraPackages` so video backgrounds work. Drop swaylock and
-  route swayidle → `studio-lock`. Don't use qylock's `lock.sh` (it
+  route swayidle → `loft-lock`. Don't use qylock's `lock.sh` (it
   `killall -9`s other lockers) or its flake module.
 
 ### 4.6 Launcher (walker)
@@ -461,41 +461,41 @@ Each phase ends with something runnable in the nested dev session (Phase 0),
 and nothing replaces the working Noctalia session until Phase 6.
 
 ### Phase 0: Repo + dev loop *(do first)*
-- Create `Codys-Wright/studio-linux` (flake-parts) and
-  `Codys-Wright/studio-linux-themes`. Credit javiiervm in `CREDITS.md`.
+- Create `Codys-Wright/loft` (flake-parts) and
+  `Codys-Wright/loft-themes`. Credit javiiervm in `CREDITS.md`.
 - `nix run` / `nix run .#dev`: niri **nested as a window** (inside KDE
-  today) with studio's base niri fragments + a hello-world bar from `./src`.
+  today) with Loft's base niri fragments + a hello-world bar from `./src`.
   - niri hot-reloads KDL on save and Quickshell hot-reloads QML on save, so
     both iterate with no rebuild.
   - Blur, layer-shell, `WlSessionLock` (lock screen) and walker all work
     nested. The greeter uses `.#greeter-preview`.
 - Package nirimod.
 - **Fleet side:**
-  - Add the `studio-linux` input + `fleet.desktop._.studio` aspect (off by
-    default). `settings.desktop.shell = "noctalia" | "studio"` picks per host.
+  - Add the `loft` input + `fleet.desktop._.loft` aspect (off by
+    default). `settings.desktop.shell = "noctalia" | "loft"` picks per host.
   - Delete the stale `_niri-settings.nix` + `niri-wrapper.nix`.
   - Fix the `~/.flake` symlink so it applies to cody only (§2).
 
-**Done when:** `nix run github:Codys-Wright/studio-linux` opens a nested niri
+**Done when:** `nix run github:Codys-Wright/loft` opens a nested niri
 window with a glass bar from any machine, and in a checkout `nix run .#dev`
 updates live when KDL or QML is edited.
 
 ### Phase 1: Theme spine *(engine done — branch `phase1-theme-engine`)*
 
 > **Status:** pack format (`docs/THEME-FORMAT.md`, `themes/schema.json`), the
-> runtime renderer + `studio theme list|current|apply|render|validate`, the
+> runtime renderer + `loft theme list|current|apply|render|validate`, the
 > `current` symlink + render cache, reload hooks (shell IPC, niri, kitty,
 > Ghostty, GTK color-scheme), consumers niri/kitty/Ghostty/GTK/walker/Noctalia,
-> `pkgs.studio-themes-builtin` rendered by the same CLI, and checks (schema,
+> `pkgs.loft-themes-builtin` rendered by the same CLI, and checks (schema,
 > unit, golden, `niri validate`, `ghostty +validate-config`) are in.
 > **Not yet:** the `overrides/` directory (lands with the settings UI /
-> `studio save`, §4.1) and the fleet-side Stylix narrowing.
+> `loft save`, §4.1) and the fleet-side Stylix narrowing.
 >
 > **Design notes / deviations:**
-> - The CLI is Python (stdlib + `jsonschema`), replacing `cli/studio.sh`: JSON,
+> - The CLI is Python (stdlib + `jsonschema`), replacing `cli/loft.sh`: JSON,
 >   color math and tests are natural there, and Nix runs the same program for
 >   the built-ins. Templates are `string.Template` files; all logic (derived
->   colors, conditional snippets) is in `cli/studio/render.py`.
+>   colors, conditional snippets) is in `cli/loft/render.py`.
 > - Render cache is `rendered/<name>/<hash>/` rather than `rendered/<name>/`,
 >   so `apply` never rewrites the directory `current` points into, and an
 >   edited pack lands at a new path (which niri's watcher sees).
@@ -504,24 +504,24 @@ updates live when KDL or QML is edited.
 > - Extra optional keys beyond the sketch: `ansi`, `glass.terminalOpacity`,
 >   `glass.shadow`, `radii.window`, `fonts` (see THEME-FORMAT.md).
 > - `--dev` runs only the shell + niri hooks by default (terminals and GTK
->   belong to the host desktop); `STUDIO_HOOKS` picks hooks explicitly.
+>   belong to the host desktop); `LOFT_HOOKS` picks hooks explicitly.
 
 - Theme pack format (`manifest.json` + `theme.json` core: palette + glass).
   Built-in packs: `tokyonight` (ported from Stylix, the current look) + one
   light theme.
-- `studio theme` runtime renderer (also called by Nix for built-ins),
+- `loft theme` runtime renderer (also called by Nix for built-ins),
   `apply|list`, `current` symlink + overrides directory.
 - Consumers: niri fragment (colors + blur), kitty, Ghostty, GTK, Noctalia
   `colors.json` (so it works before our shell exists).
 - Stylix narrowed to fonts, cursor and the default.
 
-**Done when:** `studio theme apply <light theme>` recolors niri (and toggles
+**Done when:** `loft theme apply <light theme>` recolors niri (and toggles
 blur), terminals, GTK and Noctalia live with no rebuild, and the default
 theme comes from Nix.
 
 ### Phase 1b: Theme manager + importers *(manager + importers done; index TODO)*
 
-> **Status:** `studio theme install <dir|tarball|tarball URL|git URL> [--subdir]
+> **Status:** `loft theme install <dir|tarball|tarball URL|git URL> [--subdir]
 > [--force]` (validated against the schema, manifest required), `new [--from]`,
 > `remove`, `export [-o pack.tar.zst]` are in. Importers (branch `importers`):
 > `install [--list] cozytile:|qylock:<theme>[,…]|all[@ref]` fetch blob-less +
@@ -530,11 +530,11 @@ theme comes from Nix.
 > `cozytile:all` downloads ~15 MB; a qylock theme downloads only its own
 > directory (0.3–78 MB). Index support is not started.
 
-- `install|new|export|remove`, index support, `~/.local/share/studio themes`.
+- `install|new|export|remove`, index support, `~/.local/share/loft themes`.
 - `cozytile:` importer (all five) and `qylock:` importer (palette + assets;
   lock designs become usable in Phase 5).
 
-**Done when:** `studio theme install cozytile:all` followed by `apply cozytile-sakura`
+**Done when:** `loft theme install cozytile:all` followed by `apply cozytile-sakura`
 works on a machine whose build contains none of them. *(Met.)*
 
 ### Phase 1c: Vibes *(done — branch `vibes`)*
@@ -543,7 +543,7 @@ works on a machine whose build contains none of them. *(Met.)*
 > `wallpapers/`, videos flagged / represented by a still) and several lock
 > designs (`locks`, `locks/<dir>/`; `lock` stays the default shorthand), plus
 > curated `vibes` links to other packs' assets; the themes index adds vibe
-> groups (sakura, forest, monochrome). `studio theme vibes [--json] [--dir]`
+> groups (sakura, forest, monochrome). `loft theme vibes [--json] [--dir]`
 > ranks every other installed pack's wallpapers/locks (and loose images) by
 > CIEDE2000 palette distance + image swatch distance (cached by hash). The
 > importers bring all of a theme's wallpapers (cozytile: orphaned
@@ -556,19 +556,19 @@ works on a machine whose build contains none of them. *(Met.)*
 
 **Open:** qylock designs need `SddmComponents`, `Qt5Compat.GraphicalEffects`
 and `QtMultimedia` on the shell's QML import path; the packaged
-`studio-shell` doesn't add them yet (they load in a session whose
+`loft-shell` doesn't add them yet (they load in a session whose
 environment already has them, e.g. a KDE session with SDDM installed).
 Videos are not played as desktop wallpapers (the still is shown).
 
 ### Phase 2: Shell skeleton
-- `src/` skeleton, `studio-shell` package, HM systemd user service, dev/installed split.
+- `src/` skeleton, `loft-shell` package, HM systemd user service, dev/installed split.
 - Services: `Niri` adapter (event-stream), `Theme`, `Settings` (defaults ⊕
   overrides).
 - Menu bar: workspaces, focused-app title, clock, tray, status icons. Glass +
   blur.
 
 **Done when:** in nested niri, the bar tracks workspaces and focus, recolors
-on `studio theme apply`, and a setting changed in `overrides/` applies live.
+on `loft theme apply`, and a setting changed in `overrides/` applies live.
 
 ### Phase 3: Core shell features
 - Dock, Control Center, notifications (Quickshell server), OSD, media,
@@ -578,7 +578,7 @@ on `studio theme apply`, and a setting changed in `overrides/` applies live.
 
 ### Phase 4: Launcher + save-back
 - walker/elephant service, Spotlight theme wired to the theme bundle, binds.
-- `studio diff|save|save --as-theme`.
+- `loft diff|save|save --as-theme`.
 
 **Done when:** a theme tweaked in the selector can be saved as a new theme
 JSON in the repo, and it is the default after the next `just switch`.
@@ -589,7 +589,7 @@ JSON in the repo, and it is the default after the next `just switch`.
 - Lock wired to swayidle and Ctrl+Cmd+Q. The loader replaces MacTahoe-Dark.
   `apply --greeter` via the polkit helper.
 
-**Done when:** `studio theme install qylock:nier-automata` + `apply --greeter`
+**Done when:** `loft theme install qylock:nier-automata` + `apply --greeter`
 changes both the lock screen and the login screen with no rebuild.
 
 **Status (2026-10-13): lock + greeter landed; wiring to the fleet pending.**
@@ -599,7 +599,7 @@ changes both the lock screen and the login screen with no rebuild.
   rendered in-scene (`FrostedGlass`: MultiEffect blur of the lock's own
   wallpaper under a `GlassSurface`), since a lock surface is opaque and there
   is nothing behind it for niri to blur.
-- Greeter: `lock/sddm/` + `nix/lock.nix` → `packages.studio-sddm-theme`. The
+- Greeter: `lock/sddm/` + `nix/lock.nix` → `packages.loft-sddm-theme`. The
   build copies `src/lock/design` + `GlassSurface`/`Icon` into the theme with
   `qs.*` imports rewritten to relative ones; `lock/sddm/services/Theme.qml`
   stands in for the shell's Theme. The build fails if the shared design ever
@@ -622,7 +622,7 @@ changes both the lock screen and the login screen with no rebuild.
   with the `qylock:` importer (Phase 1b), so the "Done when" above is not met
   yet.
 - **Pack contract:** SDDM's API subset (so qylock-style designs load) plus a
-  studio-native `lock` object (`tryUnlock`, `failed`, `busy`, `showInput`,
+  loft-native `lock` object (`tryUnlock`, `failed`, `busy`, `showInput`,
   `theme`, …), so one design file works under both hosts.
 - **Not done yet:** swayidle wiring (documented in the README only), replacing
   MacTahoe-Dark in the fleet's `sddm.nix`, `apply --greeter` + polkit helper,
@@ -659,13 +659,13 @@ complete menu-bar system does":
 
 ## 7. Repo layouts
 
-**studio-linux**
+**Loft**
 ```
 flake.nix                 # flake-parts; outputs in §1a
-src/                      # studio-shell QML
+src/                      # loft-shell QML
   shell.qml  services/  bar/  dock/  controlcenter/  island/  switcher/  osd/  lock/  settings/  theme-selector/
 lock/                     # SDDM loader theme (sddm/); the Quickshell lock is src/lock/
-cli/                      # `studio` CLI: render, theme manager, importers (qylock, cozytile), diff/save, greeter helper
+cli/                      # `loft` CLI: render, theme manager, importers (qylock, cozytile), diff/save, greeter helper
 templates/render/         # per-consumer templates: niri.kdl, kitty.conf, ghostty, gtk.css, walker css, noctalia
 themes/                   # built-in packs only (default + basics)
 niri/                     # base KDL fragments (layout, animations, blur rules, binds, startup)
@@ -675,7 +675,7 @@ nix/
 docs/PLAN.md  CREDITS.md  LICENSE
 ```
 
-**studio-linux-themes**
+**loft-themes**
 ```
 index.json                # name → source, preview; includes qylock:*/cozytile:* importer entries
 packs/<name>/             # manifest.json, theme.json (palette + glass), optional wallpaper/fonts/lock/greeter/apps
@@ -683,16 +683,16 @@ packs/<name>/             # manifest.json, theme.json (palette + glass), optiona
 
 **Fleet (`~/.flake`) after integration**
 ```
-modules/desktop/studio/studio.nix          # fleet.desktop._.studio — flake-file input + wraps the modules
-users/cody/_data/studio.json               # cody's consumer defaults (saveTarget)
-modules/desktop/environment/niri/_config/  # includes studio base; host outputs/workspaces/rules stay here
+modules/desktop/loft/loft.nix              # fleet.desktop._.loft — flake-file input + wraps the modules
+users/cody/_data/loft.json                 # cody's consumer defaults (saveTarget)
+modules/desktop/environment/niri/_config/  # includes Loft base; host outputs/workspaces/rules stay here
 ```
 
 Per-host knobs stay den settings on `fleet.desktop`:
 
 ```nix
 den.hosts.x86_64-linux.THEBATTLESHIP.settings.desktop = {
-  shell = "studio";         # "noctalia" | "studio" during the transition
+  shell = "loft";           # "noctalia" | "loft" during the transition
   theme = "tokyonight";     # default; runtime can override
 };
 ```
@@ -706,9 +706,9 @@ den.hosts.x86_64-linux.THEBATTLESHIP.settings.desktop = {
    let the user fix it in the editor. Or require hand-mapping each one once
    and publishing the results in our index? *Leaning: extract, then curate
    the ones we use.*
-3. **Theme index home:** a separate public repo (e.g. `studio themes`) holding
+3. **Theme index home:** a separate public repo (e.g. `loft-themes`) holding
    our own packs + importer entries, or a directory in this repo?
-4. **Shell name** (placeholder: `studio-shell`).
+4. **Shell name** (placeholder: `loft-shell`).
 5. **voyager WM:** stay with OmniWM (as `desktop-design.md` plans), or
    AeroSpace, which has a richer config, for the parity layer?
 

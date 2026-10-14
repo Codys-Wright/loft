@@ -8,13 +8,13 @@ import Quickshell.Io
 //
 // The values below are the product defaults (layer 1). Runtime changes —
 // from the settings app, the wallpaper picker, the Control Center — are
-// written to $STUDIO_STATE_DIR/overrides/shell.json (layer 3), which is also
-// read back here, so they persist. `studio save` will promote them into the
+// written to $LOFT_STATE_DIR/overrides/shell.json (layer 3), which is also
+// read back here, so they persist. `loft save` will promote them into the
 // consumer's Nix defaults (layer 2, not wired yet).
 Singleton {
     id: root
 
-    readonly property string stateDir: Quickshell.env("STUDIO_STATE_DIR") || `${Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state"}/studio-linux`
+    readonly property string stateDir: Quickshell.env("LOFT_STATE_DIR") || `${Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state"}/loft`
     readonly property string file: `${stateDir}/overrides/shell.json`
 
     readonly property alias dock: settings.dock
@@ -33,7 +33,7 @@ Singleton {
     // Per-theme choices, keyed by theme name (Vibes.qml reads and writes
     // them): { "<theme>": { wallpaper, rotate, perWorkspace, lockDesign,
     // displays, workspaces, sameAll, auto, autoSeed, sets, activeSet } }
-    // (the wallpaper keys: cli/studio/wallsets.py).
+    // (the wallpaper keys: cli/loft/wallsets.py).
     // A key a theme doesn't have falls back to the global value above it.
     property alias perTheme: settings.perTheme
     // Menu bar module (AppMenu.pref): key → value; absent = the default.

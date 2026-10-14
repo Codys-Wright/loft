@@ -1,4 +1,4 @@
-"""Unit tests for the library (cli/studio/library.py): color buckets, the
+"""Unit tests for the library (cli/loft/library.py): color buckets, the
 generated symlink views (idempotent, never touching real files or links it
 didn't make), `add`, and the library as theme path / install target / vibes
 source. Offline: images are generated here and ffmpeg is disabled.
@@ -14,9 +14,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from studio import library, palette
+from loft import library, palette
 from test_importers import make_png
-from test_vibes import GREEN_DARK, PINK_DARK, make_pack, studio, write
+from test_vibes import GREEN_DARK, PINK_DARK, make_pack, loft, write
 
 BLUE = (40, 80, 170)
 PINK = (235, 120, 170)
@@ -77,13 +77,13 @@ class Views(unittest.TestCase):
             {
                 "HOME": str(self.tmp / "home"),
                 "XDG_DATA_HOME": str(self.tmp / "data"),
-                "STUDIO_STATE_DIR": str(self.state),
-                "STUDIO_HOOKS": "none",
-                "STUDIO_THEME_INDEX": "none",
-                "STUDIO_LIBRARY": str(self.lib),
+                "LOFT_STATE_DIR": str(self.state),
+                "LOFT_HOOKS": "none",
+                "LOFT_THEME_INDEX": "none",
+                "LOFT_LIBRARY": str(self.lib),
             }
         )
-        for k in ("STUDIO_THEME_PATH", "STUDIO_DATA_DIR"):
+        for k in ("LOFT_THEME_PATH", "LOFT_DATA_DIR"):
             os.environ.pop(k, None)
         self.noff = mock.patch.object(palette, "have_ffmpeg", return_value=False)
         self.noff.start()
@@ -105,7 +105,7 @@ class Views(unittest.TestCase):
         shutil.rmtree(self.tmp)
 
     def sort(self) -> dict:
-        rc, out, err = studio("library", "sort", "--json")
+        rc, out, err = loft("library", "sort", "--json")
         self.assertEqual(rc, 0, err)
         return json.loads(out)
 
@@ -152,7 +152,7 @@ class Views(unittest.TestCase):
         self.assertEqual(self.links(), links)
 
         # status reads the saved index.
-        rc, out, _ = studio("library", "status")
+        rc, out, _ = loft("library", "status")
         self.assertEqual(rc, 0)
         self.assertIn("Sea", out)
 
@@ -189,62 +189,62 @@ class Views(unittest.TestCase):
         src = self.tmp / "in"
         a = write(src / "a.png", make_png(4, 4, lambda x, y: PINK))
         b = write(src / "b.png", make_png(4, 4, lambda x, y: GREEN))
-        rc, out, err = studio("library", "add", str(a), str(b), "--topic", "New Topic")
+        rc, out, err = loft("library", "add", str(a), str(b), "--topic", "New Topic")
         self.assertEqual(rc, 0, err)
         dest = self.lib / "Wallpapers" / "Topics" / "New Topic"
         self.assertTrue((dest / "a.png").is_file() and a.is_file())
         self.assertIn("Wallpapers/Colors/Pink/New Topic - a.png", self.links())
         # Same content again: skipped; same name, other content: renamed; --move.
         c = write(self.tmp / "other" / "a.png", make_png(4, 4, lambda x, y: BLUE))
-        rc, _, err = studio("library", "add", str(a), str(c), "--topic", "New Topic", "--move", "--no-sort")
+        rc, _, err = loft("library", "add", str(a), str(c), "--topic", "New Topic", "--move", "--no-sort")
         self.assertEqual(rc, 0, err)
         self.assertTrue((dest / "a (2).png").is_file())
         self.assertFalse(c.exists())
         self.assertFalse(a.exists())  # moved = gone from the source, already there
-        rc, _, err = studio("library", "add", str(self.tmp / "nope.txt"), "--topic", "X")
+        rc, _, err = loft("library", "add", str(self.tmp / "nope.txt"), "--topic", "X")
         self.assertEqual(rc, 1)
-        rc, _, err = studio("library", "add", str(b), "--topic", "../escape")
+        rc, _, err = loft("library", "add", str(b), "--topic", "../escape")
         self.assertEqual(rc, 1)
 
     def test_theme_path_install_and_vibes(self):
-        rc, out, _ = studio("theme", "list")
+        rc, out, _ = loft("theme", "list")
         self.assertEqual(out.split(), ["forest", "latte", "pinky", "tokyonight"])
-        rc, out, err = studio("theme", "new", "mine", "--from", "latte")
+        rc, out, err = loft("theme", "new", "mine", "--from", "latte")
         self.assertEqual(rc, 0, err)
         self.assertTrue((self.lib / "Packs" / "mine" / "theme.json").is_file())
-        rc, _, err = studio("theme", "remove", "mine")
+        rc, _, err = loft("theme", "remove", "mine")
         self.assertEqual(rc, 0, err)
         # The old data dir is still searched (it may hold packs, or link here).
-        legacy = self.tmp / "data" / "studio-linux" / "themes"
+        legacy = self.tmp / "data" / "loft" / "themes"
         make_pack(legacy, "oldie", GREEN_DARK)
-        rc, out, _ = studio("theme", "list")
+        rc, out, _ = loft("theme", "list")
         self.assertIn("oldie", out.split())
-        rc, _, err = studio("theme", "remove", "oldie")
+        rc, _, err = loft("theme", "remove", "oldie")
         self.assertEqual(rc, 0, err)
         # Topic images rank among the vibes, recursively, with their topic.
-        rc, out, err = studio("theme", "vibes", "pinky", "--json")
+        rc, out, err = loft("theme", "vibes", "pinky", "--json")
         self.assertEqual(rc, 0, err)
         topics = {Path(w["path"]).name: w["topic"] for w in json.loads(out)["wallpapers"] if w.get("topic")}
         self.assertEqual(topics, {"blue.png": "Sea", "deep.png": "Sea", "gray.png": "Sea", "green.png": "Woods"})
-        rc, out, _ = studio("theme", "vibes", "pinky", "--json", "--no-library")
+        rc, out, _ = loft("theme", "vibes", "pinky", "--json", "--no-library")
         self.assertFalse(any(w.get("topic") for w in json.loads(out)["wallpapers"]))
 
     def test_legacy_symlink_into_library(self):
-        legacy = self.tmp / "data" / "studio-linux" / "themes"
+        legacy = self.tmp / "data" / "loft" / "themes"
         legacy.parent.mkdir(parents=True)
         legacy.symlink_to(self.lib / "Packs")
-        rc, out, _ = studio("theme", "list")
+        rc, out, _ = loft("theme", "list")
         self.assertEqual(out.split(), ["forest", "latte", "pinky", "tokyonight"])
         self.assertTrue(legacy.is_symlink())
 
     def test_no_library(self):
-        os.environ["STUDIO_LIBRARY"] = str(self.tmp / "absent")
-        rc, out, _ = studio("library", "sort", "--json")
+        os.environ["LOFT_LIBRARY"] = str(self.tmp / "absent")
+        rc, out, _ = loft("library", "sort", "--json")
         self.assertEqual((rc, json.loads(out)["exists"]), (0, False))
-        self.assertEqual(studio("library", "sort")[0], 1)
+        self.assertEqual(loft("library", "sort")[0], 1)
         self.assertFalse((self.tmp / "absent").exists())
-        os.environ["STUDIO_LIBRARY"] = "none"
-        rc, out, _ = studio("theme", "list")
+        os.environ["LOFT_LIBRARY"] = "none"
+        rc, out, _ = loft("theme", "list")
         self.assertEqual(out.split(), ["latte", "tokyonight"])
 
 

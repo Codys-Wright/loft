@@ -40,7 +40,7 @@ Singleton {
     // Feedback line for the panel ("Copied", "Cleaned 3 parameters", …).
     property string toast: ""
 
-    readonly property string cacheDir: `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/studio-clipboard/${Quickshell.env("WAYLAND_DISPLAY") || "wayland"}`
+    readonly property string cacheDir: `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/loft-clipboard/${Quickshell.env("WAYLAND_DISPLAY") || "wayland"}`
     readonly property string dataDir: `${Settings.stateDir}/clipboard`
 
     // Pinned items: { id, kind: "text" | "image", text, path, mime, added }.

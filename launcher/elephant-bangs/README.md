@@ -1,6 +1,6 @@
-### Elephant Bangs (studio-linux)
+### Elephant Bangs (Loft)
 
-DuckDuckGo !bangs and Quicklinks for the studio-linux Spotlight.
+DuckDuckGo !bangs and Quicklinks for the Loft Spotlight.
 
 - `!` lists your quicklinks, favorites and the most used bangs; `!nixpk`, `!youtube`, `!yout`
   fuzzy-find by trigger, name, domain and category.

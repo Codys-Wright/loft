@@ -4,7 +4,7 @@ import Quickshell
 import qs.components
 import qs.services
 
-// The left of the bar, macOS style: the studio mark (overview), the
+// The left of the bar, macOS style: the Loft mark (overview), the
 // focused app's name in bold (its app menu), then its global menus
 // (File Edit View …). Owns this screen's MenuOverlay.
 RowLayout {

@@ -7,26 +7,26 @@
 #   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte
 #   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`
-#   studio-niri     the crate builds and its tests pass (incl. `niri validate`)
-#   studio-niri-clippy  `cargo clippy --all-targets -D warnings`
-#   studio-appmenu  the global menu daemon builds and its tests pass
-#   studio-appmenu-clippy  the same clippy gate for it
-#   studio-input    the test driver builds and its tests pass (keymaps, combos,
+#   loft-niri       the crate builds and its tests pass (incl. `niri validate`)
+#   loft-niri-clippy  `cargo clippy --all-targets -D warnings`
+#   loft-appmenu    the global menu daemon builds and its tests pass
+#   loft-appmenu-clippy  the same clippy gate for it
+#   loft-input      the test driver builds and its tests pass (keymaps, combos,
 #                   script parsing, bind lookup, screenshot geometry)
-#   studio-input-clippy  the same clippy gate for it
+#   loft-input-clippy  the same clippy gate for it
 #   clipboard-urlclean  Clean URL's tracking-parameter stripping (src/services/urlclean.js)
 #   wallpaper-sets  display roles + set resolution (src/services/wallsets.js), against the
-#                   fixture tests/test_wallsets.py checks cli/studio/wallsets.py with
+#                   fixture tests/test_wallsets.py checks cli/loft/wallsets.py with
 #
 # After an intended output change, refresh the goldens from a checkout:
-#   for t in tokyonight latte; do rm -rf tests/golden/$t; STUDIO_THEME_INDEX=none nix run .#studio -- theme render themes/$t tests/golden/$t; done
+#   for t in tokyonight latte; do rm -rf tests/golden/$t; LOFT_THEME_INDEX=none nix run .#loft -- theme render themes/$t tests/golden/$t; done
 { lib, ... }:
 {
   perSystem =
     { pkgs, self', ... }:
     let
-      studio = lib.getExe self'.packages.studio;
-      builtin = self'.packages.studio-themes-builtin;
+      loft = lib.getExe self'.packages.loft;
+      builtin = self'.packages.loft-themes-builtin;
       fixture = ../tests/fixtures/glassless;
       python = pkgs.python3.withPackages (ps: [ ps.jsonschema ]);
       testSrc = lib.fileset.toSource {
@@ -45,12 +45,12 @@
     {
       checks = {
         theme-schema = check "theme-schema" [ ] ''
-          ${studio} theme validate ${../themes}/tokyonight ${../themes}/latte ${fixture}
+          ${loft} theme validate ${../themes}/tokyonight ${../themes}/latte ${fixture}
           touch $out
         '';
 
         theme-unit = check "theme-unit" [ pkgs.git ] ''
-          export HOME=$TMPDIR STUDIO_THEME_INDEX=none
+          export HOME=$TMPDIR LOFT_THEME_INDEX=none
           cd ${testSrc}
           PYTHONPATH=cli PYTHONDONTWRITEBYTECODE=1 ${python}/bin/python3 -m unittest discover -s tests -v
           touch $out
@@ -64,8 +64,8 @@
         '';
 
         niri-config = check "niri-config" [ pkgs.niri ] ''
-          export HOME=$TMPDIR STUDIO_THEME_INDEX=none
-          ${studio} theme render ${fixture} glassless
+          export HOME=$TMPDIR LOFT_THEME_INDEX=none
+          ${loft} theme render ${fixture} glassless
           for t in ${builtin}/tokyonight ${builtin}/latte $PWD/glassless; do
             printf 'include "%s"\ninclude "%s"\n' ${../niri}/base.kdl "$t/niri.kdl" > config.kdl
             echo "niri validate: base.kdl + $t/niri.kdl"
@@ -84,41 +84,41 @@
           touch $out
         '';
 
-        studio-niri = self'.packages.studio-niri;
+        loft-niri = self'.packages.loft-niri;
 
-        studio-niri-clippy = self'.packages.studio-niri.overrideAttrs (old: {
-          pname = "studio-niri-clippy";
+        loft-niri-clippy = self'.packages.loft-niri.overrideAttrs (old: {
+          pname = "loft-niri-clippy";
           nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.clippy ];
           dontCargoBuild = true;
           doCheck = false;
           buildPhase = ''
-            cargo clippy --offline -p studio-niri --all-targets -- -D warnings
+            cargo clippy --offline -p loft-niri --all-targets -- -D warnings
           '';
           installPhase = "touch $out";
         });
 
-        studio-appmenu = self'.packages.studio-appmenu;
+        loft-appmenu = self'.packages.loft-appmenu;
 
-        studio-appmenu-clippy = self'.packages.studio-appmenu.overrideAttrs (old: {
-          pname = "studio-appmenu-clippy";
+        loft-appmenu-clippy = self'.packages.loft-appmenu.overrideAttrs (old: {
+          pname = "loft-appmenu-clippy";
           nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.clippy ];
           dontCargoBuild = true;
           doCheck = false;
           buildPhase = ''
-            cargo clippy --offline -p studio-appmenu --all-targets -- -D warnings
+            cargo clippy --offline -p loft-appmenu --all-targets -- -D warnings
           '';
           installPhase = "touch $out";
         });
 
-        studio-input = self'.packages.studio-input;
+        loft-input = self'.packages.loft-input;
 
-        studio-input-clippy = self'.packages.studio-input.overrideAttrs (old: {
-          pname = "studio-input-clippy";
+        loft-input-clippy = self'.packages.loft-input.overrideAttrs (old: {
+          pname = "loft-input-clippy";
           nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.clippy ];
           dontCargoBuild = true;
           doCheck = false;
           buildPhase = ''
-            cargo clippy --offline -p studio-input --all-targets -- -D warnings
+            cargo clippy --offline -p loft-input --all-targets -- -D warnings
           '';
           postInstall = "";
           installPhase = "touch $out";
@@ -130,13 +130,13 @@
           export HOME=$TMPDIR XDG_RUNTIME_DIR=$TMPDIR/run XDG_CONFIG_HOME=$TMPDIR/cfg XDG_CACHE_HOME=$TMPDIR/cache
           cfg=$XDG_CONFIG_HOME/elephant
           mkdir -p $XDG_RUNTIME_DIR $cfg
-          el=${self'.packages.studio-elephant}
+          el=${self'.packages.loft-elephant}
           ignored=$(cd $el/lib/elephant/providers && ls *.so | sed 's/\.so$//' | grep -vx bangs | sed 's/.*/"&"/' | paste -sd, -)
           echo "ignored_providers = [$ignored]" > $cfg/elephant.toml
           printf '#!/bin/sh\necho "$1" >> %s\n' $TMPDIR/opened > $TMPDIR/open
           chmod +x $TMPDIR/open
           {
-            echo 'data = "${self'.packages.studio-bangs}/bangs.json"'
+            echo 'data = "${self'.packages.loft-bangs}/bangs.json"'
             echo "settings = \"$TMPDIR/spotlight.json\""
             echo 'defaults = "${../launcher/spotlight-defaults.json}"'
             echo "command = \"$TMPDIR/open\""

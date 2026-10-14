@@ -7,7 +7,7 @@ import Quickshell.Io
 // The active theme: palette + glass state that every component reads.
 // Components never hardcode colors — everything goes through here.
 //
-// Source: $STUDIO_THEME_FILE (set by the studio-shell wrapper / studio-dev),
+// Source: $LOFT_THEME_FILE (set by the loft-shell wrapper / loft-dev),
 // normally <state>/current/theme.json where `current` is a symlink to the
 // active theme. Edits to that file apply live (watched). Re-pointing the
 // symlink is NOT visible to the watcher (it follows the old target), so
@@ -16,7 +16,7 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    readonly property string file: Quickshell.env("STUDIO_THEME_FILE") ?? ""
+    readonly property string file: Quickshell.env("LOFT_THEME_FILE") ?? ""
 
     readonly property string name: theme.name
     readonly property bool dark: theme.polarity !== "light"
@@ -235,12 +235,12 @@ Singleton {
 
     FontLoader {
         id: uiFont
-        source: Quickshell.env("STUDIO_UI_FONT") ? "file://" + Quickshell.env("STUDIO_UI_FONT") : ""
+        source: Quickshell.env("LOFT_UI_FONT") ? "file://" + Quickshell.env("LOFT_UI_FONT") : ""
     }
 
     FontLoader {
         id: iconFont
-        source: Quickshell.env("STUDIO_ICON_FONT") ? "file://" + Quickshell.env("STUDIO_ICON_FONT") : ""
+        source: Quickshell.env("LOFT_ICON_FONT") ? "file://" + Quickshell.env("LOFT_ICON_FONT") : ""
     }
 
     function withAlpha(c, a) {
@@ -278,7 +278,7 @@ Singleton {
         path: root.file
         watchChanges: true
         onFileChanged: reload()
-        // A rewrite by `studio theme apply` can briefly remove the file.
+        // A rewrite by `loft theme apply` can briefly remove the file.
         onLoadFailed: error => console.warn(`Theme: cannot load ${root.file}: ${error}`)
 
         JsonAdapter {
