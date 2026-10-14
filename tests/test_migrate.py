@@ -152,7 +152,7 @@ class Migrate(Home):
         """M1 (§9) with renders: every old name renders the same after the
         migration, through its alias, once the library root is swapped. The
         one exception is by design: osumania's wallpapers are osu's now (the
-        same images, merged into one facet)."""
+        same images, merged into one facet; manifest.json and wallpapers.json)."""
         pre = self.tmp / "pre"
         self.render_all(pre)
         # The facet engine's v1 adapter = the v1 engine, before anything moves.
@@ -182,7 +182,12 @@ class Migrate(Home):
             if n != "qylock-osumania":
                 self.assertEqual(differ, [], n)
                 continue
-            self.assertEqual(differ, ["manifest.json"])
+            self.assertEqual(sorted(differ), ["manifest.json", "wallpapers.json"])
+            # wallpapers.json: the same collection, at osu's copies.
+            w = json.loads(before["wallpapers.json"].replace(b"/qylock-osumania/", b"/qylock-osu/"))
+            for e in w["collection"]:
+                e["source_pack"] = "qylock-osu"
+            self.assertEqual(w, json.loads(after["wallpapers.json"]))
             x, y = json.loads(before["manifest.json"]), json.loads(after["manifest.json"])
             for w in x["wallpapers"]:
                 w["path"] = w["path"].replace("/qylock-osumania/", "/qylock-osu/")

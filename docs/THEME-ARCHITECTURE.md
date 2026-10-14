@@ -1153,7 +1153,7 @@ importers, `tests/test_migrate.py` (six real packs, media stubbed).
     `Packs/cozytile`, referring to `colors:cozytile-sakura/…` etc.
   - Variants carry their member pack's identity (`author`, `version`,
     `source`, `upstream`) and a `v1` link (`{path, greeter?, vibes?}`, relative
-    to the theme's pack) that `compat.py` reads for curated vibes and the
+    to the theme's pack) that the render units read for curated vibes and the
     greeter; the colors facet's envelope `apps` names the palette's `apps/`
     dir (a variant's `spicetify.ini`); `render/identity.py` gives both to the
     `manifest` unit and the units' apps/ overrides (`spotify`, `apps`).
