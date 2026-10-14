@@ -20,10 +20,12 @@ Item {
     property bool checked: false // ✓ on the right
     property bool dim: false
     property bool bold: false
+    // false: an informational line (no highlight, not in keyboard order).
+    property bool interactive: true
     default property alias extra: below.data
 
-    readonly property bool navigable: enabled
-    readonly property bool lit: enabled && Nav.item === row
+    readonly property bool navigable: enabled && interactive
+    readonly property bool lit: navigable && Nav.item === row
 
     signal clicked
     signal rightClicked
@@ -122,7 +124,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
-            enabled: row.enabled
+            enabled: row.navigable
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             cursorShape: Qt.PointingHandCursor
             onEntered: Nav.item = row

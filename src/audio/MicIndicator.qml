@@ -9,8 +9,10 @@ Item {
     id: root
 
     property string screenName: ""
+    // Show even while idle (menu bar: "only when active" off).
+    property bool always: false
 
-    visible: Features.on("micTools") && Settings.sound.micIndicator && (Sound.recording || Sound.micsMuted)
+    visible: Features.on("micTools") && Settings.sound.micIndicator && (always || Sound.recording || Sound.micsMuted)
     implicitWidth: 20
     implicitHeight: 24
 
@@ -18,7 +20,7 @@ Item {
         anchors.centerIn: parent
         size: 16
         text: Sound.micsMuted ? "󰍭" : "󰍬"
-        color: Sound.micsMuted ? Theme.subtext : Theme.warn
+        color: Sound.micsMuted ? Theme.subtext : Sound.recording ? Theme.warn : Controls.barText
     }
 
     // Recording dot.

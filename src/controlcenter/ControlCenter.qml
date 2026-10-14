@@ -8,6 +8,7 @@ import Quickshell.Services.Pipewire
 import Quickshell.Services.UPower
 import qs.audio
 import qs.components
+import qs.controls
 import qs.services
 
 // macOS-style Control Center: toggles, now playing, volume and a calendar,

@@ -132,7 +132,7 @@ ColumnLayout {
     PanelHeader {
         visible: root.dev !== null
         title: "Wi-Fi"
-        subtitle: root.details && root.dev ? `${root.dev.name} · ${root.dev.address || ""}` : ""
+        subtitle: root.details && root.dev ? [root.dev.name, root.dev.address].filter(x => x).join(" · ") : ""
         hasSwitch: true
         checked: root.wifiOn
         onToggled: on => Networking.wifiEnabled = on
@@ -269,6 +269,7 @@ ColumnLayout {
     Repeater {
         model: NetStatus.wiredDevices
         delegate: PanelRow {
+            id: wd
             required property var modelData
             readonly property var link: NetStatus.links.find(l => l.device === modelData.name)
             text: modelData.network?.name || link?.connection || modelData.name
@@ -287,8 +288,8 @@ ColumnLayout {
             onClicked: root.details = !root.details
 
             PanelValue {
-                visible: root.details && parent.modelData.connected
-                rows: root.detailRows(parent.modelData.name)
+                visible: root.details && wd.modelData.connected
+                rows: root.detailRows(wd.modelData.name)
             }
         }
     }

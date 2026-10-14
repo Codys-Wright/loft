@@ -1,32 +1,40 @@
 import QtQuick
 import Quickshell
 import Quickshell.Services.SystemTray
-import Quickshell.Widgets
+import qs.components
+import qs.services
 
-// StatusNotifier tray: left click activates, right click opens the item's menu.
+// StatusNotifier tray icons, drawn as monochrome templates in the bar's
+// text color (macOS menu bar icons) unless set to "show in color" in
+// Settings → Menu Bar. Left click activates, right click opens the menu.
 Row {
     id: root
 
     // The window the menus anchor to.
     required property var window
+    // The items to show (the pinned ones; tucked ones live behind »).
+    property var items: SystemTray.items.values
+    property color fg: Controls.barText
 
-    spacing: 10
+    spacing: 8
 
     Repeater {
-        model: SystemTray.items
+        model: root.items
 
         delegate: Item {
             id: item
 
             required property SystemTrayItem modelData
 
-            width: 18
+            width: 20
             height: 24
 
-            IconImage {
+            TemplateIcon {
                 anchors.centerIn: parent
-                implicitSize: 16
+                size: 16
                 source: item.modelData.icon
+                color: root.fg
+                template: !Controls.trayColor.includes(item.modelData.id)
             }
 
             MouseArea {

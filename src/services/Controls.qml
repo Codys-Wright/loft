@@ -272,6 +272,32 @@ Singleton {
         saveBar({ trayTucked: l });
     }
 
+    // Tray items drawn in their own colors instead of as monochrome
+    // templates (macOS draws every menu bar icon as a template).
+    readonly property var trayColor: barCfg.trayColor ?? []
+
+    function setTrayColor(itemId, color) {
+        const l = trayColor.filter(x => x !== itemId);
+        if (color)
+            l.push(itemId);
+        saveBar({ trayColor: l });
+    }
+
+    // Status items that didn't fit, per screen (StatusItems reports them;
+    // the » overflow lists them).
+    property var overflowByScreen: ({})
+
+    function setOverflow(screenName, ids) {
+        if (JSON.stringify(overflowByScreen[screenName] ?? []) === JSON.stringify(ids))
+            return;
+        const m = Object.assign({}, overflowByScreen);
+        m[screenName] = ids;
+        overflowByScreen = m;
+    }
+
+    // The menu bar's icon color (the bar may adapt it to the wallpaper).
+    readonly property color barText: Theme.barText !== undefined ? Theme.barText : Theme.text
+
     // ── Control Center layout ────────────────────────────────────────────
     readonly property var ccLayout: {
         const saved = Settings.controlCenter.layout;

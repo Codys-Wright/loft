@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.components
+import qs.controls
 import qs.services
 import qs.settings
 
@@ -21,6 +22,8 @@ PanelWindow {
 
     readonly property bool shown: MenuState.open && MenuState.screen === screenName
     readonly property bool menuMode: MenuState.mode === "menu"
+    readonly property bool extraMode: MenuState.mode === "extra"
+    readonly property bool cardMode: MenuState.mode === "about" || MenuState.mode === "confirm"
 
     visible: shown
     WlrLayershell.layer: WlrLayer.Overlay
@@ -39,8 +42,8 @@ PanelWindow {
     BackgroundEffect.blurRegion: Theme.blur && shown ? blur : null
     Region {
         id: blur
-        item: root.menuMode ? (panels.count > 0 ? panels.itemAt(0) : null) : card
-        radius: root.menuMode ? 12 : card.radius
+        item: root.menuMode ? (panels.count > 0 ? panels.itemAt(0) : null) : root.extraMode ? extraPanel : card
+        radius: root.cardMode ? card.radius : 12
 
         Region {
             item: root.menuMode && panels.count > 1 ? panels.itemAt(1) : null
@@ -71,12 +74,89 @@ PanelWindow {
         focus: root.shown
 
         Item {
+            id: keys
             anchors.fill: parent
             focus: true
             Keys.onPressed: event => {
+                // A panel's text field keeps Enter/Space (and letters).
+                if (Nav.typing && root.extraMode && ![Qt.Key_Up, Qt.Key_Down, Qt.Key_Escape].includes(event.key))
+                    return;
                 MenuState.key(event);
                 event.accepted = true;
             }
+
+            // ── A status item's panel (Wi-Fi, Sound, …) ─────────────────
+            GlassSurface {
+                id: extraPanel
+                visible: root.shown && root.extraMode
+                width: MenuState.extra === "wifi" || MenuState.extra === "nowPlaying" ? 320 : MenuState.extra === "clock" ? 290 : 300
+                height: host.implicitHeight + 12
+                radius: 12
+                strength: 1.9
+                x: {
+                    void root.titles.stamp;
+                    const a = MenuState.anchor;
+                    const ax = a ? a.mapToItem(null, 0, 0).x : root.width;
+                    return Math.max(8, Math.min(ax - 6, root.width - width - 8));
+                }
+                y: 2
+                opacity: visible ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 110
+                    }
+                }
+
+                // Swallow clicks on the panel.
+                MouseArea {
+                    anchors.fill: parent
+                }
+
+                PanelHost {
+                    id: host
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        top: parent.top
+                        margins: 6
+                    }
+                    panel: root.extraMode ? MenuState.extra : ""
+                    details: MenuState.details
+                    shown: extraPanel.visible
+                    screenName: root.screenName
+                    window: root
+                    onDismiss: MenuState.close()
+                    onOpenSettings: section => {
+                        MenuState.close();
+                        Panels.settingsSection = section;
+                        Panels.settingsOpen = true;
+                    }
+                    onOpenControl: id => {
+                        if (Controls.control(id)?.kind === "panel")
+                            MenuState.openExtra(root.screenName, id, MenuState.anchorOf(root.screenName, "overflow"), false);
+                        else {
+                            MenuState.close();
+                            ControlActions.trigger(id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Binding {
+        target: Nav
+        property: "root"
+        value: host
+        when: root.shown && root.extraMode
+    }
+
+    // A text field let go of the keyboard: back to menu keys.
+    Connections {
+        target: Nav
+        function onTypingChanged() {
+            if (!Nav.typing && root.shown)
+                keys.forceActiveFocus();
         }
     }
 
@@ -119,7 +199,7 @@ PanelWindow {
 
     GlassSurface {
         id: card
-        visible: root.shown && !root.menuMode
+        visible: root.shown && root.cardMode
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.max(20, (root.height - height) / 3)
         width: 340
