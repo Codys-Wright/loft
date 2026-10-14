@@ -4,9 +4,10 @@ import Quickshell.Wayland
 import qs.services
 
 // Background layer. niri's xray blur samples it, so it is what the glass
-// surfaces show through. Source, in order: the user's chosen image
-// (Settings.wallpaper.path, set by the picker), the theme pack's image, the
-// theme's gradient. Image changes crossfade.
+// surfaces show through. Source (Vibes.wallpaperFor), in order: the user's
+// chosen image for this theme (set by the pickers), the theme's collection
+// when rotating / per workspace (this screen's active workspace), the theme
+// pack's default image, the theme's gradient. Image changes crossfade.
 PanelWindow {
     id: root
 
@@ -24,13 +25,7 @@ PanelWindow {
     }
     color: Theme.bg
 
-    readonly property string source: {
-        const p = Settings.wallpaper.path || Theme.wallpaperImage;
-        if (!p)
-            return "";
-        const abs = p.startsWith("~/") ? Quickshell.env("HOME") + p.slice(1) : p;
-        return abs.startsWith("/") ? "file://" + abs : abs;
-    }
+    readonly property string source: Vibes.url(Vibes.wallpaperFor(modelData.name))
 
     // Gradient fallback (no image), with soft color fields for the blur.
     Item {

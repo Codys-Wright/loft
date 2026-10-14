@@ -37,7 +37,16 @@ studio theme install qylock:pixel-sakura      #   (--list cozytile: / qylock: sh
 studio theme export mytheme -o mytheme.tar.zst
 studio theme remove mytheme
 studio theme validate ./pack                  # against themes/schema.json
+studio theme vibes [theme] [--json] [--dir ~/Pictures/Wallpapers]   # wallpapers + lock designs that fit
 ```
+
+**Vibes.** A pack carries a collection of wallpapers (`wallpapers/`, `wallpaper.images`) and lock
+designs (`locks`), plus curated links to other packs' (`vibes`, and groups in the
+[themes index](https://github.com/Codys-Wright/studio-linux-themes)). `studio theme vibes` lists
+the theme's own, the curated ones, then every other installed pack's wallpapers and locks (and
+loose images) ranked by color closeness (CIEDE2000 between palettes and between image swatches).
+Settings → Wallpaper / Lock Screen and the wallpaper picker (`wallpaper toggle`) show the same
+set; choices, rotation and per-workspace wallpapers are remembered per theme.
 
 Point your apps at the rendered fragments once; `apply` keeps them current:
 
@@ -57,7 +66,8 @@ Point your apps at the rendered fragments once; `apply` keeps them current:
 `Mod+Ctrl+Q` (Ctrl+Cmd+Q on a Mac) locks: a session lock with PAM, a big clock, now playing
 and a frosted card with the password field. The same design is the login screen, shipped as the
 SDDM theme `studio` (`packages.studio-sddm-theme`). A theme pack can replace both with its own
-`lock/Main.qml` ([docs/THEME-FORMAT-LOCK.md](docs/THEME-FORMAT-LOCK.md)).
+`lock/Main.qml` ([docs/THEME-FORMAT-LOCK.md](docs/THEME-FORMAT-LOCK.md)) or ship several designs;
+Settings → Lock Screen picks one per theme (any installed pack's) and previews it.
 
 ```sh
 nix run .#greeter-preview           # the login screen in SDDM's test mode (opens a window)

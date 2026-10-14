@@ -282,6 +282,7 @@ Nix calls the *same* renderer at build time for the built-in packs, so
 
 ```
 studio theme list [--installed|--available]      # local packs + index entries
+studio theme vibes [<name>] [--json] [--dir DIR]  # wallpapers + lock designs that fit (own, curated, ranked)
 studio theme apply <name>                        # render (cached) → swap current → reload hooks
 studio theme install <git-url|tarball|path>      # any pack
 studio theme install qylock:<theme> | qylock:all # importer: sparse-checkout that theme dir
@@ -535,6 +536,29 @@ theme comes from Nix.
 
 **Done when:** `studio theme install cozytile:all` followed by `apply cozytile-sakura`
 works on a machine whose build contains none of them. *(Met.)*
+
+### Phase 1c: Vibes *(done — branch `vibes`)*
+
+> **Status:** a pack carries a wallpaper collection (`wallpaper.images`,
+> `wallpapers/`, videos flagged / represented by a still) and several lock
+> designs (`locks`, `locks/<dir>/`; `lock` stays the default shorthand), plus
+> curated `vibes` links to other packs' assets; the themes index adds vibe
+> groups (sakura, forest, monochrome). `studio theme vibes [--json] [--dir]`
+> ranks every other installed pack's wallpapers/locks (and loose images) by
+> CIEDE2000 palette distance + image swatch distance (cached by hash). The
+> importers bring all of a theme's wallpapers (cozytile: orphaned
+> `Wallpaper/` images go to the closest palette; qylock: every background,
+> a frame per video) and its SDDM design as a lock. Shell: `Vibes` service;
+> Settings → Wallpaper / Lock Screen pages and the wallpaper carousel show
+> "From <theme>" then "Matching vibes"; choices, rotation and per-workspace
+> wallpapers are per theme (`overrides/shell.json` `perTheme`); "Preview
+> lock" locks with the chosen design. See THEME-FORMAT.md, "Vibes".
+
+**Open:** qylock designs need `SddmComponents`, `Qt5Compat.GraphicalEffects`
+and `QtMultimedia` on the shell's QML import path; the packaged
+`studio-shell` doesn't add them yet (they load in a session whose
+environment already has them, e.g. a KDE session with SDDM installed).
+Videos are not played as desktop wallpapers (the still is shown).
 
 ### Phase 2: Shell skeleton
 - `src/` skeleton, `studio-shell` package, HM systemd user service, dev/installed split.

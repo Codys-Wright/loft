@@ -21,6 +21,11 @@ Singleton {
     readonly property alias island: settings.island
     readonly property alias wallpaper: settings.wallpaper
     readonly property alias appearance: settings.appearance
+    readonly property alias lock: settings.lock
+    // Per-theme choices, keyed by theme name (Vibes.qml reads and writes
+    // them): { "<theme>": { wallpaper, rotate, perWorkspace, lockDesign } }.
+    // A key a theme doesn't have falls back to the global value above it.
+    property alias perTheme: settings.perTheme
 
     FileView {
         id: view
@@ -55,11 +60,23 @@ Singleton {
             }
 
             property JsonObject wallpaper: JsonObject {
-                // An image path; empty = the theme's wallpaper.
+                // An image path; empty = the theme's wallpaper. (Global
+                // fallback: the pickers store their choice per theme.)
                 property string path: ""
                 // Where the picker looks for images.
                 property string directory: "~/Pictures/Wallpapers"
+                // Cycle through the theme's collection every N minutes (0 = off).
+                property real rotate: 0
+                // A different wallpaper of the collection per niri workspace.
+                property bool perWorkspace: false
             }
+
+            property JsonObject lock: JsonObject {
+                // A lock design directory, "builtin", or "" = the theme's default.
+                property string design: ""
+            }
+
+            property var perTheme: ({})
 
             property JsonObject appearance: JsonObject {
                 // Runtime overrides on top of the theme (-1 / "" = theme value).

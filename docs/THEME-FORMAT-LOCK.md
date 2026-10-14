@@ -23,6 +23,13 @@ The **same `lock/Main.qml` runs in both places**:
 A design that fails to compile falls back to the built-in one, so a broken
 pack never leaves a screen without a password field.
 
+A pack can ship more than one design (`locks` in `manifest.json`, or
+`locks/<name>/Main.qml`), and the user can lock with any installed pack's
+design: Settings → Lock Screen lists the theme's own, curated ones and the
+rest ranked by color, and remembers the choice per theme (THEME-FORMAT.md,
+"Lock designs" and "Vibes"). A `preview.png` next to `Main.qml` is shown in
+that picker. The design's `theme.conf` is the one in its own directory.
+
 ## The contract
 
 A design gets these names in scope (no imports needed). They're a subset of
@@ -45,6 +52,7 @@ unchanged, and a design written against `lock` works in both hosts.
 | `screen` | object | Lock: the Quickshell screen (`name`, `width`, …). Greeter: `null`. |
 | `isGreeter` | bool | `true` under SDDM. |
 | `theme` | object | The active palette and glass tokens, the same names as the shell's `Theme` (`bg`, `text`, `accent`, `glassFill`, `radius`, `wallpaperGradient`, `fontUi`, `withAlpha()`, …). |
+| `wallpaper` | URL | Lock: what the desktop shows on this screen (the theme's chosen / rotated / per-workspace wallpaper). Greeter: `""`. |
 
 On success the host tears the screen down (lock) or starts the session
 (greeter); there is no "unlocked" animation hook yet.
