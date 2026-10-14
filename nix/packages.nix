@@ -33,6 +33,18 @@
         iproute2 # Network: local addresses (ip -j addr)
         librespeed-cli # Network: speed test (on demand)
         pipewire # pw-metadata: per-app output (Sound mixer)
+        # Capture: frozen frames, crop/GIF/trim/mic track, clipboard, annotate.
+        grim
+        ffmpeg
+        satty
+        # Text from screen: English OCR (add languages with
+        # tesseract.override { enableLanguages = [ … ]; }) and QR codes.
+        (tesseract.override { enableLanguages = [ "eng" ]; })
+        (zbar.override {
+          enableVideo = false;
+          withXorg = false;
+          enableDbus = false;
+        })
         walker # Spotlight launcher (frontend)
         elephant # launcher data providers
         jq
@@ -74,6 +86,11 @@
         pkgs.kdePackages.sddm.unwrapped
       ];
 
+      # QtMultimedia's plugins for the camera mirror (its QML is in lockQmlPath).
+      qtMultimediaEnv = ''
+        export QT_PLUGIN_PATH="${pkgs.kdePackages.qtmultimedia}/lib/qt-6/plugins''${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+      '';
+
       python = pkgs.python3.withPackages (ps: [ ps.jsonschema ]);
 
       builtinRendered = self'.packages.studio-themes-builtin;
@@ -102,6 +119,7 @@
             fi
             export STUDIO_UI_FONT="${uiFont}" STUDIO_ICON_FONT="${iconFont}"
             export QML_IMPORT_PATH="${lockQmlPath}''${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
+            ${qtMultimediaEnv}
             # STUDIO_SHELL_SRC runs the QML from a checkout instead (hot reload);
             # the CLI's IPC hooks must target the same path.
             src="''${STUDIO_SHELL_SRC:-${../src}}"
@@ -208,7 +226,7 @@
             include optional=true "$root/niri/dev-local.kdl"
             include optional=true "$dir/overrides/niri.kdl"
             spawn-at-startup "env" "STUDIO_STATE_DIR=$dir" "STUDIO_LAUNCHER_DIR=$root/launcher" "studio-launcher" "service"
-            spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_NIRI_CONFIG=$dir/config.kdl" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "QML_IMPORT_PATH=${lockQmlPath}" "quickshell" "--path" "$root/src"
+            spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_NIRI_CONFIG=$dir/config.kdl" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "QML_IMPORT_PATH=${lockQmlPath}" "QT_PLUGIN_PATH=${pkgs.kdePackages.qtmultimedia}/lib/qt-6/plugins" "quickshell" "--path" "$root/src"
             EOF
 
             # Live everything, not just QML: `studio` runs the checkout's CLI,

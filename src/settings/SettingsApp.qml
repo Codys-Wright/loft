@@ -29,6 +29,7 @@ Scope {
         { id: "keybinds", icon: "󰘳", label: "Keybinds" },
         { id: "system", icon: "󰍛", label: "System" },
         { id: "sound", icon: "󰕾", label: "Sound" },
+        { id: "capture", icon: "󰹑", label: "Capture", feature: "capture" },
         { id: "features", icon: "󰐱", label: "Features" },
         { id: "clipboard", icon: "󰨸", label: "Clipboard & Files" },
         { id: "snippets", icon: "󱐋", label: "Snippets", feature: "snippets" },
@@ -65,6 +66,9 @@ Scope {
         }
         function lockscreen(): void {
             root.show("lockscreen");
+        }
+        function capture(): void {
+            root.show("capture");
         }
     }
 
@@ -540,6 +544,11 @@ Scope {
                         SoundPage {
                             Layout.fillWidth: true
                             visible: root.section === "sound"
+                        }
+
+                        CapturePage {
+                            Layout.fillWidth: true
+                            visible: root.section === "capture"
                         }
 
                         // About

@@ -38,7 +38,11 @@ Singleton {
         { id: "scratchpad", label: "Scratchpad", icon: "󰺿", group: "Everyday", description: "Tabbed, autosaved Markdown notes in a floating window" },
         { id: "mixer", label: "Volume mixer", icon: "󰘮", group: "Sound", description: "Per-app volume up to 150 %, mute, favorites and per-app output" },
         { id: "audioOutputs", label: "Output switcher", icon: "󰓃", group: "Sound", description: "Pick the output from the Control Center or ⌘⇧O; safe volume when headphones disconnect" },
-        { id: "micTools", label: "Microphone tools", icon: "󰍬", group: "Sound", description: "Default input, level, mute all (⌘⇧M), bar indicator while recording" }
+        { id: "micTools", label: "Microphone tools", icon: "󰍬", group: "Sound", description: "Default input, level, mute all (⌘⇧M), bar indicator while recording" },
+        { id: "capture", label: "Screenshots & recording", icon: "󰹑", group: "Capture", description: "⌘⇧5 selector: area/window/screen shots, recording with audio, thumbnail, annotate, pin, GIF, trim" },
+        { id: "ocr", label: "Text from screen", icon: "󱄽", group: "Capture", description: "Copy the text or QR code in a screen region (tesseract, zbar)" },
+        { id: "colorPicker", label: "Color picker", icon: "󰈊", group: "Capture", description: "Pick any pixel with a loupe; HEX / RGB / HSL / QML, recent colors" },
+        { id: "camera", label: "Camera mirror", icon: "󰄀", group: "Capture", description: "A floating round camera preview + an island page" }
     ]
 
     readonly property var presets: ({

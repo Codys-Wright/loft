@@ -12,6 +12,11 @@ binds {
     Mod+Comma hotkey-overlay-title="Settings" { spawn @IPC@ "settings" "toggle"; }
     Mod+Shift+W hotkey-overlay-title="Wallpapers" { spawn @IPC@ "wallpaper" "toggle"; }
     Ctrl+Shift+Escape hotkey-overlay-title="System Monitor" { spawn @IPC@ "monitor" "toggle"; }
+    // macOS ⌘⇧5 / ⌘⇧4 / ⌘⇧3 on Cmd (physical Super), not the WM Mod — so
+    // Mod+Shift+3–5 keep moving windows to workspaces.
+    Super+Shift+5 hotkey-overlay-title="Capture" { spawn @IPC@ "capture" "toggle"; }
+    Super+Shift+4 hotkey-overlay-title="Capture Area" { spawn @IPC@ "capture" "area"; }
+    Super+Shift+3 hotkey-overlay-title="Capture Screen" { spawn @IPC@ "capture" "screen"; }
     // macOS Ctrl+Cmd+Q.
     Mod+Ctrl+Q hotkey-overlay-title="Lock Screen" { spawn @IPC@ "lock" "lock"; }
     Mod+Shift+V hotkey-overlay-title="Clipboard History" { spawn @IPC@ "clipboard" "toggle"; }

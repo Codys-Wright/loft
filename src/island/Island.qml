@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Services.Mpris
+import qs.capture
 import qs.components
 import qs.services
 
@@ -16,7 +17,8 @@ import qs.services
 // alerts (overheating / overload) and turns white for unread notifications.
 //
 // Hover expands it into a carousel of pages — live activity, notifications
-// (when there are any), media, system, screen time; scroll to switch.
+// (when there are any), camera (while the mirror is on), media, system,
+// screen time; scroll to switch.
 // IPC: island toggle|media|system|usage|notifications|live|flash.
 PanelWindow {
     id: root
@@ -43,7 +45,7 @@ PanelWindow {
     property int liveIndex: 0
     readonly property string live: liveActivities.length ? liveActivities[liveIndex % liveActivities.length] : ""
 
-    readonly property var pages: [live !== "" ? "live" : "", Notifications.history.length > 0 ? "notifications" : "", "media", "system", "usage"].filter(s => s)
+    readonly property var pages: [live !== "" ? "live" : "", Capture.cameraOn ? "camera" : "", Notifications.history.length > 0 ? "notifications" : "", "media", "system", "usage"].filter(s => s)
     property alias page: persist.page
     readonly property int pageIndex: Math.max(0, pages.indexOf(page))
 
@@ -303,6 +305,8 @@ PanelWindow {
                             switch (slot.modelData) {
                             case "live":
                                 return livePage;
+                            case "camera":
+                                return cameraPage;
                             case "notifications":
                                 return notificationsPage;
                             case "media":
@@ -386,6 +390,10 @@ PanelWindow {
         LivePage {
             activity: root.live
         }
+    }
+    Component {
+        id: cameraPage
+        CameraPage {}
     }
     Component {
         id: notificationsPage

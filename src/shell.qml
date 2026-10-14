@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import qs.services
 import qs.background
+import qs.capture
 import qs.bar
 import qs.dock
 import qs.controlcenter
@@ -61,6 +62,42 @@ ShellRoot {
     Variants {
         model: Features.on("wallpaperPicker") ? Quickshell.screens : []
         WallpaperPicker {}
+    }
+
+    // Capture (screenshots, recording, OCR, color picker, camera).
+    Variants {
+        model: Features.on("capture") || Features.on("ocr") || Features.on("colorPicker") ? Quickshell.screens : []
+        RegionOverlay {}
+    }
+
+    Variants {
+        model: Features.on("capture") ? Quickshell.screens : []
+        CaptureSelector {}
+    }
+
+    Variants {
+        model: Features.on("capture") ? Quickshell.screens : []
+        CaptureCountdown {}
+    }
+
+    Variants {
+        model: Features.on("capture") ? Quickshell.screens : []
+        CaptureThumbnail {}
+    }
+
+    Variants {
+        model: Features.on("capture") ? Quickshell.screens : []
+        CaptureTrim {}
+    }
+
+    Variants {
+        model: Features.on("capture") ? Capture.pins : []
+        PinnedCapture {}
+    }
+
+    LazyLoader {
+        active: Features.on("camera") && Capture.cameraOn
+        CameraMirror {}
     }
 
     SettingsApp {}
