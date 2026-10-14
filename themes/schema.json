@@ -59,7 +59,7 @@
       "required": ["path"],
       "properties": {
         "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$", "description": "Unique in the pack; vibes refer to it as <pack>:<name>. Default: metadata.desktop's Name, else the pack name (or the locks/<dir> name)" },
-        "format": { "enum": ["loft", "qylock"], "description": "loft: Main.qml against docs/THEME-FORMAT-LOCK.md. qylock: an SDDM-API QML theme dir (metadata.desktop, theme.conf, MainScript). Default: qylock when the dir has metadata.desktop" },
+        "format": { "enum": ["loft", "qylock", "studio"], "description": "loft: Main.qml against docs/THEME-FORMAT-LOCK.md. qylock: an SDDM-API QML theme dir (metadata.desktop, theme.conf, MainScript). Default: qylock when the dir has metadata.desktop. studio: the old name of loft (studio-linux packs), read as loft" },
         "path": { "type": "string", "description": "Directory relative to the pack (or absolute)" },
         "preview": { "type": "string", "description": "A screenshot for pickers (default: preview.* / screenshot.* in the design dir)" }
       }

@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -294,3 +295,27 @@ class Hooks(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LegacyNames(unittest.TestCase):
+    """studio-linux (Loft's old name): what still works under the old names."""
+
+    def test_studio_env_vars_fall_back(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("LOFT_", "STUDIO_"))}
+        env.update(STUDIO_STATE_DIR="/old", LOFT_LIBRARY="new", STUDIO_LIBRARY="old", PYTHONPATH=str(ROOT / "cli"))
+        code = "import os, loft; print(os.environ['LOFT_STATE_DIR'], os.environ['LOFT_LIBRARY'])"
+        out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True).stdout
+        self.assertEqual(out.split(), ["/old", "new"])
+
+    def test_studio_lock_format_reads_as_loft(self):
+        with tempfile.TemporaryDirectory() as d:
+            pack = Path(d) / "oldlock"
+            copy_pack(FIXTURE, pack)
+            (pack / "lock").mkdir()
+            (pack / "lock" / "Main.qml").write_text("import QtQuick\nItem {}\n")
+            m = json.loads((pack / "manifest.json").read_text())
+            m["lock"] = {"format": "studio", "path": "lock"}
+            (pack / "manifest.json").write_text(json.dumps(m))
+            locks = Pack(pack).lock_entries()
+            self.assertEqual([lk["format"] for lk in locks], ["loft"])
+

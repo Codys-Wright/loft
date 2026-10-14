@@ -180,6 +180,17 @@ class Views(unittest.TestCase):
         self.assertFalse((self.lib / "Wallpapers/Colors/Green").exists())
         self.assertTrue(blue_dir.is_dir())
 
+    def test_legacy_manifest_carries_over(self):
+        # A library sorted by studio-linux (Loft's old name): its links stay ours.
+        self.sort()
+        (self.lib / library.MANIFEST).rename(self.lib / library.LEGACY_MANIFEST)
+        before = self.links()
+        again = self.sort()
+        self.assertEqual(again["changes"], {"created": 0, "removed": 0})
+        self.assertEqual(self.links(), before)
+        self.assertTrue((self.lib / library.MANIFEST).is_file())
+        self.assertFalse((self.lib / library.LEGACY_MANIFEST).exists())
+
     def test_user_readme_kept(self):
         write(self.lib / "README.md", "# mine\n")
         self.sort()

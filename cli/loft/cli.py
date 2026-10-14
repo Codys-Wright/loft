@@ -16,6 +16,9 @@ Environment (all optional):
   LOFT_THEME_INDEX     themes index (path, file:// or http(s) URL; `none` = off)
                        for curated vibe links (default: loft-themes on GitHub)
 
+The STUDIO_* names from before the rename (studio-linux) are read when the
+LOFT_* one is unset.
+
 `loft --dev …` targets the session started by `nix run .#dev` instead
 ($LOFT_SESSION=NAME: the one started with `loft-dev --session NAME`).
 """

@@ -61,7 +61,8 @@ pickers draw a small card in the source pack's colors over the design's
 background (qylock `theme.conf` `background`, else the pack's wallpaper).
 
 `path` is relative to the pack (or absolute). Format `loft` is a
-`Main.qml` against [THEME-FORMAT-LOCK.md](THEME-FORMAT-LOCK.md). Format `qylock` is an
+`Main.qml` against [THEME-FORMAT-LOCK.md](THEME-FORMAT-LOCK.md). (`studio`, its name
+before the rename, is still read as `loft`.) Format `qylock` is an
 SDDM-API QML theme directory as qylock ships them: `metadata.desktop`
 (`MainScript`, default `Main.qml`), `theme.conf` (the design's own settings:
 `background`, `type=image|video|color`, `color`, `font`, …), its fonts

@@ -33,6 +33,8 @@ BOOKMARK_NS = "{http://www.freedesktop.org/standards/desktop-bookmarks}"
 MIME_NS = "{http://www.freedesktop.org/standards/shared-mime-info}"
 # Marks the autostart entries the dock wrote ("Open at Login").
 MARK = "X-Loft-OpenAtLogin"
+# The mark studio-linux (Loft's old name) wrote: still ours.
+LEGACY_MARK = "X-Studio-OpenAtLogin"
 THUMB_SIZE = 256
 
 # Launchers that open a file with "the default app": the bookmark doesn't say
@@ -694,6 +696,11 @@ def autostart_list() -> dict:
     return {"enabled": sorted(i for i in ids if autostart_enabled(i)), "dir": str(autostart_dir())}
 
 
+def _marked(entry: dict) -> bool:
+    """An autostart entry the dock wrote (under either mark)."""
+    return entry.get(MARK) == "true" or entry.get(LEGACY_MARK) == "true"
+
+
 def autostart_set(did: str, on: bool, *, source: Path | None = None) -> dict:
     """Turn "Open at Login" on or off for desktop id `did`.
 
@@ -702,7 +709,7 @@ def autostart_set(did: str, on: bool, *, source: Path | None = None) -> dict:
     removed; anyone else's entry (the user's, a system one) is shadowed with
     Hidden=true — the XDG way — so turning it back on restores it."""
     user = autostart_dir() / f"{did}.desktop"
-    mine = user.is_file() and parse_desktop(user).get(MARK) == "true"
+    mine = user.is_file() and _marked(parse_desktop(user))
     if on:
         if autostart_enabled(did):
             return {"id": did, "enabled": True, "changed": False}
@@ -718,7 +725,7 @@ def autostart_set(did: str, on: bool, *, source: Path | None = None) -> dict:
                 src = source or desktop_files().get(did)
                 if src is None:
                     raise ValueError(f"no desktop entry for {did}")
-                lines = [ln for ln in _entry_group(Path(src)) if not ln.startswith(("Hidden=", "NoDisplay=", f"{MARK}="))]
+                lines = [ln for ln in _entry_group(Path(src)) if not ln.startswith(("Hidden=", "NoDisplay=", f"{MARK}=", f"{LEGACY_MARK}="))]
                 user.parent.mkdir(parents=True, exist_ok=True)
                 user.write_text("\n".join(lines + [f"{MARK}=true"]) + "\n")
     else:
@@ -758,8 +765,10 @@ def autostart_run(*, once: str | None = None, dry_run: bool = False) -> dict:
     reload doesn't start them again."""
     if once:
         rt = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp")
-        stamp = rt / f"loft-autostart-{hashlib.sha1(once.encode()).hexdigest()[:16]}"
-        if stamp.exists():
+        key = hashlib.sha1(once.encode()).hexdigest()[:16]
+        stamp = rt / f"loft-autostart-{key}"
+        # studio-autostart-*: written before the rename, in the same session.
+        if stamp.exists() or (rt / f"studio-autostart-{key}").exists():
             return {"started": [], "skipped": "already ran for this session"}
         if not dry_run:
             stamp.touch()
@@ -771,7 +780,7 @@ def autostart_run(*, once: str | None = None, dry_run: bool = False) -> dict:
     d = autostart_dir()
     for f in sorted(d.glob("*.desktop")) if d.is_dir() else []:
         e = parse_desktop(f)
-        if e.get(MARK) != "true" or e.get("Hidden", "").lower() == "true" or not e.get("Exec"):
+        if not _marked(e) or e.get("Hidden", "").lower() == "true" or not e.get("Exec"):
             continue
         launch(f, [], dry_run=dry_run)
         started.append(f.stem)

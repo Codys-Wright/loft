@@ -31,6 +31,8 @@ IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif", ".jxl"}
 VIDEO_EXT = {".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
 PREVIEW_NAMES = ("preview", "screenshot")
 LOCK_FORMATS = ("loft", "qylock")
+# Lock formats under their old names: `studio` is `loft` (studio-linux packs).
+LEGACY_LOCK_FORMATS = {"studio": "loft"}
 # Display roles a wallpaper set can name (wallsets.py; themes/schema.json has the same pattern).
 SET_ROLE = re.compile(r"^(?:(?:main|left|right|top|bottom)(?:-[1-9][0-9]*)?|portrait|landscape|ultrawide|display-[1-9][0-9]*|\*)$")
 
@@ -234,6 +236,7 @@ class Pack:
             seen_paths.add(str(path))
             meta = read_kv(path / "metadata.desktop")
             fmt = spec.get("format") or ("qylock" if meta else "loft")
+            fmt = LEGACY_LOCK_FORMATS.get(fmt, fmt)
             main = path / (meta.get("MainScript") or "Main.qml") if fmt == "qylock" else path / "Main.qml"
             name = spec.get("name") or (
                 slug(meta["Name"]) if meta.get("Name") else slug(path.name) if spec.get("_dirname") else slug(self.name)
