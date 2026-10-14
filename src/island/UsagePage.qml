@@ -68,12 +68,11 @@ Item {
                     Layout.fillWidth: true
                     spacing: 8
 
-                    Image {
+                    AppIcon {
                         Layout.preferredWidth: 20
                         Layout.preferredHeight: 20
-                        source: Apps.icon(bar.modelData.appId)
-                        sourceSize: Qt.size(40, 40)
-                        mipmap: true
+                        appId: bar.modelData.appId
+                        pixelSize: 40
                     }
 
                     Item {

@@ -140,14 +140,11 @@ PanelWindow {
                         border.width: current ? 1 : 0
                         border.color: Theme.glassBorder
 
-                        Image {
+                        AppIcon {
                             anchors.centerIn: parent
                             width: 72
                             height: 72
-                            source: Apps.icon(cell.modelData.appId)
-                            sourceSize: Qt.size(128, 128)
-                            fillMode: Image.PreserveAspectFit
-                            mipmap: true
+                            appId: cell.modelData.appId
                         }
 
                         // Window count badge for apps with several windows.
