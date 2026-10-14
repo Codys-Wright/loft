@@ -29,6 +29,15 @@ overview {
     backdrop-color "#eff1f5"
 }
 
+// ⌘Tab switcher (binds in the shell's keybind fragment).
+recent-windows {
+    highlight {
+        active-color "#1e66f5"
+        urgent-color "#d20f39"
+        corner-radius 12
+    }
+}
+
 // glass.blur, glass.noise, glass.saturation. `off` also disables blur that
 // windows request themselves; `on` re-enables it after an earlier `off`.
 blur {
