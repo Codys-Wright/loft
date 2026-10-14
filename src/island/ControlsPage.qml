@@ -14,7 +14,7 @@ Item {
         { id: "focus", label: "Do Not Disturb", icon: "󰂛" },
         { id: "caffeine", label: "Keep Awake", icon: "󰅶" },
         { id: "micMute", label: "Microphones", icon: "" },
-        { id: "record", label: "Record", icon: "󰑋" },
+        { id: "record", label: "Record", icon: "󰻃" },
         { id: "focusTimer", label: "Focus Timer", icon: "󰔟" }
     ].filter(c => Controls.available(c.id))
 

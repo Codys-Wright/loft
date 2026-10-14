@@ -43,7 +43,7 @@ Singleton {
         { id: "powerMode", label: "Power Mode", icon: "󰾅", group: "System", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "toggle" },
         { id: "focusTimer", label: "Focus Timer", icon: "󰔟", group: "Everyday", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "toggle", activeOnly: "default" },
         { id: "screenshot", label: "Screenshot", icon: "󰹑", group: "Capture", feature: "capture", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "action" },
-        { id: "record", label: "Screen Recording", icon: "󰑋", group: "Capture", feature: "capture", sizes: ["1x1", "2x1"], bar: true, barDefault: true, kind: "toggle", activeOnly: "default" },
+        { id: "record", label: "Screen Recording", icon: "󰻃", group: "Capture", feature: "capture", sizes: ["1x1", "2x1"], bar: true, barDefault: true, kind: "toggle", activeOnly: "default" },
         { id: "micMute", label: "Microphones", icon: "󰍬", group: "Sound", feature: "micTools", sizes: ["1x1", "2x1"], bar: true, barDefault: true, kind: "toggle", activeOnly: "default" },
         { id: "lock", label: "Lock Screen", icon: "󰌾", group: "Desktop", sizes: ["1x1"], bar: true, barDefault: false, kind: "action" },
         { id: "overview", label: "Overview", icon: "󰕰", group: "Windows", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "action" },
