@@ -35,7 +35,9 @@ ShellRoot {
     }
 
     Variants {
-        model: Features.on("dock") ? Quickshell.screens : []
+        // One dock: on the main display, or the fallback while the main one
+        // shows something fullscreen (Displays.qml).
+        model: Features.on("dock") ? Quickshell.screens.filter(s => s.name === Displays.activeName) : []
         Dock {}
     }
 
