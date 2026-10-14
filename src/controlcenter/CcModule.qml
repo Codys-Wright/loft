@@ -384,8 +384,8 @@ GlassSurface {
             ccLabel: mod.control?.label ?? mod.controlId
             ccExpandable: isPanel
             toggleFn: () => {
-                if (mod.controlId === "focus")
-                    ControlActions.trigger("focus");
+                if (mod.controlId === "focus" || mod.controlId === "caffeine")
+                    ControlActions.trigger(mod.controlId);
                 else if (isPanel && !["wifi", "bluetooth"].includes(mod.controlId))
                     mod.expand(mod.controlId);
                 else

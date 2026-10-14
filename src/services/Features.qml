@@ -46,6 +46,11 @@ Singleton {
         { id: "ocr", label: "Text from screen", icon: "󱄽", group: "Capture", description: "Copy the text or QR code in a screen region (tesseract, zbar)" },
         { id: "colorPicker", label: "Color picker", icon: "󰈊", group: "Capture", description: "Pick any pixel with a loupe; HEX / RGB / HSL / QML, recent colors" },
         { id: "camera", label: "Camera mirror", icon: "󰄀", group: "Capture", description: "A floating round camera preview + an island page" },
+        { id: "keepAwake", label: "Keep Awake", icon: "󰅶", group: "Display", page: "EverydayPage.qml", description: "Keep the screen on for a while, or while an app is open, on power or with a display connected" },
+        { id: "cleaningMode", label: "Cleaning Mode", icon: "󰃢", group: "Everyday", page: "EverydayPage.qml", description: "Lock keyboard and mouse while you wipe them; hold Esc to leave" },
+        { id: "arrange", label: "Arrange windows", icon: "󰕴", group: "Windows", page: "EverydayPage.qml", description: "Halves, thirds, column widths and more from the app menu, the dock or ⌘⌃A" },
+        { id: "quitOnClose", label: "Quit on close", icon: "󰗼", group: "Windows", page: "EverydayPage.qml", description: "Quit chosen apps when their last window closes" },
+        { id: "quitProtection", label: "Quit protection", icon: "󰌾", group: "Windows", page: "EverydayPage.qml", description: "Hold ⌘Q to quit chosen apps, so a slip doesn't close them" },
         { id: "appMenu", label: "App menu", icon: "󰀻", group: "Desktop", page: "MenuBarPage.qml", description: "Click the app name (or Mod+F10): About, New Window, desktop actions, window commands, Hide, Quit" },
         // Controls: each lives in the Control Center, the menu bar, or both
         // (Controls.qml; arranged in Settings → Menu Bar and CC Edit Controls).

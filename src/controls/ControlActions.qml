@@ -21,7 +21,11 @@ Singleton {
     function trigger(id) {
         switch (id) {
         case "caffeine":
-            Panels.caffeine = !Panels.caffeine;
+            KeepAwake.toggle();
+            break;
+        case "cleaning":
+            closePanels();
+            Cleaning.start();
             break;
         case "nightLight":
             NightLight.enabled = !NightLight.enabled;

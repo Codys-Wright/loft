@@ -18,6 +18,7 @@ import qs.devtools
 import qs.monitor
 import qs.clipboard
 import qs.desktopmenu
+import qs.everyday
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 // Optional modules are gated by the feature registry (services/Features.qml).
@@ -151,4 +152,7 @@ ShellRoot {
         model: Features.on("mixer") ? Quickshell.screens : []
         Mixer {}
     }
+
+    // Cleaning Mode, Keep Awake, Quit on close / protection, Arrange.
+    Everyday {}
 }

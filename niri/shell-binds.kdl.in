@@ -24,6 +24,13 @@ binds {
     Mod+Shift+N hotkey-overlay-title="Scratchpad" { spawn @IPC@ "scratchpad" "toggle"; }
     Mod+Shift+O hotkey-overlay-title="Next Audio Output" { spawn @IPC@ "audio" "nextOutput"; }
     Mod+Shift+M hotkey-overlay-title="Mute Microphones" { spawn @IPC@ "mic" "toggleMute"; }
+    // ⌘Q through the shell (src/everyday/QuitGuard.qml): apps with quit
+    // protection need it held; the rest close the focused window as before.
+    // Alt+F4 is what xremap's macOS layout sends for ⌘Q. Without a shell to
+    // answer, plain close-window. cooldown-ms throttles the held key's repeats.
+    Mod+Q cooldown-ms=100 hotkey-overlay-title="Close Window (hold to quit protected apps)" { spawn "sh" "-c" "\"$@\" quit key || niri msg action close-window" "loft-quit" @IPC@; }
+    Alt+F4 cooldown-ms=100 hotkey-overlay-title=null { spawn "sh" "-c" "\"$@\" quit key || niri msg action close-window" "loft-quit" @IPC@; }
+    Mod+Ctrl+A hotkey-overlay-title="Arrange Window" { spawn @IPC@ "arrange" "open"; }
 }
 
 // ⌘Tab: niri's recent-windows switcher (live previews). xremap sends a
