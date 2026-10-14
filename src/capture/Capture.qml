@@ -1,0 +1,710 @@
+pragma Singleton
+
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import qs.services
+
+// Capture and create (docs/FEATURES.md): the ⌘⇧5 selector, screenshots
+// (area / window / screen), area + screen recording (Recorder), text from
+// screen (OCR + QR), the color picker, and what follows a capture — the
+// floating thumbnail, annotate (satty), pins, GIF export and trim.
+//
+// Area selection happens on a frozen frame: every output is grabbed with
+// grim first, then RegionOverlay shows the frames full-screen with a pixel
+// loupe, and the selection is cropped out of the frozen PNG (ffmpeg) — so
+// what you select is exactly what you saw.
+//
+// Settings: <state>/overrides/capture.json (CapturePage).
+// IPC: capture toggle|area|screen|window|recordArea|recordScreen|text|color|
+//      annotateLast|pinLast|gifLast|trimLast|unpinAll
+//      camera toggle|on|off
+Singleton {
+    id: root
+
+    readonly property string home: Quickshell.env("HOME")
+    readonly property bool dev: Quickshell.env("STUDIO_DEV") === "1"
+    readonly property string tmp: `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/studio-capture`
+
+    // ── Settings ────────────────────────────────────────────────────────
+    readonly property alias cfg: cfg
+    readonly property string screenshotDir: expand(cfg.screenshotDir)
+    readonly property string recordingDir: expand(cfg.recordingDir)
+
+    function expand(p) {
+        return p.startsWith("~") ? home + p.slice(1) : p;
+    }
+
+    function pretty(p) {
+        return p.startsWith(home) ? "~" + p.slice(home.length) : p;
+    }
+
+    // ── State ───────────────────────────────────────────────────────────
+    property bool selectorOpen: false
+    // Selector choice: shot | record | text | color, and its target.
+    property string mode: "shot"
+    property string target: "area"
+
+    // A countdown (selector timer) is running: seconds left.
+    property int countdown: 0
+    property var pendingCapture: null
+
+    // Area selection in progress: what it's for (shot | record | text |
+    // color) and the frozen frame of each output (name → png path).
+    property string selecting: ""
+    property var frozen: ({})
+    // Output the selection started on (keyboard focus / loupe).
+    property string selectScreen: ""
+
+    // The floating thumbnail: { path, kind: "image" | "video", poster }.
+    property var thumbnail: null
+    // Pinned captures (always-on-top windows): [{ id, path, screen }].
+    property var pins: []
+    property int pinSerial: 0
+    // A recording being trimmed: { path, duration }.
+    property var trimming: null
+    // Long-running post-processing (GIF export, trim) for the UI.
+    property string busy: ""
+
+    property bool cameraOn: false
+    property string cameraScreen: ""
+    onCameraOnChanged: if (cameraOn)
+        cameraScreen = screenFocused?.name ?? ""
+    // Published by CameraView: unavailable (no QtMultimedia) | none (no
+    // device) | starting | live | error; the device and the choices.
+    property string cameraState: "unavailable"
+    property string cameraName: ""
+    property string cameraError: ""
+    property var cameraDevices: []
+
+    // Last finished captures, for the IPC follow-ups.
+    property string lastImage: ""
+    property string lastVideo: ""
+
+    readonly property var screenFocused: Quickshell.screens.find(s => s.name === (Niri.focusedWorkspace?.output ?? "")) ?? Quickshell.screens[0] ?? null
+
+    function stamp() {
+        return Qt.formatDateTime(new Date(), "yyyy-MM-dd_HH-mm-ss");
+    }
+
+    // ── Entry points ────────────────────────────────────────────────────
+    function toggleSelector() {
+        selectorOpen ? closeSelector() : openSelector();
+    }
+
+    function openSelector() {
+        if (selecting !== "" || countdown > 0)
+            return;
+        mode = cfg.lastMode;
+        target = cfg.lastTarget;
+        selectorOpen = true;
+    }
+
+    function closeSelector() {
+        selectorOpen = false;
+    }
+
+    // Run the selector's current choice (the Capture button / Enter).
+    function captureSelected() {
+        cfg.lastMode = mode;
+        cfg.lastTarget = target;
+        capture(mode, mode === "text" || mode === "color" ? "area" : target, cfg.timer);
+    }
+
+    // mode: shot | record | text | color; target: area | window | screen.
+    // Which capture kinds the enabled feature modules allow.
+    function allowed(kind) {
+        return kind === "color" ? Features.on("colorPicker") : kind === "text" ? Features.on("ocr") : Features.on("capture");
+    }
+
+    function capture(kind, where, delay) {
+        if (!allowed(kind) || selecting !== "")
+            return;
+        if (kind === "record" && Recorder.active) {
+            Recorder.stop();
+            return;
+        }
+        selectorOpen = false;
+        thumbnailHide.restart();
+        pendingCapture = {
+            kind: kind,
+            where: where
+        };
+        countdown = delay > 0 ? delay : 0;
+        if (countdown > 0)
+            tick.restart();
+        else
+            // Let the selector / thumbnail unmap before grabbing the screen.
+            settle.restart();
+    }
+
+    function cancel() {
+        tick.stop();
+        settle.stop();
+        countdown = 0;
+        pendingCapture = null;
+        selecting = "";
+        frozen = {};
+    }
+
+    Timer {
+        id: tick
+        interval: 1000
+        repeat: true
+        onTriggered: {
+            root.countdown--;
+            if (root.countdown <= 0) {
+                stop();
+                settle.restart();
+            }
+        }
+    }
+
+    Timer {
+        id: settle
+        interval: 180
+        onTriggered: root.run()
+    }
+
+    Timer {
+        id: thumbnailHide
+        interval: 1
+        onTriggered: root.thumbnail = null
+    }
+
+    function run() {
+        const p = pendingCapture;
+        pendingCapture = null;
+        if (!p)
+            return;
+        if (p.where === "area")
+            freeze(p.kind);
+        else if (p.kind === "record")
+            Recorder.start({
+                output: screenFocused?.name ?? ""
+            });
+        else if (p.where === "window")
+            shootWindow();
+        else
+            shootScreen();
+    }
+
+    // ── Screenshots ─────────────────────────────────────────────────────
+    function newShotPath() {
+        return `${screenshotDir}/Screenshot_${stamp()}.png`;
+    }
+
+    function shootScreen() {
+        const out = newShotPath();
+        const name = screenFocused?.name ?? "";
+        exec(["sh", "-c", 'mkdir -p "$(dirname "$2")" && exec grim ${3:+-c} ${1:+-o "$1"} "$2"', "sh", name, out, cfg.showPointer ? "1" : ""], (code, _out, err) => code === 0 ? shotDone(out) : failed("Screenshot failed", err));
+    }
+
+    function shootWindow() {
+        const w = Niri.focusedWindow;
+        if (!w) {
+            failed("No window to capture", "Focus a window first");
+            return;
+        }
+        const out = newShotPath();
+        // niri writes the file and copies it; ScreenshotCaptured(path) follows.
+        exec(["mkdir", "-p", screenshotDir], () => Niri.action("ScreenshotWindow", {
+                id: w.id,
+                write_to_disk: true,
+                show_pointer: cfg.showPointer,
+                path: out
+            }));
+    }
+
+    // A finished image capture of ours (niri's own come via screenshotTaken).
+    function shotDone(path) {
+        if (cfg.copyToClipboard)
+            exec(["sh", "-c", 'wl-copy --type image/png < "$1"', "sh", path]);
+        // The island's shutter flash + our thumbnail listen to this.
+        Niri.screenshotTaken(path);
+    }
+
+    Connections {
+        target: Niri
+        function onScreenshotTaken(path) {
+            if (path === "")
+                return;
+            root.lastImage = path;
+            if (root.cfg.annotateAfter)
+                root.annotate(path);
+            else if (root.cfg.showThumbnail)
+                root.thumbnail = {
+                    path: path,
+                    kind: "image",
+                    poster: path
+                };
+        }
+    }
+
+    // ── Area selection on frozen frames ─────────────────────────────────
+    function freeze(kind) {
+        const shots = {};
+        const cmds = [];
+        for (const s of Quickshell.screens) {
+            const f = `${tmp}/frozen-${s.name}-${Date.now()}.png`;
+            shots[s.name] = f;
+            cmds.push(`grim -o '${s.name.replace(/'/g, "")}' '${f}'`);
+        }
+        exec(["sh", "-c", `rm -f "$1"/frozen-*.png; mkdir -p "$1" && ${cmds.join(" && ")}`, "sh", tmp], (code, _out, err) => {
+            if (code !== 0) {
+                failed("Couldn't capture the screen", err);
+                return;
+            }
+            root.frozen = shots;
+            root.selectScreen = root.screenFocused?.name ?? "";
+            root.selecting = kind;
+        });
+    }
+
+    // From RegionOverlay: rect in the screen's logical coords, px = the same
+    // rect in the frozen image's pixels; color = the picked pixel (#rrggbb).
+    function selected(screen, rect, px, color) {
+        const kind = selecting;
+        const src = frozen[screen.name] ?? "";
+        selecting = "";
+        if (kind === "color") {
+            pickedColor(color);
+        } else if (kind === "record") {
+            const geo = `${Math.round(screen.x + rect.x)},${Math.round(screen.y + rect.y)} ${Math.round(rect.width)}x${Math.round(rect.height)}`;
+            Recorder.start({
+                geometry: geo
+            });
+        } else if (kind === "text") {
+            const out = `${tmp}/ocr-${Date.now()}.png`;
+            crop(src, px, out, () => recognize(out));
+        } else {
+            const out = newShotPath();
+            crop(src, px, out, () => root.shotDone(out));
+        }
+        frozen = {};
+    }
+
+    function crop(src, px, out, then) {
+        // Even sizes aren't needed for PNG; clamp to at least 1 px.
+        const w = Math.max(1, Math.round(px.width)), h = Math.max(1, Math.round(px.height));
+        exec(["sh", "-c", 'mkdir -p "$(dirname "$2")" && ffmpeg -v error -y -i "$1" -vf "crop=$3:$4:$5:$6" -frames:v 1 -update 1 "$2"', "sh", src, out, `${w}`, `${h}`, `${Math.round(px.x)}`, `${Math.round(px.y)}`], (code, _o, err) => code === 0 ? then() : failed("Capture failed", err));
+    }
+
+    // ── Text from screen (QR first, then OCR) ───────────────────────────
+    function recognize(png) {
+        exec(["sh", "-c", 'zbarimg -q --raw "$1" 2>/dev/null', "sh", png], (code, out) => {
+            const qr = out.trim();
+            if (code === 0 && qr !== "") {
+                root.copied(qr, "QR code copied", "qr");
+                root.exec(["rm", "-f", png]);
+                return;
+            }
+            root.exec(["tesseract", png, "-", "-l", root.cfg.ocrLanguage || "eng"], (c, text, err) => {
+                root.exec(["rm", "-f", png]);
+                const t = text.replace(/\f/g, "").replace(/\n{3,}/g, "\n\n").trim();
+                if (c !== 0)
+                    root.failed("Text recognition failed", err);
+                else if (t === "")
+                    root.failed("No text found", "Try a larger or sharper selection");
+                else
+                    root.copied(t, "Text copied", "ocr");
+            });
+        });
+    }
+
+    // Last recognized text, for the banner's body and tests.
+    property string lastText: ""
+
+    function copied(text, summary, kind) {
+        lastText = text;
+        exec(["wl-copy", "--", text]);
+        Notifications.show({
+            appName: kind === "qr" ? "QR Code" : "Text from Screen",
+            appIcon: kind === "qr" ? "view-barcode-qr" : "edit-select-text",
+            summary: summary,
+            body: text.replace(/\s+/g, " "),
+            image: "",
+            actions: []
+        });
+    }
+
+    // ── Color picker ────────────────────────────────────────────────────
+    readonly property var colorFormats: [
+        {
+            value: "hex",
+            label: "HEX  #7aa2f7"
+        },
+        {
+            value: "rgb",
+            label: "RGB  rgb(122, 162, 247)"
+        },
+        {
+            value: "hsl",
+            label: "HSL  hsl(221, 89%, 72%)"
+        },
+        {
+            value: "qml",
+            label: "QML  Qt.rgba(0.478, …)"
+        }
+    ]
+
+    function formatColor(hex, fmt) {
+        const c = Qt.color(hex);
+        const r = Math.round(c.r * 255), g = Math.round(c.g * 255), b = Math.round(c.b * 255);
+        switch (fmt) {
+        case "rgb":
+            return `rgb(${r}, ${g}, ${b})`;
+        case "hsl":
+            {
+                const max = Math.max(c.r, c.g, c.b), min = Math.min(c.r, c.g, c.b);
+                const l = (max + min) / 2;
+                const d = max - min;
+                let h = 0, s = 0;
+                if (d > 0) {
+                    s = d / (1 - Math.abs(2 * l - 1));
+                    if (max === c.r)
+                        h = ((c.g - c.b) / d) % 6;
+                    else if (max === c.g)
+                        h = (c.b - c.r) / d + 2;
+                    else
+                        h = (c.r - c.g) / d + 4;
+                    h = Math.round(h * 60);
+                    if (h < 0)
+                        h += 360;
+                }
+                return `hsl(${h}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%)`;
+            }
+        case "qml":
+            return `Qt.rgba(${c.r.toFixed(3)}, ${c.g.toFixed(3)}, ${c.b.toFixed(3)}, 1)`;
+        default:
+            return hex.toLowerCase();
+        }
+    }
+
+    property string lastColor: ""
+
+    function pickedColor(hex) {
+        if (!hex)
+            return;
+        lastColor = hex;
+        cfg.recentColors = [hex].concat(cfg.recentColors.filter(c => c !== hex)).slice(0, 10);
+        copyColor(hex);
+    }
+
+    function copyColor(hex) {
+        const text = formatColor(hex, cfg.colorFormat);
+        exec(["wl-copy", "--", text]);
+        Notifications.show({
+            appName: "Color Picker",
+            appIcon: "color-select",
+            summary: `${text} copied`,
+            body: cfg.colorFormat === "hex" ? formatColor(hex, "rgb") : hex,
+            image: "",
+            actions: []
+        });
+    }
+
+    // ── Follow-ups ──────────────────────────────────────────────────────
+    function annotate(path) {
+        thumbnail = null;
+        // satty saves over the capture (Ctrl+S) and copies with wl-copy.
+        Quickshell.execDetached(["satty", "--filename", path, "--output-filename", path, "--copy-command", "wl-copy", "--early-exit"]);
+    }
+
+    function pin(path) {
+        thumbnail = null;
+        pinSerial++;
+        pins = pins.concat([
+            {
+                id: pinSerial,
+                path: path,
+                screen: screenFocused?.name ?? ""
+            }
+        ]);
+    }
+
+    function unpin(id) {
+        pins = pins.filter(p => p.id !== id);
+    }
+
+    function open(path) {
+        Quickshell.execDetached(["xdg-open", path]);
+    }
+
+    function trash(path) {
+        thumbnail = null;
+        exec(["sh", "-c", 'gio trash "$1" 2>/dev/null || rm -f "$1"', "sh", path]);
+    }
+
+    // A recording finished (Recorder): thumbnail with a poster frame.
+    function recordingDone(path) {
+        lastVideo = path;
+        if (!cfg.showThumbnail)
+            return;
+        const poster = `${tmp}/poster-${Date.now()}.png`;
+        exec(["sh", "-c", 'mkdir -p "$(dirname "$2")" && ffmpeg -v error -y -i "$1" -frames:v 1 -update 1 "$2"', "sh", path, poster], code => {
+            root.thumbnail = {
+                path: path,
+                kind: "video",
+                poster: code === 0 ? poster : ""
+            };
+        });
+    }
+
+    Connections {
+        target: Recorder
+        function onFinished(path, ok) {
+            if (ok)
+                root.recordingDone(path);
+        }
+    }
+
+    function exportGif(path) {
+        const out = path.replace(/\.[^./]+$/, "") + ".gif";
+        busy = "Exporting GIF…";
+        const fps = cfg.gifFps, width = cfg.gifWidth;
+        exec(["ffmpeg", "-v", "error", "-y", "-i", path, "-vf", `fps=${fps},scale='min(${width},iw)':-2:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4`, "-loop", "0", out], (code, _o, err) => {
+            root.busy = "";
+            if (code !== 0) {
+                root.failed("GIF export failed", err);
+                return;
+            }
+            Notifications.show({
+                appName: "Screen Recording",
+                appIcon: "image-gif",
+                summary: "GIF exported",
+                body: root.pretty(out),
+                image: "",
+                actions: []
+            });
+        });
+    }
+
+    function startTrim(path) {
+        thumbnail = null;
+        exec(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", path], (code, out) => {
+            const d = parseFloat(out);
+            if (code !== 0 || !(d > 0)) {
+                root.failed("Can't read the recording", path);
+                return;
+            }
+            root.trimming = {
+                path: path,
+                duration: d
+            };
+        });
+    }
+
+    // Cut [start, end] seconds into "<name>-trimmed.<ext>" (re-encodes video
+    // for a frame-exact start; audio tracks are kept).
+    function trim(path, start, end) {
+        trimming = null;
+        const out = path.replace(/(\.[^./]+)$/, "-trimmed$1");
+        busy = "Trimming…";
+        exec(["ffmpeg", "-v", "error", "-y", "-ss", start.toFixed(3), "-to", end.toFixed(3), "-i", path, "-map", "0", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "copy", out], (code, _o, err) => {
+            root.busy = "";
+            if (code !== 0) {
+                root.failed("Trim failed", err);
+                return;
+            }
+            root.recordingDone(out);
+        });
+    }
+
+    function failed(summary, detail) {
+        console.warn(`Capture: ${summary}: ${detail ?? ""}`);
+        Notifications.show({
+            appName: "Capture",
+            appIcon: "dialog-warning",
+            summary: summary,
+            body: (detail ?? "").trim().split("\n").slice(-1)[0] ?? "",
+            image: "",
+            actions: []
+        });
+    }
+
+    // ── Process helper ──────────────────────────────────────────────────
+    // exec(argv, cb(code, stdout, stderr)) — one Process per job.
+    function exec(argv, cb) {
+        const job = jobComponent.createObject(root, {
+            command: argv,
+            callback: cb ?? null
+        });
+        job.running = true;
+    }
+
+    Component {
+        id: jobComponent
+        Process {
+            id: job
+            property var callback: null
+            stdout: StdioCollector {
+                id: out
+            }
+            stderr: StdioCollector {
+                id: err
+            }
+            onExited: code => {
+                if (job.callback)
+                    job.callback(code, out.text, err.text);
+                job.destroy();
+            }
+        }
+    }
+
+    // ── Recorder + settings plumbing ────────────────────────────────────
+    Binding {
+        target: Recorder
+        property: "dir"
+        value: root.recordingDir
+    }
+    Binding {
+        target: Recorder
+        property: "audio"
+        value: root.cfg.audio
+    }
+
+    FileView {
+        id: view
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onAdapterUpdated: writeAdapter()
+        onLoadFailed: error => {
+            if (error === FileViewError.FileNotFound)
+                mkdir.running = true;
+        }
+
+        JsonAdapter {
+            id: cfg
+
+            property string screenshotDir: "~/Pictures/Screenshots"
+            property string recordingDir: "~/Videos/Recordings"
+            // Selector defaults (remembered).
+            property string lastMode: "shot"
+            property string lastTarget: "area"
+            property int timer: 0 // seconds: 0, 3, 10
+            property bool copyToClipboard: true
+            property bool showThumbnail: true
+            property bool annotateAfter: false
+            property bool showPointer: false
+            // Recording audio: none | system | mic | both (separate tracks).
+            property string audio: "none"
+            property int gifFps: 15
+            property int gifWidth: 960
+            property string ocrLanguage: "eng"
+            // Color picker: hex | rgb | hsl | qml.
+            property string colorFormat: "hex"
+            property list<string> recentColors: []
+            // Camera mirror: circle | rounded; size in px; mirrored.
+            property string cameraShape: "circle"
+            property int cameraSize: 220
+            property bool cameraMirror: true
+            property string cameraDevice: "" // id; "" = system default
+        }
+    }
+
+    Component.onCompleted: view.path = `${Settings.stateDir}/overrides/capture.json`
+
+    Process {
+        id: mkdir
+        command: ["mkdir", "-p", `${Settings.stateDir}/overrides`]
+        onExited: {
+            view.writeAdapter();
+            view.path = "";
+            view.path = `${Settings.stateDir}/overrides/capture.json`;
+        }
+    }
+
+    // ── IPC ─────────────────────────────────────────────────────────────
+    IpcHandler {
+        target: "capture"
+
+        function toggle(): void {
+            if (Features.on("capture"))
+                root.toggleSelector();
+        }
+        function area(): void {
+            root.capture("shot", "area", 0);
+        }
+        function screen(): void {
+            root.capture("shot", "screen", 0);
+        }
+        function window(): void {
+            root.capture("shot", "window", 0);
+        }
+        function recordArea(): void {
+            root.capture("record", "area", 0);
+        }
+        function recordScreen(): void {
+            root.capture("record", "screen", 0);
+        }
+        function text(): void {
+            root.capture("text", "area", 0);
+        }
+        function color(): void {
+            root.capture("color", "area", 0);
+        }
+        function cancel(): void {
+            root.cancel();
+            root.selectorOpen = false;
+        }
+        function annotateLast(): void {
+            if (root.lastImage)
+                root.annotate(root.lastImage);
+        }
+        function pinLast(): void {
+            if (root.lastImage)
+                root.pin(root.lastImage);
+        }
+        function gifLast(): void {
+            if (root.lastVideo)
+                root.exportGif(root.lastVideo);
+        }
+        function trimLast(): void {
+            if (root.lastVideo)
+                root.startTrim(root.lastVideo);
+        }
+        function unpinAll(): void {
+            root.pins = [];
+        }
+        function lastText(): string {
+            return root.lastText;
+        }
+        function lastColor(): string {
+            return root.lastColor;
+        }
+
+        // Tests (STUDIO_DEV=1 only): finish the open area selection with a
+        // fixed rect / pick a fixed pixel, since slurp-style dragging needs
+        // real pointer input.
+        function testSelect(): void {
+            if (root.dev)
+                root.testRequested("select");
+        }
+        function testPick(): void {
+            if (root.dev)
+                root.testRequested("pick");
+        }
+        function testHover(): void {
+            if (root.dev)
+                root.testRequested("hover");
+        }
+    }
+
+    signal testRequested(string what)
+
+    IpcHandler {
+        target: "camera"
+
+        function toggle(): void {
+            root.cameraOn = !root.cameraOn && Features.on("camera");
+        }
+        function on(): void {
+            root.cameraOn = Features.on("camera");
+        }
+        function off(): void {
+            root.cameraOn = false;
+        }
+    }
+}

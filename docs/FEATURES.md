@@ -85,12 +85,12 @@ in parallel without touching each other.
 ## Capture and create — wave 1 (capture)
 | Feature | Status | How |
 |---|---|---|
-| Unified capture selector (shot/record/OCR/color) | partial (recorder) | one glass selector; area/window/screen via niri + slurp |
-| Screenshot annotate/crop/redact/pin | todo | satty for annotation; pinned captures as floating windows |
-| Screen recording with mic + system tracks, trim, GIF | partial | wf-recorder audio options; ffmpeg trim/GIF |
-| Camera preview | todo | QtMultimedia camera in the island / a floating mirror |
-| Text from screen (OCR) + QR | todo | tesseract + zbar on a slurp region |
-| Color picker | todo | hyprpicker (wlr-screencopy) → HEX/RGB/HSL |
+| Unified capture selector (shot/record/OCR/color) | have | ⌘⇧5 glass toolbar (`capture toggle`): screen / focused window / area shots, screen / area recording, Text, Color, Options (save to, timer 0/3/10 s, thumbnail, clipboard, annotate, pointer, audio, color format); ⌘⇧4 area, ⌘⇧3 screen. Area selection is a QML overlay on frozen grim frames with a pixel loupe; window shots via niri `screenshot-window --path` |
+| Screenshot annotate/crop/redact/pin | have | floating thumbnail (click → satty, drag the file out, pin, delete); pins are always-on-top layer windows (drag, scroll to zoom, double-click to annotate) |
+| Screen recording with mic + system tracks, trim, GIF | have | Recorder: area (`-g`) or output; audio none / system (default monitor) / mic / both (mic recorded by ffmpeg, muxed as a 2nd track); thumbnail → Trim (range + frame previews) and Export GIF (palettegen) |
+| Camera preview | have | QtMultimedia camera in a floating round/rounded mirror (`camera toggle`) + an island Camera page; "No camera" / "in use" / "unavailable" states |
+| Text from screen (OCR) + QR | have | region → zbarimg (QR first) → tesseract → clipboard + island banner |
+| Color picker | have | loupe on the frozen frame, HEX/RGB/HSL/QML, recent colors in the selector and Settings |
 | Media tools (compress, convert, watermark) | todo (later) | ffmpeg / imagemagick presets |
 
 ## App management — wave 2 (system tools)

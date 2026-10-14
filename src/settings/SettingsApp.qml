@@ -26,6 +26,7 @@ Scope {
         { id: "input", icon: "󰌌", label: "Keyboard & Mouse" },
         { id: "layout", icon: "󰕰", label: "Layout & Motion" },
         { id: "keybinds", icon: "󰘳", label: "Keybinds" },
+        { id: "capture", icon: "󰹑", label: "Capture", feature: "capture" },
         { id: "features", icon: "󰐱", label: "Features" },
         { id: "about", icon: "󰋼", label: "About" }
     ]
@@ -54,6 +55,9 @@ Scope {
 
         function features(): void {
             root.show("features");
+        }
+        function capture(): void {
+            root.show("capture");
         }
     }
 
@@ -536,6 +540,11 @@ Scope {
                         FeaturesPage {
                             Layout.fillWidth: true
                             visible: root.section === "features"
+                        }
+
+                        CapturePage {
+                            Layout.fillWidth: true
+                            visible: root.section === "capture"
                         }
 
                         // About

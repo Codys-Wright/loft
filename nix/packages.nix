@@ -28,6 +28,19 @@
         foot # the demo session's terminal (Mod+Return); consumers bind their own
         gammastep # Night Light
         wf-recorder # Screen recording
+        # Capture: frozen frames, crop/GIF/trim/mic track, clipboard, annotate.
+        grim
+        ffmpeg
+        wl-clipboard
+        satty
+        # Text from screen: English OCR (add languages with
+        # tesseract.override { enableLanguages = [ … ]; }) and QR codes.
+        (tesseract.override { enableLanguages = [ "eng" ]; })
+        (zbar.override {
+          enableVideo = false;
+          withXorg = false;
+          enableDbus = false;
+        })
         walker # Spotlight launcher (frontend)
         elephant # launcher data providers
         jq
@@ -54,6 +67,12 @@
       shellBinds = pkgs.runCommand "studio-shell-binds.kdl" { } ''
         sed 's|@IPC@|"${lib.getExe pkgs.quickshell}" "ipc" "--path" "${../src}" "call"|g' \
           ${../niri/shell-binds.kdl.in} > $out
+      '';
+
+      # QtMultimedia for the camera mirror, matching Quickshell's Qt.
+      qtMultimediaEnv = ''
+        export QML_IMPORT_PATH="${pkgs.qt6.qtmultimedia}/lib/qt-6/qml''${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
+        export QT_PLUGIN_PATH="${pkgs.qt6.qtmultimedia}/lib/qt-6/plugins''${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
       '';
 
       python = pkgs.python3.withPackages (ps: [ ps.jsonschema ]);
@@ -83,6 +102,7 @@
               export STUDIO_THEME_FILE="$state/current/theme.json"
             fi
             export STUDIO_UI_FONT="${uiFont}" STUDIO_ICON_FONT="${iconFont}"
+            ${qtMultimediaEnv}
             # STUDIO_SHELL_SRC runs the QML from a checkout instead (hot reload);
             # the CLI's IPC hooks must target the same path.
             src="''${STUDIO_SHELL_SRC:-${../src}}"
@@ -176,7 +196,7 @@
             include optional=true "$root/niri/dev-local.kdl"
             include optional=true "$dir/overrides/niri.kdl"
             spawn-at-startup "env" "STUDIO_STATE_DIR=$dir" "STUDIO_LAUNCHER_DIR=$root/launcher" "studio-launcher" "service"
-            spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_NIRI_CONFIG=$dir/config.kdl" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "quickshell" "--path" "$root/src"
+            spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_NIRI_CONFIG=$dir/config.kdl" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "QML_IMPORT_PATH=${pkgs.qt6.qtmultimedia}/lib/qt-6/qml" "QT_PLUGIN_PATH=${pkgs.qt6.qtmultimedia}/lib/qt-6/plugins" "quickshell" "--path" "$root/src"
             EOF
 
             echo "studio-dev: niri config $dir/config.kdl, shell from $root/src"

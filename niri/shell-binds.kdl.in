@@ -11,6 +11,10 @@ binds {
     Mod+Shift+T hotkey-overlay-title="Themes" { spawn @IPC@ "themes" "open"; }
     Mod+Comma hotkey-overlay-title="Settings" { spawn @IPC@ "settings" "toggle"; }
     Mod+Shift+W hotkey-overlay-title="Wallpapers" { spawn @IPC@ "wallpaper" "toggle"; }
+    // macOS ⌘⇧5 / ⌘⇧4 / ⌘⇧3 (these win over base.kdl's move-column-to-workspace 3–5).
+    Mod+Shift+5 hotkey-overlay-title="Capture" { spawn @IPC@ "capture" "toggle"; }
+    Mod+Shift+4 hotkey-overlay-title="Capture Area" { spawn @IPC@ "capture" "area"; }
+    Mod+Shift+3 hotkey-overlay-title="Capture Screen" { spawn @IPC@ "capture" "screen"; }
     // macOS Ctrl+Cmd+Q.
     Mod+Ctrl+Q hotkey-overlay-title="Lock Screen" { spawn @IPC@ "lock" "lock"; }
 }
