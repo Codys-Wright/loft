@@ -1,0 +1,114 @@
+// studio-linux base niri config.
+//
+// Consumers `include` this first and override anything after it — includes
+// are positional, so later settings win. Theme-owned settings (focus ring
+// colors, blur strength) will move to a generated theme fragment (PLAN §4.2).
+//
+// Mod is Super in a real session and Alt when niri runs nested as a window.
+
+prefer-no-csd
+
+hotkey-overlay {
+    skip-at-startup
+}
+
+screenshot-path null
+
+input {
+    keyboard {
+        xkb {
+            layout "us"
+        }
+    }
+    focus-follows-mouse max-scroll-amount="0%"
+}
+
+layout {
+    gaps 12
+    center-focused-column "never"
+    background-color "transparent"
+
+    preset-column-widths {
+        proportion 0.33333
+        proportion 0.5
+        proportion 0.66667
+    }
+    default-column-width { proportion 0.5; }
+
+    focus-ring {
+        width 2
+        active-color "#7aa2f7cc"
+        inactive-color "#00000000"
+    }
+
+    border {
+        off
+    }
+
+    shadow {
+        on
+        softness 30
+        spread 4
+        offset x=0 y=8
+        color "#00000055"
+    }
+
+    // The shell's menu bar sits on top; leave room for it.
+    struts {
+        top 0
+    }
+}
+
+// Rounded windows everywhere, so window blur and shadows follow the shape.
+window-rule {
+    geometry-corner-radius 12
+    clip-to-geometry true
+}
+
+// Global blur quality for everything that requests it (the shell's glass
+// surfaces request it themselves through ext-background-effect).
+blur {
+    passes 3
+    offset 4
+    noise 0.02
+    saturation 1.6
+}
+
+binds {
+    Mod+Return hotkey-overlay-title="Terminal" { spawn "foot"; }
+    Mod+Q { close-window; }
+    Mod+Shift+E { quit; }
+    Mod+Shift+Slash { show-hotkey-overlay; }
+    Mod+O { toggle-overview; }
+
+    Mod+H { focus-column-left; }
+    Mod+L { focus-column-right; }
+    Mod+J { focus-window-or-workspace-down; }
+    Mod+K { focus-window-or-workspace-up; }
+    Mod+Left { focus-column-left; }
+    Mod+Right { focus-column-right; }
+    Mod+Down { focus-window-or-workspace-down; }
+    Mod+Up { focus-window-or-workspace-up; }
+
+    Mod+Shift+H { move-column-left; }
+    Mod+Shift+L { move-column-right; }
+    Mod+Shift+J { move-window-down-or-to-workspace-down; }
+    Mod+Shift+K { move-window-up-or-to-workspace-up; }
+
+    Mod+W { switch-preset-column-width; }
+    Mod+F { maximize-column; }
+    Mod+Shift+F { fullscreen-window; }
+    Mod+C { center-column; }
+    Mod+V { toggle-window-floating; }
+
+    Mod+1 { focus-workspace 1; }
+    Mod+2 { focus-workspace 2; }
+    Mod+3 { focus-workspace 3; }
+    Mod+4 { focus-workspace 4; }
+    Mod+5 { focus-workspace 5; }
+    Mod+Shift+1 { move-column-to-workspace 1; }
+    Mod+Shift+2 { move-column-to-workspace 2; }
+    Mod+Shift+3 { move-column-to-workspace 3; }
+    Mod+Shift+4 { move-column-to-workspace 4; }
+    Mod+Shift+5 { move-column-to-workspace 5; }
+}

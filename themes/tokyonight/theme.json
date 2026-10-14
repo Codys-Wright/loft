@@ -1,0 +1,27 @@
+{
+  "name": "tokyonight",
+  "polarity": "dark",
+  "palette": {
+    "bg": "#1a1b26",
+    "surface": "#24283b",
+    "overlay": "#414868",
+    "text": "#c0caf5",
+    "subtext": "#a9b1d6",
+    "accent": "#7aa2f7",
+    "accent2": "#bb9af7",
+    "urgent": "#f7768e",
+    "ok": "#9ece6a",
+    "warn": "#e0af68"
+  },
+  "glass": {
+    "blur": true,
+    "tint": "#1a1b26",
+    "opacity": 0.45,
+    "border": "#ffffff",
+    "borderOpacity": 0.14,
+    "radius": 14
+  },
+  "wallpaper": {
+    "gradient": ["#16161e", "#2a3a6e", "#6b4fa3"]
+  }
+}

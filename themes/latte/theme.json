@@ -1,0 +1,27 @@
+{
+  "name": "latte",
+  "polarity": "light",
+  "palette": {
+    "bg": "#eff1f5",
+    "surface": "#e6e9ef",
+    "overlay": "#bcc0cc",
+    "text": "#4c4f69",
+    "subtext": "#6c6f85",
+    "accent": "#1e66f5",
+    "accent2": "#8839ef",
+    "urgent": "#d20f39",
+    "ok": "#40a02b",
+    "warn": "#df8e1d"
+  },
+  "glass": {
+    "blur": true,
+    "tint": "#ffffff",
+    "opacity": 0.5,
+    "border": "#ffffff",
+    "borderOpacity": 0.6,
+    "radius": 14
+  },
+  "wallpaper": {
+    "gradient": ["#dce0e8", "#a6c8ff", "#e3c6ff"]
+  }
+}
