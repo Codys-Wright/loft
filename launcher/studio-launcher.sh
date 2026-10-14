@@ -36,6 +36,10 @@ prepare() {
   fi
 }
 
+# walker is a layer-shell surface: it must be a native Wayland client, even
+# when the session exports GDK_BACKEND=x11 for some other app's sake.
+export GDK_BACKEND=wayland
+
 case "${1:-open}" in
   service)
     prepare
