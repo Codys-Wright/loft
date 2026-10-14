@@ -6,6 +6,7 @@ import qs.bar
 import qs.dock
 import qs.controlcenter
 import qs.island
+import qs.lock
 import qs.osd
 import qs.switcher
 
@@ -45,4 +46,6 @@ ShellRoot {
         model: Quickshell.screens
         Switcher {}
     }
+
+    Lock {}
 }

@@ -5,4 +5,6 @@ binds {
     Mod+Shift+Tab { spawn @IPC@ "switcher" "prev"; }
     Mod+A hotkey-overlay-title="Control Center" { spawn @IPC@ "controlcenter" "toggle"; }
     Mod+I hotkey-overlay-title="Island" { spawn @IPC@ "island" "toggle"; }
+    // macOS Ctrl+Cmd+Q.
+    Mod+Ctrl+Q hotkey-overlay-title="Lock Screen" { spawn @IPC@ "lock" "lock"; }
 }
