@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.capture
+import qs.menubar
 import qs.services
 
 // The desktop's right-click menu: a right-click on the wallpaper (a click
@@ -48,7 +49,7 @@ Singleton {
         { id: "displays", label: "Display Settings…", hint: "Settings → Displays" },
         { id: "dock", label: "Dock Settings…", feature: "dock", hint: "Settings → Dock" },
         { id: "controlCenter", label: "Control Center", feature: "controlcenter", hint: "Opens on this display" },
-        { id: "notifications", label: "Notification History", feature: "island", hint: "The island's notifications page" },
+        { id: "notifications", label: "Notification History", hint: "Calendar and recent notifications (the clock's panel)" },
         { id: "sep-panels", separator: true },
         { id: "screenshot", label: "Screenshot", icon: "󰹑", submenu: true, feature: "capture", hint: "Capture selector, screen or area" },
         { id: "terminal", label: "Open Terminal Here", icon: "󰆍", hint: "In ~/Desktop, or your home folder" },
@@ -353,7 +354,9 @@ Singleton {
                 break;
             }
         case "notifications":
-            it.run = () => root.shellIpc("island", "notifications");
+            // The clock's panel — calendar + notifications, Notification
+            // Center in short — on the display with the status area.
+            it.run = () => MenuState.openExtra(Displays.activeName || root.screen, "clock", null, false);
             break;
         case "screenshot":
             it.build = () => root.screenshotItems();
@@ -386,6 +389,22 @@ Singleton {
         return Vibes.wallpaperFor(screen);
     }
 
+    // With several displays a choice from the desktop menu is for the
+    // display that was right-clicked (Vibes' per-display choice, by niri
+    // identity); with one it is the theme's choice.
+    readonly property bool multiDisplay: Quickshell.screens.length > 1
+
+    function ownChoice(screenName) {
+        return !!(Vibes.displayChoices[Displays.identity(screenName)] ?? Vibes.displayChoices[screenName]);
+    }
+
+    function chooseWallpaper(path) {
+        if (multiDisplay)
+            Vibes.chooseWallpaperFor(screen, path);
+        else
+            Vibes.chooseWallpaper(path);
+    }
+
     function stepWallpaper(dir) {
         const set = vibeSet;
         if (set.length === 0)
@@ -393,13 +412,13 @@ Singleton {
         let i = set.indexOf(currentWallpaper());
         if (i < 0)
             i = set.indexOf(Vibes.defaultWallpaper);
-        Vibes.chooseWallpaper(set[((i < 0 ? 0 : i + dir) % set.length + set.length) % set.length]);
+        chooseWallpaper(set[((i < 0 ? 0 : i + dir) % set.length + set.length) % set.length]);
     }
 
     function shuffleWallpaper() {
         const set = vibeSet.filter(p => p !== currentWallpaper());
         if (set.length > 0)
-            Vibes.chooseWallpaper(set[Math.floor(Math.random() * set.length)]);
+            chooseWallpaper(set[Math.floor(Math.random() * set.length)]);
     }
 
     function wallpaperName(path) {
@@ -430,7 +449,7 @@ Singleton {
         }
         if (picks.length > 0) {
             items.push(sep("s-picks"));
-            items.push(header("h-picks", `Goes with ${prettyTheme(Theme.name).label}`));
+            items.push(header("h-picks", `Goes with ${prettyTheme(Theme.name).label}` + (multiDisplay ? ` · ${screen}` : "")));
             for (const w of picks) {
                 const path = w.path;
                 const thumb = Library.byPath[path]?.thumb ?? "";
@@ -441,12 +460,22 @@ Singleton {
                     enabled: true,
                     toggle: "radio",
                     checked: path === cur,
-                    run: () => Vibes.chooseWallpaper(path)
+                    run: () => root.chooseWallpaper(path)
                 });
             }
         }
         items.push(sep("s-browse"));
-        if (Vibes.chosenWallpaper !== "")
+        if (multiDisplay) {
+            // This display has its own; or put this display's on all of them.
+            const s = screen;
+            items.push({ key: "all", label: "Use on All Displays", enabled: true, run: () => {
+                    Vibes.setChoice("displays", {});
+                    Vibes.chooseWallpaper(cur);
+                } });
+            if (ownChoice(s))
+                items.push({ key: "follow", label: "Same as Other Displays", enabled: true, run: () => Vibes.chooseWallpaperFor(s, "") });
+        }
+        if (Vibes.chosenWallpaper !== "" && !(multiDisplay && ownChoice(screen)))
             items.push({ key: "default", label: "Use Theme's Wallpaper", enabled: true, run: () => Vibes.chooseWallpaper("") });
         if (Features.on("wallpaperPicker"))
             items.push({ key: "picker", label: "Wallpaper Picker…", enabled: true, run: () => {
@@ -575,11 +604,6 @@ Singleton {
     function openTerminal() {
         // ~/Desktop when there is one; the first terminal found.
         Quickshell.execDetached(["sh", "-c", 'd="$HOME/Desktop"; [ -d "$d" ] || d="$HOME"; cd "$d" || exit 1; for t in "$TERMINAL" xdg-terminal-exec ghostty kitty foot alacritty wezterm konsole gnome-terminal xterm; do [ -n "$t" ] && command -v "$t" >/dev/null 2>&1 && exec "$t"; done', "studio-terminal"]);
-    }
-
-    // Surfaces that live per screen and only take IPC (the island).
-    function shellIpc(target, fn) {
-        Quickshell.execDetached(["quickshell", "ipc", "--path", Quickshell.shellDir, "call", target, fn]);
     }
 
     // Data the submenus show.
