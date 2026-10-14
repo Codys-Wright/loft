@@ -22,8 +22,9 @@ import Quickshell.Io
 // space is P5: see applyTheme().
 //
 // When the outputs change, `space render` (re-resolves roles → spaces.kdl;
-// a no-op when nothing moved) and `space ensure <active>` (puts the active
-// space's workspaces back on their displays, §3.3). Only once spaces are in
+// a no-op when nothing moved), `space ensure <active>` (puts the active
+// space's workspaces back on their displays, §3.3) and `space gather
+// <active>` (its windows back where the new layout puts them). Only once spaces are in
 // use, i.e. `overrides/spaces.kdl` exists: until then nothing is rendered
 // behind the user's back.
 //
@@ -117,13 +118,12 @@ Singleton {
         const prev = active;
         activeId = id;
         // The first space found after a (re)start isn't a switch.
-        if (persist.announced) {
+        if (prev !== null) {
             activated(active, prev);
             // Without the island, the on-screen pill says it (Osd.qml).
             if (!Features.on("island"))
                 Sound.announced(active.icon || "󰕰", active.name);
         }
-        persist.announced = true;
         apply();
     }
 
@@ -206,7 +206,7 @@ Singleton {
     property var queue: []
 
     function run(args) {
-        queue = queue.concat([["loft-niri", "space"].concat(args)]);
+        queue = queue.concat([["loft-niri", "--json", "space"].concat(args)]);
         if (!runner.running)
             next();
     }
@@ -216,9 +216,14 @@ Singleton {
             return;
         const cmd = queue[0];
         queue = queue.slice(1);
-        const activation = ["focus", "next", "prev"].includes(cmd[2]);
-        if (activation)
+        const activation = ["focus", "next", "prev", "open"].includes(cmd[3]);
+        if (activation) {
             settling = true;
+            // The first activation in a session also spins the space's
+            // apps up (P3), which can take seconds: the workspaces switch
+            // first, so stop holding the derivation back after a moment.
+            settleCap.restart();
+        }
         runner.activation = activation;
         runner.command = cmd;
         runner.running = true;
@@ -243,18 +248,55 @@ Singleton {
 
     property string lastError: ""
 
+    Timer {
+        id: settleCap
+        interval: 1500
+        onTriggered: settle.restart()
+    }
+
+    // `notes` of an activation's report ("Couldn't find the editor window")
+    // → a banner in the island.
+    function report(text) {
+        let r = null;
+        try {
+            r = JSON.parse(text);
+        } catch (e) {
+            return;
+        }
+        const notes = r?.notes ?? [];
+        if (notes.length === 0)
+            return;
+        const s = find(r.space) ?? active;
+        Notifications.show({
+            appName: "Spaces",
+            appIcon: "",
+            glyph: s?.icon || "󰕰",
+            summary: s ? s.name : "Spaces",
+            body: notes.join("\n"),
+            image: "",
+            actions: []
+        });
+    }
+
     Process {
         id: runner
         property bool activation: false
+        stdout: StdioCollector {
+            id: runOut
+        }
         stderr: StdioCollector {
             id: runErr
         }
         onExited: code => {
+            if (code === 0)
+                root.report(runOut.text);
             root.lastError = code === 0 ? "" : (runErr.text.trim().split("\n").pop() || `loft-niri exited with ${code}`);
             if (code !== 0)
                 console.warn(`Spaces: ${runner.command.join(" ")}: ${root.lastError}`);
-            if (activation)
+            if (activation) {
+                settleCap.stop();
                 settle.restart();
+            }
             root.next();
         }
     }
@@ -321,7 +363,7 @@ Singleton {
         onTriggered: {
             if (!root.enabled || renderer.running)
                 return;
-            renderer.command = ["sh", "-c", '[ -f "$1" ] || exit 0; loft-niri space render || exit; [ -n "$2" ] && loft-niri space ensure "$2"; exit 0', "loft-spaces", root.spacesKdl, root.activeId];
+            renderer.command = ["sh", "-c", '[ -f "$1" ] || exit 0; loft-niri space render || exit; [ -n "$2" ] || exit 0; loft-niri space ensure "$2"; loft-niri space gather "$2"; exit 0', "loft-spaces", root.spacesKdl, root.activeId];
             renderer.running = true;
         }
     }
@@ -353,7 +395,6 @@ Singleton {
         reloadableId: "spaces"
 
         property string activeId: ""
-        property bool announced: false
         property bool dndBySpace: false
         property bool dndBefore: false
     }
