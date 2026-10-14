@@ -115,7 +115,20 @@ PanelWindow {
         drag.target: proxy
         cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.PointingHandCursor
         drag.onActiveChanged: root.dragging = drag.active
-        onClicked: root.open(entry)
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: m => {
+            if (m.button !== Qt.RightButton) {
+                root.open(entry);
+                return;
+            }
+            // The item's menu (Open, Show in Files, Quick Actions ▸) at the pointer.
+            // (Closing destroys this delegate: take everything first.)
+            const p = dm.mapToItem(root.contentItem, m.x, m.y);
+            const path = entry.path;
+            const screen = root.screen.name;
+            root.close();
+            DockMenu.openStackItem(screen, p.x, p.y, path);
+        }
         onReleased: {
             if (proxy) {
                 proxy.x = 0;

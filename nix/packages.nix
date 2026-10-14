@@ -44,7 +44,8 @@
         # system's NetworkManager / systemd, matching the running daemons.
         # Capture: frozen frames, crop/GIF/trim/mic track, clipboard, annotate.
         grim
-        ffmpeg
+        ffmpeg # also Utilities → Media Tools (compress, GIF, watermark, audio)
+        imagemagick # Utilities → Media Tools: convert / watermark images (png, jpg, webp, avif)
         satty
         # Text from screen: English OCR (add languages with
         # tesseract.override { enableLanguages = [ … ]; }) and QR codes.
@@ -295,6 +296,8 @@
           installPhase = ''
             mkdir -p $out/share/loft $out/bin
             cp -r cli templates themes $out/share/loft/
+            # Utilities + Media Tools: Spotlight finds them; "Open With" in any file manager.
+            install -Dm644 -t $out/share/applications ${../applications}/*.desktop
             # Reload hooks call quickshell/niri; installs and importers use git;
             # the qylock importer samples (video) backgrounds with ffmpeg, whose
             # libraries Quickshell's closure already carries. The user's own
@@ -308,6 +311,7 @@
                   pkgs.niri
                   pkgs.git
                   pkgs.ffmpeg-headless
+                  pkgs.imagemagick # loft media convert / watermark
                 ]
               }
           '';

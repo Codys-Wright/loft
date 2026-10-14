@@ -27,7 +27,9 @@ and `loft-shot` are on PATH and pick that session by themselves.
   config and files, and so do the shell's settings that live outside the session's state dir.
   Prefer throwaway files in your scratch dir. For GTK apps that restore their last session,
   pass flags that skip it (e.g. `gnome-text-editor --standalone FILE`). Don't open the user's
-  documents.
+  documents. The Utilities window's Cleaner and Media Tools recents list and delete in `$HOME`:
+  start the session with `LOFT_TEST_HOME=<scratch tree>` exported and they use that instead
+  (the Cleaner shows a "Test home" banner, and its schedule skips systemctl).
 - The **system** D-Bus is shared. Control Center tiles for Ethernet, Bluetooth and Power Mode
   act on the real machine, so don't toggle them. The session bus, the runtime dir and audio are
   private (see below).

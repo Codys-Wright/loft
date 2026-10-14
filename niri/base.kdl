@@ -104,6 +104,7 @@ window-rule {
     match title="^Loft Settings$"
     match title="^System Monitor$"
     match title="^Loft Scratchpad$"
+    match title="^Loft Utilities$"
     open-floating true
 }
 

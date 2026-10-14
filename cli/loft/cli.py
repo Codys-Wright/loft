@@ -38,7 +38,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import dock, hooks, importers, index, island, library, render, vibes, wallsets
+from . import cleaner, dock, hooks, importers, index, island, library, media, ports, render, updates, utilities, vibes, wallsets
 from .pack import IGNORED, Pack, PackError, is_pack
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -1003,6 +1003,12 @@ def parser() -> argparse.ArgumentParser:
 
     dock.add_parser(top, lambda ctx: ctx.state_dir)
     island.add_parser(top, lambda ctx: str(ctx.shell_path))
+    # Utilities window (src/utilities): ports, flake updates, cleaner, media tools.
+    ports.add_parser(top)
+    updates.add_parser(top, lambda ctx: ctx.state_dir)
+    cleaner.add_parser(top, lambda ctx: ctx.state_dir)
+    media.add_parser(top, lambda ctx: ctx.shell_path)
+    utilities.add_parser(top, lambda ctx: ctx.shell_path)
     return p
 
 
