@@ -95,8 +95,8 @@ doesn't need (bottom of this file).
 ## Everyday tools
 | vorssaint | Loft | How |
 |---|---|---|
-| Dynamic Island (music, notifications, calendars, timers, downloads) | 🟡 | Music, notifications, live activities, focus timer, system pages; calendars/downloads todo |
-| AI agents usage in the island (Claude, Codex, …) | ⬜ | |
+| Dynamic Island (music, notifications, calendars, timers, downloads) | ✅ | Music (+ synced lyrics, opt-in), notifications with action buttons, calendar page + next event in the pill with Join (khal / vdirsyncer, Evolution, ICS), multiple timers + stopwatches with alarm, downloads live activity + Downloaded banner (Open / Show in Files / drag out), quick toggles, focus, recording, system, screen time; pages reorderable |
+| AI agents usage in the island (Claude, Codex, …) | ✅ | Claude Code + Codex: running sessions, tokens and ≈ cost today / this week, 5-hour window (Codex rate limits), from local logs — counts only |
 | Command Bar (search, calculator, units, emoji, scripts) | 🟡 | Spotlight (walker): apps, calculator, emoji, files, clipboard, 13,570 web !bangs; quicklinks + bang picker 🔨 |
 | Quick panel (floating palette) | ✅ | ⌃⌘V glass palette at the pointer: favorite tools from the action catalog, clipboard, snippets, type-to-filter |
 | Quick toggles | ✅ | Control Center controls (+ pin any to the menu bar) |

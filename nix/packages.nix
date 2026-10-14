@@ -133,6 +133,8 @@
               export LOFT_THEME_FILE="$state/current/theme.json"
             fi
             export LOFT_UI_FONT="${uiFont}" LOFT_ICON_FONT="${iconFont}"
+            # Island timers ring with the freedesktop alarm.
+            export LOFT_ALARM_SOUND="''${LOFT_ALARM_SOUND:-${pkgs.sound-theme-freedesktop}/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga}"
             export QML_IMPORT_PATH="${lockQmlPath}''${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
             ${qtMultimediaEnv}
             # LOFT_SHELL_SRC runs the QML from a checkout instead (hot reload);

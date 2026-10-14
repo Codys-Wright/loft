@@ -11,15 +11,19 @@ import qs.services
 // Dynamic Island: a glass pill at the top center (design ported from
 // javiiervm/dotfiles' DynamicIsland).
 //
-// Collapsed, in priority order: a notification banner (5 s), a live
-// activity (screen recording, focus timer — scroll to cycle when both run),
-// now playing (art + equalizer), the time. The border pulses on system
-// alerts (overheating / overload) and turns white for unread notifications.
+// Collapsed, in priority order: a notification banner (5 s; hovering holds
+// it so its buttons can be clicked), a live activity (screen recording,
+// focus timer, timers, downloads — scroll to cycle when several run), the
+// next calendar event when it's close, now playing (art + equalizer), the
+// time — with a mark while AI agents run. The border pulses on system alerts
+// (overheating / overload) and turns white for unread notifications.
 //
-// Hover expands it into a carousel of pages — live activity, notifications
-// (when there are any), camera (while the mirror is on), media, system,
-// screen time; scroll to switch.
-// IPC: island toggle|media|system|usage|notifications|live|flash.
+// Hover expands it into a carousel of pages (IslandPages: order and which
+// are shown live in Settings → Dynamic Island) — live activity, camera,
+// notifications, calendar, media, timers, controls, system, screen time, AI
+// agents; scroll to switch.
+// IPC: island toggle|media|system|usage|notifications|live|calendar|timers|
+// controls|ai|flash.
 PanelWindow {
     id: root
 
@@ -41,11 +45,32 @@ PanelWindow {
     readonly property var player: players.find(p => p.isPlaying) ?? players[0] ?? null
     readonly property bool playing: player?.isPlaying ?? false
 
-    readonly property var liveActivities: [Recorder.active ? "recording" : "", FocusTimer.active ? "focus" : ""].filter(s => s)
+    readonly property var liveActivities: [Recorder.active ? "recording" : "", FocusTimer.active ? "focus" : "", Timers.active ? "timer" : "", Downloads.active.length > 0 ? "download" : ""].filter(s => s)
     property int liveIndex: 0
     readonly property string live: liveActivities.length ? liveActivities[liveIndex % liveActivities.length] : ""
 
-    readonly property var pages: [live !== "" ? "live" : "", Capture.cameraOn ? "camera" : "", Notifications.history.length > 0 ? "notifications" : "", "media", "system", "usage"].filter(s => s)
+    // Pages that exist right now, in the user's order.
+    function pageAvailable(id) {
+        switch (id) {
+        case "live":
+            return live !== "";
+        case "camera":
+            return Capture.cameraOn;
+        case "notifications":
+            return Notifications.history.length > 0;
+        case "calendar":
+            return Agenda.enabled;
+        case "ai":
+            return AiUsage.enabled && AiUsage.available;
+        }
+        return true;
+    }
+    readonly property var pages: {
+        const out = IslandPages.order.filter(p => p.shown && pageAvailable(p.id)).map(p => p.id);
+        return out.length ? out : ["system"];
+    }
+    // The next event, while it's close (Settings: eventSoonMinutes).
+    readonly property var soonEvent: Agenda.soon
     property alias page: persist.page
     readonly property int pageIndex: Math.max(0, pages.indexOf(page))
 
@@ -58,8 +83,10 @@ PanelWindow {
         property string page: "media"
         property bool pinned: false
     }
-    readonly property bool expanded: hover.hovered || pinned
     readonly property var banner: Notifications.current
+    // A banner under the pointer stays a banner (its buttons stay clickable);
+    // the island expands once it's gone.
+    readonly property bool expanded: pinned || (hover.hovered && banner === null)
     readonly property bool bannering: banner !== null && !expanded
 
     // Unread = notifications arrived since the notifications page was last seen.
@@ -69,7 +96,9 @@ PanelWindow {
     readonly property color alertColor: SystemStats.overheating ? Theme.urgent : SystemStats.overloaded ? Theme.warn : "transparent"
     readonly property bool alerting: alertColor.a > 0
 
-    readonly property real targetWidth: expanded ? 480 : bannering ? 440 : live !== "" ? 240 : playing ? 300 : 150
+    readonly property bool showEvent: live === "" && soonEvent !== null
+    readonly property bool agentMark: Settings.island.aiIndicator && AiUsage.enabled && AiUsage.sessions.length > 0
+    readonly property real targetWidth: expanded ? 480 : bannering ? 460 : live !== "" ? 250 : showEvent ? 300 : playing ? 300 : agentMark ? 190 : 150
     readonly property real targetHeight: expanded ? 210 : bannering ? 84 : 24
 
     function showPage(name) {
@@ -84,7 +113,7 @@ PanelWindow {
     onExpandedChanged: {
         // Open on the most relevant page.
         if (expanded && !pinned)
-            page = live !== "" ? "live" : unread ? "notifications" : player ? "media" : "system";
+            page = [live !== "" ? "live" : "", unread ? "notifications" : "", soonEvent ? "calendar" : "", player ? "media" : "", "system"].find(p => p && pages.includes(p)) ?? pages[0];
     }
     onPageChanged: if (page === "notifications")
         seenCount = Notifications.history.length
@@ -94,6 +123,14 @@ PanelWindow {
     SystemClock {
         id: clock
         precision: SystemClock.Minutes
+    }
+
+    Binding {
+        target: AiUsage
+        property: "watching"
+        value: root.expanded && root.page === "ai"
+        when: root.expanded
+        restoreMode: Binding.RestoreValue
     }
 
     Binding {
@@ -197,13 +234,49 @@ PanelWindow {
                 activity: root.live
             }
 
+            // The next event, minutes before it starts.
+            RowLayout {
+                anchors {
+                    fill: parent
+                    leftMargin: 12
+                    rightMargin: 14
+                }
+                visible: root.showEvent
+                spacing: 8
+
+                Icon {
+                    text: root.soonEvent?.joinUrl ? "󰕧" : "󰃭"
+                    size: 13
+                    color: Theme.accent
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: root.soonEvent?.title ?? ""
+                    color: Theme.text
+                    font.family: Theme.fontUi
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    text: root.soonEvent ? Agenda.when(root.soonEvent) : ""
+                    color: Theme.accent
+                    font.family: Theme.fontUi
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    font.features: { "tnum": 1 }
+                }
+            }
+
             RowLayout {
                 anchors {
                     fill: parent
                     leftMargin: 8
                     rightMargin: 14
                 }
-                visible: root.live === ""
+                visible: root.live === "" && !root.showEvent
                 spacing: 10
 
                 Rectangle {
@@ -239,6 +312,41 @@ PanelWindow {
                     Layout.preferredWidth: 16
                     Layout.preferredHeight: 12
                 }
+
+                // AI agents running: a sparkle and how many (breathes while one works).
+                Row {
+                    visible: root.agentMark
+                    spacing: 3
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "󰫢"
+                        size: 12
+                        color: AiUsage.busy > 0 ? Theme.accent2 : Theme.subtext
+
+                        SequentialAnimation on opacity {
+                            running: root.agentMark && AiUsage.busy > 0 && !root.expanded
+                            loops: Animation.Infinite
+                            NumberAnimation {
+                                to: 0.4
+                                duration: 900
+                                easing.type: Easing.InOutSine
+                            }
+                            NumberAnimation {
+                                to: 1
+                                duration: 900
+                                easing.type: Easing.InOutSine
+                            }
+                        }
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: AiUsage.sessions.length
+                        color: Theme.subtext
+                        font.family: Theme.fontUi
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                    }
+                }
             }
         }
 
@@ -260,7 +368,7 @@ PanelWindow {
         }
 
         Timer {
-            running: root.bannering
+            running: root.bannering && !hover.hovered
             interval: 5000
             onTriggered: Notifications.next()
         }
@@ -313,6 +421,14 @@ PanelWindow {
                                 return mediaPage;
                             case "system":
                                 return systemPage;
+                            case "calendar":
+                                return calendarPage;
+                            case "timers":
+                                return timersPage;
+                            case "controls":
+                                return controlsPage;
+                            case "ai":
+                                return aiPage;
                             default:
                                 return usagePage;
                             }
@@ -413,6 +529,22 @@ PanelWindow {
         id: usagePage
         UsagePage {}
     }
+    Component {
+        id: calendarPage
+        CalendarPage {}
+    }
+    Component {
+        id: timersPage
+        TimersPage {}
+    }
+    Component {
+        id: controlsPage
+        ControlsPage {}
+    }
+    Component {
+        id: aiPage
+        AiPage {}
+    }
 
     IpcHandler {
         target: "island"
@@ -439,6 +571,22 @@ PanelWindow {
 
         function live(): void {
             root.showPage("live");
+        }
+
+        function calendar(): void {
+            root.showPage("calendar");
+        }
+
+        function timers(): void {
+            root.showPage("timers");
+        }
+
+        function controls(): void {
+            root.showPage("controls");
+        }
+
+        function ai(): void {
+            root.showPage("ai");
         }
 
         // Exercise the shutter flash without taking a screenshot.

@@ -6,7 +6,9 @@ import qs.components
 import qs.services
 
 // One notification in the island: image or app icon, app name, summary and
-// body. Click activates it (default action) and moves to the next banner.
+// body, and its action buttons (up to two, on the right). Click activates it
+// (default action) and moves to the next banner. A banner about a file
+// (`file`: the Downloaded banner) drags that file out from its icon.
 Item {
     id: root
 
@@ -19,6 +21,30 @@ Item {
             return icon.startsWith("/") ? "file://" + icon : icon;
         return Quickshell.iconPath(icon || "dialog-information", "dialog-information");
     }
+    readonly property string file: notification?.file ?? ""
+    readonly property string glyph: notification?.glyph ?? ""
+    // Named actions; an internal banner may list its default action too.
+    readonly property var buttons: {
+        const acts = notification?.actions ?? [];
+        const list = [];
+        for (let i = 0; i < acts.length; i++) {
+            const a = acts[i];
+            if (a && a.text && (a.identifier !== "default" || file !== ""))
+                list.push(a);
+        }
+        return list.slice(0, 2);
+    }
+
+    function uri(path) {
+        return "file://" + path.split("/").map(encodeURIComponent).join("/");
+    }
+
+    MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        onClicked: if (root.notification)
+            Notifications.activate(root.notification)
+    }
 
     RowLayout {
         anchors.fill: parent
@@ -26,6 +52,7 @@ Item {
         spacing: 12
 
         Rectangle {
+            id: iconBox
             Layout.preferredWidth: 52
             Layout.preferredHeight: 52
             radius: 14
@@ -42,9 +69,52 @@ Item {
 
             IconImage {
                 anchors.centerIn: parent
-                visible: root.imageSource === ""
+                visible: root.imageSource === "" && root.glyph === ""
                 implicitSize: 36
                 source: root.iconSource
+            }
+
+            // Loft's own banners can bring a glyph (no icon theme needed).
+            Icon {
+                anchors.centerIn: parent
+                visible: root.imageSource === "" && root.glyph !== ""
+                text: root.glyph
+                size: 26
+                color: root.notification?.glyphColor ?? Theme.accent
+            }
+
+            // Drag the file out (text/uri-list), like the dock's stacks.
+            Item {
+                id: proxy
+                width: 52
+                height: 52
+                Drag.active: dragArea.drag.active
+                Drag.dragType: Drag.Automatic
+                Drag.supportedActions: Qt.CopyAction | Qt.MoveAction | Qt.LinkAction
+                Drag.proposedAction: Qt.CopyAction
+                Drag.mimeData: ({
+                        "text/uri-list": root.uri(root.file) + "\r\n",
+                        "text/plain": root.file
+                    })
+                Drag.keys: ["text/uri-list"]
+                Drag.imageSource: root.iconSource
+                Drag.imageSourceSize: Qt.size(48, 48)
+                Drag.hotSpot.x: 24
+                Drag.hotSpot.y: 24
+            }
+
+            MouseArea {
+                id: dragArea
+                anchors.fill: parent
+                enabled: root.file !== ""
+                drag.target: proxy
+                cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                onReleased: {
+                    proxy.x = 0;
+                    proxy.y = 0;
+                }
+                onClicked: if (root.notification)
+                    Notifications.activate(root.notification)
             }
         }
 
@@ -79,16 +149,54 @@ Item {
                 opacity: 0.85
                 font.family: Theme.fontUi
                 font.pixelSize: 12
-                elide: Text.ElideRight
+                elide: Text.ElideMiddle
                 maximumLineCount: 1
             }
         }
-    }
 
-    MouseArea {
-        anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
-        onClicked: if (root.notification)
-            Notifications.activate(root.notification)
+        ColumnLayout {
+            visible: root.buttons.length > 0
+            Layout.alignment: Qt.AlignVCenter
+            Layout.fillWidth: false
+            Layout.preferredWidth: 104
+            Layout.maximumWidth: 104
+            spacing: 6
+
+            Repeater {
+                model: root.buttons
+
+                delegate: Rectangle {
+                    required property var modelData
+                    required property int index
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 74
+                    implicitWidth: actLabel.implicitWidth + 22
+                    implicitHeight: 26
+                    radius: 13
+                    color: actMouse.containsMouse ? Theme.withAlpha(Theme.text, 0.26) : Theme.withAlpha(Theme.text, index === 0 ? 0.18 : 0.1)
+
+                    Text {
+                        id: actLabel
+                        anchors.centerIn: parent
+                        text: modelData.text
+                        color: Theme.text
+                        font.family: Theme.fontUi
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                    }
+
+                    MouseArea {
+                        id: actMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            modelData.invoke();
+                            Notifications.next();
+                        }
+                    }
+                }
+            }
+        }
     }
 }

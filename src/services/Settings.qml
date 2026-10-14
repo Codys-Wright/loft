@@ -104,6 +104,26 @@ Singleton {
                 property real maxTemp: 95
                 property real maxLoad: 0.92
                 property int focusMinutes: 25
+                // Expanded pages in order, [{ id, shown }]; [] = the default
+                // order (IslandPages.qml). Missing ids slot in.
+                property var pages: []
+                // Calendar: auto (khal / vdirsyncer, else Evolution Data
+                // Server) | khal | vdirsyncer | eds | none, plus ICS files /
+                // URLs (always read).
+                property string calendarSource: "auto"
+                property var calendarIcs: []
+                // The next event takes the collapsed pill this long before it starts.
+                property int eventSoonMinutes: 15
+                property bool timerSound: true
+                // Downloads in progress as a live activity; "" = the XDG download dir.
+                property bool downloads: true
+                property string downloadsDir: ""
+                // AI agents page (Claude Code / Codex usage from their local
+                // logs, counts only) and the running-agents mark in the pill.
+                property bool ai: true
+                property bool aiIndicator: true
+                // Synced lyrics from lrclib.net (sends artist + title there).
+                property bool lyrics: false
             }
 
             property JsonObject wallpaper: JsonObject {

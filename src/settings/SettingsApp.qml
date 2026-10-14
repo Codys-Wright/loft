@@ -86,6 +86,9 @@ Scope {
         function capture(): void {
             root.show("capture");
         }
+        function island(): void {
+            root.show("island");
+        }
         function menubar(): void {
             root.show("menubar");
         }
@@ -391,47 +394,9 @@ Scope {
                         visible: root.section === "dock"
                     }
 
-                    // Island
-                    Card {
+                    IslandPage {
+                        Layout.fillWidth: true
                         visible: root.section === "island"
-
-                        Row_ {
-                            label: "Overheat alert"
-                            hint: "Border pulses red above this temperature"
-                            Slider_ {
-                                from: 60
-                                to: 105
-                                step: 1
-                                suffix: " °C"
-                                value: Settings.island.maxTemp
-                                onMoved: v => Settings.island.maxTemp = v
-                            }
-                        }
-
-                        Row_ {
-                            label: "Load alert"
-                            hint: "CPU or memory use that turns the border amber"
-                            Slider_ {
-                                from: 0.5
-                                to: 1
-                                step: 0.01
-                                decimals: 2
-                                value: Settings.island.maxLoad
-                                onMoved: v => Settings.island.maxLoad = v
-                            }
-                        }
-
-                        Row_ {
-                            label: "Focus session"
-                            Slider_ {
-                                from: 5
-                                to: 90
-                                step: 5
-                                suffix: " min"
-                                value: Settings.island.focusMinutes
-                                onMoved: v => Settings.island.focusMinutes = v
-                            }
-                        }
                     }
 
                     DisplaysPage {
