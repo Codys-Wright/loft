@@ -18,6 +18,7 @@ import qs.devtools
 import qs.monitor
 import qs.clipboard
 import qs.desktopmenu
+import qs.palette
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 // Optional modules are gated by the feature registry (services/Features.qml).
@@ -150,5 +151,15 @@ ShellRoot {
     Variants {
         model: Features.on("mixer") ? Quickshell.screens : []
         Mixer {}
+    }
+
+    Variants {
+        model: Features.on("quickPanel") ? Quickshell.screens : []
+        QuickPanelWindow {}
+    }
+
+    Variants {
+        model: Features.on("radialMenu") ? Quickshell.screens : []
+        RadialMenuWindow {}
     }
 }

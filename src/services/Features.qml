@@ -38,6 +38,8 @@ Singleton {
         { id: "clipboard", label: "Clipboard history", icon: "󰨸", group: "Clipboard & files", description: "History with pins and image previews, paste as plain text, auto-clear, Clean URL" },
         { id: "snippets", label: "Text snippets", icon: "󱐋", group: "Clipboard & files", description: "Saved text typed into any app, with {date} and {clipboard} variables" },
         { id: "shelf", label: "Shelf", icon: "󰄠", group: "Clipboard & files", description: "Park files, links and text at the screen edge while dragging" },
+        { id: "quickPanel", label: "Quick panel", icon: "󰕮", group: "Everyday", page: "QuickPanelPage.qml", description: "⌃⌘V: a glass palette of your favorite tools, the latest clipboard entries and snippets, at the pointer" },
+        { id: "radialMenu", label: "Radial menu", icon: "󰫈", group: "Everyday", page: "RadialMenuPage.qml", description: "Hold ⌃⌘Space (or the middle button on the desktop): a wheel of actions at the pointer, with submenus and per-app profiles" },
         { id: "scratchpad", label: "Scratchpad", icon: "󰺿", group: "Everyday", description: "Tabbed, autosaved Markdown notes in a floating window" },
         { id: "mixer", label: "Volume mixer", icon: "󰘮", group: "Sound", description: "Per-app volume up to 150 %, mute, favorites and per-app output" },
         { id: "audioOutputs", label: "Output switcher", icon: "󰓃", group: "Sound", description: "Pick the output from the Control Center or ⌘⇧O; safe volume when headphones disconnect" },

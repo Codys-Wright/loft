@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import qs.desktopmenu
+import qs.palette
 import qs.services
 
 // Background layer. niri's xray blur samples it, so it is what the glass
@@ -134,10 +135,26 @@ PanelWindow {
 
     // A right-click on the desktop (a click that lands on no window) opens
     // the desktop menu at the pointer (desktopmenu/DesktopMenu.qml).
+    // The middle button held on the desktop opens the radial menu there:
+    // drag toward a slice and let go (palette/Radial.qml). This surface
+    // keeps the pointer until the release, so it feeds the wheel.
     MouseArea {
         anchors.fill: parent
-        enabled: Features.on("desktopMenu")
-        acceptedButtons: Qt.RightButton
-        onPressed: mouse => DesktopMenu.openAt(root.modelData.name, mouse.x, mouse.y)
+        enabled: Features.on("desktopMenu") || Features.on("radialMenu")
+        acceptedButtons: (Features.on("desktopMenu") ? Qt.RightButton : 0) | (Features.on("radialMenu") ? Qt.MiddleButton : 0)
+        onPressed: mouse => {
+            if (mouse.button === Qt.MiddleButton)
+                Radial.openAt(root.modelData.name, mouse.x, mouse.y, "mouse");
+            else
+                DesktopMenu.openAt(root.modelData.name, mouse.x, mouse.y);
+        }
+        onPositionChanged: mouse => {
+            if (pressedButtons & Qt.MiddleButton)
+                Radial.pointer(mouse.x, mouse.y);
+        }
+        onReleased: mouse => {
+            if (mouse.button === Qt.MiddleButton)
+                Radial.release();
+        }
     }
 }

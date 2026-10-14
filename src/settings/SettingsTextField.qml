@@ -11,6 +11,10 @@ Rectangle {
     // Every keystroke (e.g. live search).
     signal edited(string text)
 
+    function focusInput() {
+        input.forceActiveFocus();
+    }
+
     implicitWidth: 200
     implicitHeight: 28
     radius: 8

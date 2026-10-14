@@ -37,6 +37,8 @@ Scope {
         { id: "spotlight", icon: "󰍉", badge: "blue", label: "Spotlight" },
         { id: "menubar", icon: "󰍜", badge: "graphite", label: "Menu Bar" },
         { id: "desktopmenu", icon: "󰍝", badge: "blue", label: "Desktop Menu", feature: "desktopMenu" },
+        { id: "quickpanel", icon: "󰕮", badge: "orange", label: "Quick Panel", feature: "quickPanel" },
+        { id: "radialmenu", icon: "󰫈", badge: "purple", label: "Radial Menu", feature: "radialMenu" },
         { id: "about", icon: "󰋼", badge: "gray", label: "About" }
     ]
 
@@ -67,6 +69,12 @@ Scope {
         }
         function desktopmenu(): void {
             root.show("desktopmenu");
+        }
+        function quickpanel(): void {
+            root.show("quickpanel");
+        }
+        function radialmenu(): void {
+            root.show("radialmenu");
         }
         function wallpaper(): void {
             root.show("wallpaper");
@@ -473,6 +481,16 @@ Scope {
                     DesktopMenuPage {
                         Layout.fillWidth: true
                         visible: root.section === "desktopmenu"
+                    }
+
+                    QuickPanelPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "quickpanel"
+                    }
+
+                    RadialMenuPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "radialmenu"
                     }
 
                     // About
