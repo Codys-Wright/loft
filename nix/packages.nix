@@ -6,6 +6,13 @@
 #   studio-session         niri + studio's base config + the shell, all from the store
 #   studio-dev             the same session, loading niri fragments, QML, templates
 #                          and themes from a checkout so everything hot-reloads
+#   studio-niri            niri settings backend (crates/studio-niri): live outputs,
+#                          runtime overrides → <state>/overrides/niri.kdl, keybinds
+#
+# Both sessions include <state>/overrides/niri.kdl FIRST (niri uses the first
+# `output` block matching a monitor, so output overrides must come first) and
+# LAST (every other section merges, later wins). Both expose their entry
+# config as $STUDIO_NIRI_CONFIG, since niri hides $NIRI_CONFIG from children.
 #
 # Both sessions run nested as a window when started inside a Wayland/X11
 # session (niri's winit backend), or as a full session from a TTY.
@@ -66,7 +73,10 @@
       packages = {
         studio-shell = pkgs.writeShellApplication {
           name = "studio-shell";
-          runtimeInputs = runtimeDeps ++ [ self'.packages.studio ];
+          runtimeInputs = runtimeDeps ++ [
+            self'.packages.studio
+            self'.packages.studio-niri
+          ];
           text = ''
             if [ -z "''${STUDIO_THEME_FILE:-}" ]; then
               ${seedState}
@@ -92,12 +102,15 @@
             dir="''${XDG_RUNTIME_DIR:-/tmp}/studio-session"
             mkdir -p "$dir"
             cat > "$dir/config.kdl" <<EOF
+            include optional=true "$state/overrides/niri.kdl"
             include "${../niri}/base.kdl"
             include "${shellBinds}"
             include optional=true "$state/current/niri.kdl"
+            include optional=true "$state/overrides/niri.kdl"
             spawn-at-startup "${lib.getExe self'.packages.studio-shell}"
             spawn-at-startup "${lib.getExe self'.packages.studio-launcher}" "service"
             EOF
+            export STUDIO_NIRI_CONFIG="$dir/config.kdl"
             exec niri --config "$dir/config.kdl" "$@"
           '';
         };
@@ -107,6 +120,7 @@
           runtimeInputs = runtimeDeps ++ [
             self'.packages.studio-launcher
             self'.packages.studio
+            self'.packages.studio-niri
           ];
           text = ''
             usage() { echo "usage: studio-dev [--output NAME] [CHECKOUT]" >&2; exit 2; }
@@ -152,14 +166,17 @@
               env "''${studio_env[@]}" STUDIO_HOOKS=none ${lib.getExe self'.packages.studio} theme apply "$theme" >/dev/null
             fi
 
-            # The theme fragment comes after base.kdl so it wins, dev-local last.
+            # The theme fragment comes after base.kdl so it wins, then dev-local,
+            # then the runtime overrides (also first: see the header comment).
             cat > "$dir/config.kdl" <<EOF
+            include optional=true "$dir/overrides/niri.kdl"
             include "$root/niri/base.kdl"
             include "$dir/shell-binds.kdl"
             include optional=true "$dir/current/niri.kdl"
             include optional=true "$root/niri/dev-local.kdl"
+            include optional=true "$dir/overrides/niri.kdl"
             spawn-at-startup "env" "STUDIO_STATE_DIR=$dir" "STUDIO_LAUNCHER_DIR=$root/launcher" "studio-launcher" "service"
-            spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "quickshell" "--path" "$root/src"
+            spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_NIRI_CONFIG=$dir/config.kdl" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "quickshell" "--path" "$root/src"
             EOF
 
             echo "studio-dev: niri config $dir/config.kdl, shell from $root/src"
@@ -259,6 +276,24 @@
           done
           ln -s "$(readlink ${cliSrc}/themes/default)" $out/default
         '';
+
+        # niri settings backend for the shell's Displays / Input / Layout /
+        # Keybinds pages. Its tests run `niri validate` on rendered fragments.
+        studio-niri = pkgs.rustPlatform.buildRustPackage {
+          pname = "studio-niri";
+          version = "0.1.0";
+          src = lib.fileset.toSource {
+            root = ../.;
+            fileset = lib.fileset.unions [
+              ../Cargo.toml
+              ../Cargo.lock
+              ../crates
+            ];
+          };
+          cargoLock.lockFile = ../Cargo.lock;
+          nativeCheckInputs = [ pkgs.niri ];
+          meta.mainProgram = "studio-niri";
+        };
 
         # Screenshot the running studio-dev session: `nix run .#shot -- out.png`.
         studio-shot = pkgs.writeShellApplication {
