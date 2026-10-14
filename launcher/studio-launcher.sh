@@ -2,6 +2,8 @@
 #
 #   studio-launcher service   prepare walker's config and run elephant + the walker service
 #   studio-launcher [open]    open (or close) the launcher
+#   studio-launcher emoji     emoji / symbol picker (walker's symbols provider)
+#   studio-launcher clipboard clipboard history
 #
 # walker's config is rendered into $STUDIO_STATE_DIR/launcher instead of
 # ~/.config, so trying studio never touches the user's own walker setup (a
@@ -53,8 +55,14 @@ case "${1:-open}" in
   open)
     exec walker
     ;;
+  emoji)
+    exec walker --provider symbols --placeholder "Emoji & Symbols"
+    ;;
+  clipboard)
+    exec walker --provider clipboard --placeholder "Clipboard History"
+    ;;
   *)
-    echo "usage: studio-launcher [service|open]" >&2
+    echo "usage: studio-launcher [service|open|emoji|clipboard]" >&2
     exit 2
     ;;
 esac
