@@ -21,6 +21,7 @@ Singleton {
     readonly property alias island: settings.island
     readonly property alias wallpaper: settings.wallpaper
     readonly property alias appearance: settings.appearance
+    readonly property alias system: settings.system
     // Feature id → on/off (Features.qml); absent = the module's default.
     property alias features: settings.features
 
@@ -69,6 +70,24 @@ Singleton {
                 // Runtime overrides on top of the theme (-1 / "" = theme value).
                 property real glassOpacity: -1
                 property int blur: -1 // -1 theme, 0 off, 1 on
+            }
+
+            // System module (Settings → System): bar readouts and alerts.
+            property JsonObject system: JsonObject {
+                // Bar readouts, left to right: cpu, memory, cpuTemp, gpu, network, battery.
+                property list<string> readouts: ["cpu", "memory"]
+                // Alerts (notifications) — each needs the condition to hold
+                // for a while, and re-arms only after it clears (hysteresis).
+                property bool alertCpu: true
+                property real cpuThreshold: 0.9 // 0..1
+                property int cpuSeconds: 60
+                property bool alertTemp: true // above Settings.island.maxTemp
+                property bool alertMemory: true
+                property real memoryPressure: 20 // PSI "some" avg10, %
+                property bool alertDisk: true
+                property real diskThreshold: 0.9 // any mounted fs, 0..1
+                property bool alertBattery: true
+                property int batteryThreshold: 15 // %
             }
         }
     }

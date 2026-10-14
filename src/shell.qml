@@ -12,6 +12,7 @@ import qs.osd
 import qs.switcher
 import qs.wallpaper
 import qs.settings
+import qs.monitor
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 // Optional modules are gated by the feature registry (services/Features.qml).
@@ -62,4 +63,14 @@ ShellRoot {
     SettingsApp {}
 
     Lock {}
+
+    LazyLoader {
+        active: Features.on("systemMonitor")
+        SystemMonitor {}
+    }
+
+    LazyLoader {
+        active: Features.on("alerts")
+        SystemAlerts {}
+    }
 }

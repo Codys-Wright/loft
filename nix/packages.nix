@@ -28,6 +28,10 @@
         foot # the demo session's terminal (Mod+Return); consumers bind their own
         gammastep # Night Light
         wf-recorder # Screen recording
+        gawk # System Monitor: processes (/proc/<pid>/stat)
+        gnugrep # System Monitor: hwmon sensors
+        iproute2 # Network: local addresses (ip -j addr)
+        librespeed-cli # Network: speed test (on demand)
         walker # Spotlight launcher (frontend)
         elephant # launcher data providers
         jq

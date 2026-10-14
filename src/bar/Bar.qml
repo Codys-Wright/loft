@@ -119,6 +119,8 @@ PanelWindow {
             anchors.centerIn: parent
             spacing: 16
 
+            Readouts {}
+
             Tray {
                 window: root
                 visible: children.length > 1
