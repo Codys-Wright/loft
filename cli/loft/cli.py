@@ -12,7 +12,7 @@ Environment (all optional):
   LOFT_DATA_DIR        root holding themes/ and templates/render/ (default: this tree)
   LOFT_TEMPLATE_DIR    override the render templates (dev)
   LOFT_HOOKS           reload hooks after apply: all|none|comma list of
-                       shell,niri,kitty,ghostty,gtk (default: all; --dev: shell,niri)
+                       shell,niri,kitty,ghostty,gtk,spotify (default: all; --dev: shell,niri)
   LOFT_THEME_INDEX     themes index (path, file:// or http(s) URL; `none` = off)
                        for curated vibe links (default: loft-themes on GitHub)
   LOFT_THEME_ENGINE    `v1`: apply/render packs directly, bypassing the facet
@@ -40,7 +40,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import capture, cleaner, dock, hooks, importers, index, island, keys, library, media, ports, render, themecmds, updates, utilities, vibes, wallsets
+from . import capture, cleaner, dock, hooks, importers, index, island, keys, library, media, ports, render, spotify, themecmds, updates, utilities, vibes, wallsets
 from .facets import FacetError
 from .pack import IGNORED, Pack, PackError, is_pack
 
@@ -861,6 +861,10 @@ def cmd_wall_auto(ctx: Ctx, args) -> None:
 DEV_VALUE_OPTS = {"--session", "--size", "--output", "--stop"}
 
 
+def _fail(msg: str):
+    raise Fail(msg)
+
+
 def run_dev(args: list[str]) -> int:
     """`loft dev …` is `loft-dev …`: the dev / test sessions (nix/dev/loft-dev.sh).
 
@@ -1038,6 +1042,7 @@ def parser() -> argparse.ArgumentParser:
     keys.add_parser(top, lambda ctx: ctx.state_dir)
     # Theme facets: loft colors|wallpapers|material|motion|… list/show/apply/set/reset/save-as.
     themecmds.add_kind_parsers(top)
+    spotify.add_parser(top, _fail)
     return p
 
 

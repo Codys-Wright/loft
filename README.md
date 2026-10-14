@@ -128,10 +128,47 @@ Point your apps at the rendered fragments once; `apply` keeps them current:
 | kitty | `include ~/.local/state/loft/current/kitty.conf` |
 | Ghostty | `config-file = ?~/.local/state/loft/current/ghostty.conf` |
 | GTK 3/4 | `@import url("file:///home/you/.local/state/loft/current/gtk.css");` in `~/.config/gtk-{3,4}.0/gtk.css` |
+| Spotify | `programs.loft.spotify.enable = true;` (below) |
 
-`LOFT_HOOKS=none|all|shell,niri,kitty,ghostty,gtk` picks the reload hooks. From a checkout,
+`LOFT_HOOKS=none|all|shell,niri,kitty,ghostty,gtk,spotify` picks the reload hooks. From a checkout,
 `python3 cli/loft …` runs the same CLI (the dev shell has `jsonschema`), and
 `nix flake check` runs the schema, unit, golden-render and `niri validate` checks.
+
+### Spotify
+
+Spotify follows the theme through [Spicetify](https://spicetify.app) with
+spicetify-themes' **text** theme (the setup [Cozytile](https://github.com/Darkkal44/Cozytile)
+uses), patched at runtime instead of at build time, so it can be recolored live:
+
+```nix
+programs.loft.spotify = {
+  enable = true;                       # package = pkgs.spotify; spicetifyPackage = pkgs.spicetify-cli;
+  extensions = [ ./adblock.js ];       # .js files (e.g. spicetify-nix's extension sources)
+  # customApps = { marketplace = …; }; # default: the Marketplace
+};
+```
+
+`loft spotify setup` (a user service at login, and the `spotify` launcher before it starts
+Spotify) copies the Nix Spotify into `~/.local/share/loft/spotify/` — the binary and its
+`Apps/` for real, the rest as symlinks into the store — rewrites the package's wrapper to run
+the copy, and applies Spicetify there with its own config dir. A new Spotify from Nix is
+re-copied and re-patched on the next login or launch (never while it runs). The `spotify`
+command and desktop entry replace the plain one (same app id and icon).
+
+Each theme gets a scheme: generated from its palette (`spicetify.ini`, scheme `loft`), or the
+pack's own (`apps/spicetify.ini`: Cozytile packs bring theirs). `loft theme apply` rewrites
+Spotify's `colors.css` and Loft's Spicetify extension swaps the colors in while it plays — no
+restart. Settings → Appearance → Spotify: status, Re-apply, **Follow theme** (off keeps the
+current colors or a text scheme: TokyoNight, Catppuccin, Gruvbox, RosePine, …).
+
+```sh
+loft spotify status [--json]                  # set up? version, pending update, scheme
+loft spotify setup [--force] | reapply        # copy + patch when needed | spicetify apply again
+loft spotify follow on|off                    # off: keep the current colors (scheme `pinned`)
+loft spotify scheme TokyoNight | theme        # a text scheme, or follow the theme again
+loft spotify run [-- ARGS]                    # what the launcher runs
+loft spotify remove                           # delete the copy (not Spotify's own data)
+```
 
 ## Lock screen and login screen
 

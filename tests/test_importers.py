@@ -238,6 +238,10 @@ class Cozytile(unittest.TestCase):
         self.assertEqual(sw["pywal_json"], "Wallpaper/e-ink.json")
         self.assertEqual(sw["wallpaper"], "Wallpaper/a_road_going_through_a_desert.jpeg")
         self.assertEqual(cozytile.parse_pywal(EINK)["special.background"], "#cccccc")
+        ini = "[cozy]\naccent=CAA9E0\n[natura]\nmain=0F1212\n"
+        self.assertEqual(cozytile.spicetify_scheme("current_theme = text\ncolor_scheme = natura\n", ini), ("natura", {"main": "0f1212"}))
+        self.assertIsNone(cozytile.spicetify_scheme("current_theme = marketplace\ncolor_scheme = cozy\n", ini))
+        self.assertIsNone(cozytile.spicetify_scheme("color_scheme = gone\n", ini))
 
     def test_derive_dark(self):
         pol, pal = cozytile.derive(
@@ -359,6 +363,9 @@ def cozytile_repo(root: Path) -> str:
         "Wallpaper/e-ink.json": EINK,
         # Shipped but set by no theme: given to the closest palette (Sakura).
         "Wallpaper/pexels (1).png": make_png(16, 16, navy_pink),
+        # Spotify: Sakura's Spicetify scheme in the text theme (Carbon has none).
+        "Themes/Sakura/.config/spicetify/config-xpui.ini": "[Setting]\ncurrent_theme          = text\ncolor_scheme           = sakura\n",
+        ".config/spicetify/Themes/text/color.ini": "; note\n[cozy]\naccent=CAA9E0\nmain=282738\n\n[sakura]\n\naccent=E5B9C6\nmain=282738\ntext=FFFFFF\n",
     }
     for name, switcher in (("Sakura", SAKURA_SWITCHER), ("Carbon", CARBON_SWITCHER)):
         low = name.lower()
@@ -457,6 +464,10 @@ class Install(unittest.TestCase):
         self.assertEqual((m["license"], m["upstream"]["importer"]), ("NOASSERTION", "cozytile"))
         self.assertRegex(m["upstream"]["commit"], "^[0-9a-f]{40}$")
         self.assertEqual(m["lock"], {"name": "sakura", "format": "qylock", "path": "greeter"})
+        # Its Spotify scheme, for `loft spotify` (first section = the scheme).
+        from loft import spotify
+
+        self.assertEqual(spotify.parse_ini((sakura / "apps" / "spicetify.ini").read_text()), {"sakura": {"accent": "e5b9c6", "main": "282738", "text": "ffffff"}})
         from loft.pack import Pack
 
         walls = [str(e["path"].relative_to(sakura)) for e in Pack(sakura).wallpaper_entries()]
@@ -467,6 +478,7 @@ class Install(unittest.TestCase):
         # Same file as the greeter's background: referenced, not copied again.
         self.assertEqual(carbon["wallpaper"], {"image": "greeter/Background.jpg"})
         self.assertFalse((carbon_dir / "wallpapers").exists())
+        self.assertFalse((carbon_dir / "apps").exists(), "no Spicetify config: the generated scheme")
 
         # Re-running `all` skips installed packs; a single theme refuses; --force replaces.
         rc, out, _ = loft("theme", "install", "cozytile:all")

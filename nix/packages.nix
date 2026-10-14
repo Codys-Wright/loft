@@ -83,6 +83,7 @@
           ../themes
           ../packs
           ../schemas
+          ../spicetify
         ];
       };
 
@@ -336,7 +337,7 @@
           dontBuild = true;
           installPhase = ''
             mkdir -p $out/share/loft $out/bin
-            cp -r cli templates themes packs schemas $out/share/loft/
+            cp -r cli templates themes packs schemas spicetify $out/share/loft/
             # Utilities + Media Tools: Spotlight finds them; "Open With" in any file manager.
             install -Dm644 -t $out/share/applications ${../applications}/*.desktop
             # Reload hooks call quickshell/niri; installs and importers use git;
@@ -357,6 +358,31 @@
               }
           '';
           meta.mainProgram = "loft";
+        };
+
+        # Spotify themed by Loft (cli/loft/spotify.py, programs.loft.spotify):
+        # spicetify-themes' `text` theme (MIT), the theme Cozytile uses, whose
+        # color.ini Loft merges the active theme's scheme into …
+        loft-spicetify-text = pkgs.fetchFromGitHub {
+          owner = "spicetify";
+          repo = "spicetify-themes";
+          rev = "c432012478e1f2e2ffccca8e943e188af40d6190";
+          sparseCheckout = [ "text" ];
+          hash = "sha256-mg/iVr8JVlfNlCALqzY45PrFDu2A5EqvLgkdC+zCpe4=";
+          postFetch = ''
+            mv $out/text $TMPDIR/text
+            rm -rf $out
+            mkdir -p $out
+            cp $TMPDIR/text/{user.css,color.ini,README.md} $out/
+          '';
+        };
+
+        # … and the Marketplace custom app (MIT), its prebuilt `dist` branch.
+        loft-spicetify-marketplace = pkgs.fetchFromGitHub {
+          owner = "spicetify";
+          repo = "spicetify-marketplace";
+          rev = "3b4a4836e3fac8bac93a5c0490fd9ebc3d76600b";
+          hash = "sha256-tQhN0Wl4S1zqShvFHILbtZSPvDbi4EZYzAQLh3FGVQg=";
         };
 
         # Built-in packs rendered at build time: <name>/{theme.json,niri.kdl,…}
