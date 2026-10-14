@@ -28,7 +28,7 @@ def noon_today() -> float:
 class Scratch(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="loft-island-"))
-        self.env = mock.patch.dict(os.environ, {"LOFT_STATE_DIR": str(self.tmp / "state"), "HOME": str(self.tmp / "home"), "XDG_CONFIG_HOME": str(self.tmp / "config")})
+        self.env = mock.patch.dict(os.environ, {"LOFT_STATE_DIR": str(self.tmp / "state"), "HOME": str(self.tmp / "home"), "XDG_CONFIG_HOME": str(self.tmp / "config"), "XDG_DATA_HOME": str(self.tmp / "data"), "XDG_CACHE_HOME": str(self.tmp / "cache")})
         self.env.start()
 
     def tearDown(self):
@@ -196,6 +196,43 @@ class Calendar(Scratch):
         r = island.agenda("khal", [], days=2, now=self.now)
         self.assertEqual(r["sources"], ["khal"])
         self.assertIn("Standup", [e["title"] for e in r["events"]])
+
+
+class Evolution(Scratch):
+    """EDS stores: a local calendar (calendar.ics) and a remote one's cache.db (ECacheObjects)."""
+
+    def test_local_and_cached(self):
+        now = noon_today()
+        ics = fx.make_calendar(self.tmp / "f.ics", now).read_text()
+        data = self.tmp / "data" / "evolution" / "calendar"
+        (data / "system").mkdir(parents=True)
+        (data / "system" / "calendar.ics").write_text(ics)
+        src = Path(os.environ["XDG_CONFIG_HOME"]) / "evolution" / "sources"
+        src.mkdir(parents=True)
+        (src / "work-uid.source").write_text("[Data Source]\nDisplayName[de]=Arbeit\nDisplayName=Work (Google)\nEnabled=true\n\n[Calendar]\nBackendName=caldav\nSelected=true\n")
+        (src / "off-uid.source").write_text("[Data Source]\nDisplayName=Hidden\nEnabled=true\n\n[Calendar]\nBackendName=caldav\nSelected=false\n")
+        cache = self.tmp / "cache" / "evolution" / "calendar" / "work-uid"
+        cache.mkdir(parents=True)
+        import sqlite3
+
+        con = sqlite3.connect(cache / "cache.db")
+        con.execute("CREATE TABLE ECacheObjects (ECacheUID TEXT PRIMARY KEY, ECacheREV TEXT, ECacheOBJ TEXT, ECacheState INTEGER)")
+        start = datetime.fromtimestamp(now) + timedelta(hours=1)
+        vevent = f"BEGIN:VEVENT\r\nUID:remote-1\r\nDTSTART:{start.astimezone().strftime('%Y%m%dT%H%M%S')}\r\nDURATION:PT1H\r\nSUMMARY:Remote sync\r\nEND:VEVENT\r\n"
+        con.execute("INSERT INTO ECacheObjects VALUES ('remote-1', '1', ?, 0)", (vevent,))
+        con.execute("INSERT INTO ECacheObjects VALUES ('gone', '1', ?, 3)", (vevent.replace("remote-1", "gone").replace("Remote sync", "Deleted"),))
+        con.commit()
+        con.close()
+        r = island.agenda("eds", [], days=2, now=now)
+        self.assertEqual(r["sources"], ["eds"])
+        self.assertEqual(r["calendars"], ["Personal", "Work (Google)"])
+        titles = [e["title"] for e in r["events"]]
+        self.assertIn("Remote sync", titles)
+        self.assertIn("Standup", titles)
+        self.assertNotIn("Deleted", titles)
+
+    def test_absent(self):
+        self.assertIsNone(island.eds_calendars())
 
 
 class Downloads(Scratch):

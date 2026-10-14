@@ -7,7 +7,7 @@ compute in QML. Everything prints JSON for the shell.
              read into the output (only `usage` / `token_count` fields, model names and the
              project folder's name). Incremental: a cache keeps each log's read offset.
   calendar   upcoming events from local calendars: khal / vdirsyncer vdirs, Evolution Data
-             Server (D-Bus), and ICS files or URLs (fetched + cached). Recurrences expanded.
+             Server's stores, and ICS files or URLs (fetched + cached). Recurrences expanded.
   downloads  watch a folder for browser downloads in progress (.crdownload, .part, …): one
              JSON line per change, then a `finished` entry when the file lands.
   lyrics     synced lyrics for a track from LRCLIB (lrclib.net; opt-in in the shell — this
@@ -493,6 +493,18 @@ def running_sessions() -> list[dict]:
     return sorted(out, key=lambda s: s["started"])
 
 
+def _procs_override() -> list[dict] | None:
+    """$LOFT_AI_PROCS: "none" = don't look; a JSON file = these sessions instead (screenshots,
+    tests). Unset = scan /proc."""
+    v = os.environ.get("LOFT_AI_PROCS")
+    if not v:
+        return None
+    if v == "none":
+        return []
+    data = _read_json(Path(v), [])
+    return data if isinstance(data, list) else []
+
+
 def _claude_project_key(cwd: str) -> str:
     # Claude Code names a project's folder after its path, non-alphanumerics → '-'.
     return re.sub(r"[^A-Za-z0-9]", "-", cwd)
@@ -508,6 +520,8 @@ def ai_summary(cache_path: Path | None = None, now: float | None = None, procs: 
     cache.save()
 
     today, week = local_midnight(now), week_start(now)
+    if procs is None:
+        procs = _procs_override()
     procs = running_sessions() if procs is None else procs
     sessions = []
     for s in procs:
@@ -954,65 +968,85 @@ def read_vdir(name: str, d: Path) -> tuple[str, list[dict]]:
     return display, events
 
 
-def _busctl(*args: str, timeout: float = 4) -> object | None:
-    if not shutil.which("busctl"):
-        return None
+def _keyfile(path: Path) -> dict[str, dict[str, str]]:
+    """GLib keyfile → {section: {key: value}} (unlocalized keys only)."""
+    out: dict[str, dict[str, str]] = {}
+    cur = None
     try:
-        r = subprocess.run(["busctl", "--user", "--json=short", *args], capture_output=True, text=True, timeout=timeout)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if r.returncode != 0:
-        return None
-    try:
-        return json.loads(r.stdout)
-    except ValueError:
-        return None
+        lines = path.read_text(errors="replace").splitlines()
+    except OSError:
+        return out
+    for line in lines:
+        line = line.strip()
+        if line.startswith("[") and line.endswith("]"):
+            cur = out.setdefault(line[1:-1], {})
+        elif cur is not None and "=" in line and not line.startswith("#"):
+            k, v = line.split("=", 1)
+            if "[" not in k:
+                cur[k.strip()] = v.strip()
+    return out
 
 
-def eds_calendars(lo: datetime, hi: datetime) -> list[tuple[str, list[dict]]] | None:
-    """Evolution Data Server over D-Bus (GNOME Online Accounts calendars and local ones).
-    None when EDS isn't on the bus. Read-only: lists the enabled calendar sources, opens each
-    through the CalendarFactory and asks for the events in the window."""
-    names = _busctl("call", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "ListNames")
-    names = (names or {}).get("data", [[]])[0] if isinstance(names, dict) else []
-    sources_bus = next((n for n in names if n.startswith("org.gnome.evolution.dataserver.Sources")), None)
-    calendar_bus = next((n for n in names if n.startswith("org.gnome.evolution.dataserver.Calendar")), None)
-    if not sources_bus or not calendar_bus:
+def _eds_cache_objects(db: Path) -> list[str]:
+    """iCalendar components from an EDS backend cache (ECalCache: ECacheObjects.ECacheOBJ).
+    The live db may be locked, so a private copy is read."""
+    try:
+        with tempfile.TemporaryDirectory(prefix="loft-eds-") as tmp:
+            for suffix in ("", "-wal"):
+                src = Path(str(db) + suffix)
+                if src.exists():
+                    shutil.copyfile(src, Path(tmp) / ("cache.db" + suffix))
+            con = sqlite3.connect(f"file:{tmp}/cache.db?mode=ro", uri=True, timeout=1)
+            try:
+                # State 3 = deleted locally, not yet synced.
+                return [r[0] for r in con.execute("SELECT ECacheOBJ FROM ECacheObjects WHERE ECacheState IS NOT 3") if isinstance(r[0], str)]
+            finally:
+                con.close()
+    except (OSError, sqlite3.Error):
+        return []
+
+
+def eds_calendars() -> list[tuple[str, list[dict]]] | None:
+    """Evolution Data Server's calendars (GNOME Online Accounts, CalDAV, local), read from its
+    stores, read-only and offline: sources in ~/.config/evolution/sources/*.source (enabled,
+    [Calendar], selected), events in ~/.local/share/evolution/calendar/<uid>/calendar.ics
+    (local) or the backend's cache ~/.cache/evolution/calendar/<uid>/cache.db (remote, as
+    last synced by EDS). None when there's no EDS data. (Not over D-Bus: EDS closes a
+    calendar when the connection that opened it goes away, and Python's stdlib has no D-Bus
+    client to keep one.)"""
+    src_dir = config_home() / "evolution" / "sources"
+    data_dir = Path(os.environ.get("XDG_DATA_HOME") or _home() / ".local" / "share") / "evolution" / "calendar"
+    cache_dir = Path(os.environ.get("XDG_CACHE_HOME") or _home() / ".cache") / "evolution" / "calendar"
+    if not src_dir.is_dir() and not data_dir.is_dir():
         return None
-    objs = _busctl("call", sources_bus, "/org/gnome/evolution/dataserver/SourceManager", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects")
-    if not isinstance(objs, dict):
-        return None
+    sources: dict[str, str] = {}
+    if (data_dir / "system" / "calendar.ics").is_file():
+        sources["system"] = "Personal"  # the built-in local calendar
+    for f in sorted(src_dir.glob("*.source")) if src_dir.is_dir() else []:
+        kf = _keyfile(f)
+        ds, cal = kf.get("Data Source", {}), kf.get("Calendar")
+        if cal is None or ds.get("Enabled", "true") == "false" or cal.get("Enabled", "true") == "false" or cal.get("Selected", "true") == "false":
+            continue
+        if cal.get("BackendName") == "contacts":
+            continue  # birthdays are derived from the address book
+        uid = f.stem
+        sources["system" if uid == "system-calendar" else uid] = ds.get("DisplayName") or uid
     out = []
-    sexp = f'(occur-in-time-range? (make-time "{lo.astimezone(timezone.utc):%Y%m%dT%H%M%SZ}") (make-time "{hi.astimezone(timezone.utc):%Y%m%dT%H%M%SZ}"))'
-    for _path, ifaces in (objs.get("data") or [{}])[0].items():
-        src = next((v for k, v in ifaces.items() if k.startswith("org.gnome.evolution.dataserver.Source")), None)
-        if not src:
-            continue
-        uid = (src.get("UID") or {}).get("data", "")
-        data = (src.get("Data") or {}).get("data", "")
-        if "[Calendar]" not in data or re.search(r"^Enabled=false", data, re.M):
-            continue
-        cal_section = data.split("[Calendar]", 1)[1].split("\n[", 1)[0]
-        if re.search(r"^Selected=false", cal_section, re.M):
-            continue
-        dname = re.search(r"^DisplayName=(.*)$", data, re.M)
-        opened = _busctl("call", calendar_bus, "/org/gnome/evolution/dataserver/CalendarFactory", "org.gnome.evolution.dataserver.CalendarFactory", "OpenCalendar", "s", uid)
-        try:
-            obj_path, bus = opened["data"]  # type: ignore[index]
-        except (TypeError, KeyError, ValueError):
-            continue
-        _busctl("call", bus, obj_path, "org.gnome.evolution.dataserver.Calendar", "Open")
-        lst = _busctl("call", bus, obj_path, "org.gnome.evolution.dataserver.Calendar", "GetObjectList", "s", sexp, timeout=8)
-        _busctl("call", bus, obj_path, "org.gnome.evolution.dataserver.Calendar", "Close")
-        try:
-            items = lst["data"][0]  # type: ignore[index]
-        except (TypeError, KeyError, IndexError):
-            continue
+    for uid, name in sources.items():
         events: list[dict] = []
-        for ics in items:
-            text = ics if "BEGIN:VCALENDAR" in ics else f"BEGIN:VCALENDAR\n{ics}\nEND:VCALENDAR"
-            events.extend(parse_ics(text)[1])
-        out.append((dname.group(1) if dname else uid, events))
+        ics = data_dir / uid / "calendar.ics"
+        if ics.is_file():
+            try:
+                events = parse_ics(ics.read_text(errors="replace"))[1]
+            except OSError:
+                pass
+        else:
+            db = cache_dir / uid / "cache.db"
+            if db.is_file():
+                for comp in _eds_cache_objects(db):
+                    text = comp if "BEGIN:VCALENDAR" in comp else f"BEGIN:VCALENDAR\n{comp}\nEND:VCALENDAR"
+                    events.extend(parse_ics(text)[1])
+        out.append((name, events))
     return out
 
 
@@ -1064,7 +1098,7 @@ def agenda(source: str = "auto", ics: list[str] | None = None, days: int = 2, no
                 used.append("vdirsyncer")
         cals += [read_vdir(n, d) for n, d in vdirs]
     if source == "eds" or (source == "auto" and not used):
-        e = eds_calendars(lo, hi)
+        e = eds_calendars()
         if e is not None:
             used.append("eds")
             cals += e
@@ -1133,6 +1167,8 @@ def chromium_total(path: str) -> int | None:
             continue
         for hist in root.glob("*/History"):
             try:
+                if hist.stat().st_size > 64 * 1024 * 1024:
+                    continue  # too big to copy every few seconds
                 with tempfile.TemporaryDirectory(prefix="loft-dl-") as tmp:
                     for suffix in ("", "-wal"):
                         src = Path(str(hist) + suffix)
@@ -1219,8 +1255,12 @@ class DownloadWatcher:
                     inst = max(0.0, (size - prev["size"]) / dt)
                     rec["speed"] = inst if not prev["speed"] else prev["speed"] * 0.6 + inst * 0.4
                 rec["_checked"] = prev.get("_checked", 0)
-            if self.totals and rec["total"] is None and ("_checked" not in rec or now - rec["_checked"] > 5):
+            # Look the total up a few times (the browser writes its row soon after starting).
+            if prev:
+                rec["_tries"] = prev.get("_tries", 0)
+            if self.totals and rec["total"] is None and rec.get("_tries", 0) < 3 and ("_checked" not in rec or now - rec["_checked"] > 5):
                 rec["_checked"] = now
+                rec["_tries"] = rec.get("_tries", 0) + 1
                 if control is not None:
                     rec["total"] = aria2_total(control)
                 elif n.endswith(".crdownload"):

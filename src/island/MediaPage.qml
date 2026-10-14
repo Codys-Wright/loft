@@ -6,7 +6,7 @@ import qs.services
 
 // Island media page (One UI-style, as javiiervm did it): the album art
 // fills the page behind a dark veil; controls take an accent color picked
-// from the art.
+// from the art. With Lyrics on, the current synced line under the artist.
 Item {
     id: root
 
@@ -100,6 +100,38 @@ Item {
             font.family: Theme.fontUi
             font.pixelSize: 12
             elide: Text.ElideRight
+        }
+
+        // The current lyric line (Settings → Dynamic Island → Lyrics).
+        Text {
+            id: lyricLine
+            Layout.fillWidth: true
+            Layout.topMargin: 4
+            visible: Lyrics.has && Lyrics.player === root.player
+            text: Lyrics.current || "♪"
+            color: root.artAccent
+            font.family: Theme.fontUi
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
+            elide: Text.ElideRight
+
+            Behavior on text {
+                SequentialAnimation {
+                    NumberAnimation {
+                        target: lyricLine
+                        property: "opacity"
+                        to: 0.3
+                        duration: 90
+                    }
+                    PropertyAction {}
+                    NumberAnimation {
+                        target: lyricLine
+                        property: "opacity"
+                        to: 1
+                        duration: 160
+                    }
+                }
+            }
         }
 
         Item {

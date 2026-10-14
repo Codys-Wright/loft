@@ -4,7 +4,8 @@ them as today's. Used by tests/test_island.py and for screenshots of a test sess
 
     python3 tests/island_fixtures.py OUTDIR      # OUTDIR/{claude,codex,calendar.ics,Downloads}
 
-then LOFT_AI_CLAUDE_DIR=OUTDIR/claude LOFT_AI_CODEX_DIR=OUTDIR/codex, and point Settings →
+then LOFT_AI_CLAUDE_DIR=OUTDIR/claude LOFT_AI_CODEX_DIR=OUTDIR/codex LOFT_AI_PROCS=OUTDIR/procs.json,
+and point Settings →
 Dynamic Island at OUTDIR/calendar.ics and OUTDIR/Downloads. Nothing here is real data.
 """
 
@@ -170,4 +171,14 @@ if __name__ == "__main__":
     make_ai(out, now)
     make_calendar(out / "calendar.ics", now)
     (out / "Downloads").mkdir(parents=True, exist_ok=True)
+    # Pretend sessions (LOFT_AI_PROCS) so screenshots don't show real ones.
+    (out / "procs.json").write_text(
+        json.dumps(
+            [
+                {"pid": 1, "tool": "claude", "cwd": "/home/me/projects/aurora", "started": now - 1800},
+                {"pid": 2, "tool": "claude", "cwd": "/home/me/projects/loft", "started": now - 600},
+                {"pid": 3, "tool": "codex", "cwd": "/home/me/projects/nimbus", "started": now - 900},
+            ]
+        )
+    )
     print(out.resolve())
