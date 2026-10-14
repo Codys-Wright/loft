@@ -1081,23 +1081,19 @@ in the same row can run in parallel.
 - **Merge-patch can't patch inside arrays.** Wallpaper `collection` and `sets` are
   replaced whole by a patch. Arrangement maps are objects on purpose.
 
-## 11. Open questions for Cody
+## 11. Decisions (Cody, 2026-10-14: "go with defaults")
 
-1. **Qylock as 37 themes or one theme with 37 variants?** The recommendation is themes
-   in a collection, because variants are for versions of one look. Cozytile becomes one
-   theme because upstream is one rice with a switcher.
-2. **Built-in default**: one `loft` theme with Dark (Tokyo Night) / Light (Latte), or
-   keep `tokyonight` and `latte` as separate themes and add `tokyonight` Storm / Day
-   variants?
-3. **Pins vs customizations for today's global appearance overrides**: migrating your
-   glass 0.35 as an "All Themes" pin keeps today's behavior. Should the slider default
-   to per-theme from now on, with an "All Themes" toggle?
-4. **Library root**: move to `~/Documents/Loft` (themes + spaces + wallpapers) or keep
-   `~/Documents/Themes` and put Spaces elsewhere?
-5. **Auto appearance**: should it follow the Night Light schedule (sunset / sunrise), a
-   fixed time, or the fleet's `services.darkman` if you use one?
-6. **Per-theme fonts**: should a theme be allowed to change the UI font (qylock designs
-   ship pixel fonts), or only the mono / terminal and lock fonts?
-7. **Icons & Cursor in themes**: allow it (it needs a shell restart and pre-installed
-   themes), or keep icons global (home-manager) and leave this facet for later?
-8. **Sounds**: worth doing at all?
+1. **Qylock**: 37 themes in a `qylock` collection (variants are for versions of one look);
+   cozytile is one theme with variants.
+2. **Built-in default**: one `loft` theme with **Dark** (Tokyo Night) and **Light**
+   (Latte) variants; `tokyonight` / `latte` stay as aliases.
+3. **Today's glass 0.35** migrates as an **All Themes pin** (behavior unchanged). From now
+   on the Liquid Glass slider is per theme, with an "All Themes" toggle.
+4. **Library root** moves to **`~/Documents/Loft`** (Themes, Spaces, Wallpapers);
+   `~/Documents/Themes` is migrated (dry run first) and left as a symlink.
+5. **Auto appearance** follows the **Night Light schedule** (sunset / sunrise).
+6. **Fonts**: a theme may set the UI font (and mono / lock fonts); accessibility clamps
+   still apply.
+7. **Icons & Cursor** are a facet themes may set (shell restart on change, themes must be
+   pre-installed); **MacTahoe** (blue) stays the default.
+8. **Sounds**: later — keep the facet in the model, no UI or assets yet.

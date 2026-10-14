@@ -505,28 +505,26 @@ loft-niri space focus|ensure|plan <id> [--json]   # the fast path; `plan` prints
 - **AOC on a connector name** can renumber. Moving it to identity in `outputs.kdl` is a
   fleet fix that's independent of spaces.
 
-## 12. Open questions for Cody
+## 12. Decisions (Cody, 2026-10-14: "go with defaults")
 
-1. **Workspace names**: keep today's (`music`, `comms`, `code`) for the main role, so
-   your rules keep working, or rename everything to the space ids?
-2. **Communication as a sidecar or a space?** Today `comms` lives on the left portrait
-   monitor alongside everything. The proposal makes Music and Gaming `keep` the left
-   display so chat stays visible. Should Communication still be its own space (with
-   calls on the center), or just "the left monitor's default"?
-3. **Project layout**: center = editor (⅔) + debugger terminal (⅓), right = preview,
-   left (portrait) = docs. Is the debugger a terminal, or an IDE panel (Zed's debugger)
-   where nothing extra should launch? Should two projects share the left docs monitor,
-   or each get its own (the proposal: its own, so switching projects swaps all three)?
-4. **Instance lifetime**: should open Project instances restore after a reboot (relaunch
-   editor, preview, docs), or only their workspaces, with apps on demand?
-5. **Browser for preview / docs**: Chromium `--app` (exact matching, separate
-   profiles), or your main Firefox (shared logins, but weak matching)?
-6. **Mod+1…9**: are spaces in this order (Main, Programming, Music, Gaming, Comms,
-   Video, Task) right, and do project instances take the next numbers, or live behind
-   Mod+2 → a project picker?
-7. **Per-space theme scope**: is "desktop only" (shell, niri, wallpapers, launcher) the
-   right default, or do you want terminals to follow too?
-8. **Video and Task**: which apps, and on which displays? (Resolve on center and OBS on
-   right are the proposal.)
-9. **Where your spaces live**: in the fleet as Nix-seeded JSON (versioned, per host),
-   or only in `~/Documents/Loft/Spaces`?
+1. **Workspace names**: keep today's names (`music`, `comms`, `code`, …) so existing
+   window rules keep working.
+2. **Communication** is the **left monitor's sidecar**: Music and Gaming `keep` the left
+   display so chat stays visible. It is still reachable as a space for calls (center).
+3. **Projects**: center = editor (⅔) + **debugger terminal** (⅓), right = preview, left
+   (portrait) = docs. Each project instance gets its own left docs workspace, so
+   switching projects swaps all three displays.
+4. **Lifetime**: project instances restore **lazily** after a reboot: their workspaces
+   come back, apps start on demand.
+5. **Preview / docs browser**: **Chromium `--app`** with per-instance profiles (exact
+   matching).
+6. **Mod+1…9**: Main, Music, Video, Comms, Gaming, Task, then project instances take the
+   next numbers.
+7. **Per-space theme scope** defaults to **`desktop`** (shell, niri, wallpapers,
+   launcher); terminals don't follow.
+8. **Video** = DaVinci Resolve on the center (OBS on the right); **Task** starts blank.
+9. **Storage**: spaces live in the library (`~/Documents/Loft/Spaces`), **seeded from the
+   fleet** (Nix-provided JSON copied on first run, never overwritten).
+
+Also decided: the AOC monitor (`HDMI-A-2`) is matched by identity in the fleet's
+`outputs.kdl` (fleet fix, independent of spaces).
