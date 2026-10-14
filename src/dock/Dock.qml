@@ -54,11 +54,11 @@ PanelWindow {
         const ws = Niri.workspaces.find(w => w.output === modelData.name && w.is_active);
         return !!ws && Niri.windows.some(w => w.workspace_id === ws.id);
     }
-    readonly property bool hideable: fullscreen || prefs.autoHide === "always" || (prefs.autoHide === "whenWindows" && occupied)
+    readonly property bool hideable: fullscreen || prefs.hidden || prefs.autoHide === "always" || (prefs.autoHide === "whenWindows" && occupied)
     readonly property bool busy: winHover.hovered || menuOpen || stackOpenHere || dragging || previewHere
     property bool dragging: false
     property bool summoned: false
-    readonly property bool revealed: !hideable || summoned
+    readonly property bool revealed: !prefs.hidden && (!hideable || summoned)
     onBusyChanged: {
         if (busy)
             hideTimer.stop();
@@ -99,7 +99,7 @@ PanelWindow {
     // The edge strip that summons a hidden dock.
     PanelWindow {
         screen: root.modelData
-        visible: root.hideable && !root.revealed
+        visible: root.hideable && !root.revealed && !root.prefs.hidden
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "loft:dock-hotzone"
         exclusionMode: ExclusionMode.Ignore

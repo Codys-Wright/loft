@@ -25,6 +25,7 @@ Scope {
         { id: "dock", icon: "󱂬", badge: "blue", label: "Dock", feature: "dock" },
         { id: "island", icon: "󰟜", badge: "purple", label: "Dynamic Island", feature: "island" },
         { id: "displays", icon: "󰍹", badge: "teal", label: "Displays" },
+        { id: "spaces", icon: "󰕰", badge: "indigo", label: "Spaces", feature: "spaces" },
         { id: "input", icon: "󰌌", badge: "gray", label: "Keyboard & Mouse" },
         { id: "layout", icon: "󰕰", badge: "mint", label: "Layout & Motion" },
         { id: "keybinds", icon: "󰘳", badge: "graphite", label: "Keyboard Shortcuts" },
@@ -98,6 +99,9 @@ Scope {
         }
         function dock(): void {
             root.show("dock");
+        }
+        function spaces(): void {
+            root.show("spaces");
         }
         // Any page by id (Spotlight's "… Settings" commands).
         function open(section: string): void {
@@ -411,6 +415,11 @@ Scope {
                     DisplaysPage {
                         Layout.fillWidth: true
                         visible: root.section === "displays"
+                    }
+
+                    SpacesPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "spaces"
                     }
 
                     InputPage {

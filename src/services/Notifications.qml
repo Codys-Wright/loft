@@ -40,8 +40,9 @@ Singleton {
     }
 
     function show(n) {
-        // Critical notifications break through Do Not Disturb.
-        if (Panels.doNotDisturb && n.urgency !== NotificationUrgency.Critical)
+        // Critical notifications break through Do Not Disturb, and so do
+        // the apps a space's Focus allows (Spaces.dndAllow, SPACES §5).
+        if (Panels.doNotDisturb && n.urgency !== NotificationUrgency.Critical && !Spaces.dndAllow.some(a => a.toLowerCase() === String(n.appName ?? "").toLowerCase()))
             return;
         queue = queue.concat([n]);
     }

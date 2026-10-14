@@ -232,7 +232,14 @@ Singleton {
 
     // On the bar right now.
     function barShown(id) {
-        return available(id) && onBar(id) && (!activeOnly(id) || active(id));
+        return available(id) && onBar(id) && (!activeOnly(id) || active(id)) && spaceAllows(id);
+    }
+
+    // The active space's menu bar (SPACES §5 `menubar.extras`): a subset of
+    // the enabled items. The Control Center button always stays.
+    function spaceAllows(id) {
+        const keep = Spaces.menubarExtras;
+        return keep === null || id === "controlcenter" || keep.includes(id);
     }
 
     // Move `id` to sit before `beforeId` ("" = the end).
