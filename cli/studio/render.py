@@ -127,6 +127,13 @@ def render(pack: Pack, outdir: Path, template_dir: Path) -> list[str]:
         shutil.copyfile(src, outdir / dest)
         written.append(dest)
 
+    # A pack's own lock / login-screen design travels with the render, so the
+    # lock finds it next to current/theme.json (docs/THEME-FORMAT-LOCK.md).
+    for sub in ("lock", "greeter"):
+        if (pack.path / sub).is_dir():
+            shutil.copytree(pack.path / sub, outdir / sub, dirs_exist_ok=True)
+            written.append(f"{sub}/")
+
     apps = pack.path / "apps"
     if apps.is_dir():
         for p in sorted(apps.rglob("*")):

@@ -50,4 +50,36 @@ Point your apps at the rendered fragments once; `apply` keeps them current:
 `python3 cli/studio …` runs the same CLI (the dev shell has `jsonschema`), and
 `nix flake check` runs the schema, unit, golden-render and `niri validate` checks.
 
-Status: Phase 0 (dev loop, glass bar + dock placeholder) and Phase 1 theme engine (render, apply, install). See [docs/PLAN.md](docs/PLAN.md). Themes: [studio-linux-themes](https://github.com/Codys-Wright/studio-linux-themes).
+## Lock screen and login screen
+
+`Mod+Ctrl+Q` (Ctrl+Cmd+Q on a Mac) locks: a session lock with PAM, a big clock, now playing
+and a frosted card with the password field. The same design is the login screen, shipped as the
+SDDM theme `studio` (`packages.studio-sddm-theme`). A theme pack can replace both with its own
+`lock/Main.qml` ([docs/THEME-FORMAT-LOCK.md](docs/THEME-FORMAT-LOCK.md)).
+
+```sh
+nix run .#greeter-preview           # the login screen in SDDM's test mode (opens a window)
+qs ipc --path <shell> call lock lock
+```
+
+Locking on idle (swayidle):
+
+```sh
+swayidle -w timeout 300 'studio-lock' before-sleep 'studio-lock'
+# where studio-lock = quickshell ipc --path <shell src> call lock lock
+```
+
+Using the login screen on NixOS:
+
+```nix
+environment.systemPackages = [ studio-linux.packages.${system}.studio-sddm-theme ];
+services.displayManager.sddm = {
+  theme = "studio";
+  # lets the greeter read /var/lib/studio-linux/greeter/theme.json
+  settings.General.GreeterEnvironment = "QML_XHR_ALLOW_FILE_READ=1";
+};
+# optional: a dedicated PAM service for the lock (default: "login")
+security.pam.services.studio-lock = { };   # + STUDIO_LOCK_PAM=studio-lock in the shell's environment
+```
+
+Status: Phase 0 (dev loop), Phase 1 (theme engine + selector), the shell port (bar, dock, Control Center, Dynamic Island, OSD, switcher, notifications, wallpaper picker, Settings), the Spotlight launcher and Phase 5 (lock + login screen). See [docs/PLAN.md](docs/PLAN.md). Themes: [studio-linux-themes](https://github.com/Codys-Wright/studio-linux-themes).
