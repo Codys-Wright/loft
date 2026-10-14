@@ -8,6 +8,8 @@
   open       launch a desktop entry with files (field codes expanded)
   show       reveal a file in the file manager (FileManager1.ShowItems)
   autostart  "Open at Login": XDG autostart entries the dock owns
+  capture    which window/display capture the compositor offers (the preview's
+             thumbnails), read from the Wayland registry
 
 Everything prints JSON for the shell; nothing here deletes or moves user files
 (emptying the trash and trashing files are `gio trash` calls in the shell).
@@ -22,7 +24,9 @@ import os
 import re
 import shlex
 import shutil
+import socket
 import sqlite3
+import struct
 import subprocess
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -790,6 +794,74 @@ def autostart_run(*, once: str | None = None, dry_run: bool = False) -> dict:
 # ── CLI ─────────────────────────────────────────────────────────────────────
 
 
+# ── capture support (the dock preview's thumbnails) ─────────────────────────
+
+# Per-window capture protocols a client could use, and what reads a display.
+TOPLEVEL_CAPTURE = ("ext_foreign_toplevel_image_capture_source_manager_v1", "hyprland_toplevel_export_manager_v1")
+OUTPUT_CAPTURE = ("zwlr_screencopy_manager_v1", "ext_output_image_capture_source_manager_v1")
+
+
+def wayland_globals(display: str | None = None, timeout: float = 2.0) -> dict[str, int]:
+    """interface → highest version, from the compositor's registry (a bare
+    wl_display.get_registry + sync over the socket; binds nothing)."""
+    name = display or os.environ.get("WAYLAND_DISPLAY") or "wayland-0"
+    path = name if name.startswith("/") else os.path.join(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"), name)
+    out: dict[str, int] = {}
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(timeout)
+        s.connect(path)
+        # wl_display (1): get_registry(new_id 2) = opcode 1, sync(new_id 3) = opcode 0.
+        s.sendall(struct.pack("<III", 1, (12 << 16) | 1, 2) + struct.pack("<III", 1, (12 << 16) | 0, 3))
+        buf = b""
+        while True:
+            chunk = s.recv(65536)
+            if not chunk:
+                break
+            buf += chunk
+            while len(buf) >= 8:
+                obj, word = struct.unpack_from("<II", buf)
+                size, op = word >> 16, word & 0xFFFF
+                if size < 8 or len(buf) < size:
+                    break
+                body, buf = buf[8:size], buf[size:]
+                if obj == 3:  # wl_callback.done: every global was sent
+                    return out
+                if obj == 2 and op == 0:  # wl_registry.global(name, interface, version)
+                    n = struct.unpack_from("<I", body, 4)[0]
+                    iface = body[8 : 8 + n - 1].decode(errors="replace")
+                    ver = struct.unpack_from("<I", body, 8 + ((n + 3) & ~3))[0]
+                    out[iface] = max(ver, out.get(iface, 0))
+                if obj == 1 and op == 0:  # wl_display.error
+                    raise OSError("wayland error")
+    return out
+
+
+def capture_support(globals_: dict[str, int] | None = None) -> dict:
+    """What the preview can use. `screencopy`: a still of a display, safe for
+    Quickshell's ScreencopyView — its buffer code asks zwp_linux_dmabuf_v1
+    for default feedback (v4+) unconditionally, which kills the client on a
+    v3-only compositor (niri on a software renderer offers just v3)."""
+    try:
+        g = wayland_globals() if globals_ is None else globals_
+    except OSError as e:
+        return {"screencopy": False, "toplevel": False, "reason": f"no Wayland registry: {e}"}
+    dmabuf = g.get("zwp_linux_dmabuf_v1", 0)
+    output = [p for p in OUTPUT_CAPTURE if p in g]
+    toplevel = [p for p in TOPLEVEL_CAPTURE if p in g]
+    reason = ""
+    if not output:
+        reason = "the compositor offers no display capture"
+    elif 0 < dmabuf < 4:
+        reason = f"zwp_linux_dmabuf_v1 is v{dmabuf} (no GPU feedback); Quickshell's capture needs v4+"
+    return {
+        "screencopy": bool(output) and not (0 < dmabuf < 4),
+        "toplevel": bool(toplevel),
+        "protocols": output + toplevel,
+        "dmabuf": dmabuf,
+        "reason": reason,
+    }
+
+
 def add_parser(top, state_dir_of) -> None:
     dock = top.add_parser("dock", help="helpers for the dock (JSON for the shell)")
     sub = dock.add_subparsers(dest="cmd", required=True)
@@ -852,3 +924,6 @@ def add_parser(top, state_dir_of) -> None:
     t.add_argument("--once", metavar="KEY")
     t.add_argument("--dry-run", action="store_true")
     t.set_defaults(fn=lambda ctx, a: out(autostart_run(once=a.once, dry_run=a.dry_run)))
+
+    s = sub.add_parser("capture", help="window/display capture the compositor offers (preview thumbnails)")
+    s.set_defaults(fn=lambda ctx, a: out(capture_support()))

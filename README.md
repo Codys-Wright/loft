@@ -255,6 +255,13 @@ to refresh), converted by `launcher/bangs.py`, which also fixes the NixOS search
 
 ## Dock
 
+Rest the pointer on a running app (or click it, if you prefer: Settings → Dock → Window
+previews) and its windows appear above the icon as Liquid Glass cards: click one to focus it on
+whatever desktop or display it's on (a hidden one comes back), × to close it, right-click or ⋯
+to move it to another desktop or display or hide it. niri 26.04 can't capture a single window,
+so thumbnails are cut from a still of the display for floating and fullscreen windows; tiled
+ones show their app icon.
+
 Right-click (or Ctrl-click, or long-press) an app: its windows, recent files, New Window and the
 app's actions, Options ▸ (Keep in Dock, Open at Login, Show in Files, Assign To, Move to Desktop /
 Display), Hide, Quit (hold Alt: Force Quit). Downloads sits left of the Trash as a stack (fan,
@@ -266,6 +273,7 @@ windows are open. The helpers behind it are `loft dock …` (JSON for the shell)
 loft dock recents | folder xdg:DOWNLOAD --sort added | trash [--empty]
 loft dock autostart list | set ID on|off | run --once KEY
 loft dock open ID FILE… | show PATH|ID | apps [ID…]
+loft dock capture                       # what window/display capture the compositor offers
 ```
 
 ## Clipboard, snippets, shelf, scratchpad

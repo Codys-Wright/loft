@@ -13,6 +13,11 @@ DockTile {
     // pinned | running | recent
     property string section: "pinned"
     property bool bounceOnLaunch: true
+    // Dock preview in click mode: a click on an app with several windows
+    // asks for the preview instead of focusing.
+    property bool previewOnClick: false
+
+    signal previewRequested
 
     readonly property var appWindows: DockData.windowsOf(appId)
     label: Apps.name(appId)
@@ -38,6 +43,10 @@ DockTile {
         }
         // Focus the app; if it already has focus, cycle to its next window.
         const ws = root.appWindows;
+        if (root.previewOnClick && ws.length > 1) {
+            root.previewRequested();
+            return;
+        }
         const i = ws.findIndex(w => w.is_focused);
         DockMenu.focus(ws[(i + 1) % ws.length]);
     }

@@ -4,9 +4,10 @@ import Quickshell
 import qs.components
 import qs.services
 
-// Settings → Dock: size and magnification, per-display dock (show,
-// auto-hide, position), behavior, the recent-apps section, docked folders
-// and the Trash, and the pinned apps.
+// Settings → Dock: size and magnification, window previews (hover / click,
+// delay, thumbnails), per-display dock (show, auto-hide, position),
+// behavior, the recent-apps section, docked folders and the Trash, and the
+// pinned apps.
 ColumnLayout {
     id: page
     spacing: 12
@@ -62,6 +63,60 @@ ColumnLayout {
         SettingsRow {
             label: "Hiding windows"
             hint: "niri has no minimize: Hide parks an app's windows on a \"hidden-<display>\" workspace; Show All brings them back"
+        }
+    }
+
+    SettingsCard {
+        PageHeader {
+            title: "Window previews"
+        }
+
+        SettingsRow {
+            label: "Show an app's windows"
+            hint: Previews.mode === "click" ? "Click an app with several windows (one window just focuses)" : "Rest the pointer on a running app: a card per window"
+            SettingsSegmented {
+                options: [
+                    { value: "off", label: "Off" },
+                    { value: "hover", label: "On hover" },
+                    { value: "click", label: "On click" }
+                ]
+                current: Features.on("dockPreview") ? Previews.mode : "off"
+                onActivated: v => {
+                    Features.set("dockPreview", v !== "off");
+                    if (v !== "off")
+                        Settings.dock.preview = v;
+                }
+            }
+        }
+
+        SettingsRow {
+            visible: Features.on("dockPreview")
+            label: "In the preview"
+            hint: "Click focuses · × or middle-click closes · right-click or ⋯: move, hide"
+        }
+
+        SettingsRow {
+            visible: Features.on("dockPreview") && Previews.mode === "hover"
+            label: "Delay"
+            hint: "How long the pointer rests on an icon first"
+            SettingsSlider {
+                from: 0
+                to: 1500
+                step: 50
+                suffix: " ms"
+                value: Settings.dock.previewDelay
+                onMoved: v => Settings.dock.previewDelay = Math.round(v)
+            }
+        }
+
+        SettingsRow {
+            visible: Features.on("dockPreview")
+            label: "Window thumbnails"
+            hint: Previews.canCapture ? "Floating and fullscreen windows; tiled ones show their app icon" : Previews.support ? "Not available here (no GPU capture): cards show the app icon" : "Checking…"
+            SettingsSwitch {
+                checked: Settings.dock.previewThumbnails
+                onToggled: on => Settings.dock.previewThumbnails = on
+            }
         }
     }
 

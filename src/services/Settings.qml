@@ -89,6 +89,12 @@ Singleton {
                 // { enabled, autoHide, position }. Missing keys fall back to
                 // the values above; an ultrawide (≥ 2.2:1) defaults to "whenWindows".
                 property var displays: ({})
+                // Window previews (feature dockPreview): open on "hover"
+                // (after previewDelay ms) or on "click" (an app with several
+                // windows); previewThumbnails = snapshots where niri allows.
+                property string preview: "hover"
+                property int previewDelay: 450
+                property bool previewThumbnails: true
             }
 
             // Which display carries the dock and the bar's status area (see
