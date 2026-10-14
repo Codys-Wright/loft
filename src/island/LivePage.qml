@@ -56,6 +56,8 @@ Item {
             Layout.preferredHeight: 110
 
             ProgressRing {
+
+                trackColor: Theme.withAlpha(Theme.islandText, 0.15)
                 anchors.fill: parent
                 visible: root.activity === "focus" || root.activity === "timer" || (root.activity === "download" && root.download?.progress !== undefined)
                 value: root.activity === "focus" ? FocusTimer.progress : root.activity === "timer" ? Timers.progress(root.timer) : (root.download?.progress ?? 0)
@@ -93,7 +95,7 @@ Item {
                 anchors.centerIn: parent
                 visible: root.activity === "focus" || root.activity === "timer" || (root.activity === "download" && root.download?.progress !== undefined)
                 text: root.activity === "focus" ? FocusTimer.format(FocusTimer.remaining) : root.activity === "timer" ? Timers.display(root.timer) : `${Math.round((root.download?.progress ?? 0) * 100)}%`
-                color: Theme.text
+                color: Theme.islandText
                 font.family: Theme.fontUi
                 font.pixelSize: text.length > 5 ? 18 : 22
                 font.weight: Font.DemiBold
@@ -108,7 +110,7 @@ Item {
             Text {
                 Layout.fillWidth: true
                 text: root.heading
-                color: Theme.text
+                color: Theme.islandText
                 font.family: Theme.fontUi
                 font.pixelSize: 16
                 font.weight: Font.DemiBold
@@ -118,7 +120,7 @@ Item {
             Text {
                 Layout.fillWidth: true
                 text: root.detail
-                color: Theme.subtext
+                color: Theme.islandSubtext
                 font.family: Theme.fontUi
                 font.pixelSize: 13
                 font.features: { "tnum": 1 }

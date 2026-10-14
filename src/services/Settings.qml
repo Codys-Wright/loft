@@ -107,6 +107,13 @@ Singleton {
             }
 
             property JsonObject island: JsonObject {
+                // attached: hangs from the top edge like a notch (flush,
+                // square top with concave shoulders, rounded bottom) |
+                // floating: a pill with a gap above it.
+                property string style: "attached"
+                // black: a solid near-black fill like the real notch |
+                // glass: the Liquid Glass material.
+                property string fill: "black"
                 // Alert border when a temperature (°C) or load (0..1) exceeds these.
                 property real maxTemp: 95
                 property real maxLoad: 0.92

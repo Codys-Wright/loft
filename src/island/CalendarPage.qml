@@ -46,7 +46,7 @@ Item {
 
             Text {
                 text: Qt.formatDateTime(new Date(Agenda.now), "d")
-                color: Theme.text
+                color: Theme.islandText
                 font.family: Theme.fontUi
                 font.pixelSize: 44
                 font.weight: Font.Light
@@ -57,7 +57,7 @@ Item {
                     const n = Agenda.today.length;
                     return !Agenda.enabled ? "No calendars" : n === 0 ? "Nothing left today" : n === 1 ? "1 event" : `${n} events`;
                 }
-                color: Theme.subtext
+                color: Theme.islandSubtext
                 font.family: Theme.fontUi
                 font.pixelSize: 11
             }
@@ -74,7 +74,7 @@ Item {
                 Layout.topMargin: 4
                 text: Agenda.enabled ? "No events today or tomorrow." : "Add a calendar in Settings → Dynamic Island: khal, Evolution or an ICS link."
                 wrapMode: Text.Wrap
-                color: Theme.subtext
+                color: Theme.islandSubtext
                 font.family: Theme.fontUi
                 font.pixelSize: 12
             }
@@ -92,7 +92,7 @@ Item {
                         id: label
                         Text {
                             text: row.modelData.text
-                            color: Theme.subtext
+                            color: Theme.islandSubtext
                             font.family: Theme.fontUi
                             font.pixelSize: 11
                             font.weight: Font.DemiBold
@@ -122,7 +122,7 @@ Item {
                                 Text {
                                     Layout.fillWidth: true
                                     text: ev.e.title
-                                    color: Theme.text
+                                    color: Theme.islandText
                                     font.family: Theme.fontUi
                                     font.pixelSize: 13
                                     font.weight: Font.DemiBold
@@ -132,7 +132,7 @@ Item {
                                 Text {
                                     Layout.fillWidth: true
                                     text: [ev.e.allDay ? "All day" : Agenda.timeRange(ev.e), ev.e.location].filter(s => s).join("  ·  ")
-                                    color: Theme.subtext
+                                    color: Theme.islandSubtext
                                     font.family: Theme.fontUi
                                     font.pixelSize: 11
                                     font.features: { "tnum": 1 }
@@ -143,7 +143,7 @@ Item {
                             Text {
                                 visible: !ev.e.allDay && !ev.e.joinUrl && ev.e.start > Agenda.now && ev.e.start - Agenda.now < 3600000
                                 text: Agenda.when(ev.e)
-                                color: Theme.subtext
+                                color: Theme.islandSubtext
                                 font.family: Theme.fontUi
                                 font.pixelSize: 11
                             }
@@ -154,7 +154,7 @@ Item {
                                 implicitWidth: joinRow.implicitWidth + 18
                                 implicitHeight: 24
                                 radius: 12
-                                color: ev.imminent ? Theme.withAlpha(Theme.ok, joinMouse.containsMouse ? 1 : 0.85) : Theme.withAlpha(Theme.text, joinMouse.containsMouse ? 0.2 : 0.1)
+                                color: ev.imminent ? Theme.withAlpha(Theme.ok, joinMouse.containsMouse ? 1 : 0.85) : Theme.withAlpha(Theme.islandText, joinMouse.containsMouse ? 0.2 : 0.1)
 
                                 Row {
                                     id: joinRow
@@ -164,12 +164,12 @@ Item {
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: "󰕧"
                                         size: 12
-                                        color: ev.imminent ? Theme.bg : Theme.text
+                                        color: ev.imminent ? Theme.readableOn(Theme.ok, Theme.islandBg) : Theme.islandText
                                     }
                                     Text {
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: "Join"
-                                        color: ev.imminent ? Theme.bg : Theme.text
+                                        color: ev.imminent ? Theme.readableOn(Theme.ok, Theme.islandBg) : Theme.islandText
                                         font.family: Theme.fontUi
                                         font.pixelSize: 11
                                         font.weight: Font.DemiBold

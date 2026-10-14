@@ -24,6 +24,8 @@ Item {
             Layout.preferredHeight: 78
 
             ProgressRing {
+
+                trackColor: Theme.withAlpha(Theme.islandText, 0.15)
                 anchors.fill: parent
                 value: gauge.value
                 lineWidth: 7
@@ -37,12 +39,13 @@ Item {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: gauge.icon
                     size: 15
+                    color: Theme.islandText
                 }
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: gauge.value < 0 ? "—" : `${Math.round(gauge.value * 100)}%`
-                    color: Theme.text
+                    color: Theme.islandText
                     font.family: Theme.fontUi
                     font.pixelSize: 13
                     font.weight: Font.DemiBold
@@ -53,7 +56,7 @@ Item {
         Text {
             Layout.alignment: Qt.AlignHCenter
             text: gauge.detail
-            color: gauge.hot ? Theme.urgent : Theme.subtext
+            color: gauge.hot ? Theme.urgent : Theme.islandSubtext
             font.family: Theme.fontUi
             font.pixelSize: 11
         }
@@ -75,7 +78,7 @@ Item {
             Text {
                 // 12-hour, without the AM/PM suffix, like the lock screen.
                 text: Qt.formatDateTime(clock.date, "h:mm AP").replace(/\s*[AP]M$/i, "")
-                color: Theme.text
+                color: Theme.islandText
                 font.family: Theme.fontUi
                 font.pixelSize: 40
                 font.weight: Font.Light
@@ -83,7 +86,7 @@ Item {
 
             Text {
                 text: Qt.formatDateTime(clock.date, "dddd, MMMM d")
-                color: Theme.subtext
+                color: Theme.islandSubtext
                 font.family: Theme.fontUi
                 font.pixelSize: 12
             }
@@ -95,7 +98,7 @@ Item {
                 implicitWidth: openRow.implicitWidth + 20
                 implicitHeight: 24
                 radius: 12
-                color: openMouse.containsMouse ? Theme.withAlpha(Theme.text, 0.16) : Theme.withAlpha(Theme.text, 0.08)
+                color: openMouse.containsMouse ? Theme.withAlpha(Theme.islandText, 0.16) : Theme.withAlpha(Theme.islandText, 0.08)
 
                 Row {
                     id: openRow
@@ -105,11 +108,12 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         text: "󰄧"
                         size: 11
+                        color: Theme.islandText
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         text: "Open Monitor"
-                        color: Theme.text
+                        color: Theme.islandText
                         font.family: Theme.fontUi
                         font.pixelSize: 11
                         font.weight: Font.Medium

@@ -3,8 +3,9 @@ import QtQuick.Layouts
 import qs.components
 import qs.services
 
-// Settings → Dynamic Island: page order and visibility, calendars, timers,
-// downloads, AI agents, lyrics and the alert thresholds
+// Settings → Dynamic Island: its look (attached / floating, black / glass),
+// page order and visibility, calendars, timers, downloads, AI agents, lyrics
+// and the alert thresholds
 // (Settings.island; pages: IslandPages).
 ColumnLayout {
     id: page
@@ -44,6 +45,39 @@ ColumnLayout {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: btn.clicked()
+        }
+    }
+
+    // ── Look ────────────────────────────────────────────────────────────
+    SettingsCard {
+        PageHeader {
+            title: "Look"
+        }
+
+        SettingsRow {
+            label: "Style"
+            hint: page.isl.style === "floating" ? "A pill just below the top edge" : "Hangs from the top edge like a notch, and grows down from it"
+            SettingsSegmented {
+                options: [
+                    { value: "attached", label: "Attached" },
+                    { value: "floating", label: "Floating pill" }
+                ]
+                current: page.isl.style === "floating" ? "floating" : "attached"
+                onActivated: v => page.isl.style = v
+            }
+        }
+
+        SettingsRow {
+            label: "Fill"
+            hint: page.isl.fill === "glass" ? "Liquid Glass, in the theme's colors" : "Solid black with light content, like the real notch: reads on any wallpaper"
+            SettingsSegmented {
+                options: [
+                    { value: "black", label: "Black" },
+                    { value: "glass", label: "Glass" }
+                ]
+                current: page.isl.fill === "glass" ? "glass" : "black"
+                onActivated: v => page.isl.fill = v
+            }
         }
     }
 

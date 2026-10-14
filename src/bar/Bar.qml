@@ -93,7 +93,8 @@ PanelWindow {
             window: root
             screenName: root.modelData.name
             barHeight: root.barHeight
-            // Up to the island (centred, ≤ 300 px compact), past the workspaces.
+            // Up to the island (centred, ≤ 300 px compact + 7 px shoulders each
+            // side when attached), past the workspaces.
             maxWidth: root.width / 2 - (Features.on("island") ? 160 : 12) - 14 - left.spacing - workspaces.implicitWidth
         }
 
@@ -117,7 +118,8 @@ PanelWindow {
         }
         window: root
         screenName: root.modelData.name
-        // Up to the island (centred, ≤ 300 px compact).
+        // Up to the island (centred, ≤ 300 px compact + 7 px shoulders each
+        // side when attached).
         maxWidth: root.width / 2 - (Features.on("island") ? 160 : 12) - 10
     }
 

@@ -79,6 +79,8 @@ Item {
             Layout.preferredHeight: 18
 
             ProgressRing {
+
+                trackColor: Theme.withAlpha(Theme.islandText, 0.15)
                 anchors.fill: parent
                 visible: root.activity === "focus" || (root.activity === "timer" && root.timer?.kind === "timer") || (root.activity === "download" && root.download?.progress !== undefined)
                 value: root.activity === "focus" ? FocusTimer.progress : root.activity === "timer" ? Timers.progress(root.timer) : (root.download?.progress ?? 0)
@@ -111,7 +113,7 @@ Item {
         Text {
             Layout.fillWidth: true
             text: root.label
-            color: Theme.text
+            color: Theme.islandText
             font.family: Theme.fontUi
             font.pixelSize: 13
             font.weight: Font.DemiBold

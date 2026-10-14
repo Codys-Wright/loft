@@ -186,6 +186,18 @@ Singleton {
     readonly property color barSubtext: barSubtextFor("")
     readonly property color barShadow: barShadowFor("")
 
+    // ── Dynamic Island ──────────────────────────────────────────────────
+    // Settings → Dynamic Island → Fill. Black is the real notch's, with light
+    // content whatever the theme (a dark theme's palette already is light);
+    // Glass is the panel material with the palette's own colors.
+    readonly property bool islandBlack: Settings.island.fill !== "glass"
+    readonly property color islandFill: "#0a0a0c"
+    readonly property bool islandLight: islandBlack && !dark
+    readonly property color islandText: islandLight ? Qt.color("#f5f5f7") : text
+    readonly property color islandSubtext: islandLight ? Qt.color("#a1a1a6") : subtext
+    // Content on a filled islandText control (an "on" button).
+    readonly property color islandBg: islandLight ? Qt.color("#1d1d1f") : bg
+
     // ── Shape ───────────────────────────────────────────────────────────
     // Shell surfaces (legacy glass.radius), then Golden Gate's radii: one
     // radius for every window (niri's rule uses the same token), panels and

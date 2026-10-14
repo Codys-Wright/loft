@@ -8,7 +8,7 @@ Rectangle {
     id: btn
 
     property string icon
-    property color tint: Theme.text
+    property color tint: Theme.islandText
     property bool on: false
     property real size: 46
     signal clicked
@@ -28,7 +28,7 @@ Rectangle {
         anchors.centerIn: parent
         text: btn.icon
         size: btn.size * 0.43
-        color: btn.on ? Theme.bg : btn.tint
+        color: btn.on ? Theme.readableOn(btn.tint, Theme.islandBg) : btn.tint
     }
 
     MouseArea {

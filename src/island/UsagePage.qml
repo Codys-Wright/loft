@@ -25,14 +25,14 @@ Item {
 
             Text {
                 text: "Screen Time"
-                color: Theme.subtext
+                color: Theme.islandSubtext
                 font.family: Theme.fontUi
                 font.pixelSize: 12
             }
 
             Text {
                 text: AppUsage.format(AppUsage.total)
-                color: Theme.text
+                color: Theme.islandText
                 font.family: Theme.fontUi
                 font.pixelSize: 30
                 font.weight: Font.Light
@@ -40,7 +40,7 @@ Item {
 
             Text {
                 text: "today"
-                color: Theme.subtext
+                color: Theme.islandSubtext
                 font.family: Theme.fontUi
                 font.pixelSize: 12
             }
@@ -54,7 +54,7 @@ Item {
             Text {
                 visible: root.topApps.length === 0
                 text: "Tracking starts as you use apps."
-                color: Theme.subtext
+                color: Theme.islandSubtext
                 font.family: Theme.fontUi
                 font.pixelSize: 12
             }
@@ -94,7 +94,7 @@ Item {
                         Layout.preferredWidth: 52
                         horizontalAlignment: Text.AlignRight
                         text: AppUsage.format(bar.modelData.seconds)
-                        color: Theme.text
+                        color: Theme.islandText
                         font.family: Theme.fontUi
                         font.pixelSize: 11
                         font.features: { "tnum": 1 }

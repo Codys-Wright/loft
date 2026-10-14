@@ -70,7 +70,7 @@ Item {
                 Text {
                     Layout.alignment: Qt.AlignHCenter
                     text: tile.modelData.label
-                    color: Theme.text
+                    color: Theme.islandText
                     font.family: Theme.fontUi
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
@@ -79,7 +79,7 @@ Item {
                 Text {
                     Layout.alignment: Qt.AlignHCenter
                     text: root.status(tile.modelData.id)
-                    color: Theme.subtext
+                    color: Theme.islandSubtext
                     font.family: Theme.fontUi
                     font.pixelSize: 10
                     font.features: { "tnum": 1 }
