@@ -72,9 +72,26 @@ Item {
                     }
                     spacing: 10
 
-                    IconImage {
-                        implicitSize: 28
-                        source: row.modelData.image || Quickshell.iconPath(row.modelData.appIcon || "dialog-information", "dialog-information")
+                    Item {
+                        readonly property string icon: row.modelData.appIcon ?? ""
+                        readonly property string themed: icon.startsWith("/") ? "file://" + icon : icon.startsWith("file:") ? icon : icon !== "" ? Quickshell.iconPath(icon, true) : ""
+                        readonly property string source: row.modelData.image || themed || Quickshell.iconPath("dialog-information", true)
+                        implicitWidth: 28
+                        implicitHeight: 28
+
+                        IconImage {
+                            anchors.fill: parent
+                            visible: parent.source !== ""
+                            source: parent.source
+                        }
+                        // No icon in the theme: a bell, not Qt's "missing" pattern.
+                        Icon {
+                            anchors.centerIn: parent
+                            visible: parent.source === ""
+                            text: "󰂚"
+                            size: 20
+                            color: Theme.islandSubtext
+                        }
                     }
 
                     ColumnLayout {
