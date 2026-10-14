@@ -14,6 +14,8 @@ ColumnLayout {
     property bool showApp: false
     property bool compact: false
     property int artSize: compact ? 40 : 52
+    // Art on top, then the titles and the transport (a 2×2 tile).
+    property bool stacked: false
 
     Layout.fillWidth: true
     spacing: 6
@@ -31,7 +33,92 @@ ColumnLayout {
         return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
     }
 
+    // Transport buttons, shared by both arrangements.
+    component Transport: Row {
+        spacing: 2
+        Repeater {
+            model: [
+                { glyph: "󰒮", ok: card.player?.canGoPrevious ?? false, act: () => card.player.previous() },
+                { glyph: card.player?.isPlaying ? "󰏤" : "󰐊", ok: card.player?.canTogglePlaying ?? false, act: () => card.player.togglePlaying() },
+                { glyph: "󰒭", ok: card.player?.canGoNext ?? false, act: () => card.player.next() }
+            ]
+            delegate: Item {
+                required property var modelData
+                width: 28
+                height: 28
+                opacity: modelData.ok ? 1 : 0.35
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 14
+                    color: tap.containsMouse && parent.modelData.ok ? Theme.withAlpha(Theme.text, 0.12) : "transparent"
+                }
+                Icon {
+                    anchors.centerIn: parent
+                    text: parent.modelData.glyph
+                    size: 17
+                }
+                MouseArea {
+                    id: tap
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: if (parent.modelData.ok)
+                        parent.modelData.act()
+                }
+            }
+        }
+    }
+
+    ColumnLayout {
+        visible: card.stacked
+        Layout.fillWidth: true
+        spacing: 6
+        Rectangle {
+            Layout.preferredWidth: card.artSize
+            Layout.preferredHeight: card.artSize
+            radius: 10
+            color: Theme.withAlpha(Theme.text, 0.12)
+            clip: true
+            Icon {
+                anchors.centerIn: parent
+                visible: art2.status !== Image.Ready
+                text: "󰎆"
+                size: card.artSize * 0.42
+                color: Theme.subtext
+            }
+            Image {
+                id: art2
+                anchors.fill: parent
+                source: card.player?.trackArtUrl ?? ""
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+            }
+        }
+        Text {
+            Layout.fillWidth: true
+            text: card.player?.trackTitle || "Not Playing"
+            color: Theme.text
+            font.family: Theme.fontUi
+            font.pixelSize: 13
+            font.weight: Font.DemiBold
+            elide: Text.ElideRight
+        }
+        Text {
+            Layout.fillWidth: true
+            text: card.player?.trackArtist ?? ""
+            visible: text !== ""
+            color: Theme.subtext
+            font.family: Theme.fontUi
+            font.pixelSize: 11
+            elide: Text.ElideRight
+        }
+        Transport {
+            Layout.alignment: Qt.AlignHCenter
+        }
+    }
+
     RowLayout {
+        visible: !card.stacked
         Layout.fillWidth: true
         spacing: 10
 
@@ -91,45 +178,12 @@ ColumnLayout {
             }
         }
 
-        Row {
-            spacing: 2
-            Repeater {
-                model: [
-                    { glyph: "󰒮", ok: card.player?.canGoPrevious ?? false, act: () => card.player.previous() },
-                    { glyph: card.player?.isPlaying ? "󰏤" : "󰐊", ok: card.player?.canTogglePlaying ?? false, act: () => card.player.togglePlaying() },
-                    { glyph: "󰒭", ok: card.player?.canGoNext ?? false, act: () => card.player.next() }
-                ]
-                delegate: Item {
-                    required property var modelData
-                    width: 26
-                    height: 26
-                    opacity: modelData.ok ? 1 : 0.35
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 13
-                        color: tap.containsMouse && parent.modelData.ok ? Theme.withAlpha(Theme.text, 0.12) : "transparent"
-                    }
-                    Icon {
-                        anchors.centerIn: parent
-                        text: parent.modelData.glyph
-                        size: 16
-                    }
-                    MouseArea {
-                        id: tap
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: if (parent.modelData.ok)
-                            parent.modelData.act()
-                    }
-                }
-            }
-        }
+        Transport {}
     }
 
     // Scrubber.
     RowLayout {
-        visible: !card.compact && (card.player?.lengthSupported ?? false) && (card.player?.length ?? 0) > 0
+        visible: !card.compact && !card.stacked && (card.player?.lengthSupported ?? false) && (card.player?.length ?? 0) > 0
         Layout.fillWidth: true
         spacing: 8
 

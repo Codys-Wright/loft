@@ -20,7 +20,7 @@ Item {
         anchors.centerIn: parent
         size: 16
         text: Sound.micsMuted ? "󰍭" : "󰍬"
-        color: Sound.micsMuted ? Theme.subtext : Sound.recording ? Theme.warn : Controls.barText
+        color: Sound.micsMuted ? Theme.barSubtextFor(screenName) : Sound.recording ? Theme.warn : Theme.barTextFor(screenName)
     }
 
     // Recording dot.

@@ -29,7 +29,7 @@ GlassSurface {
     readonly property bool resizable: (control?.sizes ?? []).length > 1
     readonly property bool wide: size === "2x1" || size === "4x1" || size === "2x2"
 
-    radius: Theme.radius + 6
+    radius: Theme.panelRadius
     showHighlight: false
     strength: 1.15
     scale: dragging ? 1.05 : 1
@@ -371,8 +371,9 @@ GlassSurface {
                     verticalCenter: parent.verticalCenter
                 }
                 player: np.player
-                compact: mod.size !== "2x2"
-                artSize: mod.size === "2x2" ? 64 : 40
+                compact: true
+                stacked: mod.size === "2x2"
+                artSize: mod.size === "2x2" ? 56 : 40
             }
         }
     }

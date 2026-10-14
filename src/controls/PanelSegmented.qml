@@ -11,7 +11,7 @@ Rectangle {
 
     Layout.fillWidth: true
     implicitHeight: 24
-    radius: 7
+    radius: Theme.controlRadius
     color: Theme.withAlpha(Theme.text, 0.10)
 
     RowLayout {

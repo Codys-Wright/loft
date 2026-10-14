@@ -23,24 +23,16 @@ Item {
         implicitSize: root.size
         source: root.source
         visible: !root.template
-        layer.enabled: root.template
     }
 
-    Rectangle {
-        id: fill
-        anchors.fill: parent
-        visible: false
-        color: root.color
-        layer.enabled: root.template
-    }
-
+    // Template: every opaque pixel pushed to white, then tinted — the
+    // icon's shape (alpha) in one color.
     MultiEffect {
         visible: root.template
         anchors.fill: parent
-        source: fill
-        maskEnabled: true
-        maskSource: image
-        maskThresholdMin: 0.0
-        maskSpreadAtMin: 1.0
+        source: image
+        brightness: 1.0
+        colorization: 1.0
+        colorizationColor: root.color
     }
 }

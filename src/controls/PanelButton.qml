@@ -11,7 +11,7 @@ Rectangle {
 
     implicitWidth: label.implicitWidth + 22
     implicitHeight: 24
-    radius: 7
+    radius: Theme.controlRadius
     color: primary ? Theme.accent : Theme.withAlpha(Theme.text, hover.containsMouse ? 0.16 : 0.10)
     opacity: enabled ? 1 : 0.45
 

@@ -14,7 +14,7 @@ GlassSurface {
     property var present: []
     signal add(string id)
 
-    radius: Theme.radius + 12
+    radius: Theme.panelRadius + 8
     strength: 1.7
 
     readonly property var groups: {

@@ -27,7 +27,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 7
+        radius: Theme.controlRadius
         color: header.lit ? Theme.withAlpha(Theme.accent, 0.25) : "transparent"
     }
 

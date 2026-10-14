@@ -295,8 +295,6 @@ Singleton {
         overflowByScreen = m;
     }
 
-    // The menu bar's icon color (the bar may adapt it to the wallpaper).
-    readonly property color barText: Theme.barText !== undefined ? Theme.barText : Theme.text
 
     // ── Control Center layout ────────────────────────────────────────────
     readonly property var ccLayout: {

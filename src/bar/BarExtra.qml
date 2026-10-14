@@ -15,7 +15,7 @@ Item {
     property string screenName: ""
     property string glyph: Controls.iconOf(controlId)
     property string label: ""
-    property color fg: Controls.barText
+    property color fg: Theme.barTextFor(screenName)
     property bool dimmed: false
     default property alias content: extraContent.data
 

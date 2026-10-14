@@ -26,7 +26,7 @@ Item {
     implicitHeight: 24
 
     readonly property var order: Controls.barOrder
-    readonly property color fg: Controls.barText
+    readonly property color fg: Theme.barTextFor(screenName)
     // Delegates before this index don't fit.
     property int firstFit: 0
     readonly property var pinnedTray: SystemTray.items.values.filter(i => !Controls.trayTucked.includes(i.id))
@@ -184,6 +184,8 @@ Item {
         id: readoutC
         Readouts {
             only: [(parent?.controlId ?? "").slice(8)]
+            textColor: root.fg
+            subColor: Theme.barSubtextFor(root.screenName)
         }
     }
 

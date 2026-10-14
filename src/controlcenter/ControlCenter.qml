@@ -306,7 +306,7 @@ PanelWindow {
                 GlassSurface {
                     id: backing
                     anchors.fill: parent
-                    radius: Theme.radius + 14
+                    radius: Theme.panelRadius + 8
                 }
 
                 // Swallow clicks on the panel itself.

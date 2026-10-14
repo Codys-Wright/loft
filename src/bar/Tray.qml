@@ -14,7 +14,7 @@ Row {
     required property var window
     // The items to show (the pinned ones; tucked ones live behind »).
     property var items: SystemTray.items.values
-    property color fg: Controls.barText
+    property color fg: Theme.barText
 
     spacing: 8
 

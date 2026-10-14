@@ -43,7 +43,7 @@ PanelWindow {
     Region {
         id: blur
         item: root.menuMode ? (panels.count > 0 ? panels.itemAt(0) : null) : root.extraMode ? extraPanel : card
-        radius: root.cardMode ? card.radius : 12
+        radius: root.cardMode ? card.radius : root.extraMode ? extraPanel.radius : 12
 
         Region {
             item: root.menuMode && panels.count > 1 ? panels.itemAt(1) : null
@@ -91,7 +91,7 @@ PanelWindow {
                 visible: root.shown && root.extraMode
                 width: MenuState.extra === "wifi" || MenuState.extra === "nowPlaying" ? 320 : MenuState.extra === "clock" ? 290 : 300
                 height: host.implicitHeight + 12
-                radius: 12
+                radius: Theme.panelRadius - 6
                 strength: 1.9
                 x: {
                     void root.titles.stamp;
