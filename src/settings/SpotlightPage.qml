@@ -25,6 +25,10 @@ ColumnLayout {
         }
 
         Hint {
+            text: "Type ? for every prefix. Plain queries find apps, windows, commands (lock, shut down, settings wifi, maximize), your script commands and answers: 5 km to mi, 72f to c, 100 usd in eur, 3pm PT in Berlin — Enter copies."
+        }
+
+        Hint {
             text: "Type ! to browse 13,500 DuckDuckGo bangs (!nixpk finds NixOS Packages). Enter or Tab scopes Spotlight to the engine — type the search, Enter opens it; Backspace leaves. !yt lofi searches right away. Quicklinks below work without the !: yt, then Enter, or yt lofi."
         }
 
@@ -50,6 +54,16 @@ ColumnLayout {
                     if (t.trim() !== "")
                         Spotlight.setDefaultEngine(t);
                 }
+            }
+        }
+
+        SettingsRow {
+            label: "Update currency rates daily"
+            hint: "“100 usd in eur” — downloads rates once a day (qalc). Off: the last ones you have"
+
+            SettingsSwitch {
+                checked: Spotlight.currencyRates
+                onToggled: on => Spotlight.setCurrencyRates(on)
             }
         }
 
@@ -220,6 +234,54 @@ ColumnLayout {
                     onClicked: Spotlight.removeQuicklink(card.ql.id)
                 }
             }
+        }
+    }
+
+    // ── Script commands ───────────────────────────────────────────────
+    SettingsCard {
+        Component.onCompleted: Spotlight.refreshScripts()
+
+        PageHeader {
+            title: "Script Commands"
+            SettingsButton {
+                text: "Open Folder"
+                onClicked: Spotlight.revealScripts()
+            }
+            SettingsButton {
+                text: "New Script"
+                primary: true
+                onClicked: Spotlight.newScript()
+            }
+        }
+
+        Hint {
+            text: "Executable scripts with Raycast metadata comments — # @raycast.title, @raycast.mode (silent, compact, fullOutput), @raycast.icon, @raycast.argument1 { \"placeholder\": \"…\" }. Type the title in Spotlight; arguments follow it: “generate password 32”. Raycast's community scripts work as they are. Yours live in " + (Spotlight.scriptsDir || "~/.local/share/loft/scripts") + "."
+        }
+
+        Repeater {
+            model: Spotlight.scripts
+
+            delegate: SettingsRow {
+                id: srow
+                required property var modelData
+                readonly property bool on: !Spotlight.disabledScripts.includes(modelData.id)
+                label: (modelData.icon && [...modelData.icon].length <= 2 ? modelData.icon + "  " : "") + modelData.title
+                hint: [modelData.pkg, modelData.mode, modelData.args, modelData.builtin ? "built-in" : modelData.id].filter(x => x).join("  ·  ")
+
+                SettingsButton {
+                    text: "Edit"
+                    onClicked: Spotlight.editScript(srow.modelData.id)
+                }
+                SettingsSwitch {
+                    checked: srow.on
+                    onToggled: v => Spotlight.setScriptEnabled(srow.modelData.id, v)
+                }
+            }
+        }
+
+        Hint {
+            visible: Spotlight.scripts.length === 0
+            text: "No scripts found (is the launcher running?)."
         }
     }
 }

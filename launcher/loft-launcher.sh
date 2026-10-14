@@ -5,6 +5,7 @@
 #                             quicklinks: yt lofi)
 #   loft-launcher emoji       emoji / symbol picker (walker's symbols provider)
 #   loft-launcher clipboard clipboard history
+#   loft-launcher help        Spotlight's "?" help: every prefix with examples
 #
 # walker's config is rendered into $LOFT_STATE_DIR/launcher instead of
 # ~/.config, so trying Loft never touches the user's own walker setup (a
@@ -52,6 +53,33 @@ EOF
     printf 'command = "%s"\n' "$LOFT_LAUNCHER_OPEN" >> "$dir/elephant/bangs.toml"
   fi
 
+  # Calculator (math, units, currencies, time zones) and Commands (system,
+  # Settings pages, window actions, script commands, "?" help): elephant
+  # providers too (launcher/elephant-calculator, launcher/elephant-commands).
+  # qalc gets its own config dir, so the person's qalc settings stay theirs.
+  cat > "$dir/elephant/calculator.toml" <<EOF
+settings = "$state_dir/spotlight.json"
+qalc_config = "$dir/qalc"
+EOF
+  scripts="${LOFT_SCRIPTS_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/loft/scripts}"
+  cat > "$dir/elephant/commands.toml" <<EOF
+shell_ipc = "quickshell ipc --any-display --path '$shell' call"
+shell_path = "$shell"
+scripts = "$scripts"
+builtin_scripts = "$src/scripts"
+settings = "$state_dir/spotlight.json"
+EOF
+  # Tests (named loft-dev sessions): power / session / trash commands are
+  # logged, never run.
+  if [ -n "${LOFT_LAUNCHER_DRYRUN:-}" ]; then
+    printf 'dry_run = "%s"\n' "$LOFT_LAUNCHER_DRYRUN" >> "$dir/elephant/commands.toml"
+  fi
+  # The calculator replaces elephant's calc (which downloads currency rates at
+  # every start; ours only daily, when Settings → Spotlight allows it).
+  # Recently used apps come first on an empty query.
+  printf 'ignored_providers = ["calc"]\n' > "$dir/elephant/elephant.toml"
+  printf 'history_when_empty = true\n' > "$dir/elephant/desktopapplications.toml"
+
   # Until the theme engine renders walker.css (PLAN §4.2), derive the colors
   # from the active theme.json so the launcher is themed today.
   if [ ! -e "$state_dir/current/walker.css" ] && [ -f "$state_dir/current/theme.json" ]; then
@@ -89,8 +117,11 @@ case "${1:-open}" in
   clipboard)
     exec walker --provider clipboard --placeholder "Clipboard History"
     ;;
+  help)
+    exec walker --provider commands --placeholder "Spotlight Help"
+    ;;
   *)
-    echo "usage: loft-launcher [service|open|emoji|clipboard]" >&2
+    echo "usage: loft-launcher [service|open|emoji|clipboard|help]" >&2
     exit 2
     ;;
 esac

@@ -88,6 +88,13 @@ Singleton {
         function back(): void {
             root.ccExpanded = "";
         }
+        // Spotlight's Do Not Disturb / Keep Awake commands.
+        function toggleDnd(): void {
+            root.doNotDisturb = !root.doNotDisturb;
+        }
+        function toggleCaffeine(): void {
+            root.caffeine = !root.caffeine;
+        }
         function edit(): void {
             if (!root.controlCenterOpen)
                 root.toggleControlCenter(Displays.activeName || (Niri.focusedWorkspace?.output ?? ""));

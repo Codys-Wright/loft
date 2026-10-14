@@ -251,10 +251,20 @@
         # engine) built in its own provider tree: Go plugins only load into
         # the exact binary (toolchain + dependency versions) they were built
         # with, so the provider is built by elephant's own derivation.
+        # The calculator (math, units, currencies, time zones) and commands
+        # (system, Settings pages, window actions, script commands, "?" help)
+        # providers are built the same way; their Go tests run here too.
         loft-elephant = pkgs.elephant.overrideAttrs (old: {
           postPatch = (old.postPatch or "") + ''
-            cp -r ${../launcher/elephant-bangs} internal/providers/bangs
-            chmod -R u+w internal/providers/bangs
+            for p in bangs calculator commands; do
+              cp -r ${../launcher}/elephant-$p internal/providers/$p
+              chmod -R u+w internal/providers/$p
+            done
+          '';
+          postBuild = (old.postBuild or "") + ''
+            HOME=$TMPDIR XDG_CACHE_HOME=$TMPDIR/cache XDG_DATA_HOME=$TMPDIR/data \
+              LOFT_BUILTIN_SCRIPTS=${../launcher/scripts} PATH=${pkgs.libqalculate}/bin:$PATH \
+              go test ./internal/providers/calculator ./internal/providers/commands
           '';
         });
 
@@ -269,6 +279,12 @@
           runtimeInputs = [
             self'.packages.loft-walker
             self'.packages.loft-elephant
+            self'.packages.loft # script commands (Toggle Dark Mode)
+            pkgs.libnotify # script commands: banners (notify-send)
+            pkgs.glib # Empty Trash (gio trash)
+            pkgs.wl-clipboard # calculator / scripts: copy
+            pkgs.iproute2 # Copy Wi-Fi IP
+            pkgs.xdg-utils # script commands: edit / show in folder
             pkgs.quickshell # opens Settings → Spotlight (Create Quicklink)
             pkgs.jq
             pkgs.coreutils

@@ -12,9 +12,12 @@ blur_corner_radius = 26
 "default" = { input = "Spotlight Search", list = "No Results" }
 
 [providers]
-# bangs: Quicklinks (yt, np, gm …), the default web search and "Open <url>"
-# (launcher/elephant-bangs); "!" browses every DuckDuckGo !bang.
-default = ["desktopapplications", "calc", "windows", "bangs", "niriactions"]
+# Plain queries: apps (by fuzzy match + how often you open them), open
+# windows, commands + script commands (launcher/elephant-commands), the
+# calculator — math, units, currencies, time zones (launcher/elephant-calculator)
+# — and bangs: Quicklinks (yt, np, gm …), the default web search and
+# "Open <url>" (launcher/elephant-bangs). "?" lists every prefix.
+default = ["desktopapplications", "windows", "commands", "calculator", "bangs"]
 empty = ["desktopapplications"]
 max_results = 40
 
@@ -49,7 +52,17 @@ provider = "clipboard"
 
 [[providers.prefixes]]
 prefix = "="
+provider = "calculator"
+
+# elephant's own calc is off (the calculator replaces it); walker's default
+# "=" for it would shadow the calculator's.
+[[providers.prefixes]]
+prefix = "=calc:"
 provider = "calc"
+
+[[providers.prefixes]]
+prefix = "?"
+provider = "commands"
 
 [[providers.prefixes]]
 prefix = "@"
@@ -67,4 +80,27 @@ bangs = [
   { action = "open", label = "open", default = true, bind = "Return" },
   { action = "home", label = "open site", bind = "ctrl Return" },
   { action = "quicklink", label = "create quicklink", bind = "ctrl k" },
+]
+
+# Commands: dangerous ones confirm first (Enter → "Shut Down?" → Enter);
+# script commands with arguments scope like bangs ("Generate Password " +
+# the arguments). "query" puts a prefix into the field (help rows, Emoji…).
+commands = [
+  { action = "run", default = true, bind = "Return" },
+  { action = "confirm", label = "run…", default = true, bind = "Return", after = "Nothing" },
+  { action = "query", label = "open", default = true, bind = "Return", after = "Nothing" },
+  { action = "scope", label = "arguments", default = true, bind = "Return", after = "Nothing" },
+  { action = "scope", label = "arguments", bind = "Tab", after = "Nothing" },
+  { action = "cancel", default = true, bind = "Return", after = "Nothing" },
+  { action = "edit", label = "edit script", bind = "ctrl e" },
+  { action = "reveal", label = "show in folder", bind = "ctrl r" },
+]
+
+# Calculator: Enter copies the answer ("3.1069 mi"), Ctrl+Enter just the
+# number, Shift+Enter qalc's full precision.
+calculator = [
+  { action = "copy", default = true, bind = "Return" },
+  { action = "copy_number", label = "copy number", bind = "ctrl Return" },
+  { action = "copy_full", label = "copy exact", bind = "shift Return" },
+  { action = "try", label = "try", default = true, bind = "Return", after = "Nothing" },
 ]
