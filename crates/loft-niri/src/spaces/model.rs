@@ -1,7 +1,7 @@
 //! Space documents (`schemas/space-1.json`) → resolved [`Space`]s.
 //!
 //! - A **singleton** (`"kind": "space"`) is used as is (strings may still
-//!   use `${id}`, `${state}`, `${home}`).
+//!   use `${id}`, `${state}`, `${home}`, `${profiles}`).
 //! - A **template** (`"kind": "space-template"`) has `params` and an
 //!   `instance` naming pattern; an **instance** (`"kind": "space-instance"`)
 //!   fills the params in. Instantiating interpolates every string
@@ -176,18 +176,26 @@ pub fn merge_patch(target: &mut Value, patch: &Value) {
     }
 }
 
-/// What `${state}` and `${home}` stand for.
+/// What `${state}`, `${home}` and `${profiles}` stand for.
 #[derive(Debug, Clone)]
 pub struct Env {
     pub state: String,
     pub home: String,
+    /// Where per-instance browser profiles live (Chromium `--user-data-dir`,
+    /// §12.5): `$LOFT_SPACES_PROFILES`, else `<state>/browser`.
+    pub profiles: String,
 }
 
 impl Env {
     pub fn from_process(state: &Path) -> Self {
+        let profiles = std::env::var_os("LOFT_SPACES_PROFILES")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| state.join("browser"));
         Env {
             state: state.display().to_string(),
             home: std::env::var("HOME").unwrap_or_default(),
+            profiles: profiles.display().to_string(),
         }
     }
 }
@@ -223,6 +231,7 @@ pub fn instantiate(template: &Value, instance: Option<&Value>, env: &Env) -> Res
     let mut ctx = Ctx::new();
     ctx.insert("state".into(), json!(env.state));
     ctx.insert("home".into(), json!(env.home));
+    ctx.insert("profiles".into(), json!(env.profiles));
     let mut doc = template.clone();
     let tid = str_field(template, "id").unwrap_or("?").to_string();
     let (id, name, base) = match (kind(template), instance) {
@@ -592,6 +601,7 @@ pub mod tests {
         Env {
             state: "/state".into(),
             home: "/home/u".into(),
+            profiles: "/state/browser".into(),
         }
     }
 
@@ -732,7 +742,7 @@ pub mod tests {
                 "chromium",
                 "--app=http://localhost:8080",
                 "--class=loft.proj-loft.preview",
-                "--user-data-dir=/state/browser/proj-loft"
+                "--user-data-dir=/state/browser/proj-loft/preview"
             ])
         );
         // The instance's overrides patch the space.

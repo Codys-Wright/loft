@@ -39,6 +39,7 @@
         "exec": { "type": "array", "items": { "type": "string" } },
         "match": { "$ref": "#/$defs/match" },
         "launch": { "description": "false: gather an existing window, never spawn one.", "type": ["boolean", "string"] },
+        "cwd": { "description": "Where the app is spawned (default: the space's cwd). `~` is your home.", "type": "string" },
         "open": { "enum": ["maximized", "fullscreen", "floating", "normal"] },
         "width": { "description": "Column width as a proportion of the display.", "type": ["number", "string"], "exclusiveMinimum": 0, "maximum": 1 }
       },
@@ -106,7 +107,8 @@
         },
         "facets": { "type": ["object", "null"] },
         "wallpapers": { "type": ["object", "null"], "additionalProperties": { "type": "string" } },
-        "startup": { "enum": ["first-activate", "login", "never"] }
+        "startup": { "enum": ["first-activate", "login", "never"] },
+        "cwd": { "description": "Where the space's apps are spawned (an app's own cwd wins). `~` is your home.", "type": "string" }
       }
     },
     "space": {

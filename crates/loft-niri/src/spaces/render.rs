@@ -15,6 +15,7 @@
 
 use serde_json::{Map, Value};
 
+use super::apps;
 use super::model::{Fold, Space};
 use super::roles::{self, Display};
 use crate::kdl_out::{self, Node, Val};
@@ -97,43 +98,69 @@ pub fn render_workspaces(spaces: &[&Space], displays: &[Display], main: Option<&
 }
 
 /// niri window rules for apps Loft names itself (`match.appId` an exact
-/// `^loft\.…$`): open on their workspace, at their width, unfocused.
-pub fn render_rules(spaces: &[&Space]) -> Vec<Node> {
+/// `^loft\.…$`): open on their workspace, at their width, unfocused. The
+/// workspace follows the layout like spin-up does (`apps::specs`): a
+/// `columns` fold opens them on main's workspace, `skip` writes no rule.
+/// Without displays (niri unreachable) each app's declared workspace.
+pub fn render_rules(spaces: &[&Space], displays: &[Display], main: Option<&str>) -> Vec<Node> {
     let mut nodes = Vec::new();
     for s in spaces {
-        for (_, b) in s.workspaces() {
-            for app in &b.apps {
-                let Some(re) = app
-                    .pointer("/match/appId")
-                    .and_then(Value::as_str)
-                    .filter(|re| re.starts_with("^loft\\.") && re.ends_with('$'))
-                else {
-                    continue;
-                };
-                let mut n = Node::new("window-rule")
-                    .child(Node::new("match").prop("app-id", Val::Str(re.to_string())))
-                    .child(Node::new("open-on-workspace").arg(Val::Str(b.workspace.clone())))
-                    .child(Node::new("open-focused").arg(Val::Bool(false)));
-                if let Some(w) = app.get("width").and_then(Value::as_f64) {
-                    n = n.child(
-                        Node::new("default-column-width")
-                            .child(Node::new("proportion").arg(Val::Float(w))),
-                    );
-                }
-                match app.get("open").and_then(Value::as_str) {
-                    Some("maximized") => {
-                        n = n.child(Node::new("open-maximized").arg(Val::Bool(true)))
-                    }
-                    Some("fullscreen") => {
-                        n = n.child(Node::new("open-fullscreen").arg(Val::Bool(true)))
-                    }
-                    Some("floating") => {
-                        n = n.child(Node::new("open-floating").arg(Val::Bool(true)))
-                    }
-                    _ => {}
-                }
-                nodes.push(n);
+        // (workspace, app, folded into main's workspace as a column)
+        let mut apps: Vec<(String, &Value, bool)> = Vec::new();
+        if displays.is_empty() {
+            for (_, b) in s.workspaces() {
+                apps.extend(b.apps.iter().map(|a| (b.workspace.clone(), a, false)));
             }
+        } else {
+            let r = roles::resolve(s, displays, main);
+            let (specs, _) = apps::specs(s, &r, apps::UNIT_PREFIX, "");
+            for sp in specs {
+                let app = s.workspaces().into_iter().find_map(|(_, b)| {
+                    b.apps
+                        .iter()
+                        .find(|a| a.get("id").and_then(Value::as_str) == Some(sp.app.as_str()))
+                });
+                if let Some(a) = app {
+                    apps.push((sp.workspace, a, sp.folded));
+                }
+            }
+        }
+        for (ws, app, folded) in apps {
+            let Some(re) = app
+                .pointer("/match/appId")
+                .and_then(Value::as_str)
+                .filter(|re| re.starts_with("^loft\\.") && re.ends_with('$'))
+            else {
+                continue;
+            };
+            let mut n = Node::new("window-rule")
+                .child(Node::new("match").prop("app-id", Val::Str(re.to_string())))
+                .child(Node::new("open-on-workspace").arg(Val::Str(ws)))
+                .child(Node::new("open-focused").arg(Val::Bool(false)));
+            let width = app.get("width").and_then(Value::as_f64);
+            if folded {
+                // A column among main's (as spin-up sizes it).
+                n = n.child(Node::new("default-column-width").child(
+                    Node::new("proportion").arg(Val::Float(width.unwrap_or(apps::FOLD_WIDTH))),
+                ));
+                nodes.push(n);
+                continue;
+            }
+            if let Some(w) = width {
+                n = n.child(
+                    Node::new("default-column-width")
+                        .child(Node::new("proportion").arg(Val::Float(w))),
+                );
+            }
+            match app.get("open").and_then(Value::as_str) {
+                Some("maximized") => n = n.child(Node::new("open-maximized").arg(Val::Bool(true))),
+                Some("fullscreen") => {
+                    n = n.child(Node::new("open-fullscreen").arg(Val::Bool(true)))
+                }
+                Some("floating") => n = n.child(Node::new("open-floating").arg(Val::Bool(true))),
+                _ => {}
+            }
+            nodes.push(n);
         }
     }
     nodes
@@ -201,7 +228,7 @@ pub fn render(
     opts: &RenderOpts,
 ) -> String {
     let mut nodes = render_workspaces(spaces, displays, main);
-    nodes.extend(render_rules(spaces));
+    nodes.extend(render_rules(spaces, displays, main));
     if opts.binds {
         nodes.push(render_binds(spaces, opts.bin));
     }
@@ -313,6 +340,62 @@ mod tests {
             kdl_out::write_doc(&nodes),
             "border\n\nfocus-ring {\n    off\n}\n\ngaps 8\n\npreset-column-widths {\n    proportion 0.5\n}\n\nstruts {\n    bottom 2.5\n    top 0\n}\n"
         );
+    }
+
+    #[test]
+    fn rules_follow_the_fold() {
+        let cat = catalog();
+        let mut loft = cat.find("proj-loft").unwrap().clone();
+        // Apps that set their own app-id (the built-in Chromium apps can't).
+        for b in loft.displays.values_mut() {
+            if let crate::spaces::model::Binding::Bound(b) = b {
+                for a in &mut b.apps {
+                    let id = a["id"].as_str().unwrap().to_string();
+                    a["match"] = json!({ "appId": format!("^loft\\.proj-loft\\.{id}$") });
+                }
+            }
+        }
+        let laptop = vec![Display {
+            name: "eDP-1".into(),
+            identity: "BOE".into(),
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1200,
+        }];
+        let rule_ws = |s: &Space, d: &[Display]| -> Vec<String> {
+            render_rules(&[s], d, None)
+                .iter()
+                .map(|n| kdl_out::write_doc(std::slice::from_ref(n)))
+                .filter_map(|t| {
+                    t.lines()
+                        .find(|l| l.contains("open-on-workspace"))
+                        .map(|l| l.trim().to_string())
+                })
+                .collect()
+        };
+        let three = rule_ws(&loft, &desk());
+        assert_eq!(
+            three,
+            [
+                "open-on-workspace \"loft\"",
+                "open-on-workspace \"loft\"",
+                "open-on-workspace \"loft/left\"",
+                "open-on-workspace \"loft/right\""
+            ]
+        );
+        assert_eq!(rule_ws(&loft, &laptop), three, "stack keeps the workspaces");
+        loft.fold = Fold::Columns;
+        assert_eq!(rule_ws(&loft, &laptop), ["open-on-workspace \"loft\""; 4]);
+        // Folded docs: a half column in main's workspace, not maximized.
+        let docs = kdl_out::write_doc(&render_rules(&[&loft], &laptop, None)[0..1]);
+        assert!(
+            docs.contains("proportion 0.5") && !docs.contains("open-maximized"),
+            "{docs}"
+        );
+        loft.fold = Fold::Skip;
+        assert_eq!(rule_ws(&loft, &laptop), ["open-on-workspace \"loft\""; 2]);
+        assert_eq!(rule_ws(&loft, &[]), three);
     }
 
     #[test]

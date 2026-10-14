@@ -23,6 +23,8 @@
 //! farthest first, then the target again. Displays already showing their
 //! workspace are left alone (no focus hop, no pointer jump).
 
+use std::collections::BTreeMap;
+
 use niri_ipc::{Action, WorkspaceReferenceArg};
 use serde::Serialize;
 
@@ -289,6 +291,19 @@ fn ensure(sim: &mut Sim, res: &Resolution, order: &[&Space], plan: &mut Plan) {
 /// Activate a space: ensure, then switch every bound display, focus last
 /// on the target (`order`: the catalog's spaces in order, for workspace order).
 pub fn activate(st: &State, space: &Space, order: &[&Space]) -> Plan {
+    activate_with(st, space, order, &BTreeMap::new())
+}
+
+/// [`activate`], also bringing `keep` displays back to what they showed
+/// (`restore`: display identity → workspace, from runtime.json's per-space
+/// memory). The caller passes it when the space is already active (§3.1:
+/// "activating the active space restores `keep` displays switched by hand").
+pub fn activate_with(
+    st: &State,
+    space: &Space,
+    order: &[&Space],
+    restore: &BTreeMap<String, String>,
+) -> Plan {
     let res = roles::resolve(space, &st.displays, st.main.as_deref());
     let mut plan = Plan {
         space: space.id.clone(),
@@ -327,6 +342,17 @@ pub fn activate(st: &State, space: &Space, order: &[&Space]) -> Plan {
         .filter(|(d, ws)| d.name != tdisp.name && !sim.is_active(ws))
         .copied()
         .collect();
+    for p in res.placements.iter().filter(|p| p.workspace.is_none()) {
+        let Some(ws) = restore.get(p.display.identity()) else {
+            continue;
+        };
+        let here = sim
+            .find(ws)
+            .is_some_and(|(oi, _)| sim.outputs[oi].0 == p.display.name);
+        if here && !sim.is_active(ws) && p.display.name != tdisp.name {
+            others.push((&p.display, ws.as_str()));
+        }
+    }
     others.sort_by(|a, b| {
         let dist = |d: &Display| {
             let (x, y) = d.center();
@@ -351,6 +377,23 @@ pub fn activate(st: &State, space: &Space, order: &[&Space]) -> Plan {
     plan.target = Some(tdisp.name.clone());
     plan.resolution = res;
     plan
+}
+
+/// What each `keep` display shows now (identity → workspace name): the
+/// per-space memory recorded when a space is activated.
+pub fn keep_shown(st: &State, space: &Space) -> BTreeMap<String, String> {
+    let res = roles::resolve(space, &st.displays, st.main.as_deref());
+    res.placements
+        .iter()
+        .filter(|p| p.workspace.is_none())
+        .filter_map(|p| {
+            let ws = st
+                .workspaces
+                .iter()
+                .find(|w| w.is_active && w.output.as_deref() == Some(p.display.name.as_str()))?;
+            Some((p.display.identity().to_string(), ws.name.clone()?))
+        })
+        .collect()
 }
 
 /// Ensure only (`space ensure`): the workspaces exist where they belong;
@@ -786,6 +829,41 @@ mod tests {
                 json!({ "MoveWindowToWorkspace": { "window_id": 105, "reference": { "Name": "gaming" }, "focus": false } }),
                 json!({ "FocusMonitor": { "output": "DP-5" } }),
             ]
+        );
+    }
+
+    #[test]
+    fn activating_the_active_space_restores_keep_displays() {
+        let cat = catalog();
+        let music = cat.find("music").unwrap();
+        let mut st = music_showing();
+        // Music was activated while the left display showed comms.
+        let memory = keep_shown(&st, music);
+        let left = desk().into_iter().find(|d| d.name == "DP-5").unwrap();
+        assert_eq!(
+            memory.get(left.identity()).map(String::as_str),
+            Some("comms")
+        );
+        // Then the left display was switched to `media` by hand.
+        st.workspaces[4].is_active = false;
+        st.workspaces[5].is_active = true;
+        let p = activate_with(&st, music, &cat.active(), &memory);
+        assert_eq!(wire(&p), [fw("music"), fw("comms"), fw("music")]);
+        // Without memory (or when it's already showing) just main.
+        assert_eq!(wire(&activate(&st, music, &cat.active())), [fw("music")]);
+        st.workspaces[4].is_active = true;
+        st.workspaces[5].is_active = false;
+        assert_eq!(
+            wire(&activate_with(&st, music, &cat.active(), &memory)),
+            [fw("music")]
+        );
+        // A remembered workspace that moved to another display stays put.
+        st.workspaces[4].is_active = false;
+        st.workspaces[5].is_active = true;
+        st.workspaces[4].output = Some("DP-3".into());
+        assert_eq!(
+            wire(&activate_with(&st, music, &cat.active(), &memory)),
+            [fw("music")]
         );
     }
 

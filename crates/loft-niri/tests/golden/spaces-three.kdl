@@ -102,20 +102,6 @@ window-rule {
 }
 
 window-rule {
-    match app-id="^loft\\.proj-loft\\.docs$"
-    open-on-workspace "loft/left"
-    open-focused false
-    open-maximized true
-}
-
-window-rule {
-    match app-id="^loft\\.proj-loft\\.preview$"
-    open-on-workspace "loft/right"
-    open-focused false
-    open-maximized true
-}
-
-window-rule {
     match app-id="^loft\\.proj-inferno\\.debug$"
     open-on-workspace "inferno"
     open-focused false
