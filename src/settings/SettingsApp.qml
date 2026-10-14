@@ -27,7 +27,9 @@ Scope {
         { id: "layout", icon: "󰕰", label: "Layout & Motion" },
         { id: "keybinds", icon: "󰘳", label: "Keybinds" },
         { id: "features", icon: "󰐱", label: "Features" },
-        { id: "about", icon: "󰋼", label: "About" }
+        { id: "about", icon: "󰋼", label: "About" },
+        { id: "clipboard", icon: "󰨸", label: "Clipboard & Files" },
+        { id: "snippets", icon: "󱐋", label: "Snippets", feature: "snippets" }
     ]
 
     IpcHandler {
@@ -554,6 +556,16 @@ Scope {
                                 label: "Design"
                                 hint: "Liquid Glass components ported from javiiervm/dotfiles"
                             }
+                        }
+
+                        ClipboardPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "clipboard"
+                        }
+
+                        SnippetsPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "snippets"
                         }
                     }
                 }
