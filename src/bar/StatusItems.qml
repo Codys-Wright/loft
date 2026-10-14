@@ -29,8 +29,8 @@ Item {
     readonly property color fg: Theme.barTextFor(screenName)
     // Delegates before this index don't fit.
     property int firstFit: 0
-    readonly property var pinnedTray: SystemTray.items.values.filter(i => !Controls.trayTucked.includes(i.id))
-    readonly property var tuckedTray: SystemTray.items.values.filter(i => Controls.trayTucked.includes(i.id))
+    readonly property var pinnedTray: SystemTray.items.values.filter(i => !Controls.isTrayTucked(i))
+    readonly property var tuckedTray: SystemTray.items.values.filter(i => Controls.isTrayTucked(i))
 
     function wanted(id) {
         if (id === "tray")

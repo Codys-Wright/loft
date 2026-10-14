@@ -61,7 +61,7 @@ module. IPC: `extras wifi|wifiDetails|bluetooth|sound|soundDetails|nowPlaying|fo
 | Spotlight icon | have | magnifier → `studio-launcher open` |
 | Control Center | have | the toggles icon (rebuilt, see below) |
 | Menu bar readouts (CPU, RAM, temps, net, battery) | have | `barReadouts` (off by default); each readout is its own bar item |
-| **Arrange the extras** (Bartender / Ice / Golden Gate) | have | Settings → Menu Bar: show/hide, reorder (↑/↓) and "only when active" for every control and readout; tray (StatusNotifier) icons pinned or tucked behind », drawn as monochrome templates in the bar's color (per item "In color"); items that don't fit move behind the same » (leftmost first); Super-drag a status item along the bar to move it or off the bar to remove it. Persists in `Settings.menubar.bar` |
+| **Arrange the extras** (Bartender / Ice / Golden Gate) | have | Settings → Menu Bar: show/hide, reorder (↑/↓) and "only when active" for every control and readout; tray (StatusNotifier) icons pinned or tucked behind », drawn as monochrome templates in the bar's color (symbolic icons as an alpha-mask fill; opaque icons — badges, full squares — as luminance-preserving grayscale so their detail survives; per item "In color"); tray apps that duplicate a Loft control (blueman → Bluetooth, nm-applet → Wi-Fi, pasystray/pavucontrol → Sound) start tucked behind » while that control is in the bar, overridable per item; items that don't fit move behind the same » (leftmost first); Super-drag a status item along the bar to move it or off the bar to remove it. Persists in `Settings.menubar.bar` |
 
 ## Control Center — wave 2 (status)
 macOS Golden Gate's Control Center (`src/controlcenter/`), anchored top-right under

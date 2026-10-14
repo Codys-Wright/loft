@@ -23,7 +23,7 @@ import Quickshell.Services.UPower
 //
 // Placement persists in Settings.controlCenter.layout ([{ id, size }]) and
 // Settings.menubar.bar ({ order, shown: { id: bool }, activeOnly: { id:
-// bool }, trayTucked: [ids] }). Features (Features.qml) gate the rest:
+// bool }, trayTucked / trayPinned / trayColor: [ids] }). Features (Features.qml) gate the rest:
 // a control whose module is off appears nowhere.
 Singleton {
     id: root
@@ -262,14 +262,46 @@ Singleton {
         Settings.menubar = m;
     }
 
-    // Tray (StatusNotifier) items tucked behind the » overflow, by item id.
+    // Tray (StatusNotifier) items behind the » overflow. Explicit choices
+    // (by item id) win; otherwise an item whose job a Loft control already
+    // does (blueman next to our Bluetooth, nm-applet next to Wi-Fi, …) is
+    // tucked away by default — still reachable, never hidden outright.
     readonly property var trayTucked: barCfg.trayTucked ?? []
+    readonly property var trayPinned: barCfg.trayPinned ?? []
+
+    // Tray apps that duplicate a control, matched on the item's id / title /
+    // icon name.
+    readonly property var trayDuplicates: [
+        { match: /blueman|bluetooth-applet|blueberry/i, control: "bluetooth" },
+        { match: /nm-applet|nm_applet|networkmanager|network-manager-applet|iwgtk/i, control: "wifi" },
+        { match: /pasystray|pavucontrol|volumeicon|pnmixer|pa-applet|kmix/i, control: "sound" }
+    ]
+
+    // The control a tray item duplicates ("" = none), while that control is
+    // actually in the menu bar.
+    function trayDuplicateOf(item) {
+        if (!item)
+            return "";
+        const key = [item.id, item.title, item.tooltipTitle, String(item.icon ?? "")].join(" ");
+        const hit = trayDuplicates.find(d => d.match.test(key));
+        return hit && available(hit.control) && onBar(hit.control) ? hit.control : "";
+    }
+
+    function isTrayTucked(item) {
+        if (!item)
+            return false;
+        if (trayTucked.includes(item.id))
+            return true;
+        if (trayPinned.includes(item.id))
+            return false;
+        return trayDuplicateOf(item) !== "";
+    }
 
     function setTrayTucked(itemId, tucked) {
-        const l = trayTucked.filter(x => x !== itemId);
-        if (tucked)
-            l.push(itemId);
-        saveBar({ trayTucked: l });
+        const t = trayTucked.filter(x => x !== itemId);
+        const p = trayPinned.filter(x => x !== itemId);
+        (tucked ? t : p).push(itemId);
+        saveBar({ trayTucked: t, trayPinned: p });
     }
 
     // Tray items drawn in their own colors instead of as monochrome
