@@ -14,7 +14,8 @@ Scope {
     id: root
 
     readonly property bool open: Panels.settingsOpen
-    property string section: "appearance"
+    // The open page lives in Panels so IPC (`themes open`) can choose it.
+    readonly property string section: Panels.settingsSection
 
     readonly property var sections: [
         { id: "appearance", icon: "󰏘", label: "Appearance" },
@@ -285,7 +286,7 @@ Scope {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.section = item.modelData.id
+                                onClicked: Panels.settingsSection = item.modelData.id
                             }
                         }
                     }
@@ -324,13 +325,108 @@ Scope {
 
                             Row_ {
                                 label: "Theme"
-                                hint: "Switch with `studio theme apply <name>` — the theme picker is coming"
-                                Text {
-                                    text: Theme.name
-                                    color: Theme.accent
-                                    font.family: Theme.fontUi
-                                    font.pixelSize: 13
-                                    font.weight: Font.DemiBold
+                                hint: ThemeManager.applying ? "Applying…" : ThemeManager.error || "Recolors the shell, niri, terminals, GTK and the launcher"
+                            }
+
+                            Flow {
+                                Layout.fillWidth: true
+                                spacing: 10
+
+                                Repeater {
+                                    model: ThemeManager.themes
+
+                                    delegate: Rectangle {
+                                        id: card
+                                        required property var modelData
+                                        readonly property var p: modelData.palette
+                                        readonly property bool current: modelData.name === Theme.name
+
+                                        width: 150
+                                        height: 104
+                                        radius: 14
+                                        color: p.bg
+                                        border.width: current ? 3 : 1
+                                        border.color: current ? Theme.accent : Theme.glassBorder
+
+                                        // A tiny desktop: wallpaper strip, glass bar, accent dots.
+                                        Rectangle {
+                                            anchors {
+                                                left: parent.left
+                                                right: parent.right
+                                                top: parent.top
+                                                margins: 8
+                                            }
+                                            height: 50
+                                            radius: 8
+                                            gradient: Gradient {
+                                                orientation: Gradient.Horizontal
+                                                GradientStop { position: 0; color: (card.modelData.wallpaper?.gradient ?? [])[0] ?? card.p.surface }
+                                                GradientStop { position: 1; color: (card.modelData.wallpaper?.gradient ?? [])[2] ?? card.p.overlay }
+                                            }
+
+                                            Rectangle {
+                                                anchors {
+                                                    left: parent.left
+                                                    right: parent.right
+                                                    top: parent.top
+                                                    margins: 5
+                                                }
+                                                height: 10
+                                                radius: 5
+                                                color: Theme.withAlpha(card.modelData.glass?.tint ?? card.p.bg, 0.6)
+                                            }
+
+                                            Row {
+                                                anchors {
+                                                    left: parent.left
+                                                    bottom: parent.bottom
+                                                    margins: 6
+                                                }
+                                                spacing: 4
+                                                Repeater {
+                                                    model: [card.p.accent, card.p.accent2, card.p.ok, card.p.warn, card.p.urgent]
+                                                    delegate: Rectangle {
+                                                        required property var modelData
+                                                        width: 10
+                                                        height: 10
+                                                        radius: 5
+                                                        color: modelData
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Text {
+                                            anchors {
+                                                left: parent.left
+                                                bottom: parent.bottom
+                                                margins: 10
+                                            }
+                                            text: card.modelData.name
+                                            color: card.p.text
+                                            font.family: Theme.fontUi
+                                            font.pixelSize: 13
+                                            font.weight: card.current ? Font.Bold : Font.Medium
+                                        }
+
+                                        Text {
+                                            anchors {
+                                                right: parent.right
+                                                bottom: parent.bottom
+                                                margins: 10
+                                            }
+                                            text: card.modelData.polarity === "light" ? "󰖨" : "󰖔"
+                                            color: card.p.subtext
+                                            font.family: Theme.fontIcons
+                                            font.pixelSize: 12
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: ThemeManager.apply(card.modelData.name)
+                                        }
+                                    }
                                 }
                             }
 

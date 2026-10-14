@@ -98,16 +98,38 @@ def load_dev_env() -> None:
 
 
 def cmd_list(ctx: Ctx, args) -> None:
-    names = set()
+    # First match on the theme path wins, as in `find` (user packs shadow built-ins).
+    packs: dict[str, Path] = {}
     for d in ctx.theme_path:
         if not d.is_dir():
             continue
-        for sub in d.iterdir():
+        for sub in sorted(d.iterdir()):
             # `default` is an alias (symlink) for one of the real themes.
             if is_pack(sub) and not sub.is_symlink():
-                names.add(sub.name)
-    for n in sorted(names):
-        print(n)
+                packs.setdefault(sub.name, sub)
+    if not args.json:
+        for n in sorted(packs):
+            print(n)
+        return
+    # For pickers (the shell's theme selector): enough to draw a swatch.
+    out = []
+    for name in sorted(packs):
+        path = packs[name]
+        try:
+            theme = json.loads((path / "theme.json").read_text())
+        except (OSError, ValueError):
+            continue
+        out.append(
+            {
+                "name": name,
+                "path": str(path),
+                "polarity": theme.get("polarity", "dark"),
+                "palette": theme.get("palette", {}),
+                "glass": theme.get("glass", {}),
+                "wallpaper": theme.get("wallpaper", {}),
+            }
+        )
+    print(json.dumps(out))
 
 
 def cmd_current(ctx: Ctx, args) -> None:
@@ -329,7 +351,9 @@ def parser() -> argparse.ArgumentParser:
     theme = top.add_parser("theme", help="theme engine and manager")
     sub = theme.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("list", help="list available theme packs").set_defaults(fn=cmd_list)
+    s = sub.add_parser("list", help="list available theme packs")
+    s.add_argument("--json", action="store_true", help="names, paths and palettes as JSON")
+    s.set_defaults(fn=cmd_list)
     sub.add_parser("current", help="print the active theme").set_defaults(fn=cmd_current)
 
     s = sub.add_parser("apply", help="render (cached), make current, reload consumers")
