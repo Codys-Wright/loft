@@ -1,0 +1,54 @@
+{
+  "menus": [
+    {
+      "group": 0,
+      "menu": 0,
+      "items": [
+        { "label": "_File", ":submenu": [1, 0] },
+        { "label": "_View", ":submenu": [2, 0] }
+      ]
+    },
+    { "group": 1, "menu": 0, "items": [{ ":section": [1, 1] }, { ":section": [1, 2] }] },
+    {
+      "group": 1,
+      "menu": 1,
+      "items": [
+        { "label": "New _Window", "action": "app.new-window", "accel": "<Primary>n" },
+        { "label": "_Open…", "action": "win.open" },
+        { "label": "Print", "action": "win.print", "hidden-when": "action-missing" }
+      ]
+    },
+    {
+      "group": 1,
+      "menu": 2,
+      "items": [
+        { "label": "_Close", "action": "win.close", "accel": "<Primary>w" },
+        { "label": "_Quit", "action": "app.quit", "accel": "<Primary>q" }
+      ]
+    },
+    {
+      "group": 2,
+      "menu": 0,
+      "items": [
+        { "label": "Word _Wrap", "action": "win.wrap" },
+        { "label": "_Theme", ":submenu": [2, 1] }
+      ]
+    },
+    {
+      "group": 2,
+      "menu": 1,
+      "items": [
+        { "label": "Light", "action": "app.theme", "target": "light" },
+        { "label": "Dark", "action": "app.theme", "target": "dark" }
+      ]
+    }
+  ],
+  "actions": {
+    "app.new-window": { "enabled": true },
+    "win.open": { "enabled": false },
+    "win.close": { "enabled": true },
+    "app.quit": { "enabled": true },
+    "win.wrap": { "enabled": true, "state": true },
+    "app.theme": { "enabled": true, "state": "dark" }
+  }
+}

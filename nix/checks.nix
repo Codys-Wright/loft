@@ -8,6 +8,8 @@
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`
 #   studio-niri     the crate builds and its tests pass (incl. `niri validate`)
 #   studio-niri-clippy  `cargo clippy --all-targets -D warnings`
+#   studio-appmenu  the global menu daemon builds and its tests pass
+#   studio-appmenu-clippy  the same clippy gate for it
 #
 # After an intended output change, refresh the goldens from a checkout:
 #   for t in tokyonight latte; do rm -rf tests/golden/$t; nix run .#studio -- theme render themes/$t tests/golden/$t; done
@@ -73,7 +75,20 @@
           dontCargoBuild = true;
           doCheck = false;
           buildPhase = ''
-            cargo clippy --offline --all-targets -- -D warnings
+            cargo clippy --offline -p studio-niri --all-targets -- -D warnings
+          '';
+          installPhase = "touch $out";
+        });
+
+        studio-appmenu = self'.packages.studio-appmenu;
+
+        studio-appmenu-clippy = self'.packages.studio-appmenu.overrideAttrs (old: {
+          pname = "studio-appmenu-clippy";
+          nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.clippy ];
+          dontCargoBuild = true;
+          doCheck = false;
+          buildPhase = ''
+            cargo clippy --offline -p studio-appmenu --all-targets -- -D warnings
           '';
           installPhase = "touch $out";
         });

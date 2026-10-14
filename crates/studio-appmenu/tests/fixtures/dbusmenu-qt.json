@@ -1,0 +1,47 @@
+{
+  "id": 0,
+  "props": { "children-display": "submenu" },
+  "children": [
+    {
+      "id": 1,
+      "props": { "label": "_File", "children-display": "submenu" },
+      "children": [
+        { "id": 10, "props": { "type": "separator" } },
+        { "id": 11, "props": { "label": "_New", "icon-name": "document-new", "shortcut": [["Control", "N"]] } },
+        { "id": 12, "props": { "label": "_Open…", "shortcut": [["Control", "O"]] } },
+        { "id": 13, "props": { "label": "Open _Recent", "children-display": "submenu" } },
+        { "id": 14, "props": { "type": "separator" } },
+        { "id": 15, "props": { "label": "_Save", "enabled": false, "shortcut": [["Control", "S"]] } },
+        { "id": 16, "props": { "label": "Save _As…", "shortcut": [["Control", "Shift", "S"]] } },
+        { "id": 17, "props": { "label": "Print Pre_view", "visible": false } },
+        { "id": 18, "props": { "type": "separator" } },
+        { "id": 19, "props": { "label": "_Quit", "shortcut": [["Control", "Q"]] } }
+      ]
+    },
+    {
+      "id": 2,
+      "props": { "label": "_Edit", "children-display": "submenu" },
+      "children": [
+        { "id": 20, "props": { "label": "_Undo", "shortcut": [["Ctrl", "Z"]] } }
+      ]
+    },
+    {
+      "id": 3,
+      "props": { "label": "_View", "children-display": "submenu" },
+      "children": [
+        { "id": 30, "props": { "label": "Show _Toolbar", "toggle-type": "checkmark", "toggle-state": 1 } },
+        { "id": 31, "props": { "label": "Show _Statusbar", "toggle-type": "checkmark", "toggle-state": 0 } },
+        {
+          "id": 32,
+          "props": { "label": "_Mode", "children-display": "submenu" },
+          "children": [
+            { "id": 320, "props": { "label": "Light", "toggle-type": "radio", "toggle-state": 0 } },
+            { "id": 321, "props": { "label": "Dark", "toggle-type": "radio", "toggle-state": 1 } }
+          ]
+        }
+      ]
+    },
+    { "id": 4, "props": { "label": "_Help", "children-display": "submenu" }, "children": [] },
+    { "id": 5, "props": { "label": "Hidden", "visible": false } }
+  ]
+}
