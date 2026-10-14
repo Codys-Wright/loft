@@ -108,6 +108,7 @@ that is what the shell reads.
 | `wallpaper.gradient` | `#rrggbb[]` | bg → accent → accent2 blend | Shell fallback wallpaper |
 | `wallpaper.image` | path | first still of the collection | The default wallpaper. Relative to the pack (copied into the rendered bundle as `wallpaper.<ext>`), or absolute |
 | `wallpaper.images` | (path \| `{path, video?, preview?}`)[] | `[]` | More wallpapers ([Wallpapers](#wallpapers)) |
+| `wallpaperSets` | `{name, description?, displays, workspaces?}`[] | `[]` | Multi-display arrangements by display role ([Wallpaper sets](#wallpaper-sets)) |
 | `fonts.{ui,mono,size}` | string, string, number | sans-serif, monospace, 11 | Declaring `fonts` also sets the terminal font |
 | `shape.windowRadius` | px | `radii.window`, else 12 | One corner radius for every window: niri's window rule (`geometry-corner-radius` + `clip-to-geometry`), the shell's own windows, GTK/libadwaita CSD |
 | `shape.panelRadius` | px | 18 | Shell panels, popovers, cards |
@@ -140,11 +141,80 @@ still is listed but flagged (`"kind": "video"`): the shell's image layer
 can't play it. The default wallpaper is `wallpaper.image`, else the first
 still. Old packs with a single `wallpaper.image` are unchanged.
 
-The shell shows, per screen: the wallpaper chosen for this theme (pickers;
-`overrides/shell.json` `perTheme.<theme>.wallpaper`), else, with rotation
-(`rotate`, minutes) or per-workspace (`perWorkspace`: niri workspace *n*
-shows the collection's *n*-th) on, one from the collection, else the
-default. Every choice is kept per theme, so switching back restores it.
+The shell shows, per screen and its active niri workspace (all stored per
+theme in `overrides/shell.json` `perTheme.<theme>`, so switching back restores
+them; `cli/studio/wallsets.py` has the rules):
+
+1. the workspace's own choice (`workspaces`: `{"<name>" | "<identity>#<idx>": path}`),
+   then the pack's set for it (below) — skipped for a display set to "Use for
+   all workspaces" (`sameAll`: `{"<identity>": true}`);
+2. with **Auto** on (`auto`; default: on when at least 6 images match the
+   theme) and not "same on all workspaces", an auto pick for every workspace
+   but the display's first, related to the display's image;
+3. the display's image: its choice (`displays`: `{"<niri identity>": path}`),
+   the theme-wide choice (`wallpaper`), the pack's set for it, or an auto pick;
+4. with rotation (`rotate`, minutes) or per-workspace (`perWorkspace`: niri
+   workspace *n* shows the collection's *n*-th) on, one from the collection;
+5. the default.
+
+Auto picks (`studio wallpaper plan`) come from the theme's vibe set (own,
+curated, then matches scoring ≥ 0.6 — the library's theme-view floor), only
+in the theme's tone bucket (Dark / Medium / Light from the library's
+classifier: the default wallpaper's tone, else by polarity; never the
+opposite one), costed by color distance (to the theme, or for a workspace
+to its display's image), a shared color family, the same folder (a series
+stays together) and how much of the image's *interest* a display of that
+shape keeps (edge + colorfulness saliency, sampled like the swatches,
+cached in `<state>/cache/framing.json`). A hash of (seed, theme, display or
+workspace, image) breaks near-ties, so picks are stable until Shuffle
+(`autoSeed`) and distinct while the pool lasts. The wallpaper layer crops
+each image around its interest too, so a landscape image on a portrait
+display keeps its subject.
+
+### Wallpaper sets
+
+A set assigns wallpapers by **role**, not connector, so it fits any desk:
+
+```json
+"wallpaperSets": [
+  {
+    "name": "triptych",
+    "description": "three displays, a series",
+    "displays": { "main": "wallpapers/2020.jpg", "left": "wallpapers/3085.jpg", "right": "wallpapers/1157.jpg", "*": "wallpapers/any.jpg" },
+    "workspaces": { "music": "wallpapers/8294.jpg", "main#2": "wallpapers/5635.jpg" }
+  }
+]
+```
+
+Roles come from the live layout: `main` (the largest display, or the one
+Settings → Displays names), `left` / `right` / `top` / `bottom` of it
+(`left-2` … further out), the shape (`portrait`, `ultrawide` ≥ 2.2:1,
+`landscape`), the ordinal `display-1..N` (by x, then y), and `*` (any). A
+display takes the first of its roles the set names, in that order. Workspace
+keys are a niri workspace name or `<role>#<idx>`. Paths are relative to the
+pack (or absolute); `studio theme validate` checks they exist and that role
+names are known, the rendered `manifest.json` lists the sets with absolute
+paths, and `studio theme export` carries the images like any pack file.
+
+While the user has made no choice for the theme (no `wallpaper`, `displays`
+or `workspaces`), the shell applies the pack's set that names the most
+displays of a multi-display layout. Applying any set (Settings → Wallpaper →
+Sets, `studio wallpaper set apply NAME`, IPC `wallpaper applySet NAME`)
+writes its images as display and workspace choices; *Save as Set…* /
+`studio wallpaper set save NAME` captures what is on screen (each display's
+image under its primary role, workspaces that differ under their name or
+`<role>#<idx>`) into `perTheme.<theme>.sets`, or with `--pack DIR` into a
+pack's `theme.json` (images copied into its `wallpapers/`).
+
+```sh
+studio wallpaper plan [--theme T]            # what every display / workspace shows, and why
+studio wallpaper sets                        # the pack's and saved sets
+studio wallpaper set apply|save|show|delete NAME [--pack DIR]
+studio wallpaper shuffle                     # new auto picks
+studio wallpaper auto on|off|default
+# --layout '{outputs: [{name, identity, x, y, width, height}], main, workspaces: [{output, idx, name}]}'
+# (default: ask niri) and --choices JSON (default: shell.json) make it work without a session.
+```
 
 ## Rendered bundle
 

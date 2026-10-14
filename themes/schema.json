@@ -32,6 +32,27 @@
         }
       ]
     },
+    "wallpaperSet": {
+      "description": "A multi-display arrangement: wallpapers by display role (not connector) and optionally per workspace. Paths are relative to the pack (or absolute).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "description": "Unique in the pack; shown in Settings → Wallpaper → Sets" },
+        "description": { "type": "string" },
+        "displays": {
+          "type": "object",
+          "description": "role → image. A display takes the first of its roles the set has: its position (main = the largest display; left/right/top/bottom of it, left-2 … further out), its shape (portrait, ultrawide ≥ 2.2:1, landscape), its ordinal display-1..N (by x), then * (any)",
+          "propertyNames": { "pattern": "^(?:(?:main|left|right|top|bottom)(?:-[1-9][0-9]*)?|portrait|landscape|ultrawide|display-[1-9][0-9]*|\\*)$" },
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "workspaces": {
+          "type": "object",
+          "description": "workspace → image: a niri workspace name, or <role>#<idx> (e.g. main#2: the main display's second workspace)",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "lockDesign": {
       "type": "object",
       "additionalProperties": false,
@@ -111,6 +132,11 @@
             "image": { "type": "string", "description": "The default wallpaper: path relative to the pack (copied into the rendered bundle) or absolute. Default: the first still of images / wallpapers/" },
             "images": { "type": "array", "items": { "$ref": "#/$defs/wallpaperItem" }, "description": "The rest of the collection, after image; files in the pack's wallpapers/ dir follow these" }
           }
+        },
+        "wallpaperSets": {
+          "description": "Multi-display wallpaper arrangements (docs/THEME-FORMAT.md, Wallpaper sets). The shell applies the one covering the most displays on a multi-display layout while the user has made no choice for the theme.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/wallpaperSet" }
         },
         "fonts": {
           "description": "Declaring fonts makes terminals use them too.",

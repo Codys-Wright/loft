@@ -5,10 +5,14 @@ import qs.desktopmenu
 import qs.services
 
 // Background layer. niri's xray blur samples it, so it is what the glass
-// surfaces show through. Source (Vibes.wallpaperFor), in order: the user's
-// chosen image for this theme (set by the pickers), the theme's collection
-// when rotating / per workspace (this screen's active workspace), the theme
-// pack's default image, the theme's gradient. Image changes crossfade.
+// surfaces show through. Source: Vibes.wallpaperFor (this screen's active
+// workspace's image: per-workspace and per-display choices, wallpaper sets,
+// auto picks, rotation, the theme's default), else the theme's gradient.
+// Image changes — a new choice, or switching to a workspace with its own
+// image — crossfade (~400 ms); the outgoing image stays until the incoming
+// one has decoded, so there is no flash. Each image is cropped around its
+// interest (Vibes.focusFor, from the plan's framing) rather than its center:
+// on the portrait display a landscape image keeps its subject.
 PanelWindow {
     id: root
 
@@ -65,22 +69,56 @@ PanelWindow {
     // one stays until the incoming one has loaded, then they crossfade.
     property bool flip: true
     onSourceChanged: {
+        if ((flip ? a : b).source.toString() === source)
+            return;
         flip = !flip;
-        (flip ? a : b).source = source;
+        const layer = flip ? a : b;
+        layer.crop = Vibes.focusFor(Vibes.wallpaperFor(modelData.name));
+        layer.source = source;
     }
-    Component.onCompleted: a.source = source
+    Component.onCompleted: {
+        a.crop = Vibes.focusFor(Vibes.wallpaperFor(modelData.name));
+        a.source = source;
+    }
 
-    component Layer: Image {
+    component Layer: Item {
+        id: layer
+        property alias source: img.source
+        readonly property alias status: img.status
+        // The image point (0..1) to keep near the screen's center.
+        property var crop: [0.5, 0.5]
+
         anchors.fill: parent
-        fillMode: Image.PreserveAspectCrop
-        asynchronous: true
-        sourceSize: Qt.size(root.width, root.height)
+        clip: true
         visible: opacity > 0
         Behavior on opacity {
             NumberAnimation {
-                duration: 600
+                duration: 400
                 easing.type: Easing.InOutQuad
             }
+        }
+
+        // Decoded to cover the screen (PreserveAspectCrop scales to cover
+        // sourceSize, keeping the aspect) and drawn at that size, shifted so
+        // the focus sits as close to the center as the image's edges allow.
+        Image {
+            id: img
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            retainWhileLoading: true
+            sourceSize: Qt.size(root.width, root.height)
+            width: Math.max(implicitWidth, root.width)
+            height: Math.max(implicitHeight, root.height)
+            x: Math.min(0, Math.max(root.width - width, root.width / 2 - layer.crop[0] * width))
+            y: Math.min(0, Math.max(root.height - height, root.height / 2 - layer.crop[1] * height))
+        }
+    }
+
+    // A plan arriving later (framing) re-centers what is showing.
+    Connections {
+        target: Vibes
+        function onPlanChanged() {
+            (root.flip ? a : b).crop = Vibes.focusFor(Vibes.wallpaperFor(root.modelData.name));
         }
     }
 

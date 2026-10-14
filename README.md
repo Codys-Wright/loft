@@ -73,6 +73,17 @@ loose images) ranked by color closeness (CIEDE2000 between palettes and between 
 Settings → Wallpaper / Lock Screen and the wallpaper picker (`wallpaper toggle`) show the same
 set; choices, rotation and per-workspace wallpapers are remembered per theme.
 
+**Wallpaper sets.** A wallpaper per display and per niri workspace, with **Auto** filling the
+rest from the theme's vibe set in the same tone and colors (cropped around each image's subject),
+and **sets** that assign images by display role (main, left, right, portrait, …) so they fit any
+desk; theme packs ship them as `wallpaperSets` ([THEME-FORMAT.md](docs/THEME-FORMAT.md#wallpaper-sets)).
+Settings → Wallpaper → Displays & Workspaces, or:
+
+```sh
+studio wallpaper plan                         # every display + workspace: what it shows and why
+studio wallpaper sets | set apply|save|delete NAME | shuffle | auto on|off
+```
+
 **Library.** `~/Documents/Themes` (`$STUDIO_LIBRARY`; home-manager: `programs.studio-linux.library`)
 is one folder for everything: installed packs in `Packs/` (searched first; `install` and `new`
 put packs there when the library exists) and your wallpapers in `Wallpapers/Topics/<Topic>/`.

@@ -10,7 +10,7 @@ import Quickshell.Io
 // (what glass surfaces show through, Theme.glassBackdrop).
 //
 // The image the screen shows (Vibes.wallpaperFor) is scaled and cropped the
-// way the wallpaper layer does it (fill, centered), then ffmpeg averages the
+// way the wallpaper layer does it (fill, around Vibes.focusFor), then ffmpeg averages the
 // strip under the bar and the whole screen into 16 columns each. Sampled
 // once per (image, screen size) and cached; the gradient fallback is read
 // from the theme. No ffmpeg: unknown, and the bar follows the theme.
@@ -68,7 +68,7 @@ Singleton {
     property var queue: []
     property var job: null
 
-    function request(screen, path, w, h) {
+    function request(screen, path, w, h, focus) {
         if (w <= 0 || h <= 0)
             return;
         if (!path) {
@@ -80,7 +80,8 @@ Singleton {
             return;
         }
         const file = path.startsWith("file://") ? path.slice(7) : path;
-        const key = `${file}|${w}x${h}`;
+        const f = focus ?? [0.5, 0.5];
+        const key = `${file}|${w}x${h}|${f[0]},${f[1]}`;
         if (cache[key]) {
             setTone(screen, cache[key]);
             return;
@@ -91,7 +92,9 @@ Singleton {
                 file,
                 key,
                 w,
-                h
+                h,
+                fx: f[0],
+                fy: f[1]
             }
         ]);
         next();
@@ -106,7 +109,7 @@ Singleton {
         const sw = 320;
         const sh = Math.max(2, Math.round(sw * job.h / job.w));
         const bh = Math.max(1, Math.round(root.barHeight * sw / job.w));
-        sampler.command = ["sh", "-c", 'ffmpeg -v error -nostdin -i "$1" -frames:v 1 -filter_complex "[0:v]scale=$2:$3:force_original_aspect_ratio=increase,crop=$2:$3,split[a][b];[a]crop=$2:$4:0:0,scale=16:1:flags=area[top];[b]scale=16:1:flags=area[all];[top][all]vstack,format=rgb24" -f rawvideo - | od -An -v -tu1', "sh", job.file, String(sw), String(sh), String(bh)];
+        sampler.command = ["sh", "-c", 'ffmpeg -v error -nostdin -i "$1" -frames:v 1 -filter_complex "[0:v]scale=$2:$3:force_original_aspect_ratio=increase,crop=$2:$3:min(max(in_w*$5-out_w/2\\,0)\\,in_w-out_w):min(max(in_h*$6-out_h/2\\,0)\\,in_h-out_h),split[a][b];[a]crop=$2:$4:0:0,scale=16:1:flags=area[top];[b]scale=16:1:flags=area[all];[top][all]vstack,format=rgb24" -f rawvideo - | od -An -v -tu1', "sh", job.file, String(sw), String(sh), String(bh), String(job.fx), String(job.fy)];
         sampler.running = true;
     }
 
@@ -155,9 +158,10 @@ Singleton {
         delegate: QtObject {
             required property ShellScreen modelData
             readonly property string source: Vibes.wallpaperFor(modelData.name)
-            readonly property string key: `${source}|${modelData.width}x${modelData.height}|${Theme.wallpaperGradient}`
-            onKeyChanged: root.request(modelData.name, source, modelData.width, modelData.height)
-            Component.onCompleted: root.request(modelData.name, source, modelData.width, modelData.height)
+            readonly property var focus: Vibes.focusFor(source)
+            readonly property string key: `${source}|${modelData.width}x${modelData.height}|${Theme.wallpaperGradient}|${focus}`
+            onKeyChanged: root.request(modelData.name, source, modelData.width, modelData.height, focus)
+            Component.onCompleted: root.request(modelData.name, source, modelData.width, modelData.height, focus)
         }
     }
 }

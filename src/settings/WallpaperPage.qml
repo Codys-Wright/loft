@@ -9,7 +9,8 @@ import qs.services
 // applies it for this theme; rotation and per-workspace cycle the collection
 // when nothing is picked. All choices are remembered per theme (Vibes).
 // The Library card browses ~/Documents/Themes (Library) by topic, color
-// family + tone, or the theme an image goes with.
+// family + tone, or the theme an image goes with. Displays & Workspaces
+// (WallpaperDisplays) picks per display / workspace and manages sets.
 ColumnLayout {
     id: page
     spacing: 12
@@ -50,6 +51,9 @@ ColumnLayout {
             return "Folder";
         return w.source_pack;
     }
+
+    // Per display / per workspace, auto matching and sets.
+    WallpaperDisplays {}
 
     SettingsCard {
         PageHeader {

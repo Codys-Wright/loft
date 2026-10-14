@@ -15,6 +15,8 @@
 #                   script parsing, bind lookup, screenshot geometry)
 #   studio-input-clippy  the same clippy gate for it
 #   clipboard-urlclean  Clean URL's tracking-parameter stripping (src/services/urlclean.js)
+#   wallpaper-sets  display roles + set resolution (src/services/wallsets.js), against the
+#                   fixture tests/test_wallsets.py checks cli/studio/wallsets.py with
 #
 # After an intended output change, refresh the goldens from a checkout:
 #   for t in tokyonight latte; do rm -rf tests/golden/$t; STUDIO_THEME_INDEX=none nix run .#studio -- theme render themes/$t tests/golden/$t; done
@@ -74,6 +76,11 @@
 
         clipboard-urlclean = check "clipboard-urlclean" [ pkgs.nodejs-slim ] ''
           node ${../tests/urlclean.test.js} ${../src/services/urlclean.js}
+          touch $out
+        '';
+
+        wallpaper-sets = check "wallpaper-sets" [ pkgs.nodejs-slim ] ''
+          node ${../tests/wallsets.test.js} ${../src/services/wallsets.js} ${../tests/fixtures/wallsets/layouts.json}
           touch $out
         '';
 
