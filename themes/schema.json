@@ -16,6 +16,38 @@
       "pattern": "^#[0-9a-fA-F]{8}$"
     },
     "unit": { "type": "number", "minimum": 0, "maximum": 1 },
+    "wallpaperItem": {
+      "description": "A wallpaper: a path (relative to the pack, or absolute), or {path, video?, preview?} for a still that stands for a video.",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path"],
+          "properties": {
+            "path": { "type": "string", "minLength": 1, "description": "The image the shell shows (a video here is listed but flagged: the image layer can't play it)" },
+            "video": { "type": "string", "description": "The video this still was taken from" },
+            "preview": { "type": "string", "description": "A small thumbnail for pickers" }
+          }
+        }
+      ]
+    },
+    "lockDesign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$", "description": "Unique in the pack; vibes refer to it as <pack>:<name>. Default: metadata.desktop's Name, else the pack name (or the locks/<dir> name)" },
+        "format": { "enum": ["studio", "qylock"], "description": "studio: Main.qml against docs/THEME-FORMAT-LOCK.md. qylock: an SDDM-API QML theme dir (metadata.desktop, theme.conf, MainScript). Default: qylock when the dir has metadata.desktop" },
+        "path": { "type": "string", "description": "Directory relative to the pack (or absolute)" },
+        "preview": { "type": "string", "description": "A screenshot for pickers (default: preview.* / screenshot.* in the design dir)" }
+      }
+    },
+    "vibeRefs": {
+      "description": "<pack>:<file> (wallpapers) / <pack>:<lock name> (locks), or <pack> for all of that pack's. Resolved when that pack is installed; missing ones are skipped.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*(:.+)?$" }
+    },
     "theme": {
       "type": "object",
       "required": ["palette"],
@@ -74,7 +106,8 @@
           "additionalProperties": false,
           "properties": {
             "gradient": { "type": "array", "items": { "$ref": "#/$defs/color" }, "minItems": 1 },
-            "image": { "type": "string", "description": "Path relative to the pack (copied into the rendered bundle) or absolute" }
+            "image": { "type": "string", "description": "The default wallpaper: path relative to the pack (copied into the rendered bundle) or absolute. Default: the first still of images / wallpapers/" },
+            "images": { "type": "array", "items": { "$ref": "#/$defs/wallpaperItem" }, "description": "The rest of the collection, after image; files in the pack's wallpapers/ dir follow these" }
           }
         },
         "fonts": {
@@ -123,13 +156,21 @@
           }
         },
         "lock": {
-          "description": "Lock screen / greeter design shipped in the pack. Absent: the default design, colored by the palette.",
+          "$ref": "#/$defs/lockDesign",
+          "description": "The default lock screen / greeter design (shorthand for a first entry of locks). Absent: lock/Main.qml when present, else the first of locks, else the built-in design colored by the palette."
+        },
+        "locks": {
+          "description": "More lock designs shipped in the pack (directories under locks/ are picked up too).",
+          "type": "array",
+          "items": { "$ref": "#/$defs/lockDesign" }
+        },
+        "vibes": {
+          "description": "Curated links to other packs' wallpapers and lock designs that match this pack's vibe.",
           "type": "object",
           "additionalProperties": false,
-          "required": ["format", "path"],
           "properties": {
-            "format": { "type": "string", "pattern": "^[a-z0-9-]+$", "description": "Design format the loader must understand. Known: qylock (an SDDM-API QML theme dir: metadata.desktop, theme.conf, MainScript)" },
-            "path": { "type": "string", "description": "Directory relative to the pack" }
+            "wallpapers": { "$ref": "#/$defs/vibeRefs" },
+            "locks": { "$ref": "#/$defs/vibeRefs" }
           }
         }
       }

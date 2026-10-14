@@ -30,10 +30,32 @@
         foot # the demo session's terminal (Mod+Return); consumers bind their own
         gammastep # Night Light
         wf-recorder # Screen recording
+        gawk # System Monitor: processes (/proc/<pid>/stat)
+        gnugrep # System Monitor: hwmon sensors
+        iproute2 # Network: local addresses (ip -j addr)
+        librespeed-cli # Network: speed test (on demand)
+        pipewire # pw-metadata: per-app output (Sound mixer)
+        # Capture: frozen frames, crop/GIF/trim/mic track, clipboard, annotate.
+        grim
+        ffmpeg
+        satty
+        # Text from screen: English OCR (add languages with
+        # tesseract.override { enableLanguages = [ … ]; }) and QR codes.
+        (tesseract.override { enableLanguages = [ "eng" ]; })
+        (zbar.override {
+          enableVideo = false;
+          withXorg = false;
+          enableDbus = false;
+        })
         walker # Spotlight launcher (frontend)
         elephant # launcher data providers
         jq
         coreutils
+        cliphist # Clipboard history (recorder + store)
+        wl-clipboard # wl-copy / wl-paste: clipboard history, plain-text paste, Clean URL
+        wtype # paste / snippet expansion into the focused app
+        xdg-utils # Shelf: open parked files and links
+        inotify-tools # dev loop: reload after a failed reload (devtools/ReloadToast)
       ];
 
       # The CLI's own tree: Python package + templates + built-in packs/schema.
@@ -56,6 +78,19 @@
       shellBinds = pkgs.runCommand "studio-shell-binds.kdl" { } ''
         sed 's|@IPC@|"${lib.getExe pkgs.quickshell}" "ipc" "--path" "${../src}" "call"|g' \
           ${../niri/shell-binds.kdl.in} > $out
+      '';
+
+      # QML modules imported lock designs (qylock / SDDM themes) expect, so they
+      # load without a desktop session providing them.
+      lockQmlPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/qml") [
+        pkgs.kdePackages.qt5compat
+        pkgs.kdePackages.qtmultimedia
+        pkgs.kdePackages.sddm.unwrapped
+      ];
+
+      # QtMultimedia's plugins for the camera mirror (its QML is in lockQmlPath).
+      qtMultimediaEnv = ''
+        export QT_PLUGIN_PATH="${pkgs.kdePackages.qtmultimedia}/lib/qt-6/plugins''${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
       '';
 
       python = pkgs.python3.withPackages (ps: [ ps.jsonschema ]);
@@ -86,6 +121,8 @@
               export STUDIO_THEME_FILE="$state/current/theme.json"
             fi
             export STUDIO_UI_FONT="${uiFont}" STUDIO_ICON_FONT="${iconFont}"
+            export QML_IMPORT_PATH="${lockQmlPath}''${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
+            ${qtMultimediaEnv}
             # STUDIO_SHELL_SRC runs the QML from a checkout instead (hot reload);
             # the CLI's IPC hooks must target the same path.
             src="''${STUDIO_SHELL_SRC:-${../src}}"
@@ -127,12 +164,14 @@
             self'.packages.studio-appmenu
           ];
           text = ''
-            usage() { echo "usage: studio-dev [--output NAME] [CHECKOUT]" >&2; exit 2; }
+            usage() { echo "usage: studio-dev [--output NAME | --windowed] [CHECKOUT]" >&2; exit 2; }
             output=""
+            windowed=0
             root=""
             while [ $# -gt 0 ]; do
               case "$1" in
                 --output) [ $# -ge 2 ] || usage; output="$2"; shift 2 ;;
+                --windowed) windowed=1; shift ;;
                 -h|--help) usage ;;
                 *) root="$1"; shift ;;
               esac
@@ -160,6 +199,17 @@
             sed "s|@IPC@|\"quickshell\" \"ipc\" \"--path\" \"$root/src\" \"call\"|g" \
               "$root/niri/shell-binds.kdl.in" > "$dir/shell-binds.kdl"
 
+            # Relaunching replaces the running dev session instead of stacking a
+            # second one: stop the niri recorded in session.env, if it's ours.
+            if [ -f "$dir/session.env" ]; then
+              old_pid="$(sed -n 's/^NIRI_SOCKET=.*\.\([0-9]*\)\.sock$/\1/p' "$dir/session.env")"
+              if [ -n "$old_pid" ] && [ -r "/proc/$old_pid/cmdline" ] && tr '\0' ' ' < "/proc/$old_pid/cmdline" | grep -q "$dir/config.kdl"; then
+                echo "studio-dev: replacing the running session (niri $old_pid)"
+                kill "$old_pid" 2>/dev/null || true
+                for _ in $(seq 1 25); do kill -0 "$old_pid" 2>/dev/null || break; sleep 0.2; done
+              fi
+            fi
+
             # The active theme: `current` → a rendered theme dir. Kept across
             # restarts (`studio --dev theme apply NAME` switches it); rendered
             # when missing (from the default) or still a raw pack from before
@@ -180,8 +230,20 @@
             include optional=true "$root/niri/dev-local.kdl"
             include optional=true "$dir/overrides/niri.kdl"
             spawn-at-startup "env" "STUDIO_STATE_DIR=$dir" "STUDIO_LAUNCHER_DIR=$root/launcher" "studio-launcher" "service"
-            spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_NIRI_CONFIG=$dir/config.kdl" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "quickshell" "--path" "$root/src"
+            spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_NIRI_CONFIG=$dir/config.kdl" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "QML_IMPORT_PATH=${lockQmlPath}" "QT_PLUGIN_PATH=${pkgs.kdePackages.qtmultimedia}/lib/qt-6/plugins" "quickshell" "--path" "$root/src"
             EOF
+
+            # Live everything, not just QML: `studio` runs the checkout's CLI,
+            # and fresh `cargo build` binaries (target/debug) shadow the
+            # packaged studio-niri & co. niri — and everything it spawns —
+            # inherits this PATH.
+            mkdir -p "$dir/bin"
+            printf '#!/bin/sh\nexec %s -B "%s" "$@"\n' "${python}/bin/python3" "$root/cli/studio" > "$dir/bin/studio"
+            chmod +x "$dir/bin/studio"
+            export PATH="$dir/bin:$PATH"
+            if [ -d "$root/target/debug" ]; then
+              export PATH="$root/target/debug:$PATH"
+            fi
 
             echo "studio-dev: niri config $dir/config.kdl, shell from $root/src"
             niri --config "$dir/config.kdl" &
@@ -206,13 +268,18 @@
             fi
 
             # Inside KDE: put the window fullscreen + borderless on one monitor,
-            # so the nested session is a real full-size output.
-            if [ -n "$output" ]; then
+            # so the nested session is a real full-size output. Default: the
+            # rightmost enabled monitor (--output picks one, --windowed opts out).
+            if [ -z "$output" ] && [ "$windowed" = 0 ] && command -v kscreen-doctor >/dev/null; then
+              output="$(kscreen-doctor -j 2>/dev/null | jq -r '[.outputs[] | select(.enabled)] | max_by(.pos.x) | .name // empty' || true)"
+            fi
+            if [ -n "$output" ] && [ "$windowed" = 0 ]; then
+              echo "studio-dev: fullscreen on $output"
               qdbus="$(command -v qdbus || command -v qdbus6 || true)"
               if [ -z "$qdbus" ]; then
                 echo "studio-dev: --output needs KDE's qdbus; ignoring" >&2
               else
-                sed "s/@OUTPUT@/$output/g" ${./dev/kwin-place.js} > "$dir/kwin-place.js"
+                sed -e "s/@OUTPUT@/$output/g" -e "s/@PID@/$niri_pid/g" ${./dev/kwin-place.js} > "$dir/kwin-place.js"
                 id="$("$qdbus" org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$dir/kwin-place.js" studio-dev-place)"
                 "$qdbus" org.kde.KWin "/Scripting/Script$id" org.kde.kwin.Script.run >/dev/null
                 # Stay loaded long enough to catch the window being mapped.
@@ -276,7 +343,7 @@
           for pack in ${cliSrc}/themes/*/; do
             pack="''${pack%/}"
             [ -L "$pack" ] && continue
-            ${lib.getExe self'.packages.studio} theme render "$pack" "$out/$(basename "$pack")"
+            STUDIO_THEME_INDEX=none ${lib.getExe self'.packages.studio} theme render "$pack" "$out/$(basename "$pack")"
           done
           ln -s "$(readlink ${cliSrc}/themes/default)" $out/default
         '';

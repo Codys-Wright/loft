@@ -213,6 +213,27 @@ mod tests {
         );
     }
 
+    /// Captured from Kate 26.08 (`{"cmd":"dump"}`; File and Edit only,
+    /// Open Recent emptied).
+    #[test]
+    fn parses_captured_kate_layout() {
+        let root: RawNode =
+            serde_json::from_str(include_str!("../tests/fixtures/dbusmenu-kate.json")).unwrap();
+        let items = to_items(&root);
+        assert_eq!(
+            items.iter().map(|i| i.label.as_str()).collect::<Vec<_>>(),
+            ["File", "Edit"]
+        );
+        let file = &items[0].children;
+        let quit = file.last().unwrap();
+        assert_eq!(quit.label, "Quit");
+        assert_eq!(quit.shortcut, vec![vec!["Control".to_string(), "Q".into()]]);
+        let recent = file.iter().find(|i| i.label == "Open Recent").unwrap();
+        assert!(recent.submenu);
+        assert!(!file.first().unwrap().separator && !quit.separator);
+        assert!(file.windows(2).all(|w| !(w[0].separator && w[1].separator)));
+    }
+
     #[test]
     fn converts_bus_structures() {
         use zbus::zvariant::{Array, Dict, Signature, StructureBuilder};

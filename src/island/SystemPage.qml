@@ -4,7 +4,7 @@ import Quickshell
 import qs.components
 import qs.services
 
-// Island system page: clock + date, and CPU / GPU / memory gauges with
+// Island system page: clock + date (+ Open Monitor), and CPU / GPU / memory gauges with
 // temperatures. Gauges turn red past the alert thresholds.
 Item {
     id: root
@@ -86,6 +86,46 @@ Item {
                 color: Theme.subtext
                 font.family: Theme.fontUi
                 font.pixelSize: 12
+            }
+
+            // System Monitor (graphs, processes, disks).
+            Rectangle {
+                visible: Features.on("systemMonitor")
+                Layout.topMargin: 8
+                implicitWidth: openRow.implicitWidth + 20
+                implicitHeight: 24
+                radius: 12
+                color: openMouse.containsMouse ? Theme.withAlpha(Theme.text, 0.16) : Theme.withAlpha(Theme.text, 0.08)
+
+                Row {
+                    id: openRow
+                    anchors.centerIn: parent
+                    spacing: 6
+                    Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "󰄧"
+                        size: 11
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Open Monitor"
+                        color: Theme.text
+                        font.family: Theme.fontUi
+                        font.pixelSize: 11
+                        font.weight: Font.Medium
+                    }
+                }
+
+                MouseArea {
+                    id: openMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        SystemStats.monitorSection = "overview";
+                        SystemStats.monitorOpen = true;
+                    }
+                }
             }
         }
 

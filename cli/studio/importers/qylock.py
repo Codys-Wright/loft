@@ -17,8 +17,12 @@ light/dark; a lone `color` is the lock's text color, or its accent when
 it is saturated). Everything else comes from the background: a still image,
 or a frame ~1 s into a video, quantized (median cut + k-means, palette.py).
 Video frames need ffmpeg; without it (and without config colors) the pack
-gets a neutral dark palette, editable afterwards. A still background is
-copied as the pack's wallpaper; for a video, the extracted frame is.
+gets a neutral dark palette, editable afterwards.
+
+Wallpapers: every background of the theme (theme.conf's, plus other large
+images/videos such as osu's background/A..G or Genshin's dawn/day/dusk/night).
+Stills are referenced in place (lock/qylock/…, no second copy); a video gets
+a still frame in wallpapers/ that notes the video ({"path", "video"}).
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ import shutil
 from pathlib import Path
 
 from .. import color
-from . import palette
+from .. import palette
 from .upstream import ImporterError, Upstream, literal
 
 NAME = "qylock"
@@ -151,8 +155,34 @@ def find_background(theme_dir: Path, conf: dict[str, str]) -> Path | None:
     return max(cands, key=lambda p: (p.stat().st_size, str(p)), default=None)
 
 
+# Other media in a theme dir at least this big are alternative backgrounds
+# (osu's background/A..G Glow.jpg, Genshin's dawn/day/dusk/night.mp4), not
+# decorations (terraria's ter1..5.png sprites, logos, avatars).
+MIN_BACKGROUND_BYTES = 200_000
+
+
+def find_backgrounds(theme_dir: Path, conf: dict[str, str]) -> list[Path]:
+    """Every background of a theme, the primary (find_background) first."""
+    primary = find_background(theme_dir, conf)
+    out = [primary] if primary else []
+    for p in sorted(theme_dir.rglob("*")):
+        if p in out or not p.is_file() or p.suffix.lower() in SKIP_EXT or NOT_BACKGROUND.search(p.name):
+            continue
+        if any(part.lower() in ("font", "fonts") for part in p.relative_to(theme_dir).parts):
+            continue
+        if palette.sniff(p) == "unknown" and p.suffix.lower() not in palette.VIDEO_EXT:
+            continue
+        if p.stat().st_size >= MIN_BACKGROUND_BYTES:
+            out.append(p)
+    return out
+
+
 def parse_desktop(text: str) -> dict[str, str]:
     return parse_conf(text)
+
+
+def slug_name(rel: Path) -> str:
+    return re.sub(r"[^a-z0-9._-]+", "-", str(rel.with_suffix("")).lower()).strip("-._") or "background"
 
 
 # ── install ─────────────────────────────────────────────────────────────────
@@ -182,7 +212,8 @@ def install(theme: str, dest: Path, up: Upstream | None = None) -> dict:
 
         conf = parse_conf((src / "theme.conf").read_text(errors="replace")) if (src / "theme.conf").is_file() else {}
         meta = parse_desktop((src / "metadata.desktop").read_text(errors="replace")) if (src / "metadata.desktop").is_file() else {}
-        bgfile = find_background(src, conf)
+        backgrounds = find_backgrounds(src, conf)
+        bgfile = backgrounds[0] if backgrounds else None
 
         theme_json: dict = {}
         notes = []
@@ -195,13 +226,32 @@ def install(theme: str, dest: Path, up: Upstream | None = None) -> dict:
                 swatches = palette.quantize(palette.sample(bgfile))
                 if swatches:
                     notes.append(f"palette from {'a frame of ' if video else ''}{bgfile.name}")
-            # Wallpaper: the still itself, or a frame of the video.
-            if not video and palette.sniff(bgfile) in ("png", "jpg", "webp", "gif"):
-                ext = {"png": ".png", "jpg": ".jpg", "webp": ".webp", "gif": ".gif"}[palette.sniff(bgfile)]
-                shutil.copyfile(bgfile, dest / f"wallpaper{ext}")
-                theme_json["wallpaper"] = {"image": f"wallpaper{ext}"}
-            elif video and palette.have_ffmpeg() and palette.ffmpeg_frame(bgfile, dest / "wallpaper.jpg"):
-                theme_json["wallpaper"] = {"image": "wallpaper.jpg"}
+        # Wallpapers: every background, in place inside the design (stills),
+        # or a frame of each video (wallpapers/<name>.jpg, noting the video);
+        # without ffmpeg a video is listed as is (flagged: no still to show).
+        images: list = []
+        for bg in backgrounds:
+            rel = f"{LOCK_PATH}/{bg.relative_to(src)}"
+            if not palette.is_video(bg):
+                if palette.sniff(bg) in ("png", "jpg", "webp", "gif"):
+                    images.append(rel)
+                continue
+            frame = dest / "wallpapers" / (slug_name(bg.relative_to(src)) + ".jpg")
+            frame.parent.mkdir(exist_ok=True)
+            if palette.have_ffmpeg() and palette.ffmpeg_frame(bg, frame):
+                images.append({"path": str(frame.relative_to(dest)), "video": rel})
+            else:
+                images.append(rel)
+        # The default is the first still: `image` for a plain one; a video's
+        # frame stays an `images` entry (first) so it keeps its video note.
+        if images and isinstance(images[0], str) and not palette.is_video(dest / images[0]):
+            theme_json["wallpaper"] = {"image": images[0]}
+            if images[1:]:
+                theme_json["wallpaper"]["images"] = images[1:]
+        elif images:
+            theme_json["wallpaper"] = {"images": images}
+        if len(backgrounds) > 1:
+            notes.append(f"{len(backgrounds)} backgrounds")
         h = hints(conf)
         if any(k in h for k in ("bg", "accent", "text", "surface", "polarity")):
             notes.append("theme.conf colors")
@@ -210,6 +260,8 @@ def install(theme: str, dest: Path, up: Upstream | None = None) -> dict:
         polarity, pal = palette_for(conf, swatches)
         theme_json = {"polarity": polarity, "palette": pal, "glass": palette.glass(polarity, pal, busy=bool(swatches)), **theme_json}
         (dest / "theme.json").write_text(json.dumps(theme_json, indent=2) + "\n")
+        if (dest / "wallpapers").is_dir() and not any((dest / "wallpapers").iterdir()):
+            (dest / "wallpapers").rmdir()
 
         desc = meta.get("description") or f"qylock {theme}"
         manifest = {

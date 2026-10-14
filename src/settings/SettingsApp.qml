@@ -20,13 +20,19 @@ Scope {
     readonly property var sections: [
         { id: "appearance", icon: "󰏘", label: "Appearance" },
         { id: "wallpaper", icon: "󰸉", label: "Wallpaper" },
+        { id: "lockscreen", icon: "󰌾", label: "Lock Screen" },
         { id: "dock", icon: "󱂬", label: "Dock", feature: "dock" },
         { id: "island", icon: "󰟜", label: "Dynamic Island", feature: "island" },
         { id: "displays", icon: "󰍹", label: "Displays" },
         { id: "input", icon: "󰌌", label: "Keyboard & Mouse" },
         { id: "layout", icon: "󰕰", label: "Layout & Motion" },
         { id: "keybinds", icon: "󰘳", label: "Keybinds" },
+        { id: "system", icon: "󰍛", label: "System" },
+        { id: "sound", icon: "󰕾", label: "Sound" },
+        { id: "capture", icon: "󰹑", label: "Capture", feature: "capture" },
         { id: "features", icon: "󰐱", label: "Features" },
+        { id: "clipboard", icon: "󰨸", label: "Clipboard & Files" },
+        { id: "snippets", icon: "󱐋", label: "Snippets", feature: "snippets" },
         { id: "menubar", icon: "󰍜", label: "Menu Bar" },
         { id: "about", icon: "󰋼", label: "About" }
     ]
@@ -55,6 +61,15 @@ Scope {
 
         function features(): void {
             root.show("features");
+        }
+        function wallpaper(): void {
+            root.show("wallpaper");
+        }
+        function lockscreen(): void {
+            root.show("lockscreen");
+        }
+        function capture(): void {
+            root.show("capture");
         }
         function menubar(): void {
             root.show("menubar");
@@ -360,31 +375,14 @@ Scope {
                             }
                         }
 
-                        // Wallpaper
-                        Card {
+                        WallpaperPage {
+                            Layout.fillWidth: true
                             visible: root.section === "wallpaper"
+                        }
 
-                            Row_ {
-                                label: "Current"
-                                hint: Settings.wallpaper.path || "The theme's wallpaper"
-                                Text {
-                                    text: "Choose…"
-                                    color: Theme.accent
-                                    font.family: Theme.fontUi
-                                    font.pixelSize: 13
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        anchors.margins: -6
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: Panels.wallpaperPickerOpen = true
-                                    }
-                                }
-                            }
-
-                            Row_ {
-                                label: "Folder"
-                                hint: Settings.wallpaper.directory
-                            }
+                        LockScreenPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "lockscreen"
                         }
 
                         // Dock
@@ -542,6 +540,21 @@ Scope {
                             visible: root.section === "features"
                         }
 
+                        SystemPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "system"
+                        }
+
+                        SoundPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "sound"
+                        }
+
+                        CapturePage {
+                            Layout.fillWidth: true
+                            visible: root.section === "capture"
+                        }
+
                         MenuBarPage {
                             Layout.fillWidth: true
                             visible: root.section === "menubar"
@@ -563,6 +576,16 @@ Scope {
                                 label: "Design"
                                 hint: "Liquid Glass components ported from javiiervm/dotfiles"
                             }
+                        }
+
+                        ClipboardPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "clipboard"
+                        }
+
+                        SnippetsPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "snippets"
                         }
                     }
                 }

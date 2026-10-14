@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Services.Mpris
+import qs.capture
 import qs.components
 import qs.services
 
@@ -16,7 +17,8 @@ import qs.services
 // alerts (overheating / overload) and turns white for unread notifications.
 //
 // Hover expands it into a carousel of pages — live activity, notifications
-// (when there are any), media, system, screen time; scroll to switch.
+// (when there are any), camera (while the mirror is on), media, system,
+// screen time; scroll to switch.
 // IPC: island toggle|media|system|usage|notifications|live|flash.
 PanelWindow {
     id: root
@@ -29,7 +31,7 @@ PanelWindow {
     // Sit inside the bar's strip rather than below its exclusive zone.
     exclusionMode: ExclusionMode.Ignore
     anchors.top: true
-    margins.top: 5
+    margins.top: 3
     implicitWidth: 560
     implicitHeight: 260
     color: "transparent"
@@ -43,11 +45,19 @@ PanelWindow {
     property int liveIndex: 0
     readonly property string live: liveActivities.length ? liveActivities[liveIndex % liveActivities.length] : ""
 
-    readonly property var pages: [live !== "" ? "live" : "", Notifications.history.length > 0 ? "notifications" : "", "media", "system", "usage"].filter(s => s)
-    property string page: "media"
+    readonly property var pages: [live !== "" ? "live" : "", Capture.cameraOn ? "camera" : "", Notifications.history.length > 0 ? "notifications" : "", "media", "system", "usage"].filter(s => s)
+    property alias page: persist.page
     readonly property int pageIndex: Math.max(0, pages.indexOf(page))
 
-    property bool pinned: false
+    property alias pinned: persist.pinned
+
+    // Survive hot reloads (one per screen).
+    PersistentProperties {
+        id: persist
+        reloadableId: `island-${root.modelData.name}`
+        property string page: "media"
+        property bool pinned: false
+    }
     readonly property bool expanded: hover.hovered || pinned
     readonly property var banner: Notifications.current
     readonly property bool bannering: banner !== null && !expanded
@@ -60,7 +70,7 @@ PanelWindow {
     readonly property bool alerting: alertColor.a > 0
 
     readonly property real targetWidth: expanded ? 480 : bannering ? 440 : live !== "" ? 240 : playing ? 300 : 150
-    readonly property real targetHeight: expanded ? 210 : bannering ? 84 : 34
+    readonly property real targetHeight: expanded ? 210 : bannering ? 84 : 24
 
     function showPage(name) {
         pinned = true;
@@ -198,9 +208,9 @@ PanelWindow {
 
                 Rectangle {
                     visible: root.playing
-                    Layout.preferredWidth: 22
-                    Layout.preferredHeight: 22
-                    radius: 6
+                    Layout.preferredWidth: 18
+                    Layout.preferredHeight: 18
+                    radius: 5
                     clip: true
                     color: Theme.overlay
 
@@ -218,7 +228,7 @@ PanelWindow {
                     text: root.playing ? (root.player.trackTitle || root.player.identity) : Qt.formatDateTime(clock.date, "h:mm AP")
                     color: Theme.text
                     font.family: Theme.fontUi
-                    font.pixelSize: 13
+                    font.pixelSize: 12
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
                 }
@@ -226,8 +236,8 @@ PanelWindow {
                 Equalizer {
                     visible: root.playing
                     running: root.playing && !root.expanded
-                    Layout.preferredWidth: 18
-                    Layout.preferredHeight: 14
+                    Layout.preferredWidth: 16
+                    Layout.preferredHeight: 12
                 }
             }
         }
@@ -295,6 +305,8 @@ PanelWindow {
                             switch (slot.modelData) {
                             case "live":
                                 return livePage;
+                            case "camera":
+                                return cameraPage;
                             case "notifications":
                                 return notificationsPage;
                             case "media":
@@ -378,6 +390,10 @@ PanelWindow {
         LivePage {
             activity: root.live
         }
+    }
+    Component {
+        id: cameraPage
+        CameraPage {}
     }
     Component {
         id: notificationsPage

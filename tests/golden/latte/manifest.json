@@ -4,5 +4,11 @@
   "version": "1.0.0",
   "license": "MIT",
   "source": "https://github.com/catppuccin/catppuccin",
-  "description": "Catppuccin Latte palette with light Liquid Glass"
+  "description": "Catppuccin Latte palette with light Liquid Glass",
+  "wallpapers": [],
+  "locks": [],
+  "defaults": {
+    "wallpaper": "",
+    "lock": ""
+  }
 }

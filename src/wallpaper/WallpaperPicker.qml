@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import Qt.labs.folderlistmodel
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -8,11 +7,12 @@ import qs.components
 import qs.services
 
 // Wallpaper picker (javiiervm's WallpaperCarousel, reworked): a glass
-// carousel of the images in Settings.wallpaper.directory along the bottom of
-// the focused screen. Arrows / scroll to browse, Enter or click to apply,
-// Escape to close; "Theme" goes back to the theme's own wallpaper.
-// The choice is a runtime override (Settings.wallpaper.path), so it persists.
-// IPC: wallpaper toggle|next|prev.
+// carousel along the bottom of the focused screen with the theme's vibe set
+// (Vibes): its own and curated wallpapers first, then other installed packs'
+// and the wallpaper folder's images, closest colors first. Arrows / scroll
+// to browse, Enter or click to apply, Escape to close; "Use theme
+// wallpaper" goes back to the theme's default. The choice is remembered per
+// theme (Settings.perTheme). IPC: wallpaper toggle|next|prev.
 PanelWindow {
     id: root
 
@@ -46,21 +46,17 @@ PanelWindow {
         radius: panel.radius
     }
 
-    readonly property string directory: {
-        const d = Settings.wallpaper.directory;
-        return d.startsWith("~/") ? Quickshell.env("HOME") + d.slice(1) : d;
-    }
+    // Video-only entries (no still) can't be shown by the image layer.
+    readonly property var items: Vibes.themeWallpapers.concat(Vibes.matchingWallpapers).filter(w => w.kind === "image")
 
     function apply(path) {
-        Settings.wallpaper.path = path;
+        Vibes.chooseWallpaper(path);
     }
 
-    FolderListModel {
-        id: images
-        folder: "file://" + root.directory
-        nameFilters: ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.JPG", "*.PNG"]
-        showDirs: false
-        sortField: FolderListModel.Name
+    onOpenChanged: if (open) {
+        Vibes.refresh();
+        const i = items.findIndex(w => Vibes.isCurrentWallpaper(w.path));
+        list.currentIndex = Math.max(0, i);
     }
 
     GlassSurface {
@@ -82,7 +78,7 @@ PanelWindow {
             else if (event.key === Qt.Key_Left)
                 list.decrementCurrentIndex();
             else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                root.apply(images.get(list.currentIndex, "filePath"));
+                root.apply(root.items[list.currentIndex]?.path ?? "");
         }
 
         ColumnLayout {
@@ -97,7 +93,7 @@ PanelWindow {
 
                 Text {
                     Layout.fillWidth: true
-                    text: `Wallpapers  ·  ${images.count}`
+                    text: `Wallpapers for ${Vibes.theme}  ·  ${Vibes.themeWallpapers.length} + ${Vibes.matchingWallpapers.length} matching`
                     color: Theme.text
                     font.family: Theme.fontUi
                     font.pixelSize: 14
@@ -105,15 +101,15 @@ PanelWindow {
                 }
 
                 Text {
-                    text: Settings.wallpaper.path ? "Use theme wallpaper" : "Using theme wallpaper"
-                    color: Settings.wallpaper.path ? Theme.accent : Theme.subtext
+                    text: Vibes.chosenWallpaper ? "Use theme wallpaper" : "Using theme wallpaper"
+                    color: Vibes.chosenWallpaper ? Theme.accent : Theme.subtext
                     font.family: Theme.fontUi
                     font.pixelSize: 12
 
                     MouseArea {
                         anchors.fill: parent
                         anchors.margins: -6
-                        enabled: Settings.wallpaper.path !== ""
+                        enabled: Vibes.chosenWallpaper !== ""
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.apply("")
                     }
@@ -121,12 +117,12 @@ PanelWindow {
             }
 
             Text {
-                visible: images.count === 0
+                visible: root.items.length === 0
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
-                text: `No images in ${Settings.wallpaper.directory}`
+                text: Vibes.loading ? "Loading…" : `No wallpapers: the theme has none and ${Settings.wallpaper.directory} is empty`
                 color: Theme.subtext
                 font.family: Theme.fontUi
                 font.pixelSize: 13
@@ -134,13 +130,13 @@ PanelWindow {
 
             ListView {
                 id: list
-                visible: images.count > 0
+                visible: root.items.length > 0
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 orientation: ListView.Horizontal
                 spacing: 12
                 clip: true
-                model: images
+                model: root.items
                 highlightMoveDuration: 200
                 preferredHighlightBegin: width / 2 - 120
                 preferredHighlightEnd: width / 2 + 120
@@ -148,11 +144,11 @@ PanelWindow {
 
                 delegate: Item {
                     id: thumb
-                    required property string filePath
-                    required property string fileName
+                    required property var modelData
                     required property int index
                     readonly property bool current: ListView.isCurrentItem
-                    readonly property bool applied: Settings.wallpaper.path === filePath
+                    readonly property bool applied: Vibes.isCurrentWallpaper(modelData.path)
+                    readonly property string caption: modelData.origin === "own" ? Vibes.theme : modelData.origin === "curated" ? "curated · " + modelData.source_pack : `${modelData.source_pack || "folder"} · ${Math.round((modelData.score ?? 0) * 100)}%`
 
                     width: 240
                     height: ListView.view.height
@@ -176,10 +172,33 @@ PanelWindow {
                         Image {
                             anchors.fill: parent
                             anchors.margins: frame.border.width
-                            source: "file://" + thumb.filePath
+                            source: Vibes.url(thumb.modelData.path)
                             sourceSize: Qt.size(480, 270)
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
+                        }
+
+                        // Where it comes from: the theme, a curated link, or a match.
+                        Rectangle {
+                            anchors {
+                                left: parent.left
+                                bottom: parent.bottom
+                                margins: 10
+                            }
+                            width: cap.implicitWidth + 14
+                            height: 20
+                            radius: 10
+                            color: thumb.modelData.origin === "match" ? Theme.withAlpha("#000000", 0.55) : Theme.withAlpha(Theme.accent, 0.9)
+
+                            Text {
+                                id: cap
+                                anchors.centerIn: parent
+                                text: thumb.caption
+                                color: thumb.modelData.origin === "match" ? "white" : Theme.bg
+                                font.family: Theme.fontUi
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                            }
                         }
                     }
 
@@ -188,7 +207,7 @@ PanelWindow {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onEntered: list.currentIndex = thumb.index
-                        onClicked: root.apply(thumb.filePath)
+                        onClicked: root.apply(thumb.modelData.path)
                     }
                 }
             }
@@ -203,17 +222,11 @@ PanelWindow {
         }
 
         function next(): void {
-            if (images.count === 0)
-                return;
-            const i = (Math.max(0, images.indexOf("file://" + Settings.wallpaper.path)) + 1) % images.count;
-            root.apply(images.get(i, "filePath"));
+            Vibes.cycle(1);
         }
 
         function prev(): void {
-            if (images.count === 0)
-                return;
-            const i = (Math.max(0, images.indexOf("file://" + Settings.wallpaper.path)) - 1 + images.count) % images.count;
-            root.apply(images.get(i, "filePath"));
+            Vibes.cycle(-1);
         }
     }
 }

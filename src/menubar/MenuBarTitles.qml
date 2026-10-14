@@ -13,6 +13,7 @@ RowLayout {
     // The bar window and its screen.
     required property var window
     required property string screenName
+    property int barHeight: 30
 
     // Width the whole row may take; global titles past it collapse into
     // a "»" menu.
@@ -23,6 +24,15 @@ RowLayout {
     readonly property var win: MenuState.window
     readonly property int fit: MenuState.fitOn(screenName)
     readonly property bool overflowing: fit < AppMenu.titles.length
+    // Bumped after the titles are laid out anew, so dropdowns re-anchor.
+    property int stamp: 0
+    onImplicitWidthChanged: relayout.restart()
+
+    Timer {
+        id: relayout
+        interval: 16
+        onTriggered: root.stamp++
+    }
 
     // x of title `index` in window (= screen) coordinates, for the dropdown.
     function titleX(index) {
@@ -52,12 +62,13 @@ RowLayout {
     }
     onMaxWidthChanged: Qt.callLater(measure)
 
+    // The OS mark, like the Apple menu: the NixOS logo (nf-linux-nixos).
     Icon {
         id: mark
-        Layout.rightMargin: 6
-        text: "󰽰"
-        size: 18
-        color: Theme.accent
+        Layout.rightMargin: 8
+        text: "\uf313"
+        size: 16
+        color: Theme.text
 
         MouseArea {
             anchors.fill: parent
@@ -89,7 +100,10 @@ RowLayout {
             visible: index < root.fit
             onImplicitWidthChanged: Qt.callLater(root.measure)
         }
-        onCountChanged: Qt.callLater(root.measure)
+        onCountChanged: {
+            Qt.callLater(root.measure);
+            relayout.restart();
+        }
     }
 
     Title {
@@ -107,13 +121,13 @@ RowLayout {
         property bool interactive: true
         readonly property bool lit: MenuState.open && MenuState.mode === "menu" && MenuState.screen === root.screenName && MenuState.current === titleIndex
 
-        implicitWidth: label.implicitWidth + 18
-        implicitHeight: 26
+        implicitWidth: label.implicitWidth + 16
+        implicitHeight: 22
 
         Rectangle {
             anchors.fill: parent
-            radius: height / 2
-            color: title.lit ? Theme.withAlpha(Theme.text, 0.16) : hover.containsMouse && title.interactive ? Theme.withAlpha(Theme.text, 0.08) : "transparent"
+            radius: 6
+            color: title.lit ? Theme.withAlpha(Theme.text, 0.18) : hover.containsMouse && title.interactive ? Theme.withAlpha(Theme.text, 0.08) : "transparent"
             Behavior on color {
                 ColorAnimation {
                     duration: 120
@@ -128,8 +142,8 @@ RowLayout {
             color: Theme.text
             opacity: title.enabled ? 1 : 0.45
             font.family: Theme.fontUi
-            font.pixelSize: title.bold ? 14 : 13
-            font.weight: title.bold ? Font.DemiBold : Font.Medium
+            font.pixelSize: 13
+            font.weight: title.bold ? Font.Bold : Font.Normal
         }
 
         MouseArea {
@@ -151,6 +165,7 @@ RowLayout {
     MenuOverlay {
         screen: root.window.screen
         screenName: root.screenName
+        barHeight: root.barHeight
         titles: root
     }
 }

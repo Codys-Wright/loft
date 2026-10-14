@@ -17,7 +17,7 @@ PanelWindow {
     // MenuBarTitles of this screen's bar: where each title sits.
     required property var titles
     required property string screenName
-    property int barHeight: 44
+    property int barHeight: 30
 
     readonly property bool shown: MenuState.open && MenuState.screen === screenName
     readonly property bool menuMode: MenuState.mode === "menu"
@@ -94,12 +94,13 @@ PanelWindow {
             highlighted: MenuState.path[index]
 
             x: {
+                void root.titles.stamp; // re-evaluate after the titles move
                 if (!parentPanel)
                     return Math.max(8, Math.min(root.titles.titleX(MenuState.current) - 6, root.width - width - 8));
                 const right = parentPanel.x + parentPanel.width - 4;
                 return right + width <= root.width - 8 ? right : Math.max(8, parentPanel.x - width + 4);
             }
-            y: parentPanel ? Math.max(4, Math.min(parentPanel.y + parentPanel.rowY(MenuState.path[index - 1]) - pad, root.height - height - 8)) : 4
+            y: parentPanel ? Math.max(2, Math.min(parentPanel.y + parentPanel.rowY(MenuState.path[index - 1]) - pad, root.height - height - 8)) : 2
 
             onHovered: item => MenuState.highlight(index, item, true)
             onClicked: item => {

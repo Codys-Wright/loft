@@ -40,13 +40,7 @@ WlSessionLockSurface {
         readonly property var theme: Theme
         // The desktop's wallpaper image (the user's choice, else the theme
         // pack's), as a URL; "" = the theme gradient.
-        readonly property string wallpaper: {
-            const p = Settings.wallpaper.path || Theme.wallpaperImage;
-            if (!p)
-                return "";
-            const abs = p.startsWith("~/") ? Quickshell.env("HOME") + p.slice(1) : p;
-            return abs.startsWith("/") ? "file://" + abs : abs;
-        }
+        readonly property string wallpaper: Vibes.url(Vibes.wallpaperFor(surface.screen?.name ?? ""))
 
         signal failed(string message)
 
@@ -185,6 +179,7 @@ WlSessionLockSurface {
         if (c.status === Component.Ready)
             return c;
         console.warn(`lock: pack design ${host.packDesign} failed to load (${c.errorString().trim()}); using the built-in one`);
+        host.designFailed(host.packLockDir, c.errorString().trim());
         return null;
     }
 

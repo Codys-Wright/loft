@@ -10,6 +10,8 @@ Environment (all optional):
   STUDIO_TEMPLATE_DIR  override the render templates (dev)
   STUDIO_HOOKS         reload hooks after apply: all|none|comma list of
                        shell,niri,kitty,ghostty,gtk (default: all; --dev: shell,niri)
+  STUDIO_THEME_INDEX   themes index (path, file:// or http(s) URL; `none` = off)
+                       for curated vibe links (default: studio-linux-themes on GitHub)
 
 `studio --dev …` targets the session started by `nix run .#dev` instead.
 """
@@ -28,7 +30,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import hooks, importers, render
+from . import hooks, importers, index, render, vibes
 from .pack import IGNORED, Pack, PackError, is_pack
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -77,6 +79,39 @@ class Ctx:
             return Pack(p)
         raise Fail(f"no theme '{ref}' in {':'.join(map(str, self.theme_path))}")
 
+    def packs(self) -> dict[str, Pack]:
+        """Every pack on the theme path by name (first wins; `default` alias skipped)."""
+        out: dict[str, Pack] = {}
+        for d in self.theme_path:
+            if not d.is_dir():
+                continue
+            for sub in sorted(d.iterdir()):
+                if sub.name not in out and is_pack(sub) and not sub.is_symlink():
+                    try:
+                        out[sub.name] = Pack(sub)
+                    except PackError:
+                        continue
+        return out
+
+    def index(self) -> dict:
+        if not hasattr(self, "_index"):
+            self._index = index.load(self.state_dir)
+        return self._index
+
+    def curated(self, pack: Pack) -> dict:
+        """The pack's curated vibes (manifest + index), resolved against installed packs."""
+        return vibes.resolve(pack, self.packs(), self.index())
+
+    def current_name(self) -> str | None:
+        for f in ("manifest.json", "theme.json"):
+            try:
+                name = json.loads((self.current / f).read_text()).get("name")
+            except (OSError, ValueError):
+                continue
+            if name:
+                return name
+        return None
+
     def validate(self, pack: Pack, require_manifest: bool = False) -> None:
         try:
             pack.validate(self.schema, require_manifest)
@@ -99,37 +134,60 @@ def load_dev_env() -> None:
 
 def cmd_list(ctx: Ctx, args) -> None:
     # First match on the theme path wins, as in `find` (user packs shadow built-ins).
-    packs: dict[str, Path] = {}
-    for d in ctx.theme_path:
-        if not d.is_dir():
-            continue
-        for sub in sorted(d.iterdir()):
-            # `default` is an alias (symlink) for one of the real themes.
-            if is_pack(sub) and not sub.is_symlink():
-                packs.setdefault(sub.name, sub)
+    packs = ctx.packs()
     if not args.json:
         for n in sorted(packs):
             print(n)
         return
-    # For pickers (the shell's theme selector): enough to draw a swatch.
+    # For pickers (the shell's theme selector): enough to draw a swatch, plus
+    # the size of each vibe set and the installed packs it links to.
+    idx = ctx.index()
     out = []
     for name in sorted(packs):
-        path = packs[name]
-        try:
-            theme = json.loads((path / "theme.json").read_text())
-        except (OSError, ValueError):
-            continue
+        pack = packs[name]
+        theme = pack.theme
+        refs = vibes.links(pack, idx)
+        linked = sorted({r.partition(":")[0] for k in refs for r in refs[k]} & set(packs) - {name})
+        default = pack.default_wallpaper()
         out.append(
             {
                 "name": name,
-                "path": str(path),
+                "path": str(pack.path),
                 "polarity": theme.get("polarity", "dark"),
                 "palette": theme.get("palette", {}),
                 "glass": theme.get("glass", {}),
-                "wallpaper": theme.get("wallpaper", {}),
+                "wallpaper": dict(theme.get("wallpaper", {}), default=str(default["path"]) if default else ""),
+                "wallpapers": len(pack.wallpaper_entries()),
+                "locks": [e["name"] for e in pack.lock_entries()],
+                "vibes": linked,
             }
         )
     print(json.dumps(out))
+
+
+def cmd_vibes(ctx: Ctx, args) -> None:
+    name = args.theme or ctx.current_name()
+    if not name:
+        raise Fail("no theme given and none is current")
+    pack = ctx.find(name)
+    packs = ctx.packs()
+    packs.setdefault(pack.name, pack)
+    cache = vibes.PaletteCache(ctx.state_dir)
+    try:
+        result = vibes.rank(pack, packs, idx=ctx.index(), cache=cache, dirs=[Path(d) for d in args.dir], limit=args.limit)
+    finally:
+        cache.save()
+    if args.json:
+        print(json.dumps(result))
+        return
+    print(f"{result['theme']} ({result['polarity']})")
+    for kind in ("wallpapers", "locks"):
+        print(f"\n{kind}:")
+        for e in result[kind]:
+            d = f"{e['distance']:6.1f}" if "distance" in e else "      "
+            what = e.get("name") or os.path.relpath(e["path"], packs[e["source_pack"]].path) if e["source_pack"] in packs else e["path"]
+            flag = "  [video]" if e.get("kind") == "video" else ""
+            print(f"  {e['origin']:8} {d}  {e['source_pack'] or '(folder)':22} {what}{flag}")
 
 
 def cmd_current(ctx: Ctx, args) -> None:
@@ -143,7 +201,7 @@ def cmd_current(ctx: Ctx, args) -> None:
 def cmd_render(ctx: Ctx, args) -> None:
     pack = ctx.find(args.pack)
     ctx.validate(pack)
-    render.render(pack, Path(args.outdir), ctx.template_dir)
+    render.render(pack, Path(args.outdir), ctx.template_dir, curated=ctx.curated(pack))
 
 
 def cmd_validate(ctx: Ctx, args) -> None:
@@ -170,14 +228,17 @@ def cmd_apply(ctx: Ctx, args) -> None:
     ctx.validate(pack)
     # Cached by content: re-applying an unchanged pack is just a symlink swap,
     # and an edited pack lands in a new dir (a new path niri also notices).
-    digest = pack.digest(render.renderer_salt(ctx.template_dir))
+    # Curated vibes point into other installed packs: what they resolve to
+    # is part of the key, so installing a linked pack re-renders.
+    curated = ctx.curated(pack)
+    digest = pack.digest(render.renderer_salt(ctx.template_dir) + json.dumps(curated, sort_keys=True))
     base = ctx.state_dir / "rendered" / pack.name
     dest = base / digest
     if not (dest / "theme.json").is_file():
         base.mkdir(parents=True, exist_ok=True)
         tmp = Path(tempfile.mkdtemp(prefix=f".{digest}-", dir=base))
         tmp.chmod(0o755)  # mkdtemp is 0700; consumers may run as other users
-        render.render(pack, tmp, ctx.template_dir)
+        render.render(pack, tmp, ctx.template_dir, curated=curated)
         if dest.exists():
             shutil.rmtree(dest)
         tmp.rename(dest)
@@ -264,7 +325,7 @@ def _import(ctx: Ctx, args) -> None:
             for theme, pack in importers.list_available(args.source):
                 print(f"{pack:28} {args.source.split(':', 1)[0]}:{theme}")
             return
-        importers.install(args.source, ctx.user_themes, force=args.force, validate=validate)
+        importers.install(args.source, ctx.user_themes, force=args.force, validate=validate, index=ctx.index())
     except importers.ImporterError as e:
         raise Fail(str(e)) from e
 
@@ -373,6 +434,18 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true", help="names, paths and palettes as JSON")
     s.set_defaults(fn=cmd_list)
     sub.add_parser("current", help="print the active theme").set_defaults(fn=cmd_current)
+
+    s = sub.add_parser(
+        "vibes",
+        help="wallpapers and lock designs that go with a theme",
+        description="The theme's own wallpapers and lock designs, curated links (manifest `vibes`, themes index), "
+        "then every other installed pack's (and --dir images), ranked by palette distance (CIEDE2000).",
+    )
+    s.add_argument("theme", nargs="?", help="theme name or pack path (default: the current theme)")
+    s.add_argument("--json", action="store_true", help="machine-readable (the shell's pickers)")
+    s.add_argument("--dir", action="append", default=[], metavar="DIR", help="also rank the images in DIR (repeatable)")
+    s.add_argument("--limit", type=int, help="at most N ranked matches of each kind")
+    s.set_defaults(fn=cmd_vibes)
 
     s = sub.add_parser("apply", help="render (cached), make current, reload consumers")
     s.add_argument("theme", help="theme name or pack path")

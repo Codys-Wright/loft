@@ -6,18 +6,33 @@ import Quickshell.Io
 
 // Which popup panels are open, and on which screen. Bar buttons and IPC
 // (`qs ipc call controlcenter toggle`, bindable from niri) drive it.
+// Kept across hot reloads (PersistentProperties), so editing a panel's QML
+// doesn't close it or lose the Settings page you're designing.
 Singleton {
     id: root
 
-    property bool controlCenterOpen: false
-    property bool wallpaperPickerOpen: false
-    property bool settingsOpen: false
-    property string settingsSection: "appearance"
-    property bool doNotDisturb: false
+    property alias controlCenterOpen: persist.controlCenterOpen
+    property alias wallpaperPickerOpen: persist.wallpaperPickerOpen
+    property alias settingsOpen: persist.settingsOpen
+    property alias settingsSection: persist.settingsSection
+    property alias doNotDisturb: persist.doNotDisturb
     // Inhibit idle (screen blank / lock) — applied by the bar's IdleInhibitor.
-    property bool caffeine: false
+    property alias caffeine: persist.caffeine
     // Output name the panel opens on; empty = the focused one.
-    property string controlCenterScreen: ""
+    property alias controlCenterScreen: persist.controlCenterScreen
+
+    PersistentProperties {
+        id: persist
+        reloadableId: "panels"
+
+        property bool controlCenterOpen: false
+        property bool wallpaperPickerOpen: false
+        property bool settingsOpen: false
+        property string settingsSection: "appearance"
+        property bool doNotDisturb: false
+        property bool caffeine: false
+        property string controlCenterScreen: ""
+    }
 
     function toggleControlCenter(screenName) {
         if (controlCenterOpen && (screenName ?? "") === controlCenterScreen) {

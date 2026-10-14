@@ -12,7 +12,7 @@ nix run github:Codys-Wright/studio-linux      # try it: opens as a nested niri w
 
 ```sh
 nix run .#dev                       # nested niri window running ./src, ./niri, ./themes — hot reload on save
-nix run .#dev -- --output DP-1      # inside KDE: fullscreen + borderless on that monitor
+nix run .#dev -- --output DP-1      # inside KDE: fullscreen on that monitor (default: the rightmost)
 nix run .#studio -- --dev theme list
 nix run .#studio -- --dev theme apply latte   # recolors the running session live (checkout templates/themes)
 nix run .#shot -- out.png           # screenshot the dev session
@@ -20,6 +20,25 @@ nix run .#shot -- out.png           # screenshot the dev session
 
 Inside the nested session Mod is Alt (Super in a real session): Mod+Return terminal,
 Mod+O overview, Mod+Shift+E quit.
+
+## Designing live
+
+`nix run .#dev` runs the whole desktop from this checkout in a nested niri window — inside
+KDE it goes fullscreen and borderless on the rightmost monitor (`--output NAME` picks one,
+`--windowed` keeps a normal window). Re-running it replaces the running session.
+
+| You edit | What happens |
+|---|---|
+| QML (`src/**`) | hot reload on save — a "Reloaded" pill; open panels and the Settings page stay where they were |
+| QML with an error | the error (file:line) is pinned on screen, the last good version keeps running; saving the fix reloads |
+| niri KDL (`niri/*.kdl`) | niri reloads on save |
+| a theme (`themes/*`, `studio theme apply`) | recolors everything live |
+| launcher theme (`launcher/walker/themes/studio/*`) | next time the launcher opens |
+| the CLI (`cli/studio/*`) | live — `studio` runs the checkout |
+| Rust (`crates/*`) | `cargo build`; `target/debug` binaries shadow the packaged ones (restart the dev session once) |
+| Nix (`nix/*`, runtime deps) | re-run `nix run .#dev` |
+
+`Mod+Shift+R` (or `qs ipc call shell reload`) forces a reload.
 
 ## Themes
 
@@ -37,7 +56,16 @@ studio theme install qylock:pixel-sakura      #   (--list cozytile: / qylock: sh
 studio theme export mytheme -o mytheme.tar.zst
 studio theme remove mytheme
 studio theme validate ./pack                  # against themes/schema.json
+studio theme vibes [theme] [--json] [--dir ~/Pictures/Wallpapers]   # wallpapers + lock designs that fit
 ```
+
+**Vibes.** A pack carries a collection of wallpapers (`wallpapers/`, `wallpaper.images`) and lock
+designs (`locks`), plus curated links to other packs' (`vibes`, and groups in the
+[themes index](https://github.com/Codys-Wright/studio-linux-themes)). `studio theme vibes` lists
+the theme's own, the curated ones, then every other installed pack's wallpapers and locks (and
+loose images) ranked by color closeness (CIEDE2000 between palettes and between image swatches).
+Settings → Wallpaper / Lock Screen and the wallpaper picker (`wallpaper toggle`) show the same
+set; choices, rotation and per-workspace wallpapers are remembered per theme.
 
 Point your apps at the rendered fragments once; `apply` keeps them current:
 
@@ -57,7 +85,8 @@ Point your apps at the rendered fragments once; `apply` keeps them current:
 `Mod+Ctrl+Q` (Ctrl+Cmd+Q on a Mac) locks: a session lock with PAM, a big clock, now playing
 and a frosted card with the password field. The same design is the login screen, shipped as the
 SDDM theme `studio` (`packages.studio-sddm-theme`). A theme pack can replace both with its own
-`lock/Main.qml` ([docs/THEME-FORMAT-LOCK.md](docs/THEME-FORMAT-LOCK.md)).
+`lock/Main.qml` ([docs/THEME-FORMAT-LOCK.md](docs/THEME-FORMAT-LOCK.md)) or ship several designs;
+Settings → Lock Screen picks one per theme (any installed pack's) and previews it.
 
 ```sh
 nix run .#greeter-preview           # the login screen in SDDM's test mode (opens a window)
@@ -84,6 +113,49 @@ services.displayManager.sddm = {
 security.pam.services.studio-lock = { };   # + STUDIO_LOCK_PAM=studio-lock in the shell's environment
 ```
 
+## Clipboard, snippets, shelf, scratchpad
+
+| | |
+|---|---|
+| `Mod+Shift+V` | clipboard history: search, text/image previews, pins, Enter pastes into the focused app |
+| `Mod+Shift+Alt+V` | paste as plain text |
+| `Mod+Shift+Period` | snippet picker (edit snippets in Settings → Snippets) |
+| `Mod+Shift+N` | scratchpad: tabbed, autosaved Markdown notes |
+
+The shell records the clipboard itself (`wl-paste --watch cliphist store`, into cliphist's
+usual db — turn it off in Settings → Clipboard & Files if you already run a recorder).
+Pasting and snippets send keys with `wtype`, so they go to whatever window has keyboard
+focus (Ctrl+V; Ctrl+Shift+V for terminals, matched by app id). Pins, snippets, the shelf
+and notes live under `<state>/` (`clipboard/`, `snippets.json`, `shelf.json`,
+`scratchpad.json`). The Shelf slides out when you drag something to the middle of the
+right screen edge (Wayland only reports a drag to the surface under the pointer, so a thin
+strip there is the sensor) or with `qs ipc … call shelf toggle`. IPC targets: `clipboard`
+(toggle, pastePlain, clear, cleanUrl, wipe, settings), `snippets`, `shelf`, `scratchpad`.
+
+## Menu bar: app menu and global menu
+
+Click the focused app's bold name (or Mod+F10) for its app menu: About, New Window and
+the `.desktop` file's actions, Move to Workspace / Display, Float, Full Screen, Center,
+Hide (niri has no minimize: windows park on a `hidden-<output>` workspace until Show All),
+Close and Quit. The app's own menus (File, Edit, View …) follow it in the bar; menus
+take the keyboard (arrows, Enter, Esc, type to select) and hovering across titles
+switches between them. Settings → Menu Bar.
+
+The global menu comes from `studio-appmenu` (`crates/studio-appmenu`), which the shell
+runs. It owns `com.canonical.AppMenu.Registrar`, so Qt/KDE apps started afterwards move
+their menubar into the bar; it never takes the name from another registrar (Plasma's),
+and finds menus by introspection then. GTK apps with a GtkApplication menubar show
+theirs too (their in-window menubar stays); Electron does under XWayland when
+libdbusmenu-glib is loadable. GTK4/libadwaita apps, Firefox and Wayland Electron have
+no exported menubar.
+
+```sh
+printf '{"cmd":"focus","pid":%s}\n' "$(pidof kate)" | studio-appmenu   # → {"menu":{…}}
+```
+
+To try it from inside another desktop (KDE has its own registrar on your session bus),
+run the nested session on a private bus: `dbus-run-session -- nix run .#dev`.
+
 ## niri settings
 
 Studio Settings has Displays, Keyboard & Mouse, Layout & Motion and Keybinds pages,
@@ -105,4 +177,4 @@ studio-niri binds --conflicts             # keys bound more than once, and which
 studio-niri reset [input|layout.gaps|…]   # drop overrides and re-render
 ```
 
-Status: Phase 0 (dev loop), Phase 1 (theme engine + selector + Cozytile/qylock importers), the shell port (bar, dock, Control Center, Dynamic Island, OSD, switcher, notifications, wallpaper picker, Settings incl. niri Displays/Input/Layout/Keybinds), the Spotlight launcher and Phase 5 (lock + login screen). See [docs/PLAN.md](docs/PLAN.md). Themes: [studio-linux-themes](https://github.com/Codys-Wright/studio-linux-themes).
+Status: Phase 0 (dev loop), Phase 1 (theme engine + selector + Cozytile/qylock importers), the shell port (bar, dock, Control Center, Dynamic Island, OSD, switcher, notifications, wallpaper picker, Settings incl. niri Displays/Input/Layout/Keybinds), the Spotlight launcher, the System module (monitor, bar readouts, network, alerts; `qs ipc call monitor toggle`) and Phase 5 (lock + login screen). See [docs/PLAN.md](docs/PLAN.md). Themes: [studio-linux-themes](https://github.com/Codys-Wright/studio-linux-themes).

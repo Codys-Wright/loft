@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import qs.services
 import qs.background
+import qs.capture
 import qs.bar
 import qs.dock
 import qs.controlcenter
@@ -11,7 +12,11 @@ import qs.lock
 import qs.osd
 import qs.switcher
 import qs.wallpaper
+import qs.audio
 import qs.settings
+import qs.devtools
+import qs.monitor
+import qs.clipboard
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 // Optional modules are gated by the feature registry (services/Features.qml).
@@ -59,7 +64,81 @@ ShellRoot {
         WallpaperPicker {}
     }
 
+    // Capture (screenshots, recording, OCR, color picker, camera).
+    Variants {
+        model: Features.on("capture") || Features.on("ocr") || Features.on("colorPicker") ? Quickshell.screens : []
+        RegionOverlay {}
+    }
+
+    Variants {
+        model: Features.on("capture") ? Quickshell.screens : []
+        CaptureSelector {}
+    }
+
+    Variants {
+        model: Features.on("capture") ? Quickshell.screens : []
+        CaptureCountdown {}
+    }
+
+    Variants {
+        model: Features.on("capture") ? Quickshell.screens : []
+        CaptureThumbnail {}
+    }
+
+    Variants {
+        model: Features.on("capture") ? Quickshell.screens : []
+        CaptureTrim {}
+    }
+
+    Variants {
+        model: Features.on("capture") ? Capture.pins : []
+        PinnedCapture {}
+    }
+
+    LazyLoader {
+        active: Features.on("camera") && Capture.cameraOn
+        CameraMirror {}
+    }
+
     SettingsApp {}
 
+    // Hot-reload feedback: "Reloaded" / the QML error (live design loop).
+    ReloadToast {}
+
     Lock {}
+
+    LazyLoader {
+        active: Features.on("systemMonitor")
+        SystemMonitor {}
+    }
+
+    LazyLoader {
+        active: Features.on("alerts")
+        SystemAlerts {}
+    }
+
+    Variants {
+        model: Features.on("clipboard") ? Quickshell.screens : []
+        ClipboardPanel {}
+    }
+
+    Variants {
+        model: Features.on("snippets") ? Quickshell.screens : []
+        SnippetPicker {}
+    }
+
+    Variants {
+        model: Features.on("shelf") ? Quickshell.screens : []
+        ShelfPanel {}
+    }
+
+    LazyLoader {
+        active: Features.on("scratchpad")
+        ScratchpadWindow {}
+    }
+
+    Variants {
+        model: Features.on("mixer") ? Quickshell.screens : []
+        Mixer {}
+    }
 }

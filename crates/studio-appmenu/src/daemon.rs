@@ -458,7 +458,51 @@ impl App {
 
     /// The menu for the focused window, if any.
     async fn resolve(&mut self) -> Option<Target> {
-        let f = self.focus.clone()?;
+        let mut f = self.focus.clone()?;
+
+        // X11 window: niri gave us xwayland-satellite's pid; ask X instead.
+        if crate::x11::is_xwayland_bridge(f.pid) {
+            let active = within(tokio::task::spawn_blocking(crate::x11::active_window))
+                .await
+                .and_then(|r| r.ok().flatten());
+            if let Some(a) = active {
+                if let Some(e) = self
+                    .state
+                    .lock()
+                    .expect("registrar state")
+                    .for_window(a.xid)
+                {
+                    return Some(Target::DBus {
+                        service: e.service.clone(),
+                        path: e.path.clone(),
+                        pid: e.pid.unwrap_or(f.pid),
+                    });
+                }
+                if let Some(pid) = a.pid {
+                    // Registered before we started: Chromium/Electron export at
+                    // /com/canonical/menu/<XID in hex>.
+                    let path = format!("/com/canonical/menu/{:X}", a.xid);
+                    for (name, p) in self.pids.connections_of(&self.conn, &[pid]).await {
+                        if let Some(Ok(_)) =
+                            within(dbusmenu::get_layout(&self.conn, &name, &path)).await
+                        {
+                            return Some(Target::DBus {
+                                service: name,
+                                path,
+                                pid: p,
+                            });
+                        }
+                    }
+                    f = Focus {
+                        pid,
+                        index: None,
+                        count: None,
+                        exclude: f.exclude,
+                    };
+                }
+            }
+        }
+
         let table = ProcTable::read();
         let pids = candidates(&table, f.pid, &f.exclude, &self.protected);
 

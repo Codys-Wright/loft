@@ -23,7 +23,8 @@ from unittest import mock
 
 from studio import color
 from studio.cli import main
-from studio.importers import REGISTRY, ImporterError, cozytile, palette, parse_ref, qylock
+from studio import palette
+from studio.importers import REGISTRY, ImporterError, cozytile, parse_ref, qylock
 from studio.importers.upstream import literal
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -345,12 +346,19 @@ def git_repo(root: Path, files: dict[str, bytes | str]) -> str:
     return f"file://{root}"
 
 
+def navy_pink(x, y):
+    """A dark navy image with pink: Sakura's colors, nothing like Carbon's greys."""
+    return (40, 39, 56) if (x + y) % 4 else (229, 185, 198)
+
+
 def cozytile_repo(root: Path) -> str:
     files: dict[str, bytes | str] = {
         "README.md": "cozytile",
         "Wallpaper/120_-_KnFPX73.jpg": b"\xff\xd8\xff\xe0fakejpeg",
         "Wallpaper/a_road_going_through_a_desert.jpeg": b"\xff\xd8\xff\xe0fakejpeg2",
         "Wallpaper/e-ink.json": EINK,
+        # Shipped but set by no theme: given to the closest palette (Sakura).
+        "Wallpaper/pexels (1).png": make_png(16, 16, navy_pink),
     }
     for name, switcher in (("Sakura", SAKURA_SWITCHER), ("Carbon", CARBON_SWITCHER)):
         low = name.lower()
@@ -360,7 +368,8 @@ def cozytile_repo(root: Path) -> str:
         files[f"Themes/{name}/.config/dunst/dunstrc"] = DUNST
         files[f"sddm-themes/{name}/Main.qml"] = "import QtQuick\nItem {}\n"
         files[f"sddm-themes/{name}/theme.conf"] = "[General]\nbackground=Background.jpg\naccentColor=#ffb86c\n"
-        files[f"sddm-themes/{name}/Background.jpg"] = b"\xff\xd8\xff\xe0bg"
+        # Carbon's greeter background is its wallpaper (as upstream); Sakura's differs here.
+        files[f"sddm-themes/{name}/Background.jpg"] = b"\xff\xd8\xff\xe0fakejpeg2" if name == "Carbon" else b"\xff\xd8\xff\xe0bg"
         files[f"sddm-themes/{name}/font/.gitkeep"] = ""
     return git_repo(root, files)
 
@@ -380,6 +389,17 @@ def qylock_repo(root: Path) -> str:
             "themes/Video/bg.mp4": b"\0\0\0\x18ftypmp42" + b"\0" * 64,
             "themes/solid/Main.qml": "import QtQuick\nItem {}\n",
             "themes/solid/theme.conf": "[General]\ntype=color\ncolor=#eef6f0\n",
+            # Several backgrounds (osu-style) and day/night videos (Genshin-style).
+            "themes/multi/Main.qml": "import QtQuick\nItem {}\n",
+            "themes/multi/theme.conf": "[General]\nbackground=background/A Glow.jpg\n",
+            "themes/multi/background/A Glow.jpg": b"\xff\xd8\xff\xe0" + b"a" * 250_000,
+            "themes/multi/background/B Glow.jpg": b"\xff\xd8\xff\xe0" + b"b" * 250_000,
+            "themes/multi/logo.png": make_png(40, 40, two_tone),
+            "themes/multi/sprite.png": b"\x89PNG\r\n\x1a\n" + b"s" * 1000,
+            "themes/clips/Main.qml": "import QtQuick\nItem {}\n",
+            "themes/clips/theme.conf": "[General]\nbackground=day.mp4\n",
+            "themes/clips/day.mp4": b"\0\0\0\x18ftypmp42" + b"d" * 250_000,
+            "themes/clips/night.mp4": b"\0\0\0\x18ftypmp42" + b"n" * 250_000,
         },
     )
 
@@ -396,6 +416,7 @@ class Install(unittest.TestCase):
                 "XDG_DATA_HOME": str(self.tmp / "data"),
                 "STUDIO_STATE_DIR": str(self.tmp / "state"),
                 "STUDIO_HOOKS": "none",
+                "STUDIO_THEME_INDEX": "none",
                 "STUDIO_COZYTILE_URL": cozytile_repo(self.tmp / "cozytile"),
                 "STUDIO_QYLOCK_URL": qylock_repo(self.tmp / "qylock"),
             }
@@ -418,6 +439,7 @@ class Install(unittest.TestCase):
         rc, out, err = studio("theme", "install", "--list", "qylock")
         self.assertEqual(rc, 0, err)
         self.assertIn("qylock-video", out)
+        self.assertIn("qylock-multi", out)
         self.assertEqual(studio("theme", "install", "--list", "./somewhere")[0], 1)
 
     def test_cozytile_all(self):
@@ -426,15 +448,25 @@ class Install(unittest.TestCase):
         sakura = self.user / "cozytile-sakura"
         theme = json.loads((sakura / "theme.json").read_text())
         self.assertEqual(theme["palette"]["bg"], "#282738")
-        self.assertEqual(theme["wallpaper"]["image"], "wallpaper.jpg")
-        self.assertTrue((sakura / "wallpaper.jpg").is_file())
+        # The switcher's wallpaper (default), the greeter's different background, the orphan.
+        self.assertEqual(theme["wallpaper"], {"image": "wallpapers/120_-_knfpx73.jpg", "images": ["greeter/Background.jpg"]})
+        self.assertEqual(sorted(p.name for p in (sakura / "wallpapers").iterdir()), ["120_-_knfpx73.jpg", "pexels-1.png"])
         self.assertTrue((sakura / "greeter" / "Main.qml").is_file())
         self.assertFalse((sakura / "greeter" / "font" / ".gitkeep").exists())
         m = json.loads((sakura / "manifest.json").read_text())
         self.assertEqual((m["license"], m["upstream"]["importer"]), ("NOASSERTION", "cozytile"))
         self.assertRegex(m["upstream"]["commit"], "^[0-9a-f]{40}$")
-        carbon = json.loads((self.user / "cozytile-carbon" / "theme.json").read_text())
+        self.assertEqual(m["lock"], {"name": "sakura", "format": "qylock", "path": "greeter"})
+        from studio.pack import Pack
+
+        walls = [str(e["path"].relative_to(sakura)) for e in Pack(sakura).wallpaper_entries()]
+        self.assertEqual(walls, ["wallpapers/120_-_knfpx73.jpg", "greeter/Background.jpg", "wallpapers/pexels-1.png"])
+        carbon_dir = self.user / "cozytile-carbon"
+        carbon = json.loads((carbon_dir / "theme.json").read_text())
         self.assertEqual(carbon["polarity"], "light")
+        # Same file as the greeter's background: referenced, not copied again.
+        self.assertEqual(carbon["wallpaper"], {"image": "greeter/Background.jpg"})
+        self.assertFalse((carbon_dir / "wallpapers").exists())
 
         # Re-running `all` skips installed packs; a single theme refuses; --force replaces.
         rc, out, _ = studio("theme", "install", "cozytile:all")
@@ -462,14 +494,20 @@ class Install(unittest.TestCase):
         self.assertTrue((still / "lock" / "qylock" / "Main.qml").is_file())
         self.assertTrue((still / "lock" / "qylock" / "font" / "X.ttf").is_file())
         t = json.loads((still / "theme.json").read_text())
-        self.assertEqual(t["wallpaper"]["image"], "wallpaper.png")
+        self.assertEqual(t["wallpaper"]["image"], "lock/qylock/bg.png")  # in place, no copy
         self.assertEqual(t["polarity"], "dark")  # mostly navy
         self.assertLess(palette.hue_distance(t["palette"]["accent"], "#f08c28"), 10)
         self.assertIn("palette from bg.png", m["description"])
 
-        # Video without ffmpeg: no wallpaper, conf accent on a neutral palette.
+        # Video without ffmpeg: listed as is (a flagged video entry, no still),
+        # conf accent on a neutral palette.
         v = json.loads((self.user / "qylock-video" / "theme.json").read_text())
-        self.assertNotIn("wallpaper", v)
+        self.assertEqual(v["wallpaper"], {"images": ["lock/qylock/bg.mp4"]})
+        from studio.pack import Pack
+
+        vp = Pack(self.user / "qylock-video")
+        self.assertEqual([e["kind"] for e in vp.wallpaper_entries()], ["video"])
+        self.assertIsNone(vp.default_wallpaper())
         self.assertEqual(v["palette"]["accent"], "#df7a8c")
         self.assertEqual(v["palette"]["bg"], palette.NEUTRAL_DARK["bg"])
 
@@ -483,14 +521,46 @@ class Install(unittest.TestCase):
         rm = json.loads((out_dir / "manifest.json").read_text())
         self.assertEqual(rm["lock"]["path"], str((still / "lock" / "qylock").resolve()))
 
+    def test_qylock_backgrounds(self):
+        self.assertEqual(studio("theme", "install", "qylock:multi")[0], 0)
+        t = json.loads((self.user / "qylock-multi" / "theme.json").read_text())
+        self.assertEqual(t["wallpaper"], {"image": "lock/qylock/background/A Glow.jpg", "images": ["lock/qylock/background/B Glow.jpg"]})
+        self.assertIn("2 backgrounds", json.loads((self.user / "qylock-multi" / "manifest.json").read_text())["description"])
+
+        # Videos with ffmpeg: a still frame per video in wallpapers/, noting the video.
+        def frame(video, out):
+            out.write_bytes(make_png(4, 4, two_tone))
+            return True
+
+        with (
+            mock.patch.object(palette, "have_ffmpeg", return_value=True),
+            mock.patch.object(palette, "ffmpeg_frame", side_effect=frame),
+            mock.patch.object(palette, "ffmpeg_sample", return_value=[(20, 24, 40)] * 50 + [(240, 140, 40)] * 20),
+        ):
+            self.assertEqual(studio("theme", "install", "qylock:clips")[0], 0)
+        clips = self.user / "qylock-clips"
+        t = json.loads((clips / "theme.json").read_text())
+        self.assertEqual(
+            t["wallpaper"],
+            {"images": [{"path": "wallpapers/day.jpg", "video": "lock/qylock/day.mp4"}, {"path": "wallpapers/night.jpg", "video": "lock/qylock/night.mp4"}]},
+        )
+        from studio.pack import Pack
+
+        p = Pack(clips)
+        self.assertEqual(p.default_wallpaper()["path"], clips.resolve() / "wallpapers/day.jpg")
+        self.assertEqual(p.default_wallpaper()["video"], clips.resolve() / "lock/qylock/day.mp4")
+
     def test_lock_dir_not_in_digest(self):
         self.assertEqual(studio("theme", "install", "qylock:still")[0], 0)
         from studio.pack import Pack
 
         p = Pack(self.user / "qylock-still")
         d = p.digest()
-        (self.user / "qylock-still" / "lock" / "qylock" / "Main.qml").write_text("changed")
+        main = self.user / "qylock-still" / "lock" / "qylock" / "Main.qml"
+        main.write_text("x" * len(main.read_bytes()))  # same size: lock/ is listed, not hashed
         self.assertEqual(Pack(p.path).digest(), d)
+        (self.user / "qylock-still" / "lock" / "qylock" / "extra.qml").write_text("new file")
+        self.assertNotEqual(Pack(p.path).digest(), d)
 
     @unittest.skipUnless(HAVE_JSONSCHEMA, "needs jsonschema")
     def test_installed_packs_validate(self):

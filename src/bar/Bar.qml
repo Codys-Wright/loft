@@ -2,13 +2,15 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import qs.audio
 import qs.components
 import qs.menubar
 import qs.services
 
-// The menu bar: floating Liquid Glass pills on a transparent strip
-// (javiiervm's layout). Left: studio mark, the focused app's menus (app
-// menu + global menu, src/menubar/) and workspaces. Right: tray, status, clock.
+// The menu bar, as on macOS: one translucent strip, flush with the top edge
+// and the full width of the screen. Left: the OS mark, the focused app (bold)
+// and workspaces. Right: status, Control Center, date. Items sit directly on
+// the bar; the glass is the bar itself.
 PanelWindow {
     id: root
 
@@ -22,116 +24,111 @@ PanelWindow {
         left: true
         right: true
     }
-    implicitHeight: 44
-    exclusiveZone: 44
+    implicitHeight: barHeight
+    exclusiveZone: barHeight
     color: "transparent"
 
-    readonly property int pillHeight: 34
+    readonly property int barHeight: 30
 
-    // Blur exactly the pills — the strip between them stays clear.
-    BackgroundEffect.blurRegion: Theme.blur ? pills : null
+    BackgroundEffect.blurRegion: Theme.blur ? barRegion : null
     Region {
-        id: pills
-        item: appPill
-        radius: appPill.radius
+        id: barRegion
+        item: bar
+    }
 
-        Region {
-            item: workspacePill
-            radius: workspacePill.radius
-        }
-        Region {
-            item: statusPill
-            radius: statusPill.radius
+    GlassSurface {
+        id: bar
+        anchors.fill: parent
+        radius: 0
+        showBorder: false
+        showHighlight: false
+        // Lighter than a panel: the wallpaper should read through, as on macOS.
+        strength: 0.8
+
+        // Hairline under the bar.
+        Rectangle {
+            anchors {
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+            }
+            height: 1
+            color: Theme.glassBorder
         }
     }
 
-    // ── Left: app menu ──────────────────────────────────────────────────
-    GlassSurface {
-        id: appPill
+    // ── Left: OS mark, app, workspaces ──────────────────────────────────
+    RowLayout {
+        id: left
         anchors {
             left: parent.left
-            leftMargin: 12
+            leftMargin: 14
             verticalCenter: parent.verticalCenter
         }
-        height: root.pillHeight
-        width: appRow.implicitWidth + 20
-        radius: height / 2
+        spacing: 16
 
-        // Studio mark, bold app name (app menu), the app's global menus.
+        // The OS mark (overview), the focused app in bold (its app menu),
+        // then the app's global menus: File Edit View … (src/menubar/).
         MenuBarTitles {
-            id: appRow
-            anchors.centerIn: parent
             window: root
             screenName: root.modelData.name
+            barHeight: root.barHeight
             // Up to the island (centred, ≤ 300 px compact), past the workspaces.
-            maxWidth: root.width / 2 - (Features.on("island") ? 160 : 12) - 12 - 20 - 8 - workspacePill.width
+            maxWidth: root.width / 2 - (Features.on("island") ? 160 : 12) - 14 - left.spacing - workspaces.implicitWidth
         }
-    }
-
-    GlassSurface {
-        id: workspacePill
-        anchors {
-            left: appPill.right
-            leftMargin: 8
-            verticalCenter: parent.verticalCenter
-        }
-        visible: workspaces.workspaces.length > 0
-        height: root.pillHeight
-        width: workspaces.implicitWidth + 28
-        radius: height / 2
 
         Workspaces {
             id: workspaces
-            anchors.centerIn: parent
+            visible: workspaces.workspaces.length > 0
             output: root.modelData.name
         }
     }
 
     // ── Right: status ───────────────────────────────────────────────────
-    GlassSurface {
-        id: statusPill
+    RowLayout {
+        id: statusRow
         anchors {
             right: parent.right
-            rightMargin: 12
+            rightMargin: 14
             verticalCenter: parent.verticalCenter
         }
-        height: root.pillHeight
-        width: statusRow.implicitWidth + 32
-        radius: height / 2
+        spacing: 16
 
-        RowLayout {
-            id: statusRow
-            anchors.centerIn: parent
-            spacing: 16
+        Readouts {}
 
-            Tray {
-                window: root
-                visible: children.length > 1
+        Tray {
+            window: root
+            visible: children.length > 1
+        }
+
+        MicIndicator {
+            screenName: root.modelData.name
+        }
+
+        Volume {
+            screenName: root.modelData.name
+        }
+
+        Icon {
+            text: "󰒓"
+            size: 15
+            color: Panels.controlCenterOpen ? Theme.accent : Theme.text
+
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -6
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Panels.toggleControlCenter(root.modelData.name)
             }
+        }
 
-            Volume {}
-
-            Icon {
-                text: "󰒓"
-                size: 16
-                color: Panels.controlCenterOpen ? Theme.accent : Theme.text
-
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -6
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: Panels.toggleControlCenter(root.modelData.name)
-                }
-            }
-
-            Text {
-                // The time lives in the island.
-                text: Qt.formatDateTime(clock.date, "ddd MMM d")
-                color: Theme.text
-                font.family: Theme.fontUi
-                font.pixelSize: 13
-                font.weight: Font.Medium
-            }
+        Text {
+            // The time lives in the island.
+            text: Qt.formatDateTime(clock.date, "ddd MMM d")
+            color: Theme.text
+            font.family: Theme.fontUi
+            font.pixelSize: 13
+            font.weight: Font.Medium
         }
     }
 

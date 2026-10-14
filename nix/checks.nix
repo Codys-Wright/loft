@@ -1,8 +1,9 @@
 # `nix flake check`: theme engine tests.
 #
 #   theme-schema    built-in packs (and the test fixture) match themes/schema.json
-#   theme-unit      tests/test_*.py: renderer + manager against scratch dirs, and the
-#                   cozytile:/qylock: importers against local fake upstream repos (offline)
+#   theme-unit      tests/test_*.py: renderer + manager against scratch dirs, the
+#                   cozytile:/qylock: importers against local fake upstream repos, and
+#                   vibes (pack collections, ranking, index links) — all offline
 #   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte
 #   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`
@@ -10,9 +11,10 @@
 #   studio-niri-clippy  `cargo clippy --all-targets -D warnings`
 #   studio-appmenu  the global menu daemon builds and its tests pass
 #   studio-appmenu-clippy  the same clippy gate for it
+#   clipboard-urlclean  Clean URL's tracking-parameter stripping (src/services/urlclean.js)
 #
 # After an intended output change, refresh the goldens from a checkout:
-#   for t in tokyonight latte; do rm -rf tests/golden/$t; nix run .#studio -- theme render themes/$t tests/golden/$t; done
+#   for t in tokyonight latte; do rm -rf tests/golden/$t; STUDIO_THEME_INDEX=none nix run .#studio -- theme render themes/$t tests/golden/$t; done
 { lib, ... }:
 {
   perSystem =
@@ -43,7 +45,7 @@
         '';
 
         theme-unit = check "theme-unit" [ pkgs.git ] ''
-          export HOME=$TMPDIR
+          export HOME=$TMPDIR STUDIO_THEME_INDEX=none
           cd ${testSrc}
           PYTHONPATH=cli PYTHONDONTWRITEBYTECODE=1 ${python}/bin/python3 -m unittest discover -s tests -v
           touch $out
@@ -57,13 +59,18 @@
         '';
 
         niri-config = check "niri-config" [ pkgs.niri ] ''
-          export HOME=$TMPDIR
+          export HOME=$TMPDIR STUDIO_THEME_INDEX=none
           ${studio} theme render ${fixture} glassless
           for t in ${builtin}/tokyonight ${builtin}/latte $PWD/glassless; do
             printf 'include "%s"\ninclude "%s"\n' ${../niri}/base.kdl "$t/niri.kdl" > config.kdl
             echo "niri validate: base.kdl + $t/niri.kdl"
             niri validate -c config.kdl
           done
+          touch $out
+        '';
+
+        clipboard-urlclean = check "clipboard-urlclean" [ pkgs.nodejs-slim ] ''
+          node ${../tests/urlclean.test.js} ${../src/services/urlclean.js}
           touch $out
         '';
 

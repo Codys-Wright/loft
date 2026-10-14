@@ -284,6 +284,8 @@ pub fn normalize_chord(chord: &[String]) -> Vec<String> {
         .map(|k| match k.as_str() {
             "Ctrl" | "Control" => "Control".to_string(),
             "Meta" | "Super" => "Super".to_string(),
+            // Chromium sends the key as typed ("h").
+            k if k.chars().count() == 1 => k.to_uppercase(),
             other => other.to_string(),
         })
         .collect()
@@ -401,6 +403,16 @@ mod tests {
         assert_eq!(gtk_accel("F11"), vec!["F11"]);
         assert_eq!(gtk_accel("<Alt>Delete"), vec!["Alt", "Del"]);
         assert!(gtk_accel("").is_empty());
+    }
+
+    #[test]
+    fn normalizes_chords() {
+        let c = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(normalize_chord(&c(&["Ctrl", "h"])), c(&["Control", "H"]));
+        assert_eq!(
+            normalize_chord(&c(&["Meta", "Shift", "F5"])),
+            c(&["Super", "Shift", "F5"])
+        );
     }
 
     #[test]

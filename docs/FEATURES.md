@@ -13,26 +13,26 @@ in parallel without touching each other.
 ## Sound — wave 1 (audio)
 | Feature | Status | How (Linux) |
 |---|---|---|
-| Volume mixer per app, boost > 100 % | todo | PipeWire stream nodes (Quickshell.Services.Pipewire), volume up to 150 %, pin/reorder favorites |
-| Per-app output | todo | set the stream's `target.object` (PipeWire metadata) from the mixer |
-| Output switcher + volume drop on headphone unplug | partial (CC slider) | default-sink picker in CC + shortcut + OSD; watch default sink changes |
-| Microphone tools (preferred input, level, mute all) | todo | default source picker, level, global mute shortcut + bar indicator |
+| Volume mixer per app, boost > 100 % | have | `mixer`: glass panel (bar volume right-click, CC chevron, `mixer toggle`); app streams grouped per app (filters/loopbacks/meters hidden), up to 150 %, mute, live levels, favorites pinned in the mixer and reordered in Settings → Sound |
+| Per-app output | have | mixer: per-app output list → `pw-metadata <stream> target.object <sink>` (delete = follow the default); the row says where it plays when not the default |
+| Output switcher + volume drop on headphone unplug | have | `audioOutputs`: picker in CC (click the device name), mixer and Settings; Mod+Shift+O / `audio nextOutput`; OSD "Output: …"; when headphones/Bluetooth vanish the new output drops to a safe volume (setting) |
+| Microphone tools (preferred input, level, mute all) | have | `micTools`: input picker + level (mixer, Settings), mute all (Mod+Shift+M / `mic toggleMute`, OSD), bar mic while an app records (amber) or muted |
 | Music app blocker | n/a | macOS media-key quirk |
 
 ## Know what the system is doing — wave 1 (system)
 | Feature | Status | How |
 |---|---|---|
-| System monitor (CPU/GPU/mem/temps, history graphs, energy-hungry apps) | partial (island page) | ring-buffer history in SystemStats, graphs, top processes from /proc |
-| Fan control | todo (read-only first) | hwmon `fan*_input` RPM; control via `pwm*` is hardware-specific → later |
-| Menu bar readouts | todo | configurable bar widgets (CPU, RAM, temp, GPU, net, battery) |
-| Network (live traffic, totals, local IP, speed test) | todo | /proc/net/dev, NetworkManager, librespeed-cli |
-| Alerts (sustained load, temps, memory pressure, low disk, low battery) | partial (island border) | notifications with hysteresis; statvfs for disks; UPower |
+| System monitor (CPU/GPU/mem/temps, history graphs, energy-hungry apps) | have | `systemMonitor`: SystemStats ring buffers (5 min) → Canvas graphs in a glass window (island "Open Monitor", bar readouts, `monitor toggle`, Ctrl+Shift+Esc); top processes from /proc/<pid>/stat + status (only while open) with Quit / Force Quit after a confirm |
+| Fan control | partial (read-only) | every hwmon `fan*_input` RPM + temps on Disks & Sensors, NVIDIA fan % via nvidia-smi; control via `pwm*` is hardware-specific → later |
+| Menu bar readouts | have | `barReadouts`: CPU, RAM, CPU temp, GPU, net up/down, battery (when present) in the status pill; chosen in Settings → System |
+| Network (live traffic, totals, local IP, speed test) | have | `network`: /proc/net/dev (physical interfaces summed), session totals, `ip -j addr`, librespeed-cli on button press |
+| Alerts (sustained load, temps, memory pressure, low disk, low battery) | have | `alerts`: island banners with hold time, hysteresis and a 10 min cooldown; PSI memory pressure, `df` every 5 min (re-alerts only when another fs fills), UPower; thresholds in Settings → System |
 
 ## Menu bar — wave 1 (menu bar)
 | Feature | Status | How |
 |---|---|---|
-| App menu for every app (macOS ⌘-menu) | todo | the bar's app pill opens: About, Hide, New Window + `.desktop` actions, window commands (move to workspace/display, float, fullscreen), Quit (with hold-to-quit protection) |
-| Global menu (File / Edit / View … in the bar) | todo | Rust `appmenu` daemon: a `com.canonical.AppMenu.Registrar` (Qt exports its menubar when one exists) + reads DBusMenu / `org.gtk.Menus` for the focused window, matched by PID from niri (niri has no KDE appmenu protocol); the bar draws glass dropdowns. Qt/KDE apps yes; GTK3 via appmenu-gtk-module; Electron only under XWayland; GTK4/libadwaita/Firefox no (in-window menus) |
+| App menu for every app (macOS ⌘-menu) | have | click the bold app name or Mod+F10 (`src/menubar/`): About, New Window + `.desktop` actions, Move to Workspace ▸ / Display ▸, Float/Tile, Full Screen, Maximize Column, Center, Hide / Hide Others / Show All (parking workspace `hidden-<output>`: niri has no minimize), Close Window, Quit (closes every window, confirms when several, optional SIGTERM after 3/10 s). Hold-to-quit: todo |
+| Global menu (File / Edit / View … in the bar) | have | `studio-appmenu` (crates/studio-appmenu): owns `com.canonical.AppMenu.Registrar` (never replaces another one, e.g. Plasma's), matches the focused window by pid (niri has no appmenu protocol) — registrar entries, then introspection of the process's bus connections, and `_NET_ACTIVE_WINDOW` for X11 windows. Reads DBusMenu (Qt/KDE, Electron on X11) and `org.gtk.Menus` (GtkApplication menubars). Verified: Qt/KDE (Kate, KCalc, PyQt), GTK3 GtkApplication (Mousepad, gtk3-demo-application), Electron under XWayland (needs libdbusmenu-glib). No: GTK4/libadwaita apps without a menubar (Text Editor), Firefox, Electron on Wayland |
 
 ## Windows and the dock — wave 2 (windows)
 | Feature | Status | How |
@@ -49,7 +49,7 @@ in parallel without touching each other.
 ## Keyboard and mouse — mostly niri + fleet
 | Feature | Status | How |
 |---|---|---|
-| Text snippets | todo | snippet store + picker (walker `snippets` provider) + typed expansion via wtype |
+| Text snippets | have | `<state>/snippets.json` (Settings → Snippets) + a glass picker (Mod+Shift+Period, IPC `snippets toggle`) typing the expansion with wtype; variables {clipboard} {date} {time} {datetime} {weekday} {user}. No as-you-type expansion (needs an input hook, e.g. keyd/espanso) |
 | Smooth / linear scrolling | n/a | libinput has no wheel smoothing; apps handle it |
 | Pointer acceleration, scroll direction, focus follows mouse | niri | Keyboard & Mouse settings page |
 | Scroll sideways while holding a key | todo (later) | needs an input remapper (keyd/xremap) |
@@ -62,12 +62,12 @@ in parallel without touching each other.
 ## Clipboard, files and links — wave 1 (clipboard)
 | Feature | Status | How |
 |---|---|---|
-| Clipboard history (text/images/files, pin, preview) | partial (walker) | cliphist store + our own glass history panel with image previews and pins |
-| Auto-clear clipboard (delay / lock) | todo | timer + on-lock hook |
-| Paste as plain text | todo | shortcut: wl-paste --type text → wl-copy → paste |
-| Shelf (park files/text/links while dragging) | todo | a drop target panel (Qt DropArea) that keeps items until dropped out |
+| Clipboard history (text/images/files, pin, preview) | have | the shell runs `wl-paste --watch cliphist store` (dies with the shell); glass panel (Mod+Shift+V, IPC `clipboard toggle`): search, filters, image previews, pins kept apart from cliphist (`<state>/clipboard/`), Enter pastes into the focused app via wtype (Ctrl+Shift+V for terminals) |
+| Auto-clear clipboard (delay / lock) | have | N minutes after the last copy and/or on lock (`LockState`), `wl-copy --clear`; history kept |
+| Paste as plain text | have | Mod+Shift+Alt+V / IPC `clipboard pastePlain`: wl-paste --type text → wl-copy text/plain → paste |
+| Shelf (park files/text/links while dragging) | have | edge drop target (a thin strip mid-edge notices drags and slides the shelf out), items persisted, dragged back out as text/uri-list / text/plain (Qt Drag.Automatic); IPC `shelf toggle\|addClipboard`. Verified client↔client in nested niri |
 | Finder shortcuts | n/a | file-manager specific |
-| Clean URL | todo | clipboard watcher stripping utm_*/fbclid/… (opt-in) |
+| Clean URL | have | opt-in watcher (Settings → Clipboard & Files) + "Clean link" in the panel; rules in src/services/urlclean.js (unit-tested) |
 | Disk image installer | n/a | Nix installs apps declaratively |
 
 ## Everyday tools — wave 2 (everyday)
@@ -79,18 +79,18 @@ in parallel without touching each other.
 | Quick panel (favorite tools palette) | todo | glass palette of tools/toggles, ⌃⌘V |
 | Quick toggles | partial (CC) | + dark/light, empty trash, eject disks, lock |
 | Radial menu | todo | pointer-centred wheel of apps/tools with profiles |
-| Scratchpad (tabbed autosaved Markdown notes) | todo | floating window + island page |
+| Scratchpad (tabbed autosaved Markdown notes) | have (island page: todo) | floating glass window (Mod+Shift+N), tabs, autosave to `<state>/scratchpad.json`, Markdown preview, export to `<dir>/<title>.md` |
 | Cleaning mode | todo | full-screen overlay grabbing the keyboard; hold Esc to exit |
 
 ## Capture and create — wave 1 (capture)
 | Feature | Status | How |
 |---|---|---|
-| Unified capture selector (shot/record/OCR/color) | partial (recorder) | one glass selector; area/window/screen via niri + slurp |
-| Screenshot annotate/crop/redact/pin | todo | satty for annotation; pinned captures as floating windows |
-| Screen recording with mic + system tracks, trim, GIF | partial | wf-recorder audio options; ffmpeg trim/GIF |
-| Camera preview | todo | QtMultimedia camera in the island / a floating mirror |
-| Text from screen (OCR) + QR | todo | tesseract + zbar on a slurp region |
-| Color picker | todo | hyprpicker (wlr-screencopy) → HEX/RGB/HSL |
+| Unified capture selector (shot/record/OCR/color) | have | ⌘⇧5 glass toolbar (`capture toggle`): screen / focused window / area shots, screen / area recording, Text, Color, Options (save to, timer 0/3/10 s, thumbnail, clipboard, annotate, pointer, audio, color format); ⌘⇧4 area, ⌘⇧3 screen. Area selection is a QML overlay on frozen grim frames with a pixel loupe; window shots via niri `screenshot-window --path` |
+| Screenshot annotate/crop/redact/pin | have | floating thumbnail (click → satty, drag the file out, pin, delete); pins are always-on-top layer windows (drag, scroll to zoom, double-click to annotate) |
+| Screen recording with mic + system tracks, trim, GIF | have | Recorder: area (`-g`) or output; audio none / system (default monitor) / mic / both (mic recorded by ffmpeg, muxed as a 2nd track); thumbnail → Trim (range + frame previews) and Export GIF (palettegen) |
+| Camera preview | have | QtMultimedia camera in a floating round/rounded mirror (`camera toggle`) + an island Camera page; "No camera" / "in use" / "unavailable" states |
+| Text from screen (OCR) + QR | have | region → zbarimg (QR first) → tesseract → clipboard + island banner |
+| Color picker | have | loupe on the frozen frame, HEX/RGB/HSL/QML, recent colors in the selector and Settings |
 | Media tools (compress, convert, watermark) | todo (later) | ffmpeg / imagemagick presets |
 
 ## App management — wave 2 (system tools)

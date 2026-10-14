@@ -1,0 +1,1645 @@
+{
+ "children": [
+  {
+   "children": [
+    {
+     "children": [],
+     "id": 2,
+     "props": {
+      "enabled": true,
+      "icon-name": "document-new",
+      "label": "_New",
+      "shortcut": [
+       [
+        "Control",
+        "N"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 3,
+     "props": {
+      "enabled": true,
+      "icon-name": "window-new",
+      "label": "New _Window",
+      "shortcut": [
+       [
+        "Control",
+        "Shift",
+        "N"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 4,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 5,
+     "props": {
+      "enabled": true,
+      "icon-name": "document-open",
+      "label": "_Open…",
+      "shortcut": [
+       [
+        "Control",
+        "O"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 6,
+     "props": {
+      "children-display": "submenu",
+      "enabled": true,
+      "icon-name": "document-open-recent",
+      "label": "Open _Recent",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 10,
+     "props": {
+      "children-display": "submenu",
+      "enabled": false,
+      "label": "Open W_ith",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 226,
+     "props": {
+      "enabled": true,
+      "icon-name": "document-open-folder",
+      "label": "Open _Folder...",
+      "shortcut": [
+       [
+        "Control",
+        "T"
+       ],
+       [
+        "O"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 11,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 340,
+     "props": {
+      "enabled": true,
+      "icon-name": "document-save",
+      "label": "_Save",
+      "shortcut": [
+       [
+        "Control",
+        "S"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 341,
+     "props": {
+      "enabled": true,
+      "icon-name": "document-save-as",
+      "label": "Save _As…",
+      "shortcut": [
+       [
+        "Control",
+        "Shift",
+        "S"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 404,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-6",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 403,
+         "props": {
+          "enabled": true,
+          "label": "cp 1256",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 402,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Arabic",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 401,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-4",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 400,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-13",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 399,
+         "props": {
+          "enabled": true,
+          "label": "cp 1257",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 398,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Baltic",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 397,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-2",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 396,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-3",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 395,
+         "props": {
+          "enabled": true,
+          "label": "cp 1250",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 394,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Central European",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 393,
+         "props": {
+          "enabled": true,
+          "label": "GB18030",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 392,
+         "props": {
+          "enabled": true,
+          "label": "GBK",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 391,
+         "props": {
+          "enabled": true,
+          "label": "GB2312",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 390,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Chinese Simplified",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 389,
+         "props": {
+          "enabled": true,
+          "label": "Big5",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 388,
+         "props": {
+          "enabled": true,
+          "label": "Big5-HKSCS",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 387,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Chinese Traditional",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 386,
+         "props": {
+          "enabled": true,
+          "label": "KOI8-R",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 385,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-5",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 384,
+         "props": {
+          "enabled": true,
+          "label": "cp 1251",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 383,
+         "props": {
+          "enabled": true,
+          "label": "KOI8-U",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 382,
+         "props": {
+          "enabled": true,
+          "label": "IBM866",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 381,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Cyrillic",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 380,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-7",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 379,
+         "props": {
+          "enabled": true,
+          "label": "cp 1253",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 378,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Greek",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 377,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-8",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 376,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-8-I",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 375,
+         "props": {
+          "enabled": true,
+          "label": "cp 1255",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 374,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Hebrew",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 373,
+         "props": {
+          "enabled": true,
+          "label": "sjis",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 372,
+         "props": {
+          "enabled": true,
+          "label": "ISO-2022-JP",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 371,
+         "props": {
+          "enabled": true,
+          "label": "EUC-JP",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 370,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Japanese",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 369,
+         "props": {
+          "enabled": true,
+          "label": "EUC-KR",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 368,
+         "props": {
+          "enabled": true,
+          "label": "windows-949",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 367,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Korean",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 366,
+         "props": {
+          "enabled": true,
+          "label": "windows-1258",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 365,
+         "props": {
+          "enabled": true,
+          "label": "IBM874",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 364,
+         "props": {
+          "enabled": true,
+          "label": "TSCII",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 363,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Other",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 362,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-16",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 361,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "South-Eastern Europe",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 360,
+         "props": {
+          "enabled": true,
+          "label": "TIS620",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 359,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-11",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 358,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Thai",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 357,
+         "props": {
+          "enabled": true,
+          "label": "cp 1254",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 356,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-9",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 355,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Turkish",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 354,
+         "props": {
+          "enabled": true,
+          "label": "UTF-8",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 353,
+         "props": {
+          "enabled": true,
+          "label": "UTF-16",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 352,
+         "props": {
+          "enabled": true,
+          "label": "utf7",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 351,
+         "props": {
+          "enabled": true,
+          "label": "ucs2",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 350,
+         "props": {
+          "enabled": true,
+          "label": "ISO 10646-UCS-2",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 349,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Unicode",
+        "visible": true
+       }
+      },
+      {
+       "children": [
+        {
+         "children": [],
+         "id": 348,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-1",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 347,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-15",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 346,
+         "props": {
+          "enabled": true,
+          "label": "ISO 8859-14",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 345,
+         "props": {
+          "enabled": true,
+          "label": "cp 1252",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        },
+        {
+         "children": [],
+         "id": 344,
+         "props": {
+          "enabled": true,
+          "label": "IBM850",
+          "toggle-state": 0,
+          "toggle-type": "radio",
+          "visible": true
+         }
+        }
+       ],
+       "id": 343,
+       "props": {
+        "children-display": "submenu",
+        "enabled": true,
+        "label": "Western European",
+        "visible": true
+       }
+      }
+     ],
+     "id": 342,
+     "props": {
+      "children-display": "submenu",
+      "enabled": true,
+      "icon-name": "document-save-as",
+      "label": "Save As with Encodin_g…",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 405,
+     "props": {
+      "enabled": true,
+      "icon-name": "document-save-as",
+      "label": "Save Cop_y As…",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 12,
+     "props": {
+      "enabled": true,
+      "icon-name": "document-save-all",
+      "label": "Sa_ve All",
+      "shortcut": [
+       [
+        "Control",
+        "L"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 13,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 406,
+     "props": {
+      "enabled": true,
+      "icon-name": "view-refresh",
+      "label": "Reloa_d",
+      "shortcut": [
+       [
+        "F5"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 14,
+     "props": {
+      "enabled": true,
+      "label": "Reload A_ll",
+      "visible": true
+     }
+    },
+    {
+     "children": [
+      {
+       "children": [],
+       "id": 408,
+       "props": {
+        "enabled": true,
+        "icon-name": "document-print",
+        "label": "_Print…",
+        "shortcut": [
+         [
+          "Control",
+          "P"
+         ]
+        ],
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 409,
+       "props": {
+        "enabled": true,
+        "icon-name": "document-print-preview",
+        "label": "Print Previe_w",
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 410,
+       "props": {
+        "enabled": true,
+        "icon-name": "document-export",
+        "label": "E_xport as HTML…",
+        "visible": true
+       }
+      }
+     ],
+     "id": 407,
+     "props": {
+      "children-display": "submenu",
+      "enabled": true,
+      "label": "_Print/Export",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 15,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 16,
+     "props": {
+      "enabled": true,
+      "icon-name": "document-close",
+      "label": "_Close",
+      "shortcut": [
+       [
+        "Control",
+        "W"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 17,
+     "props": {
+      "enabled": true,
+      "label": "Close O_ther",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 18,
+     "props": {
+      "enabled": true,
+      "label": "Clos_e All",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 19,
+     "props": {
+      "enabled": true,
+      "label": "Close Orp_haned",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 20,
+     "props": {
+      "enabled": true,
+      "label": "Close _Window",
+      "shortcut": [
+       [
+        "Control",
+        "Shift",
+        "W"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 21,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [
+      {
+       "children": [],
+       "id": 23,
+       "props": {
+        "enabled": false,
+        "icon-name": "edit-rename",
+        "label": "Rename...",
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 24,
+       "props": {
+        "enabled": false,
+        "icon-name": "edit-delete",
+        "label": "Delete",
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 25,
+       "props": {
+        "enabled": true,
+        "label": "Compare",
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 26,
+       "props": {
+        "type": "separator",
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 27,
+       "props": {
+        "enabled": false,
+        "icon-name": "edit-copy-path",
+        "label": "Copy Location",
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 28,
+       "props": {
+        "enabled": false,
+        "icon-name": "edit-copy",
+        "label": "Copy Filename",
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 29,
+       "props": {
+        "enabled": false,
+        "icon-name": "document-open-folder",
+        "label": "_Open Containing Folder",
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 30,
+       "props": {
+        "enabled": false,
+        "icon-name": "dialog-object-properties",
+        "label": "Properties",
+        "visible": true
+       }
+      }
+     ],
+     "id": 22,
+     "props": {
+      "children-display": "submenu",
+      "enabled": true,
+      "label": "File Act_ions",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 31,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 32,
+     "props": {
+      "enabled": true,
+      "icon-name": "application-exit",
+      "label": "_Quit",
+      "shortcut": [
+       [
+        "Control",
+        "Q"
+       ]
+      ],
+      "visible": true
+     }
+    }
+   ],
+   "id": 1,
+   "props": {
+    "children-display": "submenu",
+    "enabled": true,
+    "label": "_File",
+    "visible": true
+   }
+  },
+  {
+   "children": [
+    {
+     "children": [],
+     "id": 411,
+     "props": {
+      "enabled": false,
+      "icon-name": "edit-undo",
+      "label": "_Undo",
+      "shortcut": [
+       [
+        "Control",
+        "Z"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 412,
+     "props": {
+      "enabled": false,
+      "icon-name": "edit-redo",
+      "label": "Re_do",
+      "shortcut": [
+       [
+        "Control",
+        "Shift",
+        "Z"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 413,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 34,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 414,
+     "props": {
+      "enabled": true,
+      "icon-name": "edit-cut",
+      "label": "Cu_t",
+      "shortcut": [
+       [
+        "Control",
+        "X"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 415,
+     "props": {
+      "enabled": true,
+      "icon-name": "edit-copy",
+      "label": "_Copy",
+      "shortcut": [
+       [
+        "Control",
+        "C"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 416,
+     "props": {
+      "enabled": false,
+      "icon-name": "edit-copy",
+      "label": "Copy as _HTML",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 417,
+     "props": {
+      "enabled": true,
+      "icon-name": "edit-copy",
+      "label": "Copy File Location",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 418,
+     "props": {
+      "enabled": true,
+      "icon-name": "edit-paste",
+      "label": "_Paste",
+      "shortcut": [
+       [
+        "Control",
+        "V"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 419,
+     "props": {
+      "enabled": true,
+      "label": "Paste Selection",
+      "shortcut": [
+       [
+        "Control",
+        "Shift",
+        "Ins"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 420,
+     "props": {
+      "enabled": true,
+      "label": "Paste From File",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 421,
+     "props": {
+      "enabled": true,
+      "label": "Swap with Clipboard Contents",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 422,
+     "props": {
+      "enabled": true,
+      "label": "Clipboard _History Paste",
+      "shortcut": [
+       [
+        "Control",
+        "Alt",
+        "Shift",
+        "V"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 35,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 423,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [
+      {
+       "children": [],
+       "id": 428,
+       "props": {
+        "enabled": true,
+        "label": "Switch to Next Input Mode",
+        "shortcut": [
+         [
+          "Control",
+          "Alt",
+          "V"
+         ]
+        ],
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 427,
+       "props": {
+        "type": "separator",
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 426,
+       "props": {
+        "enabled": true,
+        "label": "Normal",
+        "toggle-state": 1,
+        "toggle-type": "radio",
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 425,
+       "props": {
+        "enabled": true,
+        "label": "vi-mode",
+        "toggle-state": 0,
+        "toggle-type": "radio",
+        "visible": true
+       }
+      }
+     ],
+     "id": 424,
+     "props": {
+      "children-display": "submenu",
+      "enabled": true,
+      "label": "Input Modes",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 429,
+     "props": {
+      "enabled": true,
+      "label": "Overwr_ite Mode",
+      "shortcut": [
+       [
+        "Ins"
+       ]
+      ],
+      "toggle-state": 0,
+      "toggle-type": "checkmark",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 430,
+     "props": {
+      "enabled": true,
+      "label": "_Read Only Mode",
+      "toggle-state": 0,
+      "toggle-type": "checkmark",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 431,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 36,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 432,
+     "props": {
+      "enabled": true,
+      "icon-name": "edit-find",
+      "label": "_Find…",
+      "shortcut": [
+       [
+        "Control",
+        "F"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [
+      {
+       "children": [],
+       "id": 434,
+       "props": {
+        "enabled": true,
+        "icon-name": "go-down-search",
+        "label": "Find _Next",
+        "shortcut": [
+         [
+          "F3"
+         ]
+        ],
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 435,
+       "props": {
+        "enabled": true,
+        "icon-name": "go-up-search",
+        "label": "Find Pre_vious",
+        "shortcut": [
+         [
+          "Shift",
+          "F3"
+         ]
+        ],
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 436,
+       "props": {
+        "enabled": true,
+        "label": "Find Selected",
+        "shortcut": [
+         [
+          "Control",
+          "H"
+         ]
+        ],
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 437,
+       "props": {
+        "enabled": true,
+        "label": "Find Selected Backwards",
+        "shortcut": [
+         [
+          "Control",
+          "Shift",
+          "H"
+         ]
+        ],
+        "visible": true
+       }
+      }
+     ],
+     "id": 433,
+     "props": {
+      "children-display": "submenu",
+      "enabled": true,
+      "label": "Find Variants",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 438,
+     "props": {
+      "enabled": true,
+      "icon-name": "edit-find-replace",
+      "label": "_Replace…",
+      "shortcut": [
+       [
+        "Control",
+        "R"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 439,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 37,
+     "props": {
+      "type": "separator",
+      "visible": true
+     }
+    },
+    {
+     "children": [],
+     "id": 201,
+     "props": {
+      "enabled": true,
+      "icon-name": "edit-find",
+      "label": "Find in Files",
+      "shortcut": [
+       [
+        "Control",
+        "Shift",
+        "F"
+       ]
+      ],
+      "visible": true
+     }
+    },
+    {
+     "children": [
+      {
+       "children": [],
+       "id": 203,
+       "props": {
+        "enabled": true,
+        "label": "Go to Next Match",
+        "shortcut": [
+         [
+          "F6"
+         ]
+        ],
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 204,
+       "props": {
+        "enabled": true,
+        "label": "Go to Previous Match",
+        "shortcut": [
+         [
+          "Shift",
+          "F6"
+         ]
+        ],
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 205,
+       "props": {
+        "enabled": true,
+        "label": "Find in Files (in a New Tab)",
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 206,
+       "props": {
+        "enabled": true,
+        "icon-name": "edit-cut",
+        "label": "Cut Matching Lines",
+        "visible": true
+       }
+      },
+      {
+       "children": [],
+       "id": 207,
+       "props": {
+        "enabled": true,
+        "icon-name": "edit-copy",
+        "label": "Copy Matching Lines",
+        "visible": true
+       }
+      }
+     ],
+     "id": 202,
+     "props": {
+      "children-display": "submenu",
+      "enabled": true,
+      "label": "Find in Files Variants",
+      "visible": true
+     }
+    }
+   ],
+   "id": 33,
+   "props": {
+    "children-display": "submenu",
+    "enabled": true,
+    "label": "_Edit",
+    "visible": true
+   }
+  }
+ ],
+ "id": 0,
+ "props": {
+  "children-display": "submenu"
+ }
+}

@@ -21,8 +21,15 @@ Singleton {
     readonly property alias island: settings.island
     readonly property alias wallpaper: settings.wallpaper
     readonly property alias appearance: settings.appearance
+    readonly property alias system: settings.system
+    readonly property alias sound: settings.sound
     // Feature id → on/off (Features.qml); absent = the module's default.
     property alias features: settings.features
+    readonly property alias lock: settings.lock
+    // Per-theme choices, keyed by theme name (Vibes.qml reads and writes
+    // them): { "<theme>": { wallpaper, rotate, perWorkspace, lockDesign } }.
+    // A key a theme doesn't have falls back to the global value above it.
+    property alias perTheme: settings.perTheme
     // Menu bar module (AppMenu.pref): key → value; absent = the default.
     property alias menubar: settings.menubar
 
@@ -59,13 +66,24 @@ Singleton {
             }
 
             property JsonObject wallpaper: JsonObject {
-                // An image path; empty = the theme's wallpaper.
+                // An image path; empty = the theme's wallpaper. (Global
+                // fallback: the pickers store their choice per theme.)
                 property string path: ""
                 // Where the picker looks for images.
                 property string directory: "~/Pictures/Wallpapers"
+                // Cycle through the theme's collection every N minutes (0 = off).
+                property real rotate: 0
+                // A different wallpaper of the collection per niri workspace.
+                property bool perWorkspace: false
             }
 
             property var features: ({})
+            property JsonObject lock: JsonObject {
+                // A lock design directory, "builtin", or "" = the theme's default.
+                property string design: ""
+            }
+
+            property var perTheme: ({})
 
             property var menubar: ({})
 
@@ -73,6 +91,39 @@ Singleton {
                 // Runtime overrides on top of the theme (-1 / "" = theme value).
                 property real glassOpacity: -1
                 property int blur: -1 // -1 theme, 0 off, 1 on
+            }
+
+            // System module (Settings → System): bar readouts and alerts.
+            property JsonObject system: JsonObject {
+                // Bar readouts, left to right: cpu, memory, cpuTemp, gpu, network, battery.
+                property list<string> readouts: ["cpu", "memory"]
+                // Alerts (notifications) — each needs the condition to hold
+                // for a while, and re-arms only after it clears (hysteresis).
+                property bool alertCpu: true
+                property real cpuThreshold: 0.9 // 0..1
+                property int cpuSeconds: 60
+                property bool alertTemp: true // above Settings.island.maxTemp
+                property bool alertMemory: true
+                property real memoryPressure: 20 // PSI "some" avg10, %
+                property bool alertDisk: true
+                property real diskThreshold: 0.9 // any mounted fs, 0..1
+                property bool alertBattery: true
+                property int batteryThreshold: 15 // %
+            }
+
+            property JsonObject sound: JsonObject {
+                // Mixer favorites (application names), top to bottom.
+                property list<string> pinned: []
+                // Per-app volume goes up to 150 % when on.
+                property bool boost: true
+                // Live level meters open small capture streams on the real
+                // graph while the mixer is visible — off unless asked for.
+                property bool meters: false
+                // Lower the new output when headphones / a Bluetooth sink disappear.
+                property bool safeOnUnplug: true
+                property real safeVolume: 0.3
+                // Bar mic icon while an app records or the mics are muted.
+                property bool micIndicator: true
             }
         }
     }

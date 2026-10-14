@@ -100,13 +100,16 @@ def renderer_salt(template_dir: Path) -> str:
     """Changes whenever templates or renderer code change (render cache key)."""
     h = hashlib.sha256()
     here = Path(__file__).resolve().parent
-    for p in sorted(template_dir.iterdir()) + [here / "render.py", here / "pack.py", here / "color.py"]:
+    for p in sorted(template_dir.iterdir()) + [here / "render.py", here / "pack.py", here / "color.py", here / "palette.py"]:
         h.update(p.name.encode() + b"\0" + p.read_bytes())
     return h.hexdigest()
 
 
-def render(pack: Pack, outdir: Path, template_dir: Path) -> list[str]:
-    """Write every consumer file for `pack` into outdir; return their names."""
+def render(pack: Pack, outdir: Path, template_dir: Path, curated: dict | None = None) -> list[str]:
+    """Write every consumer file for `pack` into outdir; return their names.
+
+    `curated`: the pack's vibe links already resolved against the installed
+    packs (vibes.resolve), listed in the manifest after the pack's own."""
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     norm, assets = normalize(pack)
@@ -118,7 +121,7 @@ def render(pack: Pack, outdir: Path, template_dir: Path) -> list[str]:
         written.append(name)
 
     write("theme.json", json.dumps(norm, indent=2) + "\n")
-    write("manifest.json", json.dumps(normalized_manifest(pack), indent=2) + "\n")
+    write("manifest.json", json.dumps(normalized_manifest(pack, curated), indent=2) + "\n")
     for tpl in sorted(Path(template_dir).iterdir()):
         if tpl.is_file():
             write(tpl.name, Template(tpl.read_text(encoding="utf-8")).substitute(vars_))

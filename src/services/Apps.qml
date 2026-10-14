@@ -15,6 +15,15 @@ Singleton {
     // niri app_id → DesktopEntry (or null). Cached; lookups are heuristic.
     property var cache: ({})
 
+    // Entries are scanned asynchronously (and rescanned on install): drop
+    // misses cached before they were there.
+    Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() {
+            root.cache = {};
+        }
+    }
+
     function entry(appId) {
         if (!appId)
             return null;

@@ -24,7 +24,7 @@ ColumnLayout {
 
         SettingsRow {
             label: "Global menu"
-            hint: "Qt and KDE apps started after turning this on hide their own menubar and show it here; GTK menubars when exported"
+            hint: "File, Edit, View … of Qt/KDE apps (opened after turning it on), GTK and X11 Electron apps"
             SettingsSwitch {
                 checked: Features.on("globalMenu")
                 onToggled: on => Features.set("globalMenu", on)

@@ -4,5 +4,11 @@
   "version": "1.0.0",
   "license": "Apache-2.0",
   "source": "https://github.com/folke/tokyonight.nvim",
-  "description": "Tokyo Night (night) palette with dark Liquid Glass \u2014 the default theme"
+  "description": "Tokyo Night (night) palette with dark Liquid Glass \u2014 the default theme",
+  "wallpapers": [],
+  "locks": [],
+  "defaults": {
+    "wallpaper": "",
+    "lock": ""
+  }
 }

@@ -312,11 +312,15 @@ Singleton {
 
         if (AppMenu.pref("desktopActions") && entry) {
             items.push(sep("s-new"));
-            items.push({ key: "new", label: "New Window", enabled: true, run: () => entry.execute() });
             const actions = entry.actions ?? [];
+            // The app's own "new window" action, if it has one, beats relaunching.
+            const isNew = a => a.id === "new-window" || /^new window$/i.test(a.name);
+            const newAction = actions.find(isNew);
+            items.push({ key: "new", label: "New Window", enabled: true, run: () => newAction ? newAction.execute() : entry.execute() });
             for (let i = 0; i < actions.length; i++) {
                 const a = actions[i];
-                items.push({ key: `action-${i}`, label: a.name, enabled: true, run: () => a.execute() });
+                if (a !== newAction)
+                    items.push({ key: `action-${i}`, label: a.name, enabled: true, run: () => a.execute() });
             }
         }
 

@@ -20,6 +20,7 @@ themes index (studio-linux-themes/index.json, "importers") names these keys.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
@@ -28,6 +29,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Callable
 
+from .. import index as theme_index
 from . import cozytile, qylock
 from .upstream import ImporterError, Upstream, human
 
@@ -69,13 +71,15 @@ def install(
     force: bool = False,
     validate: Callable[[Path], None] | None = None,
     out: Callable[[str], None] = print,
+    index: dict | None = None,
 ) -> list[str]:
     """Install the packs `ref` names into user_themes; return the installed pack names.
 
     Each pack is built in a staging dir next to its destination, validated,
     then moved into place, so a failure never leaves a half-written pack.
     Already-installed packs are an error for a single theme and skipped for
-    `all` / lists, unless force.
+    `all` / lists, unless force. Vibe links the themes `index` declares for a
+    pack are written into its manifest (`vibes`), so they hold offline too.
     """
     mod, themes, gitref = parse_ref(ref)
     if not themes:
@@ -106,6 +110,8 @@ def install(
             try:
                 pack_dir = staging / name
                 mod.install(theme, pack_dir, up)
+                if index:
+                    add_index_vibes(pack_dir, index)
                 if validate is not None:
                     validate(pack_dir)
                 if dest.exists():
@@ -122,3 +128,14 @@ def install(
             f"in {up.fetch_seconds:.1f}s (total {time.monotonic() - t0:.1f}s)"
         )
     return installed
+
+
+def add_index_vibes(pack_dir: Path, index: dict) -> None:
+    """Merge the index's curated links for this pack into its manifest."""
+    mf = pack_dir / "manifest.json"
+    manifest = json.loads(mf.read_text())
+    links = theme_index.merge_links(manifest.get("vibes"), theme_index.links_for(index, manifest["name"]))
+    links = {k: v for k, v in links.items() if v}
+    if links:
+        manifest["vibes"] = links
+        mf.write_text(json.dumps(manifest, indent=2) + "\n")
