@@ -188,11 +188,19 @@ PanelWindow {
     // pointer last was (macOS keeps the icons magnified under a menu).
     readonly property bool magnifyHeld: menuOpen || stackOpenHere || previewHere
     property real heldPointer: -1
-    onLivePointerChanged: if (!magnifyHeld)
+    onLivePointerChanged: if (!magnifyHeld && (livePointer >= 0 || !releaseGrace.running))
         heldPointer = livePointer
+    // When the menu closes the pointer is often still on the dock, but the
+    // dock only hears about it on the next motion: keep the held fisheye a
+    // moment instead of collapsing and re-magnifying (a flash).
     onMagnifyHeldChanged: if (!magnifyHeld)
-        heldPointer = livePointer
-    readonly property real pointer: magnifyHeld ? heldPointer : livePointer
+        releaseGrace.restart()
+    Timer {
+        id: releaseGrace
+        interval: 350
+        onTriggered: root.heldPointer = root.livePointer
+    }
+    readonly property real pointer: magnifyHeld || (releaseGrace.running && livePointer < 0) ? heldPointer : livePointer
     readonly property real livePointer: {
         if (!hover.hovered)
             return -1;

@@ -28,7 +28,10 @@ PanelWindow {
     visible: shown
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "loft:menu"
-    WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    // Right-click (context) menus don't take the keyboard: the app keeps its
+    // focus, like macOS, so nothing goes inactive behind the menu. The menu
+    // bar's menus keep exclusive focus for arrow keys / type-to-select.
+    WlrLayershell.keyboardFocus: !shown ? WlrKeyboardFocus.None : MenuState.context !== null ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
     anchors {
         top: true
