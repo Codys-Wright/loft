@@ -49,7 +49,7 @@ in parallel without touching each other.
 ## Keyboard and mouse — mostly niri + fleet
 | Feature | Status | How |
 |---|---|---|
-| Text snippets | todo | snippet store + picker (walker `snippets` provider) + typed expansion via wtype |
+| Text snippets | have | `<state>/snippets.json` (Settings → Snippets) + a glass picker (Mod+Shift+Period, IPC `snippets toggle`) typing the expansion with wtype; variables {clipboard} {date} {time} {datetime} {weekday} {user}. No as-you-type expansion (needs an input hook, e.g. keyd/espanso) |
 | Smooth / linear scrolling | n/a | libinput has no wheel smoothing; apps handle it |
 | Pointer acceleration, scroll direction, focus follows mouse | niri | Keyboard & Mouse settings page |
 | Scroll sideways while holding a key | todo (later) | needs an input remapper (keyd/xremap) |
@@ -62,12 +62,12 @@ in parallel without touching each other.
 ## Clipboard, files and links — wave 1 (clipboard)
 | Feature | Status | How |
 |---|---|---|
-| Clipboard history (text/images/files, pin, preview) | partial (walker) | cliphist store + our own glass history panel with image previews and pins |
-| Auto-clear clipboard (delay / lock) | todo | timer + on-lock hook |
-| Paste as plain text | todo | shortcut: wl-paste --type text → wl-copy → paste |
-| Shelf (park files/text/links while dragging) | todo | a drop target panel (Qt DropArea) that keeps items until dropped out |
+| Clipboard history (text/images/files, pin, preview) | have | the shell runs `wl-paste --watch cliphist store` (dies with the shell); glass panel (Mod+Shift+V, IPC `clipboard toggle`): search, filters, image previews, pins kept apart from cliphist (`<state>/clipboard/`), Enter pastes into the focused app via wtype (Ctrl+Shift+V for terminals) |
+| Auto-clear clipboard (delay / lock) | have | N minutes after the last copy and/or on lock (`LockState`), `wl-copy --clear`; history kept |
+| Paste as plain text | have | Mod+Shift+Alt+V / IPC `clipboard pastePlain`: wl-paste --type text → wl-copy text/plain → paste |
+| Shelf (park files/text/links while dragging) | have | edge drop target (a thin strip mid-edge notices drags and slides the shelf out), items persisted, dragged back out as text/uri-list / text/plain (Qt Drag.Automatic); IPC `shelf toggle\|addClipboard`. Verified client↔client in nested niri |
 | Finder shortcuts | n/a | file-manager specific |
-| Clean URL | todo | clipboard watcher stripping utm_*/fbclid/… (opt-in) |
+| Clean URL | have | opt-in watcher (Settings → Clipboard & Files) + "Clean link" in the panel; rules in src/services/urlclean.js (unit-tested) |
 | Disk image installer | n/a | Nix installs apps declaratively |
 
 ## Everyday tools — wave 2 (everyday)
@@ -79,7 +79,7 @@ in parallel without touching each other.
 | Quick panel (favorite tools palette) | todo | glass palette of tools/toggles, ⌃⌘V |
 | Quick toggles | partial (CC) | + dark/light, empty trash, eject disks, lock |
 | Radial menu | todo | pointer-centred wheel of apps/tools with profiles |
-| Scratchpad (tabbed autosaved Markdown notes) | todo | floating window + island page |
+| Scratchpad (tabbed autosaved Markdown notes) | have (island page: todo) | floating glass window (Mod+Shift+N), tabs, autosave to `<state>/scratchpad.json`, Markdown preview, export to `<dir>/<title>.md` |
 | Cleaning mode | todo | full-screen overlay grabbing the keyboard; hold Esc to exit |
 
 ## Capture and create — wave 1 (capture)

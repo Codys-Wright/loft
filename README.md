@@ -84,6 +84,25 @@ services.displayManager.sddm = {
 security.pam.services.studio-lock = { };   # + STUDIO_LOCK_PAM=studio-lock in the shell's environment
 ```
 
+## Clipboard, snippets, shelf, scratchpad
+
+| | |
+|---|---|
+| `Mod+Shift+V` | clipboard history: search, text/image previews, pins, Enter pastes into the focused app |
+| `Mod+Shift+Alt+V` | paste as plain text |
+| `Mod+Shift+Period` | snippet picker (edit snippets in Settings → Snippets) |
+| `Mod+Shift+N` | scratchpad: tabbed, autosaved Markdown notes |
+
+The shell records the clipboard itself (`wl-paste --watch cliphist store`, into cliphist's
+usual db — turn it off in Settings → Clipboard & Files if you already run a recorder).
+Pasting and snippets send keys with `wtype`, so they go to whatever window has keyboard
+focus (Ctrl+V; Ctrl+Shift+V for terminals, matched by app id). Pins, snippets, the shelf
+and notes live under `<state>/` (`clipboard/`, `snippets.json`, `shelf.json`,
+`scratchpad.json`). The Shelf slides out when you drag something to the middle of the
+right screen edge (Wayland only reports a drag to the surface under the pointer, so a thin
+strip there is the sensor) or with `qs ipc … call shelf toggle`. IPC targets: `clipboard`
+(toggle, pastePlain, clear, cleanUrl, wipe, settings), `snippets`, `shelf`, `scratchpad`.
+
 ## niri settings
 
 Studio Settings has Displays, Keyboard & Mouse, Layout & Motion and Keybinds pages,
