@@ -6,9 +6,10 @@ import qs.audio
 import qs.components
 import qs.services
 
-// The menu bar: floating Liquid Glass pills on a transparent strip
-// (javiiervm's layout). Left: app menu (studio mark + focused app, like
-// macOS) and workspaces. Right: tray, status, clock.
+// The menu bar, as on macOS: one translucent strip, flush with the top edge
+// and the full width of the screen. Left: the OS mark, the focused app (bold)
+// and workspaces. Right: status, Control Center, date. Items sit directly on
+// the bar; the glass is the bar itself.
 PanelWindow {
     id: root
 
@@ -22,141 +23,123 @@ PanelWindow {
         left: true
         right: true
     }
-    implicitHeight: 44
-    exclusiveZone: 44
+    implicitHeight: barHeight
+    exclusiveZone: barHeight
     color: "transparent"
 
-    readonly property int pillHeight: 34
+    readonly property int barHeight: 30
 
-    // Blur exactly the pills — the strip between them stays clear.
-    BackgroundEffect.blurRegion: Theme.blur ? pills : null
+    BackgroundEffect.blurRegion: Theme.blur ? barRegion : null
     Region {
-        id: pills
-        item: appPill
-        radius: appPill.radius
+        id: barRegion
+        item: bar
+    }
 
-        Region {
-            item: workspacePill
-            radius: workspacePill.radius
-        }
-        Region {
-            item: statusPill
-            radius: statusPill.radius
+    GlassSurface {
+        id: bar
+        anchors.fill: parent
+        radius: 0
+        showBorder: false
+        showHighlight: false
+        // Lighter than a panel: the wallpaper should read through, as on macOS.
+        strength: 0.8
+
+        // Hairline under the bar.
+        Rectangle {
+            anchors {
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+            }
+            height: 1
+            color: Theme.glassBorder
         }
     }
 
-    // ── Left: app menu ──────────────────────────────────────────────────
-    GlassSurface {
-        id: appPill
+    // ── Left: OS mark, app, workspaces ──────────────────────────────────
+    RowLayout {
+        id: left
         anchors {
             left: parent.left
-            leftMargin: 12
+            leftMargin: 14
             verticalCenter: parent.verticalCenter
         }
-        height: root.pillHeight
-        width: appRow.implicitWidth + 28
-        radius: height / 2
+        spacing: 16
 
-        RowLayout {
-            id: appRow
-            anchors.centerIn: parent
-            spacing: 10
+        // The OS mark, like the Apple menu: the NixOS logo (nf-linux-nixos).
+        Icon {
+            text: "\uf313"
+            size: 16
+            color: Theme.text
 
-            // The OS mark, like the Apple menu: the NixOS logo (nf-linux-nixos).
-            Icon {
-                text: "\uf313"
-                size: 18
-                color: Theme.accent
-            }
-
-            Text {
-                text: Niri.focusedWindow ? Apps.name(Niri.focusedWindow.app_id) : "Desktop"
-                color: Theme.text
-                font.family: Theme.fontUi
-                font.pixelSize: 14
-                font.weight: Font.DemiBold
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -6
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Niri.toggleOverview()
             }
         }
 
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: Niri.toggleOverview()
+        Text {
+            text: Niri.focusedWindow ? Apps.name(Niri.focusedWindow.app_id) : "Desktop"
+            color: Theme.text
+            font.family: Theme.fontUi
+            font.pixelSize: 13
+            font.weight: Font.Bold
         }
-    }
-
-    GlassSurface {
-        id: workspacePill
-        anchors {
-            left: appPill.right
-            leftMargin: 8
-            verticalCenter: parent.verticalCenter
-        }
-        visible: workspaces.workspaces.length > 0
-        height: root.pillHeight
-        width: workspaces.implicitWidth + 28
-        radius: height / 2
 
         Workspaces {
             id: workspaces
-            anchors.centerIn: parent
+            visible: workspaces.workspaces.length > 0
             output: root.modelData.name
         }
     }
 
     // ── Right: status ───────────────────────────────────────────────────
-    GlassSurface {
-        id: statusPill
+    RowLayout {
+        id: statusRow
         anchors {
             right: parent.right
-            rightMargin: 12
+            rightMargin: 14
             verticalCenter: parent.verticalCenter
         }
-        height: root.pillHeight
-        width: statusRow.implicitWidth + 32
-        radius: height / 2
+        spacing: 16
 
-        RowLayout {
-            id: statusRow
-            anchors.centerIn: parent
-            spacing: 16
+        Readouts {}
 
-            Readouts {}
+        Tray {
+            window: root
+            visible: children.length > 1
+        }
 
-            Tray {
-                window: root
-                visible: children.length > 1
+        MicIndicator {
+            screenName: root.modelData.name
+        }
+
+        Volume {
+            screenName: root.modelData.name
+        }
+
+        Icon {
+            text: "󰒓"
+            size: 15
+            color: Panels.controlCenterOpen ? Theme.accent : Theme.text
+
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -6
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Panels.toggleControlCenter(root.modelData.name)
             }
+        }
 
-            MicIndicator {
-                screenName: root.modelData.name
-            }
-
-            Volume {
-                screenName: root.modelData.name
-            }
-
-            Icon {
-                text: "󰒓"
-                size: 16
-                color: Panels.controlCenterOpen ? Theme.accent : Theme.text
-
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -6
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: Panels.toggleControlCenter(root.modelData.name)
-                }
-            }
-
-            Text {
-                // The time lives in the island.
-                text: Qt.formatDateTime(clock.date, "ddd MMM d")
-                color: Theme.text
-                font.family: Theme.fontUi
-                font.pixelSize: 13
-                font.weight: Font.Medium
-            }
+        Text {
+            // The time lives in the island.
+            text: Qt.formatDateTime(clock.date, "ddd MMM d")
+            color: Theme.text
+            font.family: Theme.fontUi
+            font.pixelSize: 13
+            font.weight: Font.Medium
         }
     }
 

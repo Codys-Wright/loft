@@ -31,7 +31,7 @@ PanelWindow {
     // Sit inside the bar's strip rather than below its exclusive zone.
     exclusionMode: ExclusionMode.Ignore
     anchors.top: true
-    margins.top: 5
+    margins.top: 3
     implicitWidth: 560
     implicitHeight: 260
     color: "transparent"
@@ -70,7 +70,7 @@ PanelWindow {
     readonly property bool alerting: alertColor.a > 0
 
     readonly property real targetWidth: expanded ? 480 : bannering ? 440 : live !== "" ? 240 : playing ? 300 : 150
-    readonly property real targetHeight: expanded ? 210 : bannering ? 84 : 34
+    readonly property real targetHeight: expanded ? 210 : bannering ? 84 : 24
 
     function showPage(name) {
         pinned = true;
@@ -208,9 +208,9 @@ PanelWindow {
 
                 Rectangle {
                     visible: root.playing
-                    Layout.preferredWidth: 22
-                    Layout.preferredHeight: 22
-                    radius: 6
+                    Layout.preferredWidth: 18
+                    Layout.preferredHeight: 18
+                    radius: 5
                     clip: true
                     color: Theme.overlay
 
@@ -228,7 +228,7 @@ PanelWindow {
                     text: root.playing ? (root.player.trackTitle || root.player.identity) : Qt.formatDateTime(clock.date, "h:mm AP")
                     color: Theme.text
                     font.family: Theme.fontUi
-                    font.pixelSize: 13
+                    font.pixelSize: 12
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
                 }
@@ -236,8 +236,8 @@ PanelWindow {
                 Equalizer {
                     visible: root.playing
                     running: root.playing && !root.expanded
-                    Layout.preferredWidth: 18
-                    Layout.preferredHeight: 14
+                    Layout.preferredWidth: 16
+                    Layout.preferredHeight: 12
                 }
             }
         }
