@@ -35,6 +35,10 @@
         iproute2 # Network: local addresses (ip -j addr)
         librespeed-cli # Network: speed test (on demand)
         pipewire # pw-metadata: per-app output (Sound mixer)
+        ddcutil # Control Center → Display: external monitor brightness (DDC/CI)
+        brightnessctl # Control Center → Display: laptop backlight
+        # nmcli (Wi-Fi details, VPNs) and busctl (Bluetooth RSSI) come from the
+        # system's NetworkManager / systemd, matching the running daemons.
         # Capture: frozen frames, crop/GIF/trim/mic track, clipboard, annotate.
         grim
         ffmpeg
