@@ -218,6 +218,7 @@ PanelWindow {
                     AppIcon {
                         anchors.fill: parent
                         sources: DockData.fileIcons(fr.modelData)
+                        glyph: fr.modelData.dir ? "󰉋" : "󰈔"
                     }
                     DragProxy {
                         id: fproxy
@@ -362,6 +363,7 @@ PanelWindow {
                     AppIcon {
                         anchors.fill: parent
                         sources: DockData.fileIcons(gcell.modelData)
+                        glyph: gcell.modelData.dir ? "󰉋" : "󰈔"
                     }
                     DragProxy {
                         id: gproxy
@@ -438,6 +440,7 @@ PanelWindow {
                     AppIcon {
                         anchors.fill: parent
                         sources: DockData.fileIcons(lc.modelData, false)
+                        glyph: lc.modelData.dir ? "󰉋" : "󰈔"
                         pixelSize: 40
                     }
                     DragProxy {

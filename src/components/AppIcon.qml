@@ -12,6 +12,9 @@ Item {
     // Explicit candidates (e.g. a file's thumbnail, then its MIME icons).
     property var sources: null
     property int pixelSize: 128
+    // The glyph when nothing loads: an app by default; files, folders and
+    // the Trash pass their own.
+    property string glyph: "󰀻"
 
     readonly property var candidates: sources ?? Apps.iconSources(appId)
     property int index: 0
@@ -49,7 +52,7 @@ Item {
 
         Icon {
             anchors.centerIn: parent
-            text: "󰀻"
+            text: root.glyph
             size: parent.width * 0.5
             color: Theme.subtext
         }

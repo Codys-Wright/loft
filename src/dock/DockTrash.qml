@@ -13,6 +13,7 @@ DockTile {
 
     AppIcon {
         anchors.fill: parent
+        glyph: "󰩺"
         sources: {
             const out = [];
             for (const n of DockData.trashFull ? ["user-trash-full", "trashcan_full", "user-trash"] : ["user-trash", "trashcan_empty", "user-trash-empty"]) {
