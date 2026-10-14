@@ -1,7 +1,7 @@
 # Theme architecture: facets, themes, variants
 
-Status: **spec, partly implemented**: phases A (model + resolver) and D (CLI surface)
-have landed; see [§9 Status](#status). It replaces the "a theme is one pack
+Status: **spec, partly implemented**: phases A (model + resolver), B (render units,
+composition cache, hook diffing) and D (CLI surface) have landed; see [§9 Status](#status). It replaces the "a theme is one pack
 with one `theme.json`" model of [THEME-FORMAT.md](THEME-FORMAT.md) and absorbs the
 `wallsets` branch (multi-display wallpaper sets). The companion spec
 [SPACES.md](SPACES.md) uses this model to give each functional space its own theme
@@ -1044,28 +1044,55 @@ in the same row can run in parallel.
 
 ### Status
 
-**Done: A (model + resolver), D (CLI surface), golden gate.** Code is in `cli/loft/facets/`
+**Done: A (model + resolver), B (units + cache + hook diffing), D (CLI surface), golden gate.** Code is in `cli/loft/facets/`
 (`model.py` catalog, ids and merge rules; `refs.py`; `resolve.py`; `schema.py`, a
 JSON Schema subset checker so bare `python3` behaves like the Nix CLI;
-`appearance.py` for `appearance.json`, saves and pins; `compat.py`) and
+`appearance.py` for `appearance.json`, saves and pins) and
 `cli/loft/themecmds.py`, with schemas in `schemas/` and the built-ins as the v2
 pack `packs/loft/`. Tests are in `tests/test_resolve.py`, and the `theme-golden`
 check also renders `loft@dark` / `loft@light`.
 
-- **Rendering is still v1.** `compat.py` turns the resolved facets back into a v1
-  `theme.json` dict and manifest and renders them with today's templates
-  (`render.write_bundle`). `loft theme apply` / `render` now go through the
-  resolver for every name: v2 themes, aliases and v1 packs (through
-  `pack.v1_documents`, the v1 adapter). With an empty user layer the output is
-  byte-identical to the v1 render (goldens, plus cozytile-sakura, qylock-genshin
-  and the glassless fixture). Bundles keep v1 names: `Resolved.name` is the alias
-  that points at the selection (`loft@dark` → `tokyonight`), else `theme@variant`,
-  so `perTheme` keys, `rendered/<name>` and `Theme.name` don't change.
-  `LOFT_THEME_ENGINE=v1` brings back the old pack-only apply/render.
-- **Not rendered yet (phase B / I):** motion, shape gaps / focus / border, icons,
-  typography beyond the v1 `fonts`, launcher, sounds, lock options. They resolve
-  and validate, and `loft theme state` shows them. B replaces `compat.py`
-  with units and keeps the gate.
+- **Phase B (done): units, composition cache, hook diffing.** `cli/loft/render/`
+  has one module per unit (`shell`, `manifest`, `wallpapers`, `niri`, `gtk`,
+  `kitty` + `ghostty` in `terminal.py`, `walker`, `noctalia`, `spotify`; shared
+  rules in `look.py`, the cache in `compose.py`). `compat.py` is gone. Each unit
+  declares `reads` and an `inputs(resolved)` projection; `render(inputs)` sees
+  nothing else, so `sha256(salt + inputs + assets + apps override)` is a complete
+  key. Projections are finer than whole kinds where it matters: `shell` keys on
+  the default wallpaper (not the arrangement) and on shape radii / focus / shadow
+  (not gaps / border); `kitty` / `ghostty` on the terminal opacity, not
+  `glass.opacity`. Measured: motion → `shell`, `niri`; `glass.opacity` → `shell`,
+  `gtk`, `walker` (hooks shell, gtk); `blur.enabled` → + `niri`, `kitty`,
+  `ghostty`; gaps → `niri`; an arrangement → `wallpapers` only; launcher glass →
+  `walker` (no hook). `loft theme apply` re-renders only new digests and runs
+  only the hooks of changed units (`--reload` runs them all, `-v` says what
+  happened); a cache hit is ~5 ms of composing on top of resolve.
+  `loft theme preview T[@V] [--stop] [--no-shell] [--json]` composes without
+  touching `current`, points `<state>/preview` at it and calls `qs ipc call theme
+  preview <dir>` (phase E implements that IPC). `LOFT_THEME_ENGINE=v1` now means
+  "the pack alone" (no catalog, no appearance.json) through the same units.
+- **New output (intended golden changes):** `theme.json` gains `shape.focus`,
+  `motion` (speed, minimal, durations ÷ speed or 0, curves, spring), `type`,
+  `icons`, `a11y`; `niri.kdl` renders `shape.focus` (`focus-ring { off }` for the
+  default `"shadow"`; `on` + width for `ring` / `both`, plus a small focused
+  shadow for `ring`), `shape.border` (`off` / `on` + width), `shape.gaps` (only when
+  set) and `animations {}` (only when motion isn't the default: `off` when
+  minimal, `slowdown 1/speed`, the facet's `niri` keys passed through);
+  `wallpapers.json` is new. Every other byte is unchanged: `tests/test_resolve.py`
+  compares the frozen v1 renderer (`tests/v1_reference.py`) with the units minus
+  exactly these additions, for the built-ins and v1 fixtures.
+- **Deviations in B:** the composition hash covers resolved.json as well as the
+  unit digests (two selections with the same files but different sources get
+  their own resolved.json); identity is only in resolved.json, never in
+  `theme.json`, so `loft@dark` and the v1 pack `tokyonight` still render the same
+  files; `walker` doesn't read typography and there is no `gsettings` / `fonts`
+  unit yet (phase I); the `spicetify.ini` unit is named `spotify` after its hook.
+- **Still not rendered (phase I):** icons / cursor (gsettings, niri `cursor {}`),
+  typography beyond the v1 `fonts` (gsettings, walker), sounds, lock options;
+  shape shadow geometry (softness / spread / offset stay base.kdl's).
+- Bundles keep v1 names: `Resolved.name` is the alias that points at the
+  selection (`loft@dark` → `tokyonight`), else `theme@variant`, so `perTheme`
+  keys and `Theme.name` don't change.
 - **The catalog** is built from the library root (implicit pack `user`), the theme
   path's pack dirs and `packs/`. The built-in v1 `themes/` dir is left out while
   `packs/loft` exists, because its packs are now aliases of `loft`. `themes/`
@@ -1080,9 +1107,9 @@ check also renders `loft@dark` / `loft@light`.
   `save-as`; `theme accessibility --reduce-motion|--reduce-transparency|
   --increase-contrast on|off` (not in §8; the Theme pages need it); and
   `loft <kind> list|show|apply|set|reset|save-as [--pin]`. Every write re-applies
-  unless `--no-apply` is given. Not done: `preview` (B/E), `migrate` (C),
+  unless `--no-apply` is given. Not done: the shell side of `preview` (E), `migrate` (C),
   `<kind> import` (C), and `loft wallpapers plan|sets|…` (the `wallsets`
-  commands stay under `loft wallpaper`).
+  commands stay under `loft wallpaper`). B added `preview`, `apply --reload / -v`.
 - **Deviations from the text above, all small:**
   - §4.2 storage rule: "selects k" means a ref or inline facet. A variant that
     only patches k shares the `"*"` slot. On the base, a kind goes under the base

@@ -16,8 +16,12 @@
 #                   `spotify` hook) — all offline
 #   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte, and so
 #                   does `loft theme render loft@dark|loft@light` (the facet model's gate;
-#                   tests/test_resolve.py also checks imported packs through the v1 adapter)
-#   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`
+#                   tests/test_resolve.py also checks imported packs through the v1 adapter
+#                   against the frozen v1 renderer, tests/v1_reference.py, and
+#                   tests/test_render_units.py the per-unit cache keys and hook diffing)
+#   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`, including
+#                   one with motion (speed, niri animations, minimal) and shape (gaps,
+#                   focus ring, border) customized
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`
 #   loft-niri       the crate builds and its tests pass (incl. `niri validate`; spaces:
 #                   roles over the wallsets fixtures, templates + instances, golden
@@ -105,7 +109,20 @@
         niri-config = check "niri-config" [ pkgs.niri ] ''
           export HOME=$TMPDIR LOFT_THEME_INDEX=none
           ${loft} theme render ${fixture} glassless
-          for t in ${builtin}/tokyonight ${builtin}/latte $PWD/glassless; do
+          # Motion and shape render into niri.kdl too: check a customized look.
+          export LOFT_THEME_INDEX=none LOFT_LIBRARY=none LOFT_STATE_DIR=$TMPDIR/state LOFT_HOOKS=none
+          ${loft} motion set niri '{"workspace-switch":{"spring":{"damping-ratio":1.0,"stiffness":1000,"epsilon":0.0001}},"window-open":{"duration-ms":150,"curve":"ease-out-expo"},"window-close":{"off":true},"window-resize":{"duration-ms":200,"curve":["cubic-bezier",0.05,0.7,0.1,1.0]}}' --no-apply
+          ${loft} motion set speed 1.5 --no-apply
+          ${loft} shape set focus '"ring"' --no-apply
+          ${loft} shape set gaps 8 --no-apply
+          ${loft} shape set border.enabled true --no-apply
+          ${loft} theme render loft custom
+          ${loft} motion apply motion:minimal --no-apply
+          ${loft} shape set focus '"both"' --no-apply
+          ${loft} theme render loft@light custom-minimal
+          grep -q 'slowdown 0.666667' custom/niri.kdl
+          grep -q '^    off$' custom-minimal/niri.kdl
+          for t in ${builtin}/tokyonight ${builtin}/latte $PWD/glassless $PWD/custom $PWD/custom-minimal; do
             printf 'include "%s"\ninclude "%s"\n' ${../niri}/base.kdl "$t/niri.kdl" > config.kdl
             echo "niri validate: base.kdl + $t/niri.kdl"
             niri validate -c config.kdl

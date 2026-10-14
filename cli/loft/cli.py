@@ -1,7 +1,8 @@
 """loft — the Loft CLI (theme engine + manager).
 
 Environment (all optional):
-  LOFT_STATE_DIR       `current` → active rendered theme, `rendered/` cache
+  LOFT_STATE_DIR       `current` → the active composition, `rendered/` cache
+                       (units/<unit>/<digest>, compositions/<hash>)
                        (default: $XDG_STATE_HOME/loft)
   LOFT_THEME_PATH      colon-separated dirs of theme packs
                        (default: $XDG_DATA_HOME/loft/themes, then built-ins);
@@ -11,12 +12,15 @@ Environment (all optional):
   LOFT_SHELL_PATH      Quickshell config of the running shell, for IPC
   LOFT_DATA_DIR        root holding themes/ and templates/render/ (default: this tree)
   LOFT_TEMPLATE_DIR    override the render templates (dev)
-  LOFT_HOOKS           reload hooks after apply: all|none|comma list of
-                       shell,niri,kitty,ghostty,gtk,spotify (default: all; --dev: shell,niri)
+  LOFT_HOOKS           reload hooks after apply (each runs only when its unit's
+                       output changed): all|none|comma list of shell,niri,
+                       wallpapers,kitty,ghostty,gtk,spotify
+                       (default: all; --dev: shell,niri,wallpapers)
   LOFT_THEME_INDEX     themes index (path, file:// or http(s) URL; `none` = off)
                        for curated vibe links (default: loft-themes on GitHub)
-  LOFT_THEME_ENGINE    `v1`: apply/render packs directly, bypassing the facet
-                       model (themecmds.py); default: resolve every theme name
+  LOFT_THEME_ENGINE    `v1`: apply/render a pack by name or path alone, bypassing
+                       the catalog and appearance.json (themecmds.py);
+                       default: resolve every theme name
 
 The STUDIO_* names from before the rename (studio-linux) are read when the
 LOFT_* one is unset.
@@ -256,7 +260,9 @@ def cmd_render(ctx: Ctx, args) -> None:
         return
     pack = ctx.find(args.pack)
     ctx.validate(pack)
-    render.render(pack, Path(args.outdir), ctx.template_dir, curated=ctx.curated(pack))
+    cat, theme, variant = themecmds.legacy_select(ctx, pack)
+    res = themecmds.resolved(ctx, cat, theme, variant, None)
+    render.render_to(res, cat, Path(args.outdir), ctx.template_dir, ctx.curated(pack))
 
 
 def cmd_validate(ctx: Ctx, args) -> None:
@@ -284,36 +290,12 @@ def cmd_apply(ctx: Ctx, args) -> None:
         return
     if not args.theme:
         raise Fail("apply what? (LOFT_THEME_ENGINE=v1 needs a theme name)")
+    # The pack alone (no catalog, no appearance.json), rendered by the same
+    # units through the same composition cache.
     pack = ctx.find(args.theme)
-    ctx.validate(pack)
-    # Cached by content: re-applying an unchanged pack is just a symlink swap,
-    # and an edited pack lands in a new dir (a new path niri also notices).
-    # Curated vibes point into other installed packs: what they resolve to
-    # is part of the key, so installing a linked pack re-renders.
-    curated = ctx.curated(pack)
-    digest = pack.digest(render.renderer_salt(ctx.template_dir) + json.dumps(curated, sort_keys=True))
-    base = ctx.state_dir / "rendered" / pack.name
-    dest = base / digest
-    if not (dest / "theme.json").is_file():
-        base.mkdir(parents=True, exist_ok=True)
-        tmp = Path(tempfile.mkdtemp(prefix=f".{digest}-", dir=base))
-        tmp.chmod(0o755)  # mkdtemp is 0700; consumers may run as other users
-        render.render(pack, tmp, ctx.template_dir, curated=curated)
-        if dest.exists():
-            shutil.rmtree(dest)
-        tmp.rename(dest)
-    _swap_symlink(ctx.current, dest)
-    for old in base.iterdir():
-        if old != dest:
-            shutil.rmtree(old, ignore_errors=True)
-
-    ctx.theme = json.loads((dest / "theme.json").read_text())
-    try:
-        names = hooks.selected(_env("LOFT_HOOKS") if "LOFT_HOOKS" in os.environ else None, ctx.dev)
-    except ValueError as e:
-        raise Fail(str(e)) from e
-    hooks.run(names, ctx)
-    print(f"loft: applied {pack.name}")
+    cat, theme, variant = themecmds.legacy_select(ctx, pack)
+    res = themecmds.resolved(ctx, cat, theme, variant, None)
+    themecmds.apply_resolved(ctx, cat, res, reload_all=args.reload, verbose=args.verbose)
 
 
 def _copy_pack(src: Path, dest: Path) -> None:
@@ -924,10 +906,27 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--no-library", action="store_true", help="leave out the library's topic images")
     s.set_defaults(fn=cmd_vibes)
 
-    s = sub.add_parser("apply", help="render (cached), make current, reload consumers")
+    s = sub.add_parser("apply", help="render (cached per unit), make current, reload the consumers whose files changed")
     s.add_argument("theme", nargs="?", help="theme[@variant], an old pack name (alias) or a pack path")
     s.add_argument("--mode", choices=["light", "dark", "auto"], help="pick the theme's variant for this appearance")
+    s.add_argument("--reload", action="store_true", help="run every reload hook, changed or not")
+    s.add_argument("-v", "--verbose", action="store_true", help="say what was rendered, what changed and which hooks ran")
     s.set_defaults(fn=cmd_apply)
+
+    s = sub.add_parser(
+        "preview",
+        help="render a theme and show it in the shell only (current, niri, terminals, GTK unchanged)",
+        description="Renders THEME[@VARIANT] (with your customizations) into a cached composition, points "
+        "<state>/preview at it and asks the shell to show it (`qs ipc call theme preview DIR`). "
+        "`--stop` goes back to `current`. Prints the composition dir.",
+    )
+    s.add_argument("theme", nargs="?", help="theme[@variant], an old pack name or a pack path")
+    s.add_argument("--mode", choices=["light", "dark", "auto"], help="the theme's variant for this appearance")
+    s.add_argument("--stop", action="store_true", help="end the preview: the shell shows `current` again")
+    s.add_argument("--no-user", action="store_true", help="without your pins and customizations")
+    s.add_argument("--no-shell", action="store_true", help="render only; don't tell the shell")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=themecmds.cmd_preview)
 
     s = sub.add_parser("render", help="render a theme's consumer files into a directory (no apply)")
     s.add_argument("pack", metavar="theme", help="theme[@variant], an old pack name or a pack path")

@@ -18,7 +18,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from loft import color, render
+import v1_reference
+from loft import color
 from loft.cli import main
 from loft.facets import appearance as A
 from loft.facets import refs, schema
@@ -28,7 +29,6 @@ from loft.pack import Pack
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILTIN = ROOT / "packs"
-TEMPLATES = ROOT / "templates" / "render"
 GOLDEN = ROOT / "tests" / "golden"
 V1 = ROOT / "tests" / "fixtures" / "v1packs"
 GLASSLESS = ROOT / "tests" / "fixtures" / "glassless"
@@ -50,10 +50,10 @@ def facet(kind: str, fid: str, data: dict, **meta) -> dict:
     return {"kind": kind, "id": fid, "name": meta.pop("name", fid), "data": data, **meta}
 
 
-def same_tree(a: Path, b: Path) -> list[str]:
+def same_tree(a: Path, b: Path, ignore: tuple = ()) -> list[str]:
     """Differences between two directories (names and bytes), [] when equal."""
     out: list[str] = []
-    cmp = filecmp.dircmp(a, b)
+    cmp = filecmp.dircmp(a, b, ignore=list(ignore))
     out += [f"only in {a}: {n}" for n in cmp.left_only] + [f"only in {b}: {n}" for n in cmp.right_only]
     for n in cmp.common_files:
         if (a / n).read_bytes() != (b / n).read_bytes():
@@ -61,6 +61,37 @@ def same_tree(a: Path, b: Path) -> list[str]:
     for d in cmp.common_dirs:
         out += same_tree(a / d, b / d)
     return out
+
+
+# What phase B added to every render (docs/THEME-ARCHITECTURE.md §6): the
+# grouped shell tokens, niri's focus ring / border switches, wallpapers.json.
+# Everything else must stay byte-identical to the frozen v1 renderer.
+NIRI_ADDED = (
+    (
+        '    // shape.focus: "shadow" marks the focused window with its deeper shadow\n'
+        '    // alone (no ring); "ring" and "both" draw the ring, focusRing.width wide.\n'
+    ),
+    "        off\n",
+)
+
+
+def without_additions(d: Path, into: Path) -> Path:
+    """A copy of render dir `d` with phase B's additions taken out."""
+    shutil.copytree(d, into, symlinks=False, copy_function=shutil.copyfile)
+    for p in [into, *into.rglob("*")]:  # the source may be read-only (the Nix store)
+        p.chmod(0o755 if p.is_dir() else 0o644)
+    (into / "wallpapers.json").unlink()
+    t = json.loads((into / "theme.json").read_text())
+    for k in ("motion", "type", "icons", "a11y"):
+        t.pop(k)
+    t["shape"].pop("focus")
+    (into / "theme.json").write_text(json.dumps(t, indent=2) + "\n")
+    kdl = (into / "niri.kdl").read_text()
+    for chunk in NIRI_ADDED:
+        kdl = kdl.replace(chunk, "")
+    kdl = kdl.replace("    // shape.border: drawn or not, and how wide.\n", "    // Colors only: whether the border is drawn stays the base/consumer's call.\n")
+    (into / "niri.kdl").write_text(kdl)
+    return into
 
 
 class Scratch(unittest.TestCase):
@@ -451,24 +482,34 @@ class GoldenGate(Env):
             self.assertEqual(same_tree(GOLDEN / golden, out), [], ref)
 
     def test_v1_packs_through_the_adapter(self):
-        for path in (V1 / "cozytile-sakura", V1 / "qylock-genshin", GLASSLESS, ROOT / "themes" / "tokyonight"):
+        """Every byte the v1 renderer (frozen in tests/v1_reference.py) wrote
+        is still written through the adapter + render units, apart from the
+        documented additions."""
+        for path in (V1 / "cozytile-sakura", V1 / "qylock-genshin", GLASSLESS, ROOT / "themes" / "tokyonight", ROOT / "themes" / "latte"):
             pack = Pack(path)
             v1 = self.tmp / "v1" / pack.name
-            render.render(pack, v1, TEMPLATES)
+            v1_reference.render(pack, v1)
             for ref in (pack.name, str(path)):
                 if ref == pack.name and path.parent != V1:
                     continue  # not on the theme path by name (tokyonight is the loft alias: test above)
                 out = self.tmp / "v2" / pack.name / ref.replace("/", "_")
                 rc, _, err = loft("theme", "render", ref, str(out))
                 self.assertEqual(rc, 0, err)
-                self.assertEqual(same_tree(v1, out), [], ref)
+                stripped = without_additions(out, self.tmp / "v2-stripped" / pack.name / ref.replace("/", "_"))
+                self.assertEqual(same_tree(v1, stripped), [], ref)
+
+    def test_goldens_are_v1_plus_additions(self):
+        for name in ("tokyonight", "latte"):
+            v1 = self.tmp / "v1" / name
+            v1_reference.render(Pack(ROOT / "themes" / name), v1)
+            self.assertEqual(same_tree(v1, without_additions(GOLDEN / name, self.tmp / "g" / name)), [], name)
 
     def test_apply_keeps_v1_names_and_cache(self):
         rc, out, err = loft("theme", "apply", "default")
         self.assertEqual((rc, out.strip()), (0, "loft: applied tokyonight"), err)
         cur = self.tmp / "state" / "current"
-        self.assertEqual(cur.resolve().parent, (self.tmp / "state" / "rendered" / "tokyonight").resolve())
-        self.assertEqual(same_tree(GOLDEN / "tokyonight", cur.resolve()), [])
+        self.assertEqual(cur.resolve().parent, (self.tmp / "state" / "rendered" / "compositions").resolve())
+        self.assertEqual(same_tree(GOLDEN / "tokyonight", cur.resolve(), ignore=("resolved.json",)), [])
         first = cur.resolve()
         loft("theme", "apply", "loft@dark")
         self.assertEqual(cur.resolve(), first)  # same resolved look → same cached render
@@ -523,7 +564,7 @@ class Commands(Env):
         loft("theme", "apply", "latte")
         loft("theme", "reset", "--all")
         self.assertEqual(self.state()["customized"], [])
-        self.assertEqual(same_tree(GOLDEN / "latte", (self.tmp / "state" / "current").resolve()), [])
+        self.assertEqual(same_tree(GOLDEN / "latte", (self.tmp / "state" / "current").resolve(), ignore=("resolved.json",)), [])
 
     def test_pins_and_accessibility(self):
         loft("theme", "apply", "cozytile-sakura")

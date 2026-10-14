@@ -3,9 +3,10 @@
 Themes resolve through cli/loft/facets: a v2 theme (`loft`, `loft@light`),
 an alias (`tokyonight` → loft@dark, `latte` → loft@light, `default`) or a v1
 pack, which loads through the v1 adapter. Applying renders the resolved
-facets with today's renderer (facets/compat.py), byte-identical to the v1
-render when nothing is customized, so every old name keeps working.
-`LOFT_THEME_ENGINE=v1` restores the old pack-only apply/render.
+facets with the render units (cli/loft/render/) through the composition
+cache and runs only the reload hooks of units whose output changed, so every
+old name keeps working. `LOFT_THEME_ENGINE=v1` restores the pack-only
+selection (no catalog, no appearance.json).
 
 Every write goes to <state>/appearance.json and re-applies the active theme
 (`--no-apply` skips that).
@@ -15,17 +16,16 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import sys
-import tempfile
+import time
 from pathlib import Path
 
 from . import hooks, render
 from .facets import appearance as A
-from .facets import compat
 from .facets import resolve as R
 from .facets.model import KINDS, Catalog, FacetError, Theme, get_path, path_patch, read_json
 from .pack import Pack, is_pack
+from .render import compose
 
 LEGACY = "LOFT_THEME_ENGINE"
 
@@ -119,54 +119,69 @@ def resolved(ctx, cat: Catalog, theme: Theme, variant: str | None, state: dict |
     return R.resolve(cat, theme, variant, state)
 
 
+def v1_pack(res: R.Resolved) -> Pack | None:
+    """The v1 pack a theme was adapted from (for validation and curated vibes), if any."""
+    v1 = res.theme.doc.get("v1")
+    return Pack(Path(v1["path"])) if isinstance(v1, dict) and v1.get("path") else None
+
+
 def _validate_v1(ctx, res: R.Resolved) -> None:
     """A v1 pack that doesn't validate still fails apply/render, as before."""
-    pack = compat.v1_pack(res)
+    pack = v1_pack(res)
     if pack is not None:
         ctx.validate(pack)
 
 
 def _curated(ctx, res: R.Resolved) -> dict:
-    pack = compat.v1_pack(res)
+    pack = v1_pack(res)
     return ctx.curated(pack) if pack is not None else {}
 
 
-# ── apply / render ──────────────────────────────────────────────────────────
+# ── apply / preview / render ────────────────────────────────────────────────
 
 
-def apply_resolved(ctx, cat: Catalog, res: R.Resolved, quiet: bool = False) -> Path:
-    """Render (cached by content) into rendered/<name>/<digest>, point
-    `current` at it, run the reload hooks."""
-    from .cli import _swap_symlink
-
+def composition(ctx, cat: Catalog, res: R.Resolved) -> compose.Composition:
+    """Render what the cache lacks and build the composition (§6.2)."""
     _validate_v1(ctx, res)
-    curated = _curated(ctx, res)
-    digest = compat.digest(res, cat, curated, render.renderer_salt(ctx.template_dir))
-    base = ctx.state_dir / "rendered" / res.name
-    dest = base / digest
-    if not (dest / "theme.json").is_file():
-        base.mkdir(parents=True, exist_ok=True)
-        tmp = Path(tempfile.mkdtemp(prefix=f".{digest}-", dir=base))
-        tmp.chmod(0o755)  # mkdtemp is 0700; consumers may run as other users
-        compat.write(res, cat, tmp, ctx.template_dir, curated)
-        if dest.exists():
-            shutil.rmtree(dest)
-        tmp.rename(dest)
-    _swap_symlink(ctx.current, dest)
-    for old in base.iterdir():
-        if old != dest:
-            shutil.rmtree(old, ignore_errors=True)
-    ctx.theme = json.loads((dest / "theme.json").read_text())
+    src = render.source(res, cat, ctx.template_dir, _curated(ctx, res))
+    return compose.compose(src, render.UNITS, ctx.state_dir, render.resolved_doc(res))
+
+
+def _hook_names(ctx) -> list[str]:
     try:
-        names = hooks.selected(os.environ.get("LOFT_HOOKS") if "LOFT_HOOKS" in os.environ else None, ctx.dev)
+        return hooks.selected(os.environ.get("LOFT_HOOKS") if "LOFT_HOOKS" in os.environ else None, ctx.dev)
     except ValueError as e:
         raise FacetError(str(e)) from e
-    hooks.run(names, ctx)
+
+
+def apply_resolved(ctx, cat: Catalog, res: R.Resolved, quiet: bool = False, reload_all: bool = False, verbose: bool = False) -> Path:
+    """Compose (cached per unit), point `current` at it, run the reload hooks
+    of the units whose digest changed (all of them with `reload_all`)."""
+    from .cli import _swap_symlink
+
+    t0 = time.monotonic()
+    comp = composition(ctx, cat, res)
+    old = compose.units_of(ctx.current.resolve()) if ctx.current.is_symlink() else None
+    changed = compose.changed(None if reload_all else old, comp.units)
+    _swap_symlink(ctx.current, comp.path)
+    compose.gc(ctx.state_dir, compose.pinned_targets(ctx.state_dir))
+    ctx.theme = json.loads((comp.path / "theme.json").read_text())
+    selected = _hook_names(ctx)
+    wanted = render.hooks_for(changed)
+    run = [h for h in selected if h in wanted]
+    hooks.run(run, ctx)
     for e in res.errors:
         print(f"loft: skipped {e}", file=sys.stderr)
+    if verbose:
+        ms = (time.monotonic() - t0) * 1000
+        print(
+            f"loft: rendered {', '.join(comp.rendered) or 'nothing'}; changed {', '.join(changed) or 'nothing'}; "
+            f"hooks {', '.join(run) or 'none'} ({ms:.0f} ms)",
+            file=sys.stderr,
+        )
     if not quiet:
         print(f"loft: applied {res.name}")
-    return dest
+    return comp.path
 
 
 def cmd_apply(ctx, args) -> None:
@@ -181,7 +196,7 @@ def cmd_apply(ctx, args) -> None:
         variant = A.variant_for_mode(theme, args.mode)
         state["mode"] = args.mode
     res = resolved(ctx, cat, theme, variant, state)
-    apply_resolved(ctx, cat, res)
+    apply_resolved(ctx, cat, res, reload_all=getattr(args, "reload", False), verbose=getattr(args, "verbose", False))
     state["theme"], state["variant"] = theme.id, variant
     A.save(ctx.state_dir, state)
 
@@ -195,13 +210,54 @@ def reapply(ctx, state: dict, args=None) -> None:
     apply_resolved(ctx, cat, resolved(ctx, cat, theme, variant, state))
 
 
+def cmd_preview(ctx, args) -> None:
+    """Render a selection into a composition and point the shell (only) at it
+    (§6.3): `current`, niri, terminals and GTK stay as they are. `--stop`
+    returns the shell to `current`."""
+    link = ctx.state_dir / "preview"
+    if args.stop:
+        if link.is_symlink():
+            link.unlink()
+        if not args.no_shell:
+            hooks.preview(ctx, None)
+        print("loft: preview stopped")
+        return
+    if not args.theme:
+        raise FacetError("preview what? (loft theme preview THEME[@VARIANT] or --stop)")
+    from .cli import _swap_symlink
+
+    state = state_of(ctx)
+    cat, theme, variant = select(ctx, args.theme)
+    if args.mode:
+        variant = A.variant_for_mode(theme, args.mode)
+    res = resolved(ctx, cat, theme, variant, None if args.no_user else state)
+    comp = composition(ctx, cat, res)
+    _swap_symlink(link, comp.path)
+    compose.gc(ctx.state_dir, compose.pinned_targets(ctx.state_dir))
+    if not args.no_shell:
+        hooks.preview(ctx, comp.path)
+    for e in res.errors:
+        print(f"loft: skipped {e}", file=sys.stderr)
+    if args.json:
+        print(json.dumps({"ref": res.ref, "name": res.name, "dir": str(comp.path), "rendered": comp.rendered, "units": comp.units}))
+    else:
+        print(comp.path)
+
+
 def cmd_render(ctx, args) -> None:
     cat, theme, variant = select(ctx, args.pack)
     res = resolved(ctx, cat, theme, variant, None if args.no_user else state_of(ctx))
     _validate_v1(ctx, res)
-    compat.write(res, cat, Path(args.outdir), ctx.template_dir, _curated(ctx, res))
+    render.render_to(res, cat, Path(args.outdir), ctx.template_dir, _curated(ctx, res))
     for e in res.errors:
         print(f"loft: skipped {e}", file=sys.stderr)
+
+
+def legacy_select(ctx, pack: Pack) -> tuple[Catalog, Theme, str | None]:
+    """LOFT_THEME_ENGINE=v1: the pack alone, through the v1 adapter."""
+    cat = Catalog([], builtin=None, user=None, extra_packs=[pack.path.resolve()])
+    theme, variant = cat.theme(pack.name)
+    return cat, theme, variant
 
 
 # ── theme list / current / variants / state / diff ──────────────────────────
