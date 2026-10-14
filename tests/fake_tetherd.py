@@ -2,7 +2,7 @@
 """A fake tetherd: the iPhone bridge's local socket protocol, with canned data.
 
 Loft's Phone service (src/services/Phone.qml) talks to tetherd
-(github.com/zackb/tether) over $XDG_RUNTIME_DIR/tetherd.sock: newline-delimited
+(github.com/zackb/tether) over $XDG_RUNTIME_DIR/tether/tetherd.sock: newline-delimited
 JSON, `{"command":"subscribe"}` for the event stream, list commands answered on
 the same connection, fire-and-forget commands acked with a bare "OK" line, and
 results broadcast to every subscriber (upstream src/core/src/net.cpp,
@@ -19,7 +19,7 @@ without a phone, and tests/test_phone_fake.py checks it against the fixture.
 x-kde-display-appname=<app>), through `gdbus` on the session bus in
 DBUS_SESSION_BUS_ADDRESS — run it inside a test session only.
 
-The socket defaults to $XDG_RUNTIME_DIR/tetherd.sock, which in a loft-dev
+The socket defaults to $XDG_RUNTIME_DIR/tether/tetherd.sock, which in a loft-dev
 session is the session's private runtime dir.
 """
 
@@ -37,7 +37,9 @@ TELEPHONY = f"/org/bluez/hci0/dev_{PHONE.replace(':', '_')}/telephony0"
 
 
 def default_socket():
-    return os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "tetherd.sock")
+    d = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "tether")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "tetherd.sock")
 
 
 class Phone:

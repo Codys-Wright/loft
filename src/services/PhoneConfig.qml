@@ -24,7 +24,7 @@ Singleton {
     property alias previews: cfg.previews
     // The incoming-call live activity and the call timer in the island.
     property alias calls: cfg.calls
-    // tetherd's socket; "" = $XDG_RUNTIME_DIR/tetherd.sock. LOFT_TETHER_SOCKET wins.
+    // tetherd's socket; "" = $XDG_RUNTIME_DIR/tether/tetherd.sock. LOFT_TETHER_SOCKET wins.
     property alias socketPath: cfg.socketPath
 
     FileView {

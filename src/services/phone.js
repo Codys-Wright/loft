@@ -1,7 +1,7 @@
 .pragma library
 
 // The iPhone bridge's protocol: tetherd (github.com/zackb/tether, nixpkgs
-// `tether` 0.2.35) on its Unix socket, $XDG_RUNTIME_DIR/tetherd.sock.
+// `tether` 0.2.35) on its Unix socket, $XDG_RUNTIME_DIR/tether/tetherd.sock.
 // Newline-delimited JSON both ways (docs/PROTOCOL.md §4 and §6 upstream;
 // src/core/src/net.cpp UnixServer::handle_client):
 //

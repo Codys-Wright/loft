@@ -8,7 +8,7 @@ import "phone.js" as P
 // The iPhone, through tetherd (github.com/zackb/tether): it presents this
 // machine to the phone as a Bluetooth hands-free accessory and gets messages
 // (MAP), contacts (PBAP), app notifications (ANCS) and call control (HFP).
-// One subscribed connection to its socket ($XDG_RUNTIME_DIR/tetherd.sock,
+// One subscribed connection to its socket ($XDG_RUNTIME_DIR/tether/tetherd.sock,
 // JSON lines; the protocol and all parsing are in phone.js) carries the
 // events and our commands. Feature "phone" (off by default); with no socket
 // it just says "Not connected" and retries quietly.
@@ -25,7 +25,7 @@ Singleton {
     id: root
 
     readonly property bool enabled: Features.on("phone")
-    readonly property string socketPath: Quickshell.env("LOFT_TETHER_SOCKET") || PhoneConfig.socketPath || `${Quickshell.env("XDG_RUNTIME_DIR")}/tetherd.sock`
+    readonly property string socketPath: Quickshell.env("LOFT_TETHER_SOCKET") || PhoneConfig.socketPath || `${Quickshell.env("XDG_RUNTIME_DIR")}/tether/tetherd.sock`
 
     // ── State (phone.js) ────────────────────────────────────────────────
     property var state: P.initialState()

@@ -80,7 +80,7 @@ programs.loft.phone.enable = true;   # tether + tetherd.service (user unit)
 ```
 
 tetherd is a **per-user** daemon. It owns the Bluetooth session, its socket
-(`$XDG_RUNTIME_DIR/tetherd.sock`) and the clipboard. It runs without a Wayland session too.
+(`$XDG_RUNTIME_DIR/tether/tetherd.sock`) and the clipboard. It runs without a Wayland session too.
 
 ### 3. Pair (once, by hand)
 
@@ -159,7 +159,7 @@ against the fixture. In a test session (never on the live desktop):
 
 ```sh
 loft-dev --session phone "$PWD" &          # then source its session.env
-python3 tests/fake_tetherd.py serve --notify &      # binds the session's $XDG_RUNTIME_DIR/tetherd.sock
+python3 tests/fake_tetherd.py serve --notify &      # binds the session's $XDG_RUNTIME_DIR/tether/tetherd.sock
 python3 tests/fake_tetherd.py inject message        # | notification | call | outgoing | answer | hangup | away | back
 ```
 
