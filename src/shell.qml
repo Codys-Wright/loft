@@ -42,9 +42,10 @@ ShellRoot {
     }
 
     Variants {
-        // One dock: on the main display, or the fallback while the main one
-        // shows something fullscreen (Displays.qml).
-        model: Features.on("dock") ? Quickshell.screens.filter(s => s.name === Displays.activeName) : []
+        // A dock on every display that has it on (Settings → Dock →
+        // Displays), each with its own position and auto-hide; it steps
+        // aside while a window there is fullscreen (Dock.qml).
+        model: Features.on("dock") ? Quickshell.screens.filter(s => DockData.displayPrefs(s).enabled) : []
         Dock {}
     }
 

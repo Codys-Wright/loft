@@ -183,6 +183,21 @@ its query: `launcher/walker-set-query.patch` (`studio-walker`). The bang list is
 to refresh), converted by `launcher/bangs.py`, which also fixes the NixOS search URLs and adds
 `!nixopts`, `!hmopts`, `!noogle` and `!kagi`.
 
+## Dock
+
+Right-click (or Ctrl-click, or long-press) an app: its windows, recent files, New Window and the
+app's actions, Options ▸ (Keep in Dock, Open at Login, Show in Files, Assign To, Move to Desktop /
+Display), Hide, Quit (hold Alt: Force Quit). Downloads sits left of the Trash as a stack (fan,
+grid or list; drag files out), any folder can be added in Settings → Dock, and recent apps get
+their own section. Each display has its own dock: position, and auto-hide never / always / when
+windows are open. The helpers behind it are `studio dock …` (JSON for the shell):
+
+```sh
+studio dock recents | folder xdg:DOWNLOAD --sort added | trash [--empty]
+studio dock autostart list | set ID on|off | run --once KEY
+studio dock open ID FILE… | show PATH|ID | apps [ID…]
+```
+
 ## Clipboard, snippets, shelf, scratchpad
 
 | | |

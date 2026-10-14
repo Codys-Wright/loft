@@ -187,6 +187,45 @@ pub fn render_output(
     node
 }
 
+/// Escape a literal for a niri regex (`match app-id="^…$"`).
+pub fn regex_literal(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if "\\.+*?()|[]{}^$".contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// Per-app window rules (`window-rules`: app-id → { "open-on-workspace",
+/// "open-on-output" }) — the dock's "Assign To". Named workspaces are not
+/// declared here: the fragment is included twice, and a twice-declared
+/// workspace exists twice. The shell names the workspace live instead.
+pub fn render_rules(ov: &Overrides) -> Vec<Node> {
+    let mut nodes = Vec::new();
+    if let Some(rules) = ov.0.get("window-rules").and_then(Value::as_object) {
+        let ordered: BTreeMap<_, _> = rules.iter().collect();
+        for (app, rec) in ordered {
+            let mut n = Node::new("window-rule").child(
+                Node::new("match").prop("app-id", Val::Str(format!("^{}$", regex_literal(app)))),
+            );
+            let mut any = false;
+            for key in ["open-on-workspace", "open-on-output"] {
+                if let Some(v) = rec.get(key).and_then(Value::as_str) {
+                    n = n.child(Node::new(key).arg(Val::Str(v.to_string())));
+                    any = true;
+                }
+            }
+            if any {
+                nodes.push(n);
+            }
+        }
+    }
+    nodes
+}
+
 /// The whole fragment.
 pub fn render(ov: &Overrides, base: Option<&ConfigTree>, live: Option<&Outputs>) -> String {
     let mut nodes = Vec::new();
@@ -199,6 +238,7 @@ pub fn render(ov: &Overrides, base: Option<&ConfigTree>, live: Option<&Outputs>)
             nodes.push(render_output(id, rec, b));
         }
     }
+    nodes.extend(render_rules(ov));
     nodes.extend(render_settings(ov, base));
     let mut out = String::from(HEADER);
     if !nodes.is_empty() {
@@ -497,6 +537,41 @@ output "Samsung Electric Company Odyssey G95NC H1AK500000" {{
 
         std::fs::write(&cand, format!("{HEADER}layout {{ gaps \"wide\"; }}\n")).unwrap();
         assert!(validate(&niri, Some(&d.join("config.kdl")), &paths, &cand).is_err());
+    }
+
+    #[test]
+    fn window_rules_and_workspaces() {
+        let o = ov(json!({
+            "window-rules": {
+                "org.gnome.Nautilus": { "open-on-workspace": "Desktop 2" },
+                "empty": {}
+            }
+        }));
+        let expected = format!(
+            r#"{HEADER}
+window-rule {{
+    match app-id="^org\\.gnome\\.Nautilus$"
+    open-on-workspace "Desktop 2"
+}}
+"#
+        );
+        assert_eq!(render(&o, None, None), expected);
+        if let Some(niri) = find_niri() {
+            let d = scratch("render-rules");
+            let paths = Paths::new(d.join("state"));
+            std::fs::create_dir_all(paths.dir()).unwrap();
+            std::fs::write(
+                d.join("config.kdl"),
+                format!(
+                    "include optional=true \"{0}\"\ninclude optional=true \"{0}\"\n",
+                    paths.kdl.display()
+                ),
+            )
+            .unwrap();
+            let cand = d.join("cand.kdl");
+            std::fs::write(&cand, &expected).unwrap();
+            validate(&niri, Some(&d.join("config.kdl")), &paths, &cand).unwrap();
+        }
     }
 
     #[test]

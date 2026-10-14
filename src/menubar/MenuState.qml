@@ -40,6 +40,18 @@ Singleton {
     property var pendingQuit: null
     // Hidden windows: [{ id, workspace, appId }], restored by Show All.
     property var hidden: []
+    // A context menu (the dock's): { items: () => [...], x, y, edge } —
+    // the point (screen coordinates) on the edge of what was clicked, and
+    // which screen edge that sits on (bottom/left/right): the menu opens
+    // away from it. `current` is -2 while it's open.
+    property var context: null
+    // Its items, built once on open (and on refreshContext()): rebuilding
+    // them on every highlight would recreate the rows under the pointer.
+    property var contextItems: []
+    // Alt held while a menu is open (Quit → Force Quit, like Option on macOS).
+    property bool altHeld: false
+    // A generic confirmation card: { title, text, button, icon, run }.
+    property var pendingAsk: null
 
     readonly property bool appMenuOn: Features.on("appMenu")
     readonly property int firstTitle: appMenuOn ? 0 : 1
@@ -76,6 +88,7 @@ Singleton {
     function openTitle(screenName, index) {
         if (index < firstTitle || index >= titleCountOn(screenName))
             return;
+        context = null;
         if (!open)
             target = AppMenu.activeWindow;
         if (open && current !== index)
@@ -102,6 +115,8 @@ Singleton {
 
     // Hovering another title while a menu is open switches to it (macOS).
     function hoverTitle(screenName, index) {
+        if (context)
+            return;
         if (open && (mode === "menu" || mode === "extra") && screen === screenName && (mode === "extra" || current !== index))
             openTitle(screenName, index);
     }
@@ -121,6 +136,7 @@ Singleton {
     function openExtra(screenName, id, anchorItem, withDetails) {
         if (open && mode === "menu")
             notifyClosed(current);
+        context = null;
         if (!open)
             target = AppMenu.activeWindow;
         screen = screenName;
@@ -145,6 +161,8 @@ Singleton {
     // Hovering another status item (or a title) while a menu is open
     // switches to it, as on macOS.
     function hoverExtra(screenName, id, anchorItem) {
+        if (context)
+            return;
         if (open && (mode === "menu" || mode === "extra") && screen === screenName && !(mode === "extra" && extra === id))
             openExtra(screenName, id, anchorItem, false);
     }
@@ -194,6 +212,8 @@ Singleton {
     }
 
     function step(delta) {
+        if (context)
+            return;
         const n = titleCountOn(screen) - firstTitle;
         // Right past the last title (or left past the first): status items.
         const extras = (extraItems[screen] ?? []).filter(e => e.item && e.item.visible);
@@ -227,6 +247,46 @@ Singleton {
         details = false;
         Nav.item = null;
         pendingQuit = null;
+        pendingAsk = null;
+        context = null;
+        contextItems = [];
+        altHeld = false;
+    }
+
+    // A context menu at a point (screen coordinates) of `screenName`, e.g.
+    // the dock's: `items` is a function returning the top level, built on
+    // open and again by refreshContext() (Alt). `alt`: Alt was held when it
+    // opened.
+    function openContext(screenName, x, y, edge, items, alt) {
+        if (open)
+            close();
+        target = AppMenu.activeWindow;
+        context = { items: items, x: x, y: y, edge: edge ?? "bottom" };
+        screen = screenName;
+        current = -2;
+        path = [];
+        depth = 1;
+        mode = "menu";
+        altHeld = alt === true;
+        contextItems = items();
+        open = true;
+    }
+
+    function refreshContext() {
+        if (context)
+            contextItems = context.items();
+    }
+
+    // Ask before doing something destructive (the menu's confirm card).
+    function ask(screenName, spec) {
+        if (open)
+            close();
+        target = null;
+        pendingAsk = spec;
+        screen = screenName;
+        mode = "confirm";
+        depth = 0;
+        open = true;
     }
 
     function notifyOpened(index) {
@@ -247,6 +307,8 @@ Singleton {
     }
 
     function topItems() {
+        if (context)
+            return contextItems;
         if (current === 0)
             return appItems(target);
         if (isOverflow(screen, current))
@@ -316,6 +378,11 @@ Singleton {
 
     // ── Keyboard (MenuOverlay forwards keys) ─────────────────────────────
     function key(event) {
+        if (event.key === Qt.Key_Alt) {
+            altHeld = true;
+            refreshContext();
+            return;
+        }
         if (mode === "extra") {
             extraKey(event);
             return;
@@ -395,6 +462,13 @@ Singleton {
                 if (n >= 0)
                     highlight(level, items[n], false);
             }
+        }
+    }
+
+    function keyReleased(event) {
+        if (event.key === Qt.Key_Alt) {
+            altHeld = false;
+            refreshContext();
         }
     }
 
@@ -596,9 +670,45 @@ Singleton {
 
     function confirmQuit() {
         const q = pendingQuit;
+        const a = pendingAsk;
         close();
-        if (q)
+        if (a)
+            a.run();
+        else if (q && q.appId)
+            doQuitApp(q.appId);
+        else if (q)
             doQuit(q.window);
+    }
+
+    // Quit an app (the dock): every window with its app id, whichever
+    // process owns it; confirms when several are open.
+    function quitApp(appId) {
+        const ws = Niri.windows.filter(x => x.app_id === appId);
+        if (ws.length === 0)
+            return;
+        if (ws.length > 1 && AppMenu.pref("confirmQuit")) {
+            target = ws[0];
+            pendingQuit = { window: ws[0], count: ws.length, appId: appId };
+            screen = Niri.workspaces.find(x => x.id === ws[0].workspace_id)?.output ?? screen;
+            mode = "confirm";
+            depth = 0;
+            open = true;
+            return;
+        }
+        doQuitApp(appId);
+    }
+
+    function doQuitApp(appId) {
+        const ws = Niri.windows.filter(x => x.app_id === appId);
+        const pids = [];
+        for (const w of ws) {
+            if (!w.pid)
+                Niri.action("CloseWindow", { id: w.id });
+            else if (!pids.includes(w.pid)) {
+                pids.push(w.pid);
+                doQuit(w);
+            }
+        }
     }
 
     function doQuit(w) {
