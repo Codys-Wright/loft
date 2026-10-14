@@ -48,7 +48,10 @@
         "STUDIO_SHELL_SRC=${shellSrc}"
         "STUDIO_LIBRARY=${library}"
       ]
-      ++ lib.optional (cfg.devSource != null) "STUDIO_LAUNCHER_DIR=${cfg.devSource}/launcher";
+      ++ lib.optional (cfg.devSource != null) "STUDIO_LAUNCHER_DIR=${cfg.devSource}/launcher"
+      # Quickshell is a Qt app with no platform theme: without this it falls
+      # back to hicolor and the dock/bar show generic icons.
+      ++ lib.optional (cfg.iconTheme != null) "QS_ICON_THEME=${cfg.iconTheme}";
 
       service = description: exec: {
         Unit = {
@@ -93,6 +96,18 @@
             default = 600;
             description = "Turn the monitors off after this many idle seconds (null: never).";
           };
+        };
+
+        iconTheme = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = if config.gtk.iconTheme != null then config.gtk.iconTheme.name else null;
+          defaultText = lib.literalExpression "config.gtk.iconTheme.name (when set)";
+          example = "MacTahoe-blue";
+          description = ''
+            Icon theme for the shell (dock, bar, menus, switcher) — the same one
+            GTK apps and the launcher use, so everything matches. null leaves
+            Qt's default (hicolor), which has few app icons.
+          '';
         };
 
         library = lib.mkOption {
