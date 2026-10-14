@@ -21,13 +21,14 @@ import qs.desktopmenu
 import qs.palette
 import qs.everyday
 import qs.utilities
+import qs.phone
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 // Optional modules are gated by the feature registry (services/Features.qml).
 ShellRoot {
     // Background services are lazy singletons; touch them so they run from
     // startup (screen time, Bluetooth banners).
-    readonly property var services: [AppUsage, DeviceEvents, Shortcuts, Spaces, Hud]
+    readonly property var services: [AppUsage, DeviceEvents, Shortcuts, Spaces, Hud, Phone]
     Variants {
         model: Quickshell.screens
         Wallpaper {}
@@ -160,6 +161,12 @@ ShellRoot {
     Variants {
         model: Features.on("shelf") ? Quickshell.screens : []
         ShelfPanel {}
+    }
+
+    // iPhone: Messages (services/Phone.qml, through tetherd).
+    Variants {
+        model: Features.on("phone") ? Quickshell.screens : []
+        MessagesPanel {}
     }
 
     LazyLoader {

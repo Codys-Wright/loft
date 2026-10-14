@@ -24,7 +24,14 @@ Item {
         return (icon !== "" ? Quickshell.iconPath(icon, true) : "") || Quickshell.iconPath("dialog-information", true);
     }
     readonly property string file: notification?.file ?? ""
-    readonly property string glyph: notification?.glyph ?? ""
+    // From the iPhone (tetherd, or Loft's own message banners): tagged, and a
+    // handset instead of the bell when the phone app has no icon here.
+    readonly property bool phone: Notifications.isPhone(notification)
+    readonly property bool themedIcon: {
+        const icon = notification?.appIcon ?? "";
+        return icon !== "" && (icon.startsWith("/") || icon.startsWith("file:") || Quickshell.iconPath(icon, true) !== "");
+    }
+    readonly property string glyph: notification?.glyph ?? (phone && !themedIcon && imageSource === "" ? "󰄜" : "")
     // Named actions; an internal banner may list its default action too.
     readonly property var buttons: {
         const acts = notification?.actions ?? [];
@@ -127,7 +134,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: root.notification?.appName ?? ""
+                text: Notifications.appLabel(root.notification)
                 color: Theme.islandSubtext
                 font.family: Theme.fontUi
                 font.pixelSize: 11

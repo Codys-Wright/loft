@@ -56,7 +56,7 @@ PanelWindow {
     readonly property var player: players.find(p => p.isPlaying) ?? players[0] ?? null
     readonly property bool playing: player?.isPlaying ?? false
 
-    readonly property var liveActivities: [Recorder.active ? "recording" : "", FocusTimer.active ? "focus" : "", Timers.active ? "timer" : "", Downloads.active.length > 0 ? "download" : ""].filter(s => s)
+    readonly property var liveActivities: [Phone.activeCall !== null || Phone.ringingCall !== null ? "call" : "", Recorder.active ? "recording" : "", FocusTimer.active ? "focus" : "", Timers.active ? "timer" : "", Downloads.active.length > 0 ? "download" : ""].filter(s => s)
     property int liveIndex: 0
     readonly property string live: liveActivities.length ? liveActivities[liveIndex % liveActivities.length] : ""
 
@@ -97,14 +97,17 @@ PanelWindow {
     readonly property var banner: Notifications.current
     // A banner under the pointer stays a banner (its buttons stay clickable);
     // the island expands once it's gone.
-    readonly property bool expanded: pinned || (hover.hovered && banner === null)
+    // An incoming iPhone call (Phone.qml): Answer / Decline over everything.
+    readonly property var ringingCall: Phone.ringingCall
+    readonly property bool ringing: ringingCall !== null
+    readonly property bool expanded: !ringing && (pinned || (hover.hovered && banner === null))
     // A call (a "call" live activity) keeps the island to itself.
     readonly property bool calling: liveActivities.includes("call")
     // What just changed (Hud.qml), on the focused output's island: over
     // everything collapsed, but not over an expanded island, a call, or a
     // banner the pointer is on.
     readonly property bool hudShowing: Hud.inIsland && Hud.onScreen(modelData.name) && !expanded && !calling && !(banner !== null && hover.hovered)
-    readonly property bool bannering: banner !== null && !expanded && !hudShowing
+    readonly property bool bannering: banner !== null && !expanded && !hudShowing && !ringing
 
     // Unread = notifications arrived since the notifications page was last seen.
     property int seenCount: 0
@@ -118,11 +121,11 @@ PanelWindow {
     // A space switch (Spaces.activated): its icon and name for 1.2 s
     // (SPACES §6.3), over everything collapsed but a notification.
     property var spaceFlash: null
-    readonly property bool spaceShowing: spaceFlash !== null && !expanded && !bannering && !hudShowing
+    readonly property bool spaceShowing: spaceFlash !== null && !expanded && !bannering && !hudShowing && !ringing
     readonly property bool hudMessage: Hud.kind === "message"
     readonly property real hudWidth: hudMessage ? Math.min(460, Math.max(200, hudMessageRow.implicitWidth + 44)) : 300
-    readonly property real targetWidth: expanded ? 480 : hudShowing ? hudWidth : bannering ? 460 : spaceShowing ? Math.max(190, spaceRow.implicitWidth + 40) : live !== "" ? 250 : showEvent ? 300 : playing ? 300 : agentMark ? 190 : 150
-    readonly property real targetHeight: expanded ? 210 : bannering ? 84 : attached ? barHeight : 24
+    readonly property real targetWidth: ringing ? 460 : expanded ? 480 : hudShowing ? hudWidth : bannering ? 460 : spaceShowing ? Math.max(190, spaceRow.implicitWidth + 40) : live !== "" ? 250 : showEvent ? 300 : playing ? 300 : agentMark ? 190 : 150
+    readonly property real targetHeight: ringing ? 84 : expanded ? 210 : bannering ? 84 : attached ? barHeight : 24
 
     // ── Look (Settings → Dynamic Island) ────────────────────────────────
     readonly property bool attached: Settings.island.style !== "floating"
@@ -201,8 +204,8 @@ PanelWindow {
 
         // Attached: the bottom corners and the concave top shoulders, one
         // shape morphing with the size. Floating: every corner.
-        property real radius: root.attached ? (root.expanded ? 30 : root.bannering ? 26 : 12) : root.expanded ? 30 : root.bannering ? 26 : height / 2
-        property real shoulder: root.attached ? (root.expanded ? 14 : root.bannering ? 12 : 7) : 0
+        property real radius: root.attached ? (root.expanded ? 30 : root.bannering || root.ringing ? 26 : 12) : root.expanded ? 30 : root.bannering || root.ringing ? 26 : height / 2
+        property real shoulder: root.attached ? (root.expanded ? 14 : root.bannering || root.ringing ? 12 : 7) : 0
 
         // The outline: alerts pulse, unread notifications turn it white;
         // otherwise a glass hairline, or none on black (like the notch).
@@ -316,7 +319,7 @@ PanelWindow {
             Item {
                 anchors.fill: parent
                 visible: opacity > 0
-                opacity: root.expanded || root.bannering || root.spaceShowing || root.hudShowing ? 0 : 1
+                opacity: root.expanded || root.bannering || root.spaceShowing || root.hudShowing || root.ringing ? 0 : 1
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -574,6 +577,23 @@ PanelWindow {
             }
 
             // ── Notification banner ─────────────────────────────────────
+            // ── Incoming call ──────────────────────────────────────────
+            CallBanner {
+                anchors {
+                    fill: parent
+                    margins: 12
+                }
+                call: root.ringingCall
+                visible: opacity > 0
+                opacity: root.ringing ? 1 : 0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 180
+                    }
+                }
+            }
+
             Banner {
                 anchors {
                     fill: parent

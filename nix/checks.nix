@@ -40,6 +40,11 @@
 #                   or horizontal)
 #   loft-input-clippy  the same clippy gate for it
 #   clipboard-urlclean  Clean URL's tracking-parameter stripping (src/services/urlclean.js)
+#   phone-protocol  the iPhone bridge's tetherd protocol (src/services/phone.js): a recorded
+#                   subscribed session (tests/fixtures/tether/session.jsonl) replayed through
+#                   the reducer — threads, dedup, fresh-message detection, calls, battery;
+#                   tests/test_phone_fake.py (theme-unit) checks the fake tetherd the
+#                   headless sessions use against the same fixture
 #   wallpaper-sets  display roles + set resolution (src/services/wallsets.js), against the
 #                   fixture tests/test_wallsets.py checks cli/loft/wallsets.py with
 #   launcher-bangs  Spotlight's bangs provider in a real elephant; building loft-elephant for it
@@ -137,6 +142,11 @@
 
         spicetify-live = check "spicetify-live" [ pkgs.nodejs-slim ] ''
           node ${../tests/spicetify-live.test.js} ${../spicetify/loft-live.js}
+          touch $out
+        '';
+
+        phone-protocol = check "phone-protocol" [ pkgs.nodejs-slim ] ''
+          node ${../tests/phone.test.js} ${../src/services/phone.js} ${../tests/fixtures/tether/session.jsonl}
           touch $out
         '';
 

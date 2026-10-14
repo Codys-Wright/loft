@@ -15,8 +15,13 @@ Item {
     // Timers in the theme's warm color (iOS uses orange).
     readonly property color timerColor: Theme.warn
 
+    readonly property var call: Phone.activeCall ?? Phone.ringingCall
+    readonly property color callColor: "#34c759"
+
     readonly property string label: {
         switch (activity) {
+        case "call":
+            return Phone.callerName(call);
         case "recording":
             return Recorder.paused ? "Paused" : "Recording";
         case "focus":
@@ -30,6 +35,8 @@ Item {
     }
     readonly property string value: {
         switch (activity) {
+        case "call":
+            return call?.connected ? Phone.callTime : Phone.callStateLabel(call);
         case "recording":
             return FocusTimer.format(Recorder.elapsed);
         case "focus":
@@ -41,7 +48,7 @@ Item {
         }
         return "";
     }
-    readonly property color valueColor: activity === "recording" ? Theme.urgent : activity === "timer" ? timerColor : Theme.accent
+    readonly property color valueColor: activity === "call" ? callColor : activity === "recording" ? Theme.urgent : activity === "timer" ? timerColor : Theme.accent
 
     RowLayout {
         anchors {
@@ -73,8 +80,16 @@ Item {
             }
         }
 
+        // A call: the green handset.
+        Icon {
+            visible: root.activity === "call"
+            text: "󰏶"
+            size: 15
+            color: root.callColor
+        }
+
         Item {
-            visible: root.activity !== "recording"
+            visible: root.activity !== "recording" && root.activity !== "call"
             Layout.preferredWidth: 18
             Layout.preferredHeight: 18
 

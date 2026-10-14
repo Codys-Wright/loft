@@ -49,6 +49,7 @@ Singleton {
         { id: "capture", label: "Screenshots & recording", icon: "󰹑", group: "Capture", description: "⌘⇧5 selector: area/window/screen shots, recording with audio, thumbnail, annotate, pin, GIF, trim" },
         { id: "ocr", label: "Text from screen", icon: "󱄽", group: "Capture", description: "Copy the text or QR code in a screen region (tesseract, zbar)" },
         { id: "colorPicker", label: "Color picker", icon: "󰈊", group: "Capture", description: "Pick any pixel with a loupe; HEX / RGB / HSL / QML, recent colors" },
+        { id: "phone", label: "iPhone", icon: "󰄜", group: "Everyday", page: "PhonePage.qml", default: false, description: "Messages, calls and notifications from your iPhone over Bluetooth, through tetherd (pair first: Settings → Phone)" },
         { id: "camera", label: "Camera mirror", icon: "󰄀", group: "Capture", description: "A floating round camera preview + an island page" },
         { id: "keepAwake", label: "Keep Awake", icon: "󰅶", group: "Display", page: "EverydayPage.qml", description: "Keep the screen on for a while, or while an app is open, on power or with a display connected" },
         { id: "cleaningMode", label: "Cleaning Mode", icon: "󰃢", group: "Everyday", page: "EverydayPage.qml", description: "Lock keyboard and mouse while you wipe them; hold Esc to leave" },

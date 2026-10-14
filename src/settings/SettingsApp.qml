@@ -35,6 +35,7 @@ Scope {
         { id: "features", icon: "󰐱", badge: "green", label: "Features" },
         { id: "clipboard", icon: "󰨸", badge: "yellow", label: "Clipboard & Files" },
         { id: "snippets", icon: "󱐋", badge: "brown", label: "Snippets", feature: "snippets" },
+        { id: "phone", icon: "󰄜", badge: "green", label: "Phone", feature: "phone" },
         { id: "spotlight", icon: "󰍉", badge: "blue", label: "Spotlight" },
         { id: "everyday", icon: "󰅶", badge: "orange", label: "Everyday" },
         { id: "menubar", icon: "󰍜", badge: "graphite", label: "Menu Bar" },
@@ -96,6 +97,9 @@ Scope {
         // Spotlight's Quicklinks (the launcher opens it after Create Quicklink).
         function spotlight(): void {
             root.show("spotlight");
+        }
+        function phone(): void {
+            root.show("phone");
         }
         function dock(): void {
             root.show("dock");
@@ -498,6 +502,11 @@ Scope {
                             label: "Design"
                             hint: "Liquid Glass components ported from javiiervm/dotfiles"
                         }
+                    }
+
+                    PhonePage {
+                        Layout.fillWidth: true
+                        visible: root.section === "phone"
                     }
 
                     ClipboardPage {

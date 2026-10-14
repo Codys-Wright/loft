@@ -40,6 +40,7 @@ Item {
             camera: privacy,
             inputSource: inputSource,
             caffeine: keepAwake,
+            phone: phone,
             overflow: overflow
         })
 
@@ -147,6 +148,14 @@ Item {
     Component {
         id: keepAwake
         KeepAwakePanel {
+            details: host.details
+            shown: host.shown
+            inMenu: host.inMenu
+        }
+    }
+    Component {
+        id: phone
+        PhonePanel {
             details: host.details
             shown: host.shown
             inMenu: host.inMenu

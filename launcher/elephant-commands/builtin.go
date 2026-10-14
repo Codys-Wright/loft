@@ -60,6 +60,8 @@ func builtins() []*command {
 		{id: "updates", title: "Flake Updates", kind: "Loft", icon: "system-software-update", keywords: []string{"update", "nix flake update", "upgrades"}, cmd: "{ipc} utilities updates"},
 		{id: "cleaner", title: "Cleaner", kind: "Loft", icon: "edit-clear", keywords: []string{"disk space", "nix store", "garbage"}, cmd: "{ipc} utilities cleaner"},
 		{id: "mediatools", title: "Media Tools", kind: "Loft", icon: "applications-multimedia", keywords: []string{"convert video", "compress", "ffmpeg"}, cmd: "{ipc} utilities media"},
+		{id: "messages", title: "Messages", kind: "Loft", icon: "phone", keywords: []string{"imessage", "sms", "text", "iphone", "phone", "chat"}, cmd: "{ipc} phone messages"},
+		{id: "phonehangup", title: "Hang Up iPhone Call", kind: "Loft", icon: "call-stop", keywords: []string{"end call", "hang up", "phone"}, cmd: "{ipc} phone hangup"},
 		{id: "help", title: "Spotlight Help", kind: "Loft", icon: "help-about", keywords: []string{"?", "help", "prefixes", "tips"}, query: "?"},
 
 		// ── Windows (niri) ──────────────────────────────────────────────
@@ -97,6 +99,7 @@ func builtins() []*command {
 		{"features", "Features", "preferences-other", []string{"modules", "enable"}},
 		{"clipboard", "Clipboard & Files", "edit-paste", []string{"clipboard settings", "shelf"}},
 		{"snippets", "Snippets", "accessories-text-editor", []string{"snippets settings", "text expansion"}},
+		{"phone", "Phone", "phone", []string{"iphone", "tether", "pair phone", "messages settings"}},
 		{"spotlight", "Spotlight", "system-search", []string{"quicklinks", "scripts", "bangs", "search engine", "launcher"}},
 		{"menubar", "Menu Bar", "preferences-desktop", []string{"bar", "status bar", "top bar"}},
 		{"desktopmenu", "Desktop Menu", "preferences-desktop", []string{"right click menu"}},

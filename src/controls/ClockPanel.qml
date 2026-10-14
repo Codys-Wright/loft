@@ -30,7 +30,7 @@ ColumnLayout {
         model: Notifications.history.slice(-5).reverse()
         delegate: PanelRow {
             required property var modelData
-            text: modelData.summary || modelData.appName
+            text: modelData.summary || Notifications.appLabel(modelData)
             detail: modelData.body ?? ""
             onClicked: Notifications.activate(modelData)
         }

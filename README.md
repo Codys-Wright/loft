@@ -291,6 +291,22 @@ arguments and `?` help rows) needs walker to let a provider set its query:
 to refresh), converted by `launcher/bangs.py`, which also fixes the NixOS search URLs and adds
 `!nixopts`, `!hmopts`, `!noogle` and `!kagi`.
 
+## iPhone
+
+Messages, calls and notifications from an iPhone, over Bluetooth through
+[tether](https://github.com/zackb/tether)'s `tetherd`. There is no Mac or Apple ID.
+
+- A **Messages** panel: from Spotlight, the Control Center or a banner's Reply.
+- **Island banners** for new messages, with Reply.
+- An **incoming-call** live activity with Answer / Decline, and a call timer with Hang Up.
+- The phone's **app notifications**, tagged "· iPhone".
+- An **iPhone** Control Center tile showing battery and unread messages.
+
+Enable the daemon with `programs.loft.phone.enable = true;`. The system side also needs BlueZ
+`Experimental = true` and the hands-free class unit. Pair once with `tether bt pair`, then turn on
+Settings → Features → iPhone (it's off by default). The pairing guide is in Settings → Phone, and
+the details are in [docs/PHONE.md](docs/PHONE.md).
+
 ## Dock
 
 Rest the pointer on a running app (or click it, if you prefer: Settings → Dock → Window
