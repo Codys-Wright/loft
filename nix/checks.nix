@@ -22,6 +22,11 @@
 #   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`, including
 #                   one with motion (speed, niri animations, minimal) and shape (gaps,
 #                   focus ring, border) customized
+#   niri-workspace-layers  niri/workspace-wallpapers.kdl (the place-within-workspace layer
+#                   rule) passes niri-loft's `niri validate` with base.kdl, while stock niri
+#                   rejects it (why sessions include it only with niri-loft); building
+#                   niri-loft runs niri's test suite with the patch's tests (rule parsing,
+#                   capture expansion, a bound surface only on its workspace)
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`
 #   loft-niri       the crate builds and its tests pass (incl. `niri validate`; spaces:
 #                   roles over the wallsets fixtures, templates + instances, golden
@@ -47,6 +52,8 @@
 #                   headless sessions use against the same fixture
 #   wallpaper-sets  display roles + set resolution (src/services/wallsets.js), against the
 #                   fixture tests/test_wallsets.py checks cli/loft/wallsets.py with
+#   workspace-wallpapers  which per-workspace wallpaper surfaces exist (src/services/
+#                   wswallpapers.js): active ± 1, the overview's zoom, the grace period
 #   launcher-bangs  Spotlight's bangs provider in a real elephant; building loft-elephant for it
 #                   also runs the calculator + commands providers' Go tests (units, time
 #                   zones, scoring, script metadata/arguments)
@@ -135,6 +142,18 @@
           touch $out
         '';
 
+        niri-workspace-layers = check "niri-workspace-layers" [ ] ''
+          export HOME=$TMPDIR
+          printf 'include "%s"\ninclude "%s"\n' ${../niri}/base.kdl ${../niri/workspace-wallpapers.kdl} > config.kdl
+          echo "niri-loft validate: base.kdl + workspace-wallpapers.kdl"
+          ${lib.getExe self'.packages.niri-loft} validate -c config.kdl
+          if ${lib.getExe pkgs.niri} validate -c config.kdl 2>/dev/null; then
+            echo "stock niri accepted place-within-workspace: the session gate is stale" >&2
+            exit 1
+          fi
+          touch $out
+        '';
+
         clipboard-urlclean = check "clipboard-urlclean" [ pkgs.nodejs-slim ] ''
           node ${../tests/urlclean.test.js} ${../src/services/urlclean.js}
           touch $out
@@ -152,6 +171,11 @@
 
         wallpaper-sets = check "wallpaper-sets" [ pkgs.nodejs-slim ] ''
           node ${../tests/wallsets.test.js} ${../src/services/wallsets.js} ${../tests/fixtures/wallsets/layouts.json}
+          touch $out
+        '';
+
+        workspace-wallpapers = check "workspace-wallpapers" [ pkgs.nodejs-slim ] ''
+          node ${../tests/wswallpapers.test.js} ${../src/services/wswallpapers.js}
           touch $out
         '';
 

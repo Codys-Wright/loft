@@ -3,7 +3,9 @@
 #   loft                   the CLI: theme engine (render) + manager (cli/loft)
 #   loft-themes-builtin    the built-in packs, rendered by that same CLI
 #   loft-shell             the Quickshell shell (./src) with its runtime deps on PATH
-#   loft-session           niri + Loft's base config + the shell, all from the store
+#   loft-session           niri-loft + Loft's base config + the shell, all from the store
+#   niri-loft              niri + nix/niri/workspace-layers.patch (per-workspace
+#                          wallpapers: the `place-within-workspace` layer rule)
 #   loft-dev               the same session, loading niri fragments, QML, templates
 #                          and themes from a checkout so everything hot-reloads
 #   loft-niri              niri settings backend (crates/loft-niri): live outputs,
@@ -175,20 +177,41 @@
             include optional=true "$state/current/niri.kdl"
             include optional=true "$state/overrides/spaces.kdl"
             include optional=true "$state/overrides/niri.kdl"
+            include "${../niri/workspace-wallpapers.kdl}"
             spawn-at-startup "${lib.getExe self'.packages.loft-shell}"
             spawn-at-startup "${lib.getExe self'.packages.loft-launcher}" "service"
             EOF
             export LOFT_NIRI_CONFIG="$dir/config.kdl"
-            exec niri --config "$dir/config.kdl" "$@"
+            # niri-loft: per-workspace wallpapers (WorkspaceWallpapers.qml).
+            export LOFT_NIRI_WORKSPACE_LAYERS=1
+            exec ${lib.getExe self'.packages.niri-loft} --config "$dir/config.kdl" "$@"
           '';
         };
 
-        # niri + nix/dev/niri-headless-outputs.patch: NIRI_HEADLESS_OUTPUTS=WxH,…
+        # niri + nix/niri/workspace-layers.patch: the `place-within-workspace`
+        # layer rule binds a background / bottom layer surface to one workspace,
+        # so per-workspace wallpapers slide with their workspace and show behind
+        # it in the overview (niri/workspace-wallpapers.kdl, the shell's
+        # WorkspaceWallpapers). Nothing bound = stock niri. The version string
+        # carries "workspace-layers" (how the shell detects it at runtime), and
+        # `passthru.loftWorkspaceLayers` tells sessions / programs.loft to include
+        # the rule. niri's own test suite (with the patch's tests) runs in the build.
+        niri-loft = pkgs.niri.overrideAttrs (old: {
+          patches = (old.patches or [ ]) ++ [ ./niri/workspace-layers.patch ];
+          env = (old.env or { }) // {
+            NIRI_BUILD_COMMIT = "Nixpkgs, loft: workspace-layers";
+          };
+          passthru = (old.passthru or { }) // {
+            loftWorkspaceLayers = true;
+          };
+        });
+
+        # niri-loft + nix/dev/niri-headless-outputs.patch: NIRI_HEADLESS_OUTPUTS=WxH,…
         # runs niri on that many virtual outputs (its test backend, made usable at
         # runtime: 60 Hz pacing, screencopy, `niri msg output headless-N off|on` as
         # hotplug). niri's nested (winit) backend has exactly one output, so this is
         # how `loft-dev --outputs` gets a multi-monitor session.
-        loft-niri-headless = pkgs.niri.overrideAttrs (old: {
+        loft-niri-headless = self'.packages.niri-loft.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [ ./dev/niri-headless-outputs.patch ];
           doCheck = false;
         });
@@ -217,6 +240,7 @@
                 "@SWAY@"
                 "@MESA_EGL_VENDOR@"
                 "@NIRI_HEADLESS@"
+                "@NIRI_LOFT@"
               ]
               [
                 (lib.getExe self'.packages.loft)
@@ -229,6 +253,7 @@
                 (lib.getExe' pkgs.sway-unwrapped "sway")
                 "${pkgs.mesa}/share/glvnd/egl_vendor.d/50_mesa.json"
                 (lib.getExe self'.packages.loft-niri-headless)
+                (lib.getExe self'.packages.niri-loft)
               ]
               (builtins.readFile ./dev/loft-dev.sh);
         };

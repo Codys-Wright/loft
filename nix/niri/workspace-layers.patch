@@ -1,0 +1,718 @@
+diff --git a/docs/wiki/Configuration:-Layer-Rules.md b/docs/wiki/Configuration:-Layer-Rules.md
+index 0b2ccf3..8a6fc71 100644
+--- a/docs/wiki/Configuration:-Layer-Rules.md
++++ b/docs/wiki/Configuration:-Layer-Rules.md
+@@ -34,6 +34,7 @@ layer-rule {
+ 
+     geometry-corner-radius 12
+     place-within-backdrop true
++    place-within-workspace "chat"
+     baba-is-float true
+ 
+     background-effect {
+@@ -211,6 +212,35 @@ layer-rule {
+ }
+ ```
+ 
++#### `place-within-workspace`
++
++<sup>Since: next release</sup>
++
++Show a *background* or *bottom* layer surface on one workspace only, instead of on every workspace.
++
++Background and bottom layer surfaces normally render once behind every workspace of their output: they move and zoom with the workspaces, but each workspace shows the same surface.
++A surface with `place-within-workspace` renders behind its own workspace alone: in the normal view, during workspace switch animations (where it slides with its workspace), and in the [Overview](./Overview.md).
++It also gets input only while its workspace is on screen.
++On any other workspace it isn't drawn at all.
++
++The value is a workspace reference, read like the one `niri msg action focus-workspace` takes: a number is a 1-based index on the surface's output, anything else is a workspace name.
++`$1`, `${1}` or `${name}` expand to the captures of the `namespace` regex that matched, so one rule can bind a whole family of surfaces.
++
++A surface bound to a workspace never goes into the overview backdrop (`place-within-backdrop` is ignored for it).
++Surfaces without this property keep the usual behavior.
++
++```kdl
++// Per-workspace wallpapers: a client creates one background surface per workspace
++// it wants to decorate, named wallpaper@<workspace>.
++layer-rule {
++    match namespace="^wallpaper@(.+)$"
++
++    place-within-workspace "$1"
++}
++```
++
++Since only workspaces that are on screen draw their surfaces, a client can keep just those mapped (the active workspace and its neighbors, or every visible one while the overview is open) and destroy the rest.
++
+ #### `baba-is-float`
+ 
+ <sup>Since: 25.05</sup>
+diff --git a/niri-config/src/layer_rule.rs b/niri-config/src/layer_rule.rs
+index cf099b3..64bf68d 100644
+--- a/niri-config/src/layer_rule.rs
++++ b/niri-config/src/layer_rule.rs
+@@ -19,6 +19,11 @@ pub struct LayerRule {
+     pub geometry_corner_radius: Option<CornerRadius>,
+     #[knuffel(child, unwrap(argument))]
+     pub place_within_backdrop: Option<bool>,
++    /// Show this background or bottom layer surface only behind one workspace: a name, or a
++    /// 1-based index on the surface's output. `$1`, `${name}` expand to the namespace match's
++    /// captures.
++    #[knuffel(child, unwrap(argument))]
++    pub place_within_workspace: Option<String>,
+     #[knuffel(child, unwrap(argument))]
+     pub baba_is_float: Option<bool>,
+     #[knuffel(child, default)]
+diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
+index 329b766..5b64bc5 100644
+--- a/niri-config/src/lib.rs
++++ b/niri-config/src/lib.rs
+@@ -648,6 +648,31 @@ mod tests {
+         assert_eq!(config.input.keyboard.repeat_rate, 25);
+     }
+ 
++    #[test]
++    fn parse_place_within_workspace() {
++        let config = do_parse(
++            r#"
++            layer-rule {
++                match namespace="^wallpaper@(.+)$"
++                place-within-workspace "$1"
++            }
++            layer-rule {
++                match namespace="^widgets$"
++                place-within-workspace "2"
++            }
++            "#,
++        );
++        assert_eq!(
++            config.layer_rules[0].place_within_workspace.as_deref(),
++            Some("$1")
++        );
++        assert_eq!(
++            config.layer_rules[1].place_within_workspace.as_deref(),
++            Some("2")
++        );
++        assert!(Config::parse_mem("layer-rule { place-within-workspace; }").is_err());
++    }
++
+     #[track_caller]
+     fn do_parse(text: &str) -> Config {
+         Config::parse_mem(text)
+@@ -1922,6 +1947,7 @@ mod tests {
+                     },
+                     geometry_corner_radius: None,
+                     place_within_backdrop: None,
++                    place_within_workspace: None,
+                     baba_is_float: None,
+                     background_effect: BackgroundEffectRule {
+                         xray: None,
+diff --git a/src/layer/mapped.rs b/src/layer/mapped.rs
+index fbaa6fc..a9a9657 100644
+--- a/src/layer/mapped.rs
++++ b/src/layer/mapped.rs
+@@ -7,7 +7,7 @@ use smithay::utils::{Logical, Point, Rectangle, Scale, Size};
+ use smithay::wayland::compositor::{remove_pre_commit_hook, HookId};
+ use smithay::wayland::shell::wlr_layer::{ExclusiveZone, Layer};
+ 
+-use super::ResolvedLayerRules;
++use super::{ResolvedLayerRules, WorkspaceBinding};
+ use crate::animation::Clock;
+ use crate::layout::shadow::Shadow;
+ use crate::niri_render_elements;
+@@ -157,7 +157,28 @@ impl MappedLayer {
+         std::mem::take(&mut self.recompute_rules_on_commit)
+     }
+ 
++    /// The workspace this surface is bound to, if any. Only background and bottom layer
++    /// surfaces render per workspace, so only they can be bound.
++    pub fn workspace_binding(&self) -> Option<&WorkspaceBinding> {
++        if !matches!(self.surface.layer(), Layer::Background | Layer::Bottom) {
++            return None;
++        }
++        self.rules.place_within_workspace.as_ref()
++    }
++
++    /// Whether this surface shows on the workspace at `idx` (0-based) on its output, named
++    /// `name`. Unbound surfaces show on every workspace.
++    pub fn is_on_workspace(&self, idx: usize, name: Option<&str>) -> bool {
++        self.workspace_binding()
++            .is_none_or(|binding| binding.matches(idx, name))
++    }
++
+     pub fn place_within_backdrop(&self) -> bool {
++        // A surface bound to a workspace lives inside that workspace, never in the backdrop.
++        if self.workspace_binding().is_some() {
++            return false;
++        }
++
+         if !self.rules.place_within_backdrop {
+             return false;
+         }
+diff --git a/src/layer/mod.rs b/src/layer/mod.rs
+index 767a6b0..4ecc2ac 100644
+--- a/src/layer/mod.rs
++++ b/src/layer/mod.rs
+@@ -25,6 +25,9 @@ pub struct ResolvedLayerRules {
+     /// Whether to place this layer surface within the overview backdrop.
+     pub place_within_backdrop: bool,
+ 
++    /// The workspace this background or bottom layer surface is shown behind (only that one).
++    pub place_within_workspace: Option<WorkspaceBinding>,
++
+     /// Whether to bob this window up and down.
+     pub baba_is_float: bool,
+ 
+@@ -52,7 +55,9 @@ impl ResolvedLayerRules {
+                 surface_matches(surface, m)
+             };
+ 
+-            if !(rule.matches.is_empty() || rule.matches.iter().any(matches)) {
++            // The match that applies; its namespace captures fill `place-within-workspace`.
++            let matched = rule.matches.iter().find(|m| matches(m));
++            if !(rule.matches.is_empty() || matched.is_some()) {
+                 continue;
+             }
+ 
+@@ -72,6 +77,10 @@ impl ResolvedLayerRules {
+             if let Some(x) = rule.place_within_backdrop {
+                 resolved.place_within_backdrop = x;
+             }
++            if let Some(x) = &rule.place_within_workspace {
++                resolved.place_within_workspace =
++                    Some(WorkspaceBinding::resolve(x, matched, surface.namespace()));
++            }
+             if let Some(x) = rule.baba_is_float {
+                 resolved.baba_is_float = x;
+             }
+@@ -89,6 +98,43 @@ impl ResolvedLayerRules {
+     }
+ }
+ 
++/// A workspace a layer surface is bound to (`place-within-workspace`).
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub enum WorkspaceBinding {
++    /// 1-based index on the layer surface's output.
++    Index(u8),
++    /// Workspace name (case-insensitive, like everywhere else).
++    Name(String),
++}
++
++impl WorkspaceBinding {
++    /// Expands `$1` / `${name}` from the matching namespace regex, then reads the result like
++    /// a workspace reference on the command line: a number is an index, anything else a name.
++    pub fn resolve(template: &str, matched: Option<&Match>, namespace: &str) -> Self {
++        let mut value = String::new();
++        match matched
++            .and_then(|m| m.namespace.as_ref())
++            .and_then(|re| re.0.captures(namespace))
++        {
++            Some(caps) => caps.expand(template, &mut value),
++            None => value.push_str(template),
++        }
++
++        match value.parse::<u8>() {
++            Ok(idx) => Self::Index(idx),
++            Err(_) => Self::Name(value),
++        }
++    }
++
++    /// Whether this is the workspace at `idx` (0-based) on its monitor, with `name`.
++    pub fn matches(&self, idx: usize, name: Option<&str>) -> bool {
++        match self {
++            Self::Index(i) => usize::from(*i) == idx + 1,
++            Self::Name(n) => name.is_some_and(|name| name.eq_ignore_ascii_case(n)),
++        }
++    }
++}
++
+ fn surface_matches(surface: &LayerSurface, m: &Match) -> bool {
+     if let Some(namespace_re) = &m.namespace {
+         if !namespace_re.0.is_match(surface.namespace()) {
+@@ -110,3 +156,54 @@ fn surface_matches(surface: &LayerSurface, m: &Match) -> bool {
+ 
+     true
+ }
++
++#[cfg(test)]
++mod tests {
++    use niri_config::utils::RegexEq;
++
++    use super::*;
++
++    fn ns_match(re: &str) -> Match {
++        Match {
++            namespace: Some(RegexEq(re.parse().unwrap())),
++            at_startup: None,
++            layer: None,
++        }
++    }
++
++    #[test]
++    fn binding_expands_captures() {
++        let m = ns_match("^wallpaper@(.+)$");
++        assert_eq!(
++            WorkspaceBinding::resolve("$1", Some(&m), "wallpaper@dev"),
++            WorkspaceBinding::Name("dev".into())
++        );
++        assert_eq!(
++            WorkspaceBinding::resolve("${1}", Some(&m), "wallpaper@3"),
++            WorkspaceBinding::Index(3)
++        );
++        let named = ns_match("^w-(?<ws>.+)$");
++        assert_eq!(
++            WorkspaceBinding::resolve("${ws}", Some(&named), "w-chat"),
++            WorkspaceBinding::Name("chat".into())
++        );
++        // No match context: the template is the reference.
++        assert_eq!(
++            WorkspaceBinding::resolve("mail", None, "anything"),
++            WorkspaceBinding::Name("mail".into())
++        );
++    }
++
++    #[test]
++    fn binding_matches_workspaces() {
++        let idx = WorkspaceBinding::Index(2);
++        assert!(idx.matches(1, None));
++        assert!(!idx.matches(0, None));
++        assert!(!idx.matches(2, Some("2")));
++
++        let name = WorkspaceBinding::Name("Dev".into());
++        assert!(name.matches(5, Some("dev")));
++        assert!(!name.matches(5, Some("chat")));
++        assert!(!name.matches(5, None));
++    }
++}
+diff --git a/src/layout/monitor.rs b/src/layout/monitor.rs
+index 53c0606..9ff874b 100644
+--- a/src/layout/monitor.rs
++++ b/src/layout/monitor.rs
+@@ -375,6 +375,11 @@ impl<W: LayoutElement> Monitor<W> {
+         &self.workspaces[self.active_workspace_idx]
+     }
+ 
++    /// The index of a workspace on this monitor.
++    pub fn workspace_idx(&self, ws: &Workspace<W>) -> Option<usize> {
++        self.workspaces.iter().position(|w| w.id() == ws.id())
++    }
++
+     pub fn find_named_workspace(&self, workspace_name: &str) -> Option<&Workspace<W>> {
+         self.workspaces.iter().find(|ws| {
+             ws.name
+diff --git a/src/niri.rs b/src/niri.rs
+index ec40e01..59f33dd 100644
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -1184,6 +1184,15 @@ impl State {
+                         return None;
+                     }
+ 
++                    // Bound to a workspace that isn't showing.
++                    let active = mon.active_workspace_ref();
++                    if !mapped.is_on_workspace(
++                        mon.active_workspace_idx(),
++                        active.name().map(|n| n.as_str()),
++                    ) {
++                        return None;
++                    }
++
+                     let surface = surface.wl_surface().clone();
+                     Some(KeyboardFocus::LayerShell { surface })
+                 })
+@@ -3178,7 +3187,12 @@ impl Niri {
+ 
+                     // Background and bottom layers move together with the workspaces.
+                     let mon = self.layout.monitor_for_output(output)?;
+-                    let (_, geo) = mon.workspace_under(pos_within_output)?;
++                    let (ws, geo) = mon.workspace_under(pos_within_output)?;
++                    // A surface bound to another workspace isn't there.
++                    let idx = mon.workspace_idx(ws)?;
++                    if !mapped.is_on_workspace(idx, ws.name().map(|n| n.as_str())) {
++                        return None;
++                    }
+                     layer_pos_within_output += geo.loc;
+ 
+                     let surface_type = WindowSurfaceType::POPUP | WindowSurfaceType::SUBSURFACE;
+@@ -3341,7 +3355,12 @@ impl Niri {
+                     // Background and bottom layers move together with the workspaces.
+                     if matches!(layer, Layer::Background | Layer::Bottom) {
+                         let mon = self.layout.monitor_for_output(output)?;
+-                        let (_, geo) = mon.workspace_under(pos_within_output)?;
++                        let (ws, geo) = mon.workspace_under(pos_within_output)?;
++                        // A surface bound to another workspace isn't there.
++                        let idx = mon.workspace_idx(ws)?;
++                        if !mapped.is_on_workspace(idx, ws.name().map(|n| n.as_str())) {
++                            return None;
++                        }
+                         layer_pos_within_output += geo.loc;
+                         // Don't need to deal with zoom here because in the overview background and
+                         // bottom layers don't receive input.
+@@ -4300,10 +4319,11 @@ impl Niri {
+         // We use macros instead of closures to avoid borrowing issues (renderer and push() go
+         // into different functions).
+         macro_rules! push_popups_from_layer {
+-            ($layer:expr, $ns:expr, $xray_pos:expr, $backdrop:expr, $push:expr) => {{
++            ($layer:expr, $ns:expr, $ws:expr, $xray_pos:expr, $backdrop:expr, $push:expr) => {{
+                 self.render_layer_popups(
+                     ctx.r(),
+                     $ns,
++                    $ws,
+                     &layer_map,
+                     $layer,
+                     $xray_pos,
+@@ -4312,24 +4332,35 @@ impl Niri {
+                 );
+             }};
+             ($layer:expr, true) => {{
+-                push_popups_from_layer!($layer, None, XrayPos::default(), true, &mut |elem| push(
+-                    elem.into()
+-                ));
++                push_popups_from_layer!(
++                    $layer,
++                    None,
++                    None,
++                    XrayPos::default(),
++                    true,
++                    &mut |elem| push(elem.into())
++                );
+             }};
+-            ($layer:expr, $ns:expr, $xray_pos:expr, $push:expr) => {{
+-                push_popups_from_layer!($layer, $ns, $xray_pos, false, $push);
++            ($layer:expr, $ns:expr, $ws:expr, $xray_pos:expr, $push:expr) => {{
++                push_popups_from_layer!($layer, $ns, $ws, $xray_pos, false, $push);
+             }};
+-            ($layer:expr) => {{
+-                push_popups_from_layer!($layer, None, XrayPos::default(), false, &mut |elem| push(
+-                    elem.into()
+-                ));
++            ($layer:expr, $ws:expr) => {{
++                push_popups_from_layer!(
++                    $layer,
++                    None,
++                    $ws,
++                    XrayPos::default(),
++                    false,
++                    &mut |elem| push(elem.into())
++                );
+             }};
+         }
+         macro_rules! push_normal_from_layer {
+-            ($layer:expr, $ns:expr, $xray_pos:expr, $backdrop:expr, $push:expr) => {{
++            ($layer:expr, $ns:expr, $ws:expr, $xray_pos:expr, $backdrop:expr, $push:expr) => {{
+                 self.render_layer_normal(
+                     ctx.r(),
+                     $ns,
++                    $ws,
+                     &layer_map,
+                     $layer,
+                     $xray_pos,
+@@ -4338,23 +4369,41 @@ impl Niri {
+                 );
+             }};
+             ($layer:expr, true) => {{
+-                push_normal_from_layer!($layer, None, XrayPos::default(), true, &mut |elem| {
+-                    push(elem.into())
+-                });
++                push_normal_from_layer!(
++                    $layer,
++                    None,
++                    None,
++                    XrayPos::default(),
++                    true,
++                    &mut |elem| push(elem.into())
++                );
+             }};
+-            ($layer:expr, $ns:expr, $xray_pos:expr, $push:expr) => {{
+-                push_normal_from_layer!($layer, $ns, $xray_pos, false, $push);
++            ($layer:expr, $ns:expr, $ws:expr, $xray_pos:expr, $push:expr) => {{
++                push_normal_from_layer!($layer, $ns, $ws, $xray_pos, false, $push);
+             }};
+-            ($layer:expr) => {{
+-                push_normal_from_layer!($layer, None, XrayPos::default(), false, &mut |elem| {
+-                    push(elem.into())
+-                });
++            ($layer:expr, $ws:expr) => {{
++                push_normal_from_layer!(
++                    $layer,
++                    None,
++                    $ws,
++                    XrayPos::default(),
++                    false,
++                    &mut |elem| push(elem.into())
++                );
+             }};
+         }
+ 
++        // Background and bottom layer surfaces bound to a workspace (place-within-workspace)
++        // render only within it. `None` = no workspace context: everything renders.
++        let active_ws = {
++            let idx = mon.active_workspace_idx();
++            let ws = mon.active_workspace_ref();
++            Some((idx, ws.name().map(|n| n.as_str())))
++        };
++
+         // The overlay layer elements go next.
+-        push_popups_from_layer!(Layer::Overlay);
+-        push_normal_from_layer!(Layer::Overlay);
++        push_popups_from_layer!(Layer::Overlay, None);
++        push_normal_from_layer!(Layer::Overlay, None);
+ 
+         // When rendering above the top layer, we put the regular monitor elements first.
+         // Otherwise, we will render all layer-shell pop-ups and the top layer on top.
+@@ -4366,21 +4415,21 @@ impl Niri {
+ 
+             mon.render_workspaces(ctx.r(), focus_ring, &mut |elem| push(elem.into()));
+ 
+-            push_popups_from_layer!(Layer::Top);
+-            push_normal_from_layer!(Layer::Top);
++            push_popups_from_layer!(Layer::Top, None);
++            push_normal_from_layer!(Layer::Top, None);
+ 
+-            push_popups_from_layer!(Layer::Bottom);
+-            push_popups_from_layer!(Layer::Background);
+-            push_normal_from_layer!(Layer::Bottom);
+-            push_normal_from_layer!(Layer::Background);
++            push_popups_from_layer!(Layer::Bottom, active_ws);
++            push_popups_from_layer!(Layer::Background, active_ws);
++            push_normal_from_layer!(Layer::Bottom, active_ws);
++            push_normal_from_layer!(Layer::Background, active_ws);
+ 
+             // We don't expect more than one workspace when render_above_top_layer().
+             if let Some((ws, _geo)) = mon.workspaces_with_render_geo().next() {
+                 push(ws.render_background().into());
+             }
+         } else {
+-            push_popups_from_layer!(Layer::Top);
+-            push_normal_from_layer!(Layer::Top);
++            push_popups_from_layer!(Layer::Top, None);
++            push_normal_from_layer!(Layer::Top, None);
+ 
+             self.layout
+                 .render_interactive_move_for_output(ctx.r(), output, &mut |elem| push(elem.into()));
+@@ -4398,16 +4447,17 @@ impl Niri {
+                 }};
+             }
+ 
+-            for (ws, geo) in mon.workspaces_with_render_geo() {
++            for ((idx, ws), geo) in mon.workspaces_with_render_geo_idx() {
+                 let ns = Some(ws.id().get() as usize);
++                let on_ws = Some((idx, ws.name().map(|n| n.as_str())));
+                 let xray_pos = XrayPos::new(geo.loc, zoom);
+-                push_popups_from_layer!(Layer::Bottom, ns, xray_pos, process!(geo));
+-                push_popups_from_layer!(Layer::Background, ns, xray_pos, process!(geo));
++                push_popups_from_layer!(Layer::Bottom, ns, on_ws, xray_pos, process!(geo));
++                push_popups_from_layer!(Layer::Background, ns, on_ws, xray_pos, process!(geo));
+             }
+ 
+             mon.render_workspaces(ctx.r(), focus_ring, &mut |elem| push(elem.into()));
+ 
+-            for (ws, geo) in mon.workspaces_with_render_geo() {
++            for ((idx, ws), geo) in mon.workspaces_with_render_geo_idx() {
+                 // The render element namespace. This will be set to the workspace index for
+                 // elements duplicated across workspaces (i.e. background and bottom layers) in
+                 // order to have their non-xray framebuffer effects separated from each other.
+@@ -4417,9 +4467,10 @@ impl Niri {
+                 // namespace on the frame at once. Id + namespace is used as the cache key in the
+                 // damage tracker.
+                 let ns = Some(ws.id().get() as usize);
++                let on_ws = Some((idx, ws.name().map(|n| n.as_str())));
+                 let xray_pos = XrayPos::new(geo.loc, zoom);
+-                push_normal_from_layer!(Layer::Bottom, ns, xray_pos, process!(geo));
+-                push_normal_from_layer!(Layer::Background, ns, xray_pos, process!(geo));
++                push_normal_from_layer!(Layer::Bottom, ns, on_ws, xray_pos, process!(geo));
++                push_normal_from_layer!(Layer::Background, ns, on_ws, xray_pos, process!(geo));
+ 
+                 process!(geo)(ws.render_background());
+             }
+@@ -4456,6 +4507,12 @@ impl Niri {
+         // Perhaps in the future when offscreen rendering becomes on-demand, this optimization will
+         // be possible.
+ 
++        // Bound background surfaces (place-within-workspace): the active workspace's.
++        let active_ws = self.layout.monitor_for_output(output).map(|mon| {
++            let ws = mon.active_workspace_ref();
++            (mon.active_workspace_idx(), ws.name().map(|n| n.as_str()))
++        });
++
+         let mut buffer = xray.background[ctx.target as usize].borrow_mut();
+         {
+             let elements = buffer.elements();
+@@ -4463,6 +4520,7 @@ impl Niri {
+             self.render_layer_normal(
+                 ctx.r(),
+                 None,
++                active_ws,
+                 &layer_map,
+                 Layer::Background,
+                 XrayPos::default(),
+@@ -4480,6 +4538,7 @@ impl Niri {
+             self.render_layer_normal(
+                 ctx.r(),
+                 None,
++                None,
+                 &layer_map,
+                 Layer::Background,
+                 XrayPos::default(),
+@@ -4510,7 +4569,7 @@ impl Niri {
+         let layer_map = layer_map_for_output(output);
+         for for_backdrop in [false, true] {
+             for (mapped, _geo) in
+-                self.layers_in_render_order(&layer_map, Layer::Background, for_backdrop)
++                self.layers_in_render_order(&layer_map, Layer::Background, None, for_backdrop)
+             {
+                 if mapped.rules().block_out_from.is_some() {
+                     return true;
+@@ -4520,10 +4579,13 @@ impl Niri {
+         false
+     }
+ 
++    /// `ws`: the workspace (index on the output, name) being rendered, for surfaces bound to one
++    /// with `place-within-workspace`; `None` renders them all.
+     fn layers_in_render_order<'a>(
+         &'a self,
+         layer_map: &'a LayerMap,
+         layer: Layer,
++        ws: Option<(usize, Option<&'a str>)>,
+         for_backdrop: bool,
+     ) -> impl Iterator<Item = (&'a MappedLayer, Rectangle<i32, Logical>)> {
+         // LayerMap returns layers in reverse stacking order.
+@@ -4534,6 +4596,13 @@ impl Niri {
+                 return None;
+             }
+ 
++            // Never render a surface whose workspace isn't the one being drawn.
++            if let Some((idx, name)) = ws {
++                if !mapped.is_on_workspace(idx, name) {
++                    return None;
++                }
++            }
++
+             let geo = layer_map.layer_geometry(surface)?;
+             Some((mapped, geo))
+         })
+@@ -4544,13 +4613,14 @@ impl Niri {
+         &self,
+         mut ctx: RenderCtx<R>,
+         ns: Option<usize>,
++        ws: Option<(usize, Option<&str>)>,
+         layer_map: &LayerMap,
+         layer: Layer,
+         xray_pos: XrayPos,
+         for_backdrop: bool,
+         push: &mut dyn FnMut(LayerSurfaceRenderElement<R>),
+     ) {
+-        for (mapped, geo) in self.layers_in_render_order(layer_map, layer, for_backdrop) {
++        for (mapped, geo) in self.layers_in_render_order(layer_map, layer, ws, for_backdrop) {
+             let loc = geo.loc.to_f64();
+             let xray_pos = xray_pos.offset(loc);
+             mapped.render_normal(ctx.r(), ns, loc, xray_pos, push);
+@@ -4562,13 +4632,14 @@ impl Niri {
+         &self,
+         mut ctx: RenderCtx<R>,
+         ns: Option<usize>,
++        ws: Option<(usize, Option<&str>)>,
+         layer_map: &LayerMap,
+         layer: Layer,
+         xray_pos: XrayPos,
+         for_backdrop: bool,
+         push: &mut dyn FnMut(LayerSurfaceRenderElement<R>),
+     ) {
+-        for (mapped, geo) in self.layers_in_render_order(layer_map, layer, for_backdrop) {
++        for (mapped, geo) in self.layers_in_render_order(layer_map, layer, ws, for_backdrop) {
+             let loc = geo.loc.to_f64();
+             let xray_pos = xray_pos.offset(loc);
+             mapped.render_popups(ctx.r(), ns, loc, xray_pos, push);
+diff --git a/src/tests/layer_shell.rs b/src/tests/layer_shell.rs
+index 72caf72..35c8656 100644
+--- a/src/tests/layer_shell.rs
++++ b/src/tests/layer_shell.rs
+@@ -1,11 +1,14 @@
+ use insta::assert_snapshot;
++use niri_config::Config;
+ use smithay::reexports::wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::Layer;
+ use smithay::reexports::wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::{
+     Anchor, KeyboardInteractivity,
+ };
+ 
++use smithay::utils::Point;
++
+ use super::*;
+-use crate::tests::client::{LayerConfigureProps, LayerMargin};
++use crate::tests::client::{ClientId, LayerConfigureProps, LayerMargin};
+ 
+ #[test]
+ fn simple_top_anchor() {
+@@ -256,3 +259,73 @@ fn multiple_commits_before_mapping() {
+     // Configure with new size.
+     assert_snapshot!(layer.format_recent_configures(), @"size: 1920 × 50");
+ }
++
++fn map_fullscreen_background(f: &mut Fixture, id: ClientId, namespace: &str) {
++    let layer = f
++        .client(id)
++        .create_layer(None, Layer::Background, namespace);
++    let surface = layer.surface.clone();
++    layer.set_configure_props(LayerConfigureProps {
++        anchor: Some(Anchor::Left | Anchor::Right | Anchor::Top | Anchor::Bottom),
++        exclusive_zone: Some(-1),
++        ..Default::default()
++    });
++    layer.commit();
++    f.roundtrip(id);
++
++    let layer = f.client(id).layer(&surface);
++    layer.attach_new_buffer();
++    layer.set_size(1920, 1080);
++    layer.ack_last_and_commit();
++    f.double_roundtrip(id);
++}
++
++fn background_under_center(f: &mut Fixture) -> Option<String> {
++    let contents = f.niri().contents_under(Point::from((960., 540.)));
++    contents.layer.map(|l| l.namespace().to_owned())
++}
++
++#[test]
++fn place_within_workspace() {
++    let config = r##"
++workspace "one"
++workspace "two"
++
++animations {
++    off
++}
++
++layer-rule {
++    match namespace="^wp@(.+)$"
++    place-within-workspace "$1"
++}
++"##;
++    let config = Config::parse_mem(config).unwrap();
++    let mut f = Fixture::with_config(config);
++    f.add_output(1, (1920, 1080));
++    let id = f.add_client();
++
++    // Bound by name, and by index (workspace "two" is the second one).
++    map_fullscreen_background(&mut f, id, "wp@one");
++    map_fullscreen_background(&mut f, id, "wp@2");
++
++    // Each shows (and takes input) only on its own workspace.
++    assert_eq!(background_under_center(&mut f).as_deref(), Some("wp@one"));
++
++    f.niri().layout.switch_workspace(1);
++    f.niri_complete_animations();
++    assert_eq!(background_under_center(&mut f).as_deref(), Some("wp@2"));
++
++    // The empty workspace after them has none.
++    f.niri().layout.switch_workspace(2);
++    f.niri_complete_animations();
++    assert_eq!(background_under_center(&mut f), None);
++
++    // An unbound background surface keeps the stock behavior: on every workspace.
++    map_fullscreen_background(&mut f, id, "plain");
++    assert_eq!(background_under_center(&mut f).as_deref(), Some("plain"));
++    f.niri().layout.switch_workspace(0);
++    f.niri_complete_animations();
++    let hit = background_under_center(&mut f);
++    assert!(hit.as_deref() == Some("plain") || hit.as_deref() == Some("wp@one"));
++}

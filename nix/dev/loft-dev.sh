@@ -24,7 +24,7 @@ usage() {
 usage: loft-dev [--session NAME] [--size WxH | --outputs WxH[+X+Y],…] [--headless | --on-host]
                 [--output NAME | --windowed]
                 [--isolated | --shared | --private-bus | --private-runtime]
-                [--share-audio] [CHECKOUT]
+                [--share-audio] [--stock-wallpapers] [CHECKOUT]
        loft-dev --list
        loft-dev --stop NAME
 
@@ -52,6 +52,12 @@ usage: loft-dev [--session NAME] [--size WxH | --outputs WxH[+X+Y],…] [--headl
   --private-bus      only the own D-Bus;  --private-runtime: only the runtime dir
   --share-audio      isolated sessions: reach the host's PipeWire/Pulse (off by
                      default, so a test never changes the real volume or routing)
+  --stock-wallpapers without per-workspace wallpaper surfaces: nested sessions
+                     run stock niri, --outputs leaves the layer rule out (the
+                     shell then swaps one wallpaper per screen, as on stock
+                     niri). By default sessions run niri-loft
+                     (nix/niri/workspace-layers.patch) with
+                     niri/workspace-wallpapers.kdl included.
 EOF
   exit 2
 }
@@ -66,6 +72,7 @@ bus=""
 runtime=""
 headless=""
 audio=0
+ws_layers=1
 action=run
 stop_name=""
 orig_args=("$@")
@@ -83,6 +90,7 @@ while [ $# -gt 0 ]; do
     --private-bus) bus=1; shift ;;
     --private-runtime) runtime=1; shift ;;
     --share-audio) audio=1; shift ;;
+    --stock-wallpapers) ws_layers=0; shift ;;
     --list) action=list; shift ;;
     --stop) [ $# -ge 2 ] || usage; action=stop; stop_name="$2"; shift 2 ;;
     -h|--help) usage ;;
@@ -294,7 +302,9 @@ fi
 
 extra_kdl=""
 host_pid=""
-niri_bin=niri
+# niri-loft: the place-within-workspace layer rule (per-workspace wallpapers).
+niri_bin=@NIRI_LOFT@
+[ "$ws_layers" = 1 ] || niri_bin=niri
 nested=1
 if [ -n "$output_sizes" ]; then
   # niri on virtual outputs (nix/dev/niri-headless-outputs.patch): no host
@@ -368,6 +378,15 @@ fi
 # the spaces (`loft-niri space render`; included once: a workspace declared
 # twice exists twice), then the runtime overrides (also first: see the
 # header comment).
+# Per-workspace wallpapers: the layer rule (only niri-loft parses it) and the
+# shell's switch for them (WorkspaceWallpapers.qml).
+ws_kdl=""
+ws_env=""
+if [ "$ws_layers" = 1 ]; then
+  ws_kdl="include \"$root/niri/workspace-wallpapers.kdl\""
+  ws_env='"LOFT_NIRI_WORKSPACE_LAYERS=1" '
+fi
+
 cat > "$dir/config.kdl" <<EOF
 include optional=true "$dir/overrides/niri.kdl"
 $output_kdl
@@ -377,9 +396,10 @@ include optional=true "$dir/current/niri.kdl"
 include optional=true "$root/niri/dev-local.kdl"
 include optional=true "$dir/overrides/spaces.kdl"
 include optional=true "$dir/overrides/niri.kdl"
+$ws_kdl
 $extra_kdl
 spawn-at-startup "env" $launcher_env"LOFT_STATE_DIR=$dir" "LOFT_LAUNCHER_DIR=$root/launcher" "LOFT_SHELL_SRC=$root/src" "loft-launcher" "service"
-spawn-at-startup "env" "LOFT_DEV=1" "LOFT_STATE_DIR=$dir" "LOFT_DATA_DIR=$root" "LOFT_THEME_PATH=${XDG_DATA_HOME:-$HOME/.local/share}/loft/themes:$root/themes" "LOFT_SHELL_PATH=$root/src" "LOFT_NIRI_CONFIG=$dir/config.kdl" "LOFT_THEME_FILE=$dir/current/theme.json" "LOFT_UI_FONT=@UI_FONT@" "LOFT_ICON_FONT=@ICON_FONT@" "QML_IMPORT_PATH=@LOCK_QML_PATH@" "QT_PLUGIN_PATH=@QT_MM_PLUGINS@" "quickshell" "--path" "$root/src"
+spawn-at-startup "env" $ws_env"LOFT_DEV=1" "LOFT_STATE_DIR=$dir" "LOFT_DATA_DIR=$root" "LOFT_THEME_PATH=${XDG_DATA_HOME:-$HOME/.local/share}/loft/themes:$root/themes" "LOFT_SHELL_PATH=$root/src" "LOFT_NIRI_CONFIG=$dir/config.kdl" "LOFT_THEME_FILE=$dir/current/theme.json" "LOFT_UI_FONT=@UI_FONT@" "LOFT_ICON_FONT=@ICON_FONT@" "QML_IMPORT_PATH=@LOCK_QML_PATH@" "QT_PLUGIN_PATH=@QT_MM_PLUGINS@" "quickshell" "--path" "$root/src"
 EOF
 
 # Live everything, not just QML: `loft` runs the checkout's CLI,

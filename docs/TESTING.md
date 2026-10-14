@@ -81,6 +81,13 @@ to right unless `+X+Y` gives a position. Their identities are `niri headless 1`,
 and `open-on-output` by identity work). Frames are paced at 60 Hz, clients render with shm
 (Mesa llvmpipe), and screenshots work as usual (`loft-shot --output headless-2`).
 
+- niri here (and in nested sessions) is `niri-loft`, with per-workspace wallpaper surfaces on
+  (`niri/workspace-wallpapers.kdl` included, `LOFT_NIRI_WORKSPACE_LAYERS=1` for the shell).
+  `--stock-wallpapers` runs without them (stock niri when nested; the rule left out with
+  `--outputs`), so the shell swaps one wallpaper per screen as on a stock niri.
+  `quickshell ipc --path <checkout>/src call wswallpapers stats` reports the surfaces and decoded
+  image MB; `LOFT_WS_WALLPAPERS_ALL=1` in loft-dev's environment maps every workspace (the naive
+  cost, for comparison).
 - Unplug and replug a monitor: `niri msg output headless-3 off` / `… on` (niri's real hotplug
   path: its workspaces move to the first monitor and come back).
 - `RUST_LOG=niri=info,niri::ipc_action=debug,niri::headless_frame=debug` in loft-dev's

@@ -67,7 +67,13 @@
       ]
       # Quickshell is a Qt app with no platform theme: without this it falls
       # back to hicolor and the dock/bar show generic icons.
-      ++ lib.optional (cfg.iconTheme != null) "QS_ICON_THEME=${cfg.iconTheme}";
+      ++ lib.optional (cfg.iconTheme != null) "QS_ICON_THEME=${cfg.iconTheme}"
+      # niri-loft's place-within-workspace rule is in loft/niri.kdl: the shell
+      # may bind wallpapers to workspaces (WorkspaceWallpapers.qml).
+      ++ lib.optional workspaceLayers "LOFT_NIRI_WORKSPACE_LAYERS=1";
+
+      # The consumer runs a niri that parses `place-within-workspace`.
+      workspaceLayers = cfg.niriPackage.passthru.loftWorkspaceLayers or false;
 
       service = description: exec: {
         Unit = {
@@ -132,6 +138,23 @@
 
       options.programs.loft = {
         enable = lib.mkEnableOption "the Loft shell (Quickshell) and launcher on niri";
+
+        niriPackage = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.niri;
+          defaultText = lib.literalExpression "pkgs.niri";
+          example = lib.literalExpression "inputs.loft.packages.\${pkgs.stdenv.hostPlatform.system}.niri-loft";
+          description = ''
+            The niri the session runs: set it to the same package as the
+            system's niri (`programs.niri.package`). With Loft's `niri-loft`
+            (niri + nix/niri/workspace-layers.patch), each workspace's
+            wallpaper slides with it on a switch and shows behind it in the
+            overview: ~/.config/loft/niri.kdl then includes the
+            `place-within-workspace` layer rule (which a stock niri would
+            reject) and the shell turns the feature on. Also used for
+            `niri msg` in the idle timeouts.
+          '';
+        };
 
         devSource = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
@@ -306,6 +329,9 @@
           include "${shellBinds}"
           include optional=true "${stateDir}/current/niri.kdl"
           include optional=true "${stateDir}/overrides/niri.kdl"
+        ''
+        + lib.optionalString workspaceLayers ''
+          include "${self}/niri/workspace-wallpapers.kdl"
         '';
 
         xdg.configFile."loft/niri-early.kdl".text = ''
@@ -336,7 +362,7 @@
             }
             ++ lib.optional (cfg.idle.screenOffAfter != null) {
               timeout = cfg.idle.screenOffAfter;
-              command = "${lib.getExe pkgs.niri} msg action power-off-monitors";
+              command = "${lib.getExe cfg.niriPackage} msg action power-off-monitors";
             };
           events.before-sleep = lockCmd;
         };
