@@ -21,6 +21,7 @@ LOFT_* one is unset.
 
 `loft --dev …` targets the session started by `nix run .#dev` instead
 ($LOFT_SESSION=NAME: the one started with `loft-dev --session NAME`).
+`loft dev …` starts sessions: it is `loft-dev …`.
 """
 
 from __future__ import annotations
@@ -839,10 +840,44 @@ def cmd_wall_auto(ctx: Ctx, args) -> None:
 # ── entry ───────────────────────────────────────────────────────────────────
 
 
+# loft-dev options that take a value (to tell them from the CHECKOUT argument).
+DEV_VALUE_OPTS = {"--session", "--size", "--output", "--stop"}
+
+
+def run_dev(args: list[str]) -> int:
+    """`loft dev …` is `loft-dev …`: the dev / test sessions (nix/dev/loft-dev.sh).
+
+    Run from a checkout (the dev session's own `loft`), that checkout is the
+    session's default source."""
+    here = Path(__file__).resolve().parents[2]
+    checkout = here if (here / "src" / "shell.qml").is_file() and (here / "flake.nix").is_file() else None
+    positional, i = [], 0
+    while i < len(args):
+        a = args[i]
+        if a in DEV_VALUE_OPTS:
+            i += 2
+            continue
+        if not a.startswith("-"):
+            positional.append(a)
+        i += 1
+    if checkout and not positional and not {"--list", "--stop", "-h", "--help"} & set(args):
+        args = [*args, str(checkout)]
+    exe = shutil.which("loft-dev")
+    if exe:
+        os.execv(exe, [exe, *args])
+    elif checkout and shutil.which("nix"):
+        os.execvp("nix", ["nix", "run", f"{checkout}#dev", "--", *args])
+    else:
+        print("loft: loft-dev is not on PATH (try `nix run github:Codys-Wright/loft#dev`)", file=sys.stderr)
+    return 1  # exec only returns by failing
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="loft", description="Loft CLI")
     p.add_argument("--dev", action="store_true", help="target the `nix run .#dev` session")
     top = p.add_subparsers(dest="group", required=True)
+    # Handled before parsing (main): everything after `dev` goes to loft-dev.
+    top.add_parser("dev", help="run a dev / test session: `loft dev [--session NAME] …` = `loft-dev …`", add_help=False)
     theme = top.add_parser("theme", help="theme engine and manager")
     sub = theme.add_subparsers(dest="cmd", required=True)
 
@@ -971,6 +1006,9 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["dev"]:
+        return run_dev(argv[1:])
     args = parser().parse_args(argv)
     try:
         if args.dev:

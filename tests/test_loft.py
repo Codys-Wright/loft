@@ -319,3 +319,28 @@ class LegacyNames(unittest.TestCase):
             locks = Pack(pack).lock_entries()
             self.assertEqual([lk["format"] for lk in locks], ["loft"])
 
+
+class DevAlias(unittest.TestCase):
+    """`loft dev …` hands everything to loft-dev."""
+
+    def run_dev(self, *argv: str) -> list[str]:
+        from unittest import mock
+
+        from loft import cli
+
+        with mock.patch.object(cli.shutil, "which", return_value="/bin/loft-dev"), mock.patch.object(cli.os, "execv") as execv:
+            main(["dev", *argv])
+        return execv.call_args.args[1]
+
+    def test_passes_options_through(self):
+        got = self.run_dev("--list")
+        self.assertEqual(got, ["/bin/loft-dev", "--list"])
+
+    def test_checkout_is_the_default_source(self):
+        # Run from a checkout, it is appended when no CHECKOUT is given (the
+        # Nix check's source tree has no src/, so nothing is appended there).
+        is_checkout = (ROOT / "src" / "shell.qml").is_file() and (ROOT / "flake.nix").is_file()
+        got = self.run_dev("--session", "agent1", "--size", "800x600")
+        self.assertEqual(got, ["/bin/loft-dev", "--session", "agent1", "--size", "800x600", *([str(ROOT)] if is_checkout else [])])
+        got = self.run_dev("--session", "agent1", "/some/checkout")
+        self.assertEqual(got, ["/bin/loft-dev", "--session", "agent1", "/some/checkout"])
