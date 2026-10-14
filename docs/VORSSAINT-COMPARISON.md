@@ -22,14 +22,14 @@ Legend: ✅ have · 🟡 partial · 🔨 in progress · ⬜ todo · ➖ not appl
 
 | | Count |
 |---|---|
-| ✅ Have | 40 |
+| ✅ Have | 41 |
 | 🧩 Handled by niri / fleet | 9 |
-| 🟡 Partial | 4 |
+| 🟡 Partial | 3 |
 | 🔨 In progress | 0 |
 | ⬜ Todo | 3 |
 | ➖ Not applicable on Linux/NixOS | 9 |
 
-Of the 56 rows that apply on Linux: 49 are covered (✅ + 🧩), 4 more are partial, 3 are
+Of the 56 rows that apply on Linux: 50 are covered (✅ + 🧩), 3 more are partial, 3 are
 still todo — and Loft adds a whole desktop's worth of features vorssaint doesn't need
 (bottom of this file).
 
@@ -108,8 +108,8 @@ still todo — and Loft adds a whole desktop's worth of features vorssaint doesn
 | vorssaint | Loft | How |
 |---|---|---|
 | Screen capture selector (shot / record / OCR / color) | ✅ | ⌘⇧5 toolbar |
-| Screenshot (area / window / screen, annotate, share; scrolling) | 🟡 | All but scrolling capture; ⌘⇧3/⌘⇧4 + the Keychron key |
-| Screen recording (system + mic, editing, GIF) | ✅ | Trim + GIF; zooms todo |
+| Screenshot (area / window / screen, annotate, share; scrolling) | ✅ | ⌘⇧3/⌘⇧4 + the Keychron key; Scrolling in ⌘⇧5: you scroll, Loft stitches by row overlap (sticky headers kept once) with a live preview. No Auto Scroll (it would inject input into the desktop) |
+| Screen recording (system + mic, editing, GIF) | ✅ | Editor: trim, zoom segments (Auto Zoom from the recording's activity, drag / resize / depth / center), eased zoom export; GIF |
 | Camera preview | ✅ | Floating round mirror + island page |
 | Copy text from screen (OCR + QR) | ✅ | tesseract + zbar, offline |
 | Color picker | ✅ | Pixel loupe, formats, recents |

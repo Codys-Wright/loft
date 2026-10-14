@@ -1,0 +1,460 @@
+"""Capture helpers for the shell (`loft capture …`): scrolling capture and
+recording zooms.
+
+  scroll   a scrolling-capture session: grabs the area (grim -t ppm) a few
+           times a second while you scroll it, stitches the frames
+           (loft.stitch) and prints one JSON line per change —
+           {"event": "frame", "height", "frames", "segments": […]} — for the
+           live preview. Commands on stdin: `done` writes the PNG and prints
+           {"event": "done", "path", …}; `cancel` throws it away.
+  stitch   stitch PPM frames into one tall PNG (batch, for scripts/tests)
+  zoom auto    find where the action is in a recording — pointer movement,
+               clicks that change the UI, typing — and propose zoom segments
+  zoom render  export a recording with zoom segments (and an optional trim)
+               as a new file; the original is never touched
+
+Why zooms come from the video: niri 26.04's IPC doesn't report the pointer,
+and Wayland only tells a client where the pointer is while it is over that
+client's own surfaces. Reading /dev/input would mean listening to raw input
+devices, and probing with an invisible overlay would swallow clicks. The
+recording itself shows the pointer and everything a click changes, so
+`zoom auto` diffs downscaled frames instead: small, local changes are
+activity worth zooming into; whole-screen changes (scrolling, switching
+windows) are not.
+
+Zoom segments: {"start", "end" (seconds), "zoom" (1–4×), "x", "y" (the
+center, 0–1 of the frame)}. Rendering uses ffmpeg's perspective filter with
+per-frame expressions — sub-pixel, so pans and zooms don't jitter — and
+eases in and out of every segment (smoothstep over `RAMP` seconds).
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import select
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+from . import stitch
+
+# ── Scrolling capture ───────────────────────────────────────────────────
+
+MAX_HEIGHT = 40000  # px: stop growing (a PNG this tall is ~150 MB of pixels)
+
+
+def emit(obj: dict) -> None:
+    sys.stdout.write(json.dumps(obj) + "\n")
+    sys.stdout.flush()
+
+
+def grab(geometry: str, path: Path) -> bool:
+    r = subprocess.run(["grim", "-g", geometry, "-t", "ppm", str(path)], capture_output=True)
+    return r.returncode == 0 and path.exists()
+
+
+def scroll_session(geometry: str, work: Path, out: Path, interval: float = 0.12, grabber=grab, commands=None) -> int:
+    """Run until `done` / `cancel` on stdin (or `commands`, an iterator of
+    lines, for tests). Returns the exit code."""
+    work.mkdir(parents=True, exist_ok=True)
+    st = stitch.Stitcher()
+    n = 0
+    status = ""
+
+    def finish() -> int:
+        if not st.frames:
+            emit({"event": "error", "message": "nothing captured"})
+            return 1
+        out.parent.mkdir(parents=True, exist_ok=True)
+        w, h = st.compose(out)
+        emit({"event": "done", "path": str(out), "width": w, "height": h, "frames": len(st.frames), "gaps": st.gaps})
+        return 0
+
+    def cleanup() -> None:
+        shutil.rmtree(work, ignore_errors=True)
+
+    try:
+        while True:
+            line = None
+            if commands is not None:
+                line = next(commands, None)
+            else:
+                ready, _, _ = select.select([sys.stdin], [], [], interval)
+                if ready:
+                    line = sys.stdin.readline()
+                    if line == "":
+                        line = "cancel"  # the shell went away
+            if line is not None:
+                cmd = line.strip()
+                if cmd == "done":
+                    return finish()
+                if cmd == "cancel":
+                    emit({"event": "cancelled"})
+                    return 0
+            n += 1
+            f = work / f"frame-{n:05}.ppm"
+            if not grabber(geometry, f):
+                emit({"event": "error", "message": "grim failed"})
+                return 1
+            m = st.add(f)
+            if m.kind not in ("added", "gap"):
+                f.unlink(missing_ok=True)
+            if m.kind != status or m.kind in ("added", "gap"):
+                status = m.kind
+                emit(
+                    {
+                        "event": "frame",
+                        "status": m.kind,
+                        "width": st.width,
+                        "frameHeight": st.height,
+                        "height": sum(s["h"] for s in st.segments()),
+                        "frames": len(st.frames),
+                        "gaps": st.gaps,
+                        "segments": st.segments(),
+                    }
+                )
+            if st.total_height >= MAX_HEIGHT:
+                emit({"event": "limit", "height": st.total_height})
+                return finish()
+    finally:
+        cleanup()
+
+
+# ── Recording zooms ─────────────────────────────────────────────────────
+
+RAMP = 0.6  # seconds to ease in / out
+MIN_ZOOM, MAX_ZOOM = 1.0, 4.0
+
+
+def clean_segments(segs: list[dict], duration: float | None = None) -> list[dict]:
+    """Sorted, clamped, non-overlapping segments (a later one starts where
+    an earlier one would overlap it)."""
+    out: list[dict] = []
+    for s in sorted(segs, key=lambda s: float(s["start"])):
+        a, b = float(s["start"]), float(s["end"])
+        if duration is not None:
+            a, b = max(0.0, min(a, duration)), max(0.0, min(b, duration))
+        if out and a < out[-1]["end"]:
+            a = out[-1]["end"]
+        if b - a < 0.2:
+            continue
+        out.append(
+            {
+                "start": round(a, 3),
+                "end": round(b, 3),
+                "zoom": round(min(MAX_ZOOM, max(MIN_ZOOM, float(s.get("zoom", 2.0)))), 3),
+                "x": round(min(1.0, max(0.0, float(s.get("x", 0.5)))), 4),
+                "y": round(min(1.0, max(0.0, float(s.get("y", 0.5)))), 4),
+            }
+        )
+    return out
+
+
+def _smooth(p: float) -> float:
+    p = min(1.0, max(0.0, p))
+    return p * p * (3 - 2 * p)
+
+
+def zoom_at(segs: list[dict], t: float) -> tuple[float, float, float]:
+    """(zoom, x, y) at time t — the same curve the ffmpeg expressions draw."""
+    for s in segs:
+        if s["start"] <= t <= s["end"]:
+            r = min(RAMP, (s["end"] - s["start"]) / 3)
+            env = _smooth((t - s["start"]) / r) * _smooth((s["end"] - t) / r)
+            return 1 + (s["zoom"] - 1) * env, s["x"], s["y"]
+    return 1.0, 0.5, 0.5
+
+
+def viewport(segs: list[dict], t: float, w: float, h: float) -> tuple[float, float, float, float]:
+    """The source rectangle (x, y, w, h) shown at time t."""
+    z, cx, cy = zoom_at(segs, t)
+    vw, vh = w / z, h / z
+    x = min(max(cx * w - vw / 2, 0), w - vw)
+    y = min(max(cy * h - vh / 2, 0), h - vh)
+    return x, y, vw, vh
+
+
+def _num(v: float) -> str:
+    return f"{v:.4f}".rstrip("0").rstrip(".") or "0"
+
+
+def zoom_exprs(segs: list[dict], fps: float, offset: float = 0.0) -> dict[str, str]:
+    """ffmpeg perspective corner expressions (x0 … y3) for the segments.
+    T is the source time: frame number / fps + offset (the trim start)."""
+    T = f"(in/{_num(fps)}+{_num(offset)})"
+
+    def smooth(p: str) -> str:
+        return f"(clip({p},0,1)*clip({p},0,1)*(3-2*clip({p},0,1)))"
+
+    z = "1"
+    cx = cy = "0.5"
+    for s in reversed(segs):
+        a, b = s["start"], s["end"]
+        r = min(RAMP, (b - a) / 3)
+        env = f"{smooth(f'({T}-{_num(a)})/{_num(r)}')}*{smooth(f'({_num(b)}-{T})/{_num(r)}')}"
+        inside = f"between({T},{_num(a)},{_num(b)})"
+        z = f"if({inside},1+{_num(s['zoom'] - 1)}*{env},{z})"
+        cx = f"if({inside},{_num(s['x'])},{cx})"
+        cy = f"if({inside},{_num(s['y'])},{cy})"
+    vw, vh = f"(W/({z}))", f"(H/({z}))"
+    x = f"clip(({cx})*W-{vw}/2,0,W-{vw})"
+    y = f"clip(({cy})*H-{vh}/2,0,H-{vh})"
+    return {
+        "x0": x,
+        "y0": y,
+        "x1": f"{x}+{vw}",
+        "y1": y,
+        "x2": x,
+        "y2": f"{y}+{vh}",
+        "x3": f"{x}+{vw}",
+        "y3": f"{y}+{vh}",
+    }
+
+
+def probe(path: str) -> dict:
+    r = subprocess.run(
+        ["ffprobe", "-v", "error", "-print_format", "json", "-show_entries", "format=duration:stream=codec_type,width,height,avg_frame_rate,r_frame_rate", path],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        raise SystemExit(f"loft: can't read {path}: {r.stderr.strip()}")
+    info = json.loads(r.stdout or "{}")
+    v = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"), {})
+
+    def rate(s: str) -> float:
+        try:
+            a, b = s.split("/")
+            return float(a) / float(b) if float(b) else 0.0
+        except (ValueError, AttributeError):
+            return 0.0
+
+    fps = rate(v.get("avg_frame_rate", "")) or rate(v.get("r_frame_rate", ""))
+    return {
+        "duration": float(info.get("format", {}).get("duration") or 0),
+        "width": int(v.get("width") or 0),
+        "height": int(v.get("height") or 0),
+        "fps": fps,
+        "audio": any(s.get("codec_type") == "audio" for s in info.get("streams", [])),
+    }
+
+
+def render_command(src: str, out: str, segs: list[dict], info: dict, start: float = 0.0, end: float | None = None) -> list[str]:
+    fps = min(60.0, max(15.0, round(info.get("fps") or 30)))
+    ex = zoom_exprs(segs, fps, start)
+    corners = ":".join(f"{k}='{v}'" for k, v in ex.items())
+    vf = f"fps={_num(fps)},perspective={corners}:interpolation=linear:eval=frame,format=yuv420p"
+    cmd = ["ffmpeg", "-v", "error", "-y"]
+    if start > 0:
+        cmd += ["-ss", f"{start:.3f}"]
+    if end is not None:
+        cmd += ["-to", f"{end:.3f}"]
+    cmd += ["-i", src, "-map", "0:v:0", "-map", "0:a?", "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "copy", out]
+    return cmd
+
+
+def zoomed_name(src: str) -> str:
+    p = Path(src)
+    out = p.with_name(f"{p.stem}-zoomed{p.suffix or '.mp4'}")
+    n = 2
+    while out.exists():
+        out = p.with_name(f"{p.stem}-zoomed-{n}{p.suffix or '.mp4'}")
+        n += 1
+    return str(out)
+
+
+# Activity → zoom segments.
+
+ANALYSIS_W = 192
+ANALYSIS_FPS = 10
+DIFF = 14  # gray levels: a changed pixel
+BIG = 0.18  # changed fraction: a scene change (scrolling, a new window)
+
+
+def activity(frames, w: int, h: int, fps: float = ANALYSIS_FPS) -> list[dict]:
+    """Per pair of downscaled gray frames with a small, local change:
+    {t, x, y, w, h} (bbox center + size, 0–1). Scene changes come out as
+    {t, scene: true}."""
+    events: list[dict] = []
+    prev = None
+    for i, f in enumerate(frames):
+        if prev is not None:
+            xs: list[int] = []
+            ys: list[int] = []
+            n = 0
+            for y in range(h):
+                o = y * w
+                a, b = prev[o : o + w], f[o : o + w]
+                if a == b:
+                    continue
+                for x in range(w):
+                    if abs(a[x] - b[x]) > DIFF:
+                        n += 1
+                        xs.append(x)
+                        ys.append(y)
+            t = i / fps
+            if n > BIG * w * h:
+                events.append({"t": t, "scene": True})
+            elif n >= 2:
+                x0, x1, y0, y1 = min(xs), max(xs) + 1, min(ys), max(ys) + 1
+                events.append({"t": t, "x": (x0 + x1) / 2 / w, "y": (y0 + y1) / 2 / h, "w": (x1 - x0) / w, "h": (y1 - y0) / h})
+        prev = f
+    return events
+
+
+def segments_from_activity(events: list[dict], duration: float, zoom: float = 2.0) -> list[dict]:
+    """Group local activity that stays in one area into zoom segments."""
+    clusters: list[dict] = []
+    cur: dict | None = None
+
+    def close():
+        nonlocal cur
+        if cur and cur["last"] - cur["first"] >= 0.6 and cur["n"] >= 3:
+            clusters.append(cur)
+        cur = None
+
+    for e in events:
+        if e.get("scene"):
+            close()
+            continue
+        if cur is not None:
+            near = math.hypot(e["x"] - cur["cx"], e["y"] - cur["cy"]) < 0.22
+            if e["t"] - cur["last"] > 1.6 or not near:
+                close()
+        if cur is None:
+            cur = {"first": e["t"], "last": e["t"], "n": 0, "cx": e["x"], "cy": e["y"], "x0": 1.0, "y0": 1.0, "x1": 0.0, "y1": 0.0}
+        cur["n"] += 1
+        cur["last"] = e["t"]
+        k = 1 / cur["n"]
+        cur["cx"] += (e["x"] - cur["cx"]) * k
+        cur["cy"] += (e["y"] - cur["cy"]) * k
+        cur["x0"] = min(cur["x0"], e["x"] - e["w"] / 2)
+        cur["y0"] = min(cur["y0"], e["y"] - e["h"] / 2)
+        cur["x1"] = max(cur["x1"], e["x"] + e["w"] / 2)
+        cur["y1"] = max(cur["y1"], e["y"] + e["h"] / 2)
+    close()
+
+    segs = []
+    for c in clusters:
+        span = max(c["x1"] - c["x0"], c["y1"] - c["y0"], 0.05)
+        z = min(zoom, max(1.3, 0.8 / span))
+        segs.append(
+            {
+                "start": max(0.0, c["first"] - 0.5),
+                "end": min(duration, c["last"] + 1.2),
+                "zoom": round(z, 2),
+                "x": (c["x0"] + c["x1"]) / 2,
+                "y": (c["y0"] + c["y1"]) / 2,
+            }
+        )
+    # Merge neighbours in the same area; drop what's too short to read.
+    merged: list[dict] = []
+    for s in segs:
+        if merged and s["start"] - merged[-1]["end"] < 0.8 and math.hypot(s["x"] - merged[-1]["x"], s["y"] - merged[-1]["y"]) < 0.2:
+            m = merged[-1]
+            m["end"] = s["end"]
+            m["zoom"] = min(m["zoom"], s["zoom"])
+            continue
+        merged.append(dict(s))
+    return clean_segments([s for s in merged if s["end"] - s["start"] >= 1.2], duration)
+
+
+def analyze(src: str, info: dict | None = None) -> list[dict]:
+    info = info or probe(src)
+    if not info["width"] or not info["height"]:
+        raise SystemExit("loft: no video stream")
+    w = ANALYSIS_W
+    h = max(2, round(w * info["height"] / info["width"] / 2) * 2)
+    p = subprocess.Popen(
+        ["ffmpeg", "-v", "error", "-i", src, "-vf", f"fps={ANALYSIS_FPS},scale={w}:{h}:flags=area,format=gray", "-f", "rawvideo", "-"],
+        stdout=subprocess.PIPE,
+    )
+
+    def frames():
+        size = w * h
+        while True:
+            buf = p.stdout.read(size)
+            if len(buf) < size:
+                break
+            yield buf
+
+    try:
+        events = activity(frames(), w, h)
+    finally:
+        p.stdout.close()
+        p.wait()
+    return events
+
+
+def auto_zoom(src: str, zoom: float = 2.0) -> dict:
+    info = probe(src)
+    events = analyze(src, info)
+    return {"duration": info["duration"], "width": info["width"], "height": info["height"], "segments": segments_from_activity(events, info["duration"], zoom)}
+
+
+# ── CLI ─────────────────────────────────────────────────────────────────
+
+
+def _segments_arg(text: str) -> list[dict]:
+    if text.startswith("@"):
+        text = Path(text[1:]).read_text()
+    data = json.loads(text)
+    return data["segments"] if isinstance(data, dict) else data
+
+
+def add_parser(top) -> None:
+    cap = top.add_parser("capture", help="capture helpers: scrolling capture, recording zooms")
+    sub = cap.add_subparsers(dest="cmd", required=True)
+
+    s = sub.add_parser("scroll", help="scrolling-capture session (JSON lines; `done`/`cancel` on stdin)")
+    s.add_argument("--geometry", required=True, help='area as grim takes it: "X,Y WxH" (logical)')
+    s.add_argument("--out", required=True, help="PNG to write on `done`")
+    s.add_argument("--work", help="frame scratch dir (default: next to --out's tmp)")
+    s.add_argument("--interval", type=float, default=0.12)
+
+    def _scroll(ctx, a):
+        work = Path(a.work) if a.work else Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / f"loft-scroll-{os.getpid()}"
+        sys.exit(scroll_session(a.geometry, work, Path(a.out), a.interval))
+
+    s.set_defaults(fn=_scroll)
+
+    s = sub.add_parser("stitch", help="stitch PPM frames (in order) into one PNG")
+    s.add_argument("frames", nargs="+")
+    s.add_argument("-o", "--out", required=True)
+    s.set_defaults(fn=lambda ctx, a: print(json.dumps(stitch.stitch_files(a.frames, a.out))))
+
+    z = sub.add_parser("zoom", help="recording zooms: find (auto) and export (render)")
+    zs = z.add_subparsers(dest="zcmd", required=True)
+
+    s = zs.add_parser("auto", help="propose zoom segments from the activity in a recording (JSON)")
+    s.add_argument("video")
+    s.add_argument("--zoom", type=float, default=2.0, help="the deepest zoom to propose")
+    s.set_defaults(fn=lambda ctx, a: print(json.dumps(auto_zoom(a.video, a.zoom))))
+
+    s = zs.add_parser("render", help="export a recording with zoom segments as a new file")
+    s.add_argument("video")
+    s.add_argument("--segments", required=True, help="JSON list (or @file) of {start,end,zoom,x,y}")
+    s.add_argument("--out", help="default: <name>-zoomed.mp4 next to it")
+    s.add_argument("--start", type=float, default=0.0, help="trim: first second")
+    s.add_argument("--end", type=float, help="trim: last second")
+    s.add_argument("--dry-run", action="store_true")
+
+    def _render(ctx, a):
+        info = probe(a.video)
+        segs = clean_segments(_segments_arg(a.segments), info["duration"] or None)
+        out = a.out or zoomed_name(a.video)
+        cmd = render_command(a.video, out, segs, info, a.start, a.end)
+        if a.dry_run:
+            print(json.dumps(cmd))
+            return
+        t = time.monotonic()
+        r = subprocess.run(cmd)
+        if r.returncode != 0:
+            sys.exit(r.returncode)
+        print(json.dumps({"path": out, "segments": len(segs), "seconds": round(time.monotonic() - t, 2)}))
+
+    s.set_defaults(fn=_render)

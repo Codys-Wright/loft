@@ -6,7 +6,7 @@ import qs.components
 import qs.services
 
 // The capture selector (macOS ⌘⇧5): a glass toolbar at the bottom center
-// of the focused screen. Screenshot (screen / window / area) · Record
+// of the focused screen. Screenshot (screen / window / area / scrolling) · Record
 // (screen / area) · Text · Color, an Options menu (save location, timer,
 // thumbnail, clipboard, annotate, pointer, audio, color format) and the
 // Capture button. Recent picked colors show above it in Color mode.
@@ -66,7 +66,7 @@ PanelWindow {
         property string tip
         property string kind
         property string where
-        readonly property bool selected: Capture.mode === kind && (kind === "text" || kind === "color" || Capture.target === where)
+        readonly property bool selected: Capture.mode === kind && (kind === "text" || kind === "color" || kind === "scroll" || Capture.target === where)
         visible: Capture.allowed(kind)
 
         Layout.preferredWidth: 44
@@ -250,6 +250,12 @@ PanelWindow {
                 kind: "shot"
                 where: "area"
             }
+            ModeButton {
+                icon: "󰡏"
+                tip: "Capture Scrolling Area"
+                kind: "scroll"
+                where: "area"
+            }
 
             Divider {
                 visible: Capture.allowed("shot")
@@ -356,6 +362,8 @@ PanelWindow {
                                 return "Copy Text";
                             case "color":
                                 return "Pick Color";
+                            case "scroll":
+                                return "Capture Scrolling";
                             default:
                                 return "Capture";
                             }
@@ -464,12 +472,12 @@ PanelWindow {
             spacing: 1
 
             MenuTitle {
-                visible: Capture.mode === "shot" || Capture.mode === "record"
+                visible: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "record"
                 text: "Save to"
                 Layout.topMargin: 0
             }
             Repeater {
-                model: Capture.mode === "shot" || Capture.mode === "record" ? options.places : []
+                model: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "record" ? options.places : []
                 delegate: MenuItem {
                     required property string modelData
                     label: Capture.pretty(Capture.expand(modelData))
@@ -550,23 +558,23 @@ PanelWindow {
             }
 
             MenuTitle {
-                visible: Capture.mode === "shot" || Capture.mode === "record"
+                visible: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "record"
                 text: "Options"
             }
             MenuItem {
-                visible: Capture.mode === "shot" || Capture.mode === "record"
+                visible: Capture.mode === "shot" || Capture.mode === "scroll" || Capture.mode === "record"
                 label: "Show Floating Thumbnail"
                 checked: root.cfg.showThumbnail
                 onActivated: root.cfg.showThumbnail = !root.cfg.showThumbnail
             }
             MenuItem {
-                visible: Capture.mode === "shot"
+                visible: Capture.mode === "shot" || Capture.mode === "scroll"
                 label: "Copy to Clipboard"
                 checked: root.cfg.copyToClipboard
                 onActivated: root.cfg.copyToClipboard = !root.cfg.copyToClipboard
             }
             MenuItem {
-                visible: Capture.mode === "shot"
+                visible: Capture.mode === "shot" || Capture.mode === "scroll"
                 label: "Annotate After Capture"
                 checked: root.cfg.annotateAfter
                 onActivated: root.cfg.annotateAfter = !root.cfg.annotateAfter

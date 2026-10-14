@@ -4,7 +4,8 @@
 #   theme-unit      tests/test_*.py: renderer + manager against scratch dirs, the
 #                   cozytile:/qylock: importers against local fake upstream repos, and
 #                   vibes (pack collections, ranking, index links), and the Utilities
-#                   helpers (ports, flake updates, cleaner, media tools) — all offline
+#                   helpers (ports, flake updates, cleaner, media tools), and the capture
+#                   helpers (scrolling-capture stitcher, recording zooms) — all offline
 #   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte
 #   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`
@@ -55,7 +56,7 @@
 
         theme-unit = check "theme-unit" [
           pkgs.git
-          pkgs.ffmpeg # tests/test_systools.py: a real Make GIF run
+          pkgs.ffmpeg # tests/test_systools.py: a real Make GIF run; test_capture.py: a zoomed export
         ] ''
           export HOME=$TMPDIR LOFT_THEME_INDEX=none
           cd ${testSrc}

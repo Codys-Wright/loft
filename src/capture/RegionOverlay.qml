@@ -212,6 +212,8 @@ PanelWindow {
                         return "Select text or a QR code to copy  ·  Esc to cancel";
                     case "record":
                         return "Drag to choose the area to record  ·  Esc to cancel";
+                    case "scroll":
+                        return "Drag over the content you'll scroll  ·  Esc to cancel";
                     default:
                         return "Drag to capture an area  ·  Esc to cancel";
                     }
