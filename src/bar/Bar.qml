@@ -61,8 +61,9 @@ PanelWindow {
             anchors.centerIn: parent
             spacing: 10
 
+            // The OS mark, like the Apple menu.
             Icon {
-                text: "󰽰"
+                text: ""
                 size: 18
                 color: Theme.accent
             }

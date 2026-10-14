@@ -44,10 +44,18 @@ PanelWindow {
     readonly property string live: liveActivities.length ? liveActivities[liveIndex % liveActivities.length] : ""
 
     readonly property var pages: [live !== "" ? "live" : "", Notifications.history.length > 0 ? "notifications" : "", "media", "system", "usage"].filter(s => s)
-    property string page: "media"
+    property alias page: persist.page
     readonly property int pageIndex: Math.max(0, pages.indexOf(page))
 
-    property bool pinned: false
+    property alias pinned: persist.pinned
+
+    // Survive hot reloads (one per screen).
+    PersistentProperties {
+        id: persist
+        reloadableId: `island-${root.modelData.name}`
+        property string page: "media"
+        property bool pinned: false
+    }
     readonly property bool expanded: hover.hovered || pinned
     readonly property var banner: Notifications.current
     readonly property bool bannering: banner !== null && !expanded

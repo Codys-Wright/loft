@@ -12,6 +12,7 @@ import qs.osd
 import qs.switcher
 import qs.wallpaper
 import qs.settings
+import qs.devtools
 import qs.monitor
 import qs.clipboard
 
@@ -62,6 +63,9 @@ ShellRoot {
     }
 
     SettingsApp {}
+
+    // Hot-reload feedback: "Reloaded" / the QML error (live design loop).
+    ReloadToast {}
 
     Lock {}
 

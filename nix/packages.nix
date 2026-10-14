@@ -40,6 +40,7 @@
         wl-clipboard # wl-copy / wl-paste: clipboard history, plain-text paste, Clean URL
         wtype # paste / snippet expansion into the focused app
         xdg-utils # Shelf: open parked files and links
+        inotify-tools # dev loop: reload after a failed reload (devtools/ReloadToast)
       ];
 
       # The CLI's own tree: Python package + templates + built-in packs/schema.
@@ -186,6 +187,18 @@
             spawn-at-startup "env" "STUDIO_STATE_DIR=$dir" "STUDIO_LAUNCHER_DIR=$root/launcher" "studio-launcher" "service"
             spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_NIRI_CONFIG=$dir/config.kdl" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "quickshell" "--path" "$root/src"
             EOF
+
+            # Live everything, not just QML: `studio` runs the checkout's CLI,
+            # and fresh `cargo build` binaries (target/debug) shadow the
+            # packaged studio-niri & co. niri — and everything it spawns —
+            # inherits this PATH.
+            mkdir -p "$dir/bin"
+            printf '#!/bin/sh\nexec %s -B "%s" "$@"\n' "${python}/bin/python3" "$root/cli/studio" > "$dir/bin/studio"
+            chmod +x "$dir/bin/studio"
+            export PATH="$dir/bin:$PATH"
+            if [ -d "$root/target/debug" ]; then
+              export PATH="$root/target/debug:$PATH"
+            fi
 
             echo "studio-dev: niri config $dir/config.kdl, shell from $root/src"
             niri --config "$dir/config.kdl" &
