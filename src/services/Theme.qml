@@ -41,8 +41,23 @@ Singleton {
 
     readonly property var wallpaperGradient: theme.wallpaper.gradient
 
+    // Fonts ship with the shell (store paths from the wrapper) so it looks the
+    // same on any machine; fall back to whatever the system has.
+    readonly property string fontUi: uiFont.status === FontLoader.Ready ? uiFont.name : "Adwaita Sans"
+    readonly property string fontIcons: iconFont.status === FontLoader.Ready ? iconFont.name : "JetBrainsMono Nerd Font"
+
+    FontLoader {
+        id: uiFont
+        source: Quickshell.env("STUDIO_UI_FONT") ? "file://" + Quickshell.env("STUDIO_UI_FONT") : ""
+    }
+
+    FontLoader {
+        id: iconFont
+        source: Quickshell.env("STUDIO_ICON_FONT") ? "file://" + Quickshell.env("STUDIO_ICON_FONT") : ""
+    }
+
     function withAlpha(c, a) {
-        const q = Qt.color(c);
+        const q = typeof c === "string" ? Qt.color(c) : c;
         return Qt.rgba(q.r, q.g, q.b, a);
     }
 

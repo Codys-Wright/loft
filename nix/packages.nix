@@ -22,6 +22,11 @@
 
       builtinThemes = ../themes;
 
+      # Fonts the shell loads directly (FontLoader), so it looks the same on
+      # any machine regardless of installed fonts.
+      uiFont = "${pkgs.inter}/share/fonts/truetype/InterVariable.ttf";
+      iconFont = "${pkgs.nerd-fonts.symbols-only}/share/fonts/truetype/NerdFonts/Symbols/SymbolsNerdFont-Regular.ttf";
+
       # One niri config tree in the store: studio's base fragments plus a
       # session entry that starts the shell.
       sessionConfig = pkgs.runCommand "studio-niri-config" { } ''
@@ -45,6 +50,7 @@
               [ -e "$state/current" ] || ln -sfn ${builtinThemes}/default "$state/current"
               export STUDIO_THEME_FILE="$state/current/theme.json"
             fi
+            export STUDIO_UI_FONT="${uiFont}" STUDIO_ICON_FONT="${iconFont}"
             exec quickshell --path ${../src} "$@"
           '';
         };
@@ -90,7 +96,7 @@
             cat > "$dir/config.kdl" <<EOF
             include "$root/niri/base.kdl"
             include optional=true "$root/niri/dev-local.kdl"
-            spawn-at-startup "env" "STUDIO_THEME_FILE=$dir/current/theme.json" "quickshell" "--path" "$root/src"
+            spawn-at-startup "env" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "quickshell" "--path" "$root/src"
             EOF
 
             echo "studio-dev: niri config $dir/config.kdl, shell from $root/src"

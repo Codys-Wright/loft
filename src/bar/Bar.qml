@@ -2,9 +2,12 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import qs.components
 import qs.services
 
-// The menu bar: a full-width Liquid Glass strip across the top of each screen.
+// The menu bar: floating Liquid Glass pills on a transparent strip
+// (javiiervm's layout). Left: app menu (studio mark + focused app, like
+// macOS) and workspaces. Right: tray, status, clock.
 PanelWindow {
     id: root
 
@@ -18,63 +21,118 @@ PanelWindow {
         left: true
         right: true
     }
-    implicitHeight: 34
+    implicitHeight: 44
+    exclusiveZone: 44
     color: "transparent"
 
-    // Ask the compositor to blur everything behind the glass.
-    BackgroundEffect.blurRegion: Theme.blur ? glassRegion : null
+    readonly property int pillHeight: 34
+
+    // Blur exactly the pills — the strip between them stays clear.
+    BackgroundEffect.blurRegion: Theme.blur ? pills : null
     Region {
-        id: glassRegion
-        item: glass
-    }
+        id: pills
+        item: appPill
+        radius: appPill.radius
 
-    Rectangle {
-        id: glass
-        anchors.fill: parent
-        color: Theme.glassFill
-
-        // Hairline at the bottom edge, like the macOS menu bar.
-        Rectangle {
-            anchors {
-                left: parent.left
-                right: parent.right
-                bottom: parent.bottom
-            }
-            height: 1
-            color: Theme.glassBorder
+        Region {
+            item: workspacePill
+            radius: workspacePill.radius
+        }
+        Region {
+            item: statusPill
+            radius: statusPill.radius
         }
     }
 
-    RowLayout {
+    // ── Left: app menu ──────────────────────────────────────────────────
+    GlassSurface {
+        id: appPill
         anchors {
-            fill: parent
-            leftMargin: 16
-            rightMargin: 16
+            left: parent.left
+            leftMargin: 12
+            verticalCenter: parent.verticalCenter
         }
-        spacing: 18
+        height: root.pillHeight
+        width: appRow.implicitWidth + 28
+        radius: height / 2
 
-        Text {
-            text: "studio"
-            color: Theme.text
-            font.pixelSize: 14
-            font.weight: Font.Bold
+        RowLayout {
+            id: appRow
+            anchors.centerIn: parent
+            spacing: 10
+
+            Icon {
+                text: "󰽰"
+                size: 18
+                color: Theme.accent
+            }
+
+            Text {
+                text: Niri.focusedWindow ? Apps.name(Niri.focusedWindow.app_id) : "Desktop"
+                color: Theme.text
+                font.family: Theme.fontUi
+                font.pixelSize: 14
+                font.weight: Font.DemiBold
+            }
         }
 
-        Text {
-            text: Theme.name
-            color: Theme.subtext
-            font.pixelSize: 13
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: Niri.toggleOverview()
         }
+    }
 
-        Item {
-            Layout.fillWidth: true
+    GlassSurface {
+        id: workspacePill
+        anchors {
+            left: appPill.right
+            leftMargin: 8
+            verticalCenter: parent.verticalCenter
         }
+        visible: workspaces.workspaces.length > 0
+        height: root.pillHeight
+        width: workspaces.implicitWidth + 28
+        radius: height / 2
 
-        Text {
-            text: Qt.formatDateTime(clock.date, "ddd MMM d   h:mm AP")
-            color: Theme.text
-            font.pixelSize: 13
-            font.weight: Font.Medium
+        Workspaces {
+            id: workspaces
+            anchors.centerIn: parent
+            output: root.modelData.name
+        }
+    }
+
+    // ── Right: status ───────────────────────────────────────────────────
+    GlassSurface {
+        id: statusPill
+        anchors {
+            right: parent.right
+            rightMargin: 12
+            verticalCenter: parent.verticalCenter
+        }
+        height: root.pillHeight
+        width: statusRow.implicitWidth + 32
+        radius: height / 2
+
+        RowLayout {
+            id: statusRow
+            anchors.centerIn: parent
+            spacing: 16
+
+            Tray {
+                window: root
+                visible: children.length > 1
+            }
+
+            Volume {}
+
+            Text {
+                text: Qt.formatDateTime(clock.date, "ddd MMM d   h:mm AP")
+                color: Theme.text
+                font.family: Theme.fontUi
+                font.pixelSize: 13
+                font.weight: Font.Medium
+            }
         }
     }
 
