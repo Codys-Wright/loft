@@ -189,6 +189,25 @@
         };
 
         systemd.user.services.studio-launcher = service "studio-linux launcher (walker + elephant)" "${lib.getExe sp.studio-launcher} service";
+
+        # Restart the shell/launcher when their unit changed — even when the
+        # home's systemd.user.startServices is "suggest" (kept so a switch
+        # never restarts other user services, e.g. audio). Compares a hash of
+        # each unit as systemd now sees it with the one from the last switch.
+        home.activation.studioRestart = lib.hm.dag.entryAfter [ "reloadSystemd" ] ''
+          state="''${XDG_STATE_HOME:-$HOME/.local/state}/studio-linux"
+          mkdir -p "$state"
+          for unit in studio-shell studio-launcher; do
+            new="$(${pkgs.systemd}/bin/systemctl --user cat "$unit.service" 2>/dev/null | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
+            old="$(cat "$state/$unit.unit-hash" 2>/dev/null || true)"
+            if [ "$new" != "$old" ]; then
+              if ${pkgs.systemd}/bin/systemctl --user is-active --quiet "$unit.service"; then
+                run ${pkgs.systemd}/bin/systemctl --user restart "$unit.service" || true
+              fi
+              [ -n "''${DRY_RUN:-}" ] || echo "$new" > "$state/$unit.unit-hash"
+            fi
+          done
+        '';
       };
     };
 }
