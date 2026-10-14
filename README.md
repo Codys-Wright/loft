@@ -49,7 +49,7 @@ per-app fragments under `~/.local/state/studio-linux/current/`. Format: [docs/TH
 studio theme list | current
 studio theme apply latte                      # render (cached) → swap `current` → reload shell, niri, kitty, Ghostty, GTK
 studio theme render tokyonight ./out          # just render a pack's files
-studio theme new mytheme --from latte         # scaffold in ~/.local/share/studio-linux/themes
+studio theme new mytheme --from latte         # scaffold in the library's Packs/ (else ~/.local/share/studio-linux/themes)
 studio theme install ./pack | pack.tar.zst | https://…/repo.git [--subdir packs/x]
 studio theme install cozytile:all             # importers convert upstream themes at install time
 studio theme install qylock:pixel-sakura      #   (--list cozytile: / qylock: shows what's available)
@@ -66,6 +66,28 @@ the theme's own, the curated ones, then every other installed pack's wallpapers 
 loose images) ranked by color closeness (CIEDE2000 between palettes and between image swatches).
 Settings → Wallpaper / Lock Screen and the wallpaper picker (`wallpaper toggle`) show the same
 set; choices, rotation and per-workspace wallpapers are remembered per theme.
+
+**Library.** `~/Documents/Themes` (`$STUDIO_LIBRARY`; home-manager: `programs.studio-linux.library`)
+is one folder for everything: installed packs in `Packs/` (searched first; `install` and `new`
+put packs there when the library exists) and your wallpapers in `Wallpapers/Topics/<Topic>/`.
+`studio library sort` generates symlink views beside them, regenerated idempotently and never
+touching real files or links it didn't make:
+
+```
+Wallpapers/Colors/<Red|Orange|Yellow|Green|Teal|Blue|Purple|Pink|Brown|Monochrome>/
+Wallpapers/Tones/<Dark|Medium|Light>/
+Wallpapers/Themes/<theme>/          # own + curated + the closest images (vibes score ≥ 0.6, top 24)
+```
+
+```sh
+studio library sort [--json]                     # views + README.md + the index Settings → Wallpaper reads
+studio library add a.jpg b.png --topic "Studio Ghibli" [--move]
+studio library status [--json]
+```
+
+Topic images also rank among `theme vibes` matches (and in the wallpaper picker); Settings →
+Wallpaper → Library browses by Topic, Color (+ tone) and Theme. Thumbnails are cached in
+`<state>/cache/thumbs`.
 
 Point your apps at the rendered fragments once; `apply` keeps them current:
 
