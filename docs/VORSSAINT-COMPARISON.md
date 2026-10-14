@@ -22,14 +22,14 @@ Legend: ✅ have · 🟡 partial · 🔨 in progress · ⬜ todo · ➖ not appl
 
 | | Count |
 |---|---|
-| ✅ Have | 43 |
+| ✅ Have | 44 |
 | 🧩 Handled by niri / fleet | 9 |
-| 🟡 Partial | 3 |
+| 🟡 Partial | 2 |
 | 🔨 In progress | 0 |
 | ⬜ Todo | 1 |
 | ➖ Not applicable on Linux/NixOS | 9 |
 
-Of the 56 rows that apply on Linux: 52 are covered (✅ + 🧩), 3 more are partial, 1 is
+Of the 56 rows that apply on Linux: 53 are covered (✅ + 🧩), 2 more are partial, 1 is
 still todo — and Loft adds a whole desktop's worth of features vorssaint doesn't need
 (bottom of this file).
 
@@ -76,7 +76,7 @@ still todo — and Loft adds a whole desktop's worth of features vorssaint doesn
 | Side buttons (Back / Forward) | 🧩 | Apps map buttons 8/9 to Back / Forward themselves |
 | Mouse button shortcuts | 🧩 | niri binds MouseBack / MouseForward / MouseMiddle (+ modifiers) |
 | Middle click (three-finger) | 🧩 | touchpad click method |
-| Apps to leave alone | 🟡 | Settings → Keyboard Shortcuts → Apps to Leave Alone: Loft's window shortcuts (⌘Q, paste, snippets, palettes, Arrange) do nothing there; `loft keys xremap` writes xremap's config with every remap off in those apps — ✅ once the consumer's xremap service reads it (fleet diff pending). niri's own binds can't be per app |
+| Apps to leave alone | ✅ | Settings → Keyboard Shortcuts → Apps to Leave Alone: Loft's window shortcuts (⌘Q, paste, snippets, palettes, Arrange) do nothing there; xremap reads `loft keys xremap`'s config (every remap off in those apps, reloaded on change — the fleet's xremap service wires it). niri's own binds can't be per app |
 | Extra click filter / key debounce | ⬜ | No clean per-device way on Linux: libinput debounces mouse buttons by itself but never keys, keyd has no debounce, xremap's experimental `throttle_ms` is per key for every keyboard (FEATURES.md) |
 | Super key (Caps / right modifier as a combo) | ✅ | Esc / Caps hold = window key (xremap); Super = ⌘ for apps |
 | Keyboard shortcuts hub (+ macOS shortcut takeover) | ✅ | Settings → Keyboard Shortcuts: every niri bind (Loft's and your Nix config's) grouped and searchable; click to record, conflicts ask before replacing, turn off, custom shortcuts (Loft action, command, niri action), restore per shortcut or all; validated with `niri validate`. ⌘C/V/⌘⇧3/4/5 work |
