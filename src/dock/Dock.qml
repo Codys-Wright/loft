@@ -65,6 +65,8 @@ PanelWindow {
         height: root.shelfHeight
         width: row.implicitWidth + 24
         radius: Theme.radius + 8
+        // Liquid Glass: a light frost over the blurred wallpaper.
+        clear: true
 
         Behavior on width {
             NumberAnimation {

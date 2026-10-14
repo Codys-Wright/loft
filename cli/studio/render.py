@@ -64,7 +64,21 @@ def variables(norm: dict, fonts_set: bool) -> dict[str, str]:
             "glass_saturation": c.num(g["saturation"]),
             "terminal_opacity": c.num(g["terminalOpacity"]),
             "shadow": g["shadow"],
-            "window_radius": c.num(norm["radii"]["window"]),
+            # Inactive windows: the same shadow, much fainter (Golden Gate
+            # makes the focused window stand out).
+            "shadow_inactive": c.with_alpha(g["shadow"], c.parse(g["shadow"])[3] * 0.4),
+            "window_radius": c.num(norm["shape"]["windowRadius"]),
+            "panel_radius": c.num(norm["shape"]["panelRadius"]),
+            "control_radius": c.num(norm["shape"]["controlRadius"]),
+            # Traffic lights (close / minimize / zoom), Aqua colors: fixed
+            # across themes so they read the same everywhere.
+            "traffic_close": "#ff5f57",
+            "traffic_minimize": "#febc2e",
+            "traffic_zoom": "#28c840",
+            "traffic_inactive": c.rgba(p["text"], 0.22),
+            "traffic_glyph": "rgba(0, 0, 0, 0.55)",
+            "specular": c.rgba("#ffffff", min(1.0, g["specular"] * (0.35 if dark else 0.7))),
+            "edge_dark": c.rgba("#000000", g["edgeDarken"] * 0.5),
             "focus_active": c.with_alpha(p["accent"], 0.8),
             "focus_inactive": "#00000000",
             "launcher_glass": c.rgba(g["tint"], min(g["opacity"] * 1.6, 0.92)),

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
@@ -7,10 +8,13 @@ import qs.components
 import qs.menubar
 import qs.services
 
-// The menu bar, as on macOS: one translucent strip, flush with the top edge
-// and the full width of the screen. Left: the OS mark, the focused app (bold)
-// and workspaces. Right: status, Control Center, date. Items sit directly on
-// the bar; the glass is the bar itself.
+// The menu bar, as on macOS Golden Gate: flush with the top edge and the full
+// width of the screen, with no background — titles and icons sit on the
+// wallpaper, light or dark from the wallpaper under the bar on this output
+// (Theme.barTextFor / barShadowFor, WallpaperTone), with a soft shadow.
+// "Show menu bar background" (Theme.barBackground) brings back the glass
+// strip. Left: the OS mark, the focused app (bold) and workspaces. Right:
+// status, Control Center, date.
 PanelWindow {
     id: root
 
@@ -30,14 +34,30 @@ PanelWindow {
 
     readonly property int barHeight: 30
 
-    BackgroundEffect.blurRegion: Theme.blur ? barRegion : null
+    // This output's bar colors (per-output components use the same calls).
+    readonly property color textColor: Theme.barTextFor(modelData.name)
+    readonly property color shadowColor: Theme.barShadowFor(modelData.name)
+
+    BackgroundEffect.blurRegion: Theme.blur && Theme.barBackground ? barRegion : null
     Region {
         id: barRegion
         item: bar
     }
 
+    // Soft shadow under everything on a transparent bar (titles, icons).
+    contentItem.layer.enabled: !Theme.barBackground
+    contentItem.layer.effect: MultiEffect {
+        shadowEnabled: true
+        shadowColor: root.shadowColor
+        shadowBlur: 0.5
+        shadowVerticalOffset: 1
+        shadowHorizontalOffset: 0
+    }
+
     GlassSurface {
         id: bar
+        visible: Theme.barBackground
+        clear: true
         anchors.fill: parent
         radius: 0
         showBorder: false

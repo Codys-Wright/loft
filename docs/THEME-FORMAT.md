@@ -97,20 +97,35 @@ that is what the shell reads.
 | `glass.blur` | bool | `true` | Compositor blur. `false` turns niri blur **off** entirely and makes terminals opaque |
 | `glass.xray` | bool | `true` | Blur only the wallpaper (cheap). `false` = real blur of what is behind |
 | `glass.tint` | `#rrggbb` | `palette.bg` | Glass fill color |
-| `glass.opacity` | 0..1 | 0.45 dark / 0.5 light | Glass fill opacity |
+| `glass.opacity` | 0..1 | 0.45 dark / 0.5 light | Glass fill opacity: the default of the Liquid Glass slider (Settings → Appearance; 0 ultraclear … 1 fully tinted) |
 | `glass.border`, `glass.borderOpacity` | `#rrggbb`, 0..1 | `#ffffff`, 0.14 dark / 0.6 light | Glass hairline |
 | `glass.radius` | px | 14 | Shell surface corner radius |
 | `glass.noise`, `glass.saturation` | number | 0.02, 1.6 | niri blur noise / saturation |
 | `glass.terminalOpacity` | 0..1 | 0.85 with blur, else 1 | kitty / Ghostty background opacity |
-| `glass.shadow` | `#rrggbbaa` | `#00000066` dark / `#0000002e` light | niri window shadow |
+| `glass.shadow` | `#rrggbbaa` | `#00000066` dark / `#0000002e` light | niri shadow of the focused window; inactive windows get the same color at 40 % alpha (`inactive-color`) |
+| `glass.edgeDarken` | 0..1 | 0.35 dark / 0.18 light | Darkened inner rim of glass surfaces (depth) |
+| `glass.specular` | 0..1 | 0.5 dark / 0.75 light | Top specular highlight of glass surfaces |
 | `wallpaper.gradient` | `#rrggbb[]` | bg → accent → accent2 blend | Shell fallback wallpaper |
 | `wallpaper.image` | path | first still of the collection | The default wallpaper. Relative to the pack (copied into the rendered bundle as `wallpaper.<ext>`), or absolute |
 | `wallpaper.images` | (path \| `{path, video?, preview?}`)[] | `[]` | More wallpapers ([Wallpapers](#wallpapers)) |
 | `fonts.{ui,mono,size}` | string, string, number | sans-serif, monospace, 11 | Declaring `fonts` also sets the terminal font |
-| `radii.window` | px | 12 | niri window corner radius |
+| `shape.windowRadius` | px | `radii.window`, else 12 | One corner radius for every window: niri's window rule (`geometry-corner-radius` + `clip-to-geometry`), the shell's own windows, GTK/libadwaita CSD |
+| `shape.panelRadius` | px | 18 | Shell panels, popovers, cards |
+| `shape.controlRadius` | px | 8 | Buttons, fields, sidebar rows |
+| `bar.adaptiveText` | bool | `true` | Menu bar text/icons turn light or dark with the wallpaper under the bar (per output) |
+| `bar.background` | bool | `false` | Draw a (clear) glass strip behind the menu bar. Golden Gate has none |
+| `radii.window` | px | 12 | Legacy spelling of `shape.windowRadius` (which wins); the normalized theme.json still carries it |
 
 Colors are `#rrggbb`. The only alpha color, `glass.shadow`, is CSS order
 `#rrggbbaa` (Qt's `#aarrggbb` is never used in packs).
+
+Runtime choices override some of these without touching the pack
+(`<state>/overrides/shell.json`, `appearance`): `glass` (the Liquid Glass
+slider, −1 = `glass.opacity`), `reduceTransparency` (flat opaque fills, no
+blur, the menu bar gets a flat background), `blur`, `barBackground` and
+`barAdaptiveText` (−1 = the theme). An older `appearance.glassOpacity`
+override is moved into `glass` on load (same 0..1 scale). The material itself
+is described in [DESIGN-GOLDEN-GATE.md](DESIGN-GOLDEN-GATE.md).
 
 A legacy top-level `name` is accepted; `manifest.json`'s name wins.
 
@@ -143,7 +158,7 @@ default. Every choice is kept per theme, so switching back restores it.
 | `niri.kdl` | niri | `include optional=true "<state>/current/niri.kdl"` after `base.kdl` | niri watches the include (by canonical path); `niri msg action load-config-file` makes it immediate |
 | `kitty.conf` | kitty | `include ~/.local/state/studio-linux/current/kitty.conf` | `SIGUSR1` |
 | `ghostty.conf` | Ghostty | `config-file = ?~/.local/state/studio-linux/current/ghostty.conf` | `SIGUSR2` |
-| `gtk.css` | GTK 3/4, libadwaita | `@import url("file://…/current/gtk.css");` from `~/.config/gtk-{3,4}.0/gtk.css` | `gsettings … color-scheme prefer-dark/light` |
+| `gtk.css` | GTK 3/4, libadwaita | `@import url("file://…/current/gtk.css");` from `~/.config/gtk-{3,4}.0/gtk.css`. Palette + accent, the window radius, traffic-light window buttons (put them on the left with `gtk-decoration-layout=close,minimize,maximize:` in `settings.ini`) | `gsettings … color-scheme prefer-dark/light` |
 | `walker.css` | walker | studio's walker theme `@import`s it as `colors.css` | walker re-reads CSS on every open |
 | `noctalia.json` | Noctalia (transition only) | its `colors.json` | its own watcher |
 

@@ -30,5 +30,47 @@ values below are ours — tokens, so themes can tune them.
 - `shape.windowRadius` (default 12), `shape.panelRadius` (default 18), `shape.controlRadius`
 - `bar.adaptiveText` (true), `bar.background` (false)
 
+## How it is built (foundation)
+
+- **Material** — `src/components/GlassSurface.qml`, all values from `Theme`:
+  fill `Theme.fillFor(strength)` (tint × the slider; strength > 1 for windows
+  and panels, < 1 for cards inside them), hairline, darkened inner rim
+  (`Theme.edgeColor`), top sheen + specular line (`Theme.sheenColor`,
+  `specularColor`), `active: false` dims an inactive window's glass,
+  `clear: true` is the light frost of the dock and the menu bar background
+  (`Theme.clearFillFor`). A nested surface leaves the text shadow to the
+  outermost one.
+- **Liquid Glass slider** — `Theme.glass` (0..1) = `Settings.appearance.glass`
+  (−1 → the theme's `glass.opacity`); `Theme.glassPreview` shows a value live
+  while the slider drags and is saved on release. It sets the fill opacity
+  (1:1, so a theme's default looks as before), the tint strength (fades toward
+  neutral below the default) and the text shadow (none at/above the default).
+  Below the default, `Theme.text` / `subtext` become contrast-aware: when the
+  palette's text would not reach 4.5:1 on the glass over this wallpaper
+  (`Theme.onGlass`), they turn white or near-black.
+- **Reduce transparency** — `Theme.reduceTransparency`: `Theme.blur` is off
+  everywhere, `fillFor` returns opaque theme colors (`flatFill`), the bar gets
+  its (flat) background.
+- **Menu bar** — `src/bar/Bar.qml`: transparent; `services/WallpaperTone.qml`
+  samples the image each screen shows (cropped like the wallpaper layer, the
+  strip under the bar and the whole screen, ffmpeg → 16 columns each), cached
+  per image and screen size; the gradient fallback is read from the theme.
+  Per-output colors: `Theme.barTextFor(screen)`, `barSubtextFor`,
+  `barOnTextFor` (text on a pill of barText), `barShadowFor`,
+  `barDarkTextFor`; `Theme.barText` / `barShadow` are first-screen shorthands.
+  The bar's whole content gets one soft MultiEffect shadow.
+- **Windows** — niri (`niri/base.kdl` + the theme fragment): one
+  `geometry-corner-radius` (`shape.windowRadius`) with `clip-to-geometry`;
+  shadow `color` / `inactive-color` from `glass.shadow`, and a larger
+  shadow on `is-focused=true`.
+- **Shell windows** — `components/WindowChrome.qml` (edge-to-edge sidebar,
+  search, toolbar, traffic lights, active/inactive), `SidebarItem.qml`,
+  `IconBadge.qml` (`Theme.badgeColor(name)`: Apple system colors),
+  `TrafficLights.qml`. Settings and System Monitor use the chrome; the
+  Scratchpad keeps its tab bar and gets the lights, radius and dimming.
+- **GTK / libadwaita** — `templates/render/gtk.css`: accent and palette, the
+  window radius, traffic-light window buttons (glyphs on hover, grey in
+  backdrop).
+
 ## Not copied
 - The notch, HDR UI highlights, and iOS-style app icon layers.

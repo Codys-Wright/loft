@@ -40,6 +40,7 @@ Singleton {
         // A missing overrides file just means "all defaults".
         printErrors: false
         onFileChanged: reload()
+        onLoaded: root.migrate()
         // Writes from the shell persist immediately.
         onAdapterUpdated: writeAdapter()
         // First run: create the file (and its directory) with the defaults.
@@ -98,8 +99,18 @@ Singleton {
 
             property JsonObject appearance: JsonObject {
                 // Runtime overrides on top of the theme (-1 / "" = theme value).
+                // The Liquid Glass slider, 0 ultraclear … 1 fully tinted
+                // (-1 = the theme's glass.opacity).
+                property real glass: -1
+                // Before the slider: a plain glass-opacity override. Read once
+                // and moved into `glass` (same scale), then reset.
                 property real glassOpacity: -1
                 property int blur: -1 // -1 theme, 0 off, 1 on
+                // Flat opaque fills and no blur, everywhere.
+                property bool reduceTransparency: false
+                // Menu bar: -1 theme (bar.background / bar.adaptiveText), 0 off, 1 on.
+                property int barBackground: -1
+                property int barAdaptiveText: -1
             }
 
             // System module (Settings → System): bar readouts and alerts.
@@ -134,6 +145,16 @@ Singleton {
                 // Bar mic icon while an app records or the mics are muted.
                 property bool micIndicator: true
             }
+        }
+    }
+
+    // Settings written by older versions.
+    function migrate() {
+        // appearance.glassOpacity → the Liquid Glass slider (same 0..1 scale).
+        if (settings.appearance.glassOpacity >= 0) {
+            if (settings.appearance.glass < 0)
+                settings.appearance.glass = settings.appearance.glassOpacity;
+            settings.appearance.glassOpacity = -1;
         }
     }
 

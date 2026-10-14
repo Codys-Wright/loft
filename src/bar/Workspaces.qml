@@ -10,6 +10,9 @@ Item {
 
     required property string output
 
+    // Bar colors for this output (light/dark from the wallpaper, Theme).
+    readonly property color fg: Theme.barTextFor(output)
+
     readonly property var workspaces: Niri.workspacesOn(output)
     readonly property int activeIndex: Math.max(0, workspaces.findIndex(w => w.is_active))
 
@@ -36,7 +39,7 @@ Item {
                 width: root.cell
                 height: root.cell
                 radius: root.cell / 2
-                color: mouse.containsMouse ? Theme.withAlpha(Theme.text, 0.14) : "transparent"
+                color: mouse.containsMouse ? Theme.withAlpha(root.fg, 0.14) : "transparent"
 
                 // Fade the glyph the pacman is about to "eat".
                 opacity: {
@@ -53,7 +56,7 @@ Item {
                 Icon {
                     anchors.centerIn: parent
                     text: dot.modelData.is_urgent ? "󰀦" : dot.occupied ? "󰧞" : "󰊠"
-                    color: dot.modelData.is_urgent ? Theme.urgent : Theme.subtext
+                    color: dot.modelData.is_urgent ? Theme.urgent : Theme.barSubtextFor(root.output)
                     size: 16
                 }
 
@@ -75,7 +78,7 @@ Item {
         height: root.cell
         radius: root.cell / 2
         x: root.activeIndex * (root.cell + root.gap) - 4
-        color: Theme.text
+        color: root.fg
 
         Behavior on x {
             NumberAnimation {
@@ -87,7 +90,7 @@ Item {
         Icon {
             anchors.centerIn: parent
             text: "󰮯"
-            color: Theme.bg
+            color: Theme.barOnTextFor(root.output)
             size: 16
         }
     }

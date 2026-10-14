@@ -63,12 +63,16 @@ layout {
         off
     }
 
+    // Inactive windows: a small, faint shadow. The focused window gets a
+    // larger, deeper one (window rule below) — Golden Gate makes the
+    // active window stand out. Colors come from the theme fragment.
     shadow {
         on
-        softness 30
-        spread 4
-        offset x=0 y=8
-        color "#00000055"
+        softness 16
+        spread 1
+        offset x=0 y=4
+        color "#00000066"
+        inactive-color "#00000029"
     }
 
     // The shell's menu bar sits on top; leave room for it.
@@ -77,25 +81,30 @@ layout {
     }
 }
 
-// Rounded windows everywhere, so window blur and shadows follow the shape.
+// One corner radius for every window (the theme fragment sets it from
+// shape.windowRadius), so window blur and shadows follow the shape.
 window-rule {
     geometry-corner-radius 12
     clip-to-geometry true
 }
 
-// The shell's own windows float, like macOS utility windows.
+// The focused window stands out: a larger, deeper shadow.
 window-rule {
-    match title="^Studio Settings$"
-    open-floating true
-    // Match the glass frame so the focus ring and blur follow its corners.
-    geometry-corner-radius 24
+    match is-focused=true
+    shadow {
+        softness 40
+        spread 4
+        offset x=0 y=14
+    }
 }
 
+// The shell's own windows float, like macOS utility windows. Their glass
+// frame uses the same window radius as everything else.
 window-rule {
+    match title="^Studio Settings$"
     match title="^System Monitor$"
     match title="^Studio Scratchpad$"
     open-floating true
-    geometry-corner-radius 24
 }
 
 // Global blur quality for everything that requests it (the shell's glass
