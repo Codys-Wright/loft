@@ -1,0 +1,63 @@
+{
+  "name": "latte",
+  "polarity": "light",
+  "palette": {
+    "bg": "#eff1f5",
+    "surface": "#e6e9ef",
+    "overlay": "#bcc0cc",
+    "text": "#4c4f69",
+    "subtext": "#6c6f85",
+    "accent": "#1e66f5",
+    "accent2": "#8839ef",
+    "urgent": "#d20f39",
+    "ok": "#40a02b",
+    "warn": "#df8e1d"
+  },
+  "ansi": [
+    "#4c4f69",
+    "#d20f39",
+    "#40a02b",
+    "#df8e1d",
+    "#1e66f5",
+    "#8839ef",
+    "#1ed1f5",
+    "#bcc0cc",
+    "#6c6f85",
+    "#ac0c2f",
+    "#338022",
+    "#bb7718",
+    "#0a52e0",
+    "#7113ec",
+    "#0abce0",
+    "#e6e9ef"
+  ],
+  "glass": {
+    "blur": true,
+    "xray": true,
+    "tint": "#ffffff",
+    "opacity": 0.5,
+    "border": "#ffffff",
+    "borderOpacity": 0.6,
+    "radius": 14,
+    "noise": 0.02,
+    "saturation": 1.6,
+    "terminalOpacity": 0.85,
+    "shadow": "#0000002e"
+  },
+  "wallpaper": {
+    "gradient": [
+      "#dce0e8",
+      "#a6c8ff",
+      "#e3c6ff"
+    ],
+    "image": ""
+  },
+  "fonts": {
+    "ui": "sans-serif",
+    "mono": "monospace",
+    "size": 11
+  },
+  "radii": {
+    "window": 12
+  }
+}

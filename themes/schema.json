@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Codys-Wright/studio-linux/blob/main/themes/schema.json",
+  "title": "studio-linux theme pack",
+  "description": "theme.json (the core) and manifest.json of a studio-linux theme pack. See docs/THEME-FORMAT.md.",
+  "$ref": "#/$defs/theme",
+  "$defs": {
+    "color": {
+      "description": "Opaque color, #rrggbb.",
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "colorAlpha": {
+      "description": "Color with alpha, #rrggbbaa (CSS order).",
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{8}$"
+    },
+    "unit": { "type": "number", "minimum": 0, "maximum": 1 },
+    "theme": {
+      "type": "object",
+      "required": ["palette"],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": { "type": "string" },
+        "name": {
+          "description": "Legacy; manifest.json's name wins.",
+          "type": "string"
+        },
+        "polarity": { "enum": ["dark", "light"], "default": "dark" },
+        "palette": {
+          "description": "Semantic roles every component reads. Extra #rrggbb entries pass through to consumers.",
+          "type": "object",
+          "required": ["bg", "surface", "overlay", "text", "subtext", "accent", "accent2", "urgent", "ok", "warn"],
+          "additionalProperties": { "$ref": "#/$defs/color" },
+          "properties": {
+            "bg": { "$ref": "#/$defs/color", "description": "Window / desktop background" },
+            "surface": { "$ref": "#/$defs/color", "description": "Raised surfaces: cards, popovers, headerbars" },
+            "overlay": { "$ref": "#/$defs/color", "description": "Borders, separators, selection" },
+            "text": { "$ref": "#/$defs/color" },
+            "subtext": { "$ref": "#/$defs/color", "description": "Secondary text" },
+            "accent": { "$ref": "#/$defs/color" },
+            "accent2": { "$ref": "#/$defs/color" },
+            "urgent": { "$ref": "#/$defs/color", "description": "Errors, destructive actions (ANSI red)" },
+            "ok": { "$ref": "#/$defs/color", "description": "Success (ANSI green)" },
+            "warn": { "$ref": "#/$defs/color", "description": "Warnings (ANSI yellow)" }
+          }
+        },
+        "ansi": {
+          "description": "Optional explicit 16 terminal colors; derived from the palette when absent.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/color" },
+          "minItems": 16,
+          "maxItems": 16
+        },
+        "glass": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "blur": { "type": "boolean", "default": true, "description": "Compositor blur behind glass; false turns niri blur off entirely" },
+            "xray": { "type": "boolean", "default": true, "description": "Blur the wallpaper only (cheap) instead of what is really behind" },
+            "tint": { "$ref": "#/$defs/color", "description": "Glass fill color (default: palette.bg)" },
+            "opacity": { "$ref": "#/$defs/unit", "description": "Glass fill opacity (default 0.45 dark / 0.5 light)" },
+            "border": { "$ref": "#/$defs/color", "default": "#ffffff" },
+            "borderOpacity": { "$ref": "#/$defs/unit", "description": "default 0.14 dark / 0.6 light" },
+            "radius": { "type": "number", "minimum": 0, "default": 14, "description": "Shell surface corner radius (px)" },
+            "noise": { "type": "number", "minimum": 0, "maximum": 10, "default": 0.02 },
+            "saturation": { "type": "number", "minimum": 0, "maximum": 10, "default": 1.6 },
+            "terminalOpacity": { "$ref": "#/$defs/unit", "description": "Terminal background opacity (default 0.85 with blur, 1 without)" },
+            "shadow": { "$ref": "#/$defs/colorAlpha", "description": "Window shadow (default #00000066 dark / #0000002e light)" }
+          }
+        },
+        "wallpaper": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "gradient": { "type": "array", "items": { "$ref": "#/$defs/color" }, "minItems": 1 },
+            "image": { "type": "string", "description": "Path relative to the pack (copied into the rendered bundle) or absolute" }
+          }
+        },
+        "fonts": {
+          "description": "Declaring fonts makes terminals use them too.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ui": { "type": "string" },
+            "mono": { "type": "string" },
+            "size": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "radii": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "window": { "type": "number", "minimum": 0, "default": 12, "description": "niri window corner radius (px)" }
+          }
+        }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "required": ["name", "author", "version", "license"],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": { "type": "string" },
+        "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "author": { "type": "string" },
+        "version": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)*([-+].*)?$" },
+        "license": { "type": "string", "description": "SPDX identifier, or NOASSERTION" },
+        "source": { "type": "string", "description": "Where the design/palette comes from (URL)" },
+        "description": { "type": "string" },
+        "homepage": { "type": "string" }
+      }
+    }
+  }
+}

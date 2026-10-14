@@ -256,11 +256,11 @@ and the per-consumer templates ship with it in the store:
 | Consumer | Generated from the theme | Live reload |
 |---|---|---|
 | Shell (Quickshell) | `theme.json` as-is | `FileView watchChanges` (instant) |
-| niri | `niri.kdl`: focus ring, borders, shadows, **blur rules on/off + xray**, radii | `include optional=true "~/.local/state/studio-linux/current/niri.kdl"`; niri reloads config on change (*verify it watches included files*) |
+| niri | `niri.kdl`: focus ring, borders, shadows, **blur rules on/off + xray**, radii | `include optional=true "~/.local/state/studio-linux/current/niri.kdl"`; niri polls every include by canonical path, so re-pointing `current` is noticed (*verified in niri 26.04 source*); `apply` also runs `niri msg action load-config-file` to skip the ≤500 ms poll |
 | kitty | `kitty.conf` (colors, `background_blur`) | `include` + `kill -SIGUSR1` |
-| Ghostty | `ghostty.conf` | `config-file` + reload (*verify*) |
+| Ghostty | `ghostty.conf` | `config-file = ?…` + `SIGUSR2` (*verified: GTK apprt reloads config on SIGUSR2*) |
 | GTK 3/4 | `gtk.css` (`@define-color`), color-scheme | `@import` + `gsettings set … color-scheme` |
-| walker | `walker/style.css` | CSS is re-read on every open (confirmed in source) |
+| walker | `walker.css` (`@define-color studio_*`) | CSS is re-read on every open (confirmed in source) |
 | Lock / greeter | pack `lock/` or the default design + palette | Read at lock time; greeter, see §4.5 |
 | Wallpaper | path | swww/awww transition (feeds xray blur) |
 | Noctalia (transition period only) | `colors.json` | its own watcher |
@@ -272,10 +272,11 @@ Nix calls the *same* renderer at build time for the built-in packs, so
 
 | Location | Contents | Written by |
 |---|---|---|
-| store: `pkgs.studio themes-builtin` | A small built-in set: the default + a couple of light/dark basics | NixOS build (the only themes a build needs) |
+| store: `pkgs.studio-themes-builtin` (rendered) | A small built-in set: the default + a couple of light/dark basics | NixOS build (the only themes a build needs) |
 | `~/.local/share/studio themes/<name>/` | Installed and user-authored packs | `studio theme install/new/import` |
 | `/var/lib/studio-linux/themes/<name>/` | Packs promoted for the **greeter** (sddm must read them) | polkit-allowed helper (§4.5) |
-| `~/.local/state/studio-linux/current` | Symlink to the active rendered theme | `studio theme apply` |
+| `~/.local/state/studio-linux/rendered/<name>/<hash>/` | Render cache, keyed by pack content + renderer/template hash | `studio theme apply` |
+| `~/.local/state/studio-linux/current` | Symlink to the active rendered theme (swapped atomically) | `studio theme apply` |
 
 **Theme manager CLI** (`studio theme`; the shell's selector is a GUI over the same commands):
 
@@ -398,7 +399,7 @@ src/
   `services.elephant` (service mode, `--gapplication-service`). Don't also
   import upstream's flake module, because both define the same units.
 - Our theme: a Spotlight look (centered pill, large input, grouped results).
-  Its `style.css` `@import`s the active theme's `walker/style.css`, so it
+  Its `style.css` `@import`s the active theme's `walker.css`, so it
   recolors with no restart.
 - Providers to enable: apps, calc, files, clipboard, symbols, runner,
   websearch, **niri actions/sessions**, windows, bluetooth, wireplumber.
@@ -474,7 +475,32 @@ and nothing replaces the working Noctalia session until Phase 6.
 window with a glass bar from any machine, and in a checkout `nix run .#dev`
 updates live when KDL or QML is edited.
 
-### Phase 1: Theme spine
+### Phase 1: Theme spine *(engine done — branch `phase1-theme-engine`)*
+
+> **Status:** pack format (`docs/THEME-FORMAT.md`, `themes/schema.json`), the
+> runtime renderer + `studio theme list|current|apply|render|validate`, the
+> `current` symlink + render cache, reload hooks (shell IPC, niri, kitty,
+> Ghostty, GTK color-scheme), consumers niri/kitty/Ghostty/GTK/walker/Noctalia,
+> `pkgs.studio-themes-builtin` rendered by the same CLI, and checks (schema,
+> unit, golden, `niri validate`, `ghostty +validate-config`) are in.
+> **Not yet:** the `overrides/` directory (lands with the settings UI /
+> `studio save`, §4.1) and the fleet-side Stylix narrowing.
+>
+> **Design notes / deviations:**
+> - The CLI is Python (stdlib + `jsonschema`), replacing `cli/studio.sh`: JSON,
+>   color math and tests are natural there, and Nix runs the same program for
+>   the built-ins. Templates are `string.Template` files; all logic (derived
+>   colors, conditional snippets) is in `cli/studio/render.py`.
+> - Render cache is `rendered/<name>/<hash>/` rather than `rendered/<name>/`,
+>   so `apply` never rewrites the directory `current` points into, and an
+>   edited pack lands at a new path (which niri's watcher sees).
+> - Sessions write their niri entry config at runtime (in `$XDG_RUNTIME_DIR`):
+>   the theme fragment's path depends on the runtime state dir.
+> - Extra optional keys beyond the sketch: `ansi`, `glass.terminalOpacity`,
+>   `glass.shadow`, `radii.window`, `fonts` (see THEME-FORMAT.md).
+> - `--dev` runs only the shell + niri hooks by default (terminals and GTK
+>   belong to the host desktop); `STUDIO_HOOKS` picks hooks explicitly.
+
 - Theme pack format (`manifest.json` + `theme.json` core: palette + glass).
   Built-in packs: `tokyonight` (ported from Stylix, the current look) + one
   light theme.
@@ -488,7 +514,13 @@ updates live when KDL or QML is edited.
 blur), terminals, GTK and Noctalia live with no rebuild, and the default
 theme comes from Nix.
 
-### Phase 1b: Theme manager + importers
+### Phase 1b: Theme manager + importers *(manager done; index + importers TODO)*
+
+> **Status:** `studio theme install <dir|tarball|tarball URL|git URL> [--subdir]
+> [--force]` (validated against the schema, manifest required), `new [--from]`,
+> `remove`, `export [-o pack.tar.zst]` are in. `qylock:` / `cozytile:` are
+> recognized but stubbed; index support is not started.
+
 - `install|new|export|remove`, index support, `~/.local/share/studio themes`.
 - `cozytile:` importer (all five) and `qylock:` importer (palette + assets;
   lock designs become usable in Phase 5).
@@ -616,8 +648,10 @@ den.hosts.x86_64-linux.THEBATTLESHIP.settings.desktop = {
 ## 9. To verify early
 - Quickshell 0.3.1 support for `ext-background-effect` (otherwise use niri
   `layer-rule` blur).
-- niri reloads when an *included* file changes, not only `config.kdl`.
-- Ghostty runtime config reload mechanics; kitty `background_blur` on niri.
+- ~~niri reloads when an *included* file changes, not only `config.kdl`.~~
+  Yes: it polls every include (mtime + canonical path) every 500 ms.
+- ~~Ghostty runtime config reload mechanics~~ (SIGUSR2, Ghostty ≥ 1.2);
+  kitty `background_blur` on niri.
 - Whether nirimod is in nixpkgs, and its `uv`-based install under Nix.
 - The qylock shim works through a QML `Loader` from a runtime path under SDDM
   (`/var/lib/...` is readable by the `sddm` user, and QML import paths

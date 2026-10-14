@@ -1,8 +1,11 @@
 // studio-linux base niri config.
 //
 // Consumers `include` this first and override anything after it — includes
-// are positional, so later settings win. Theme-owned settings (focus ring
-// colors, blur strength) will move to a generated theme fragment (PLAN §4.2).
+// are positional, so later settings win. Theme-owned settings (focus ring /
+// border / shadow colors, blur on/off, noise, saturation, xray, window radius)
+// come from the active theme's generated fragment, included right after this:
+//   include optional=true "<state>/current/niri.kdl"
+// The values here are only the fallback when no theme is rendered yet.
 //
 // Mod is Super in a real session and Alt when niri runs nested as a window.
 

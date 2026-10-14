@@ -1,0 +1,8 @@
+{
+  "name": "latte",
+  "author": "studio-linux",
+  "version": "1.0.0",
+  "license": "MIT",
+  "source": "https://github.com/catppuccin/catppuccin",
+  "description": "Catppuccin Latte palette with light Liquid Glass"
+}

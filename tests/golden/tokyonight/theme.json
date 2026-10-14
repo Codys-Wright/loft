@@ -1,0 +1,63 @@
+{
+  "name": "tokyonight",
+  "polarity": "dark",
+  "palette": {
+    "bg": "#1a1b26",
+    "surface": "#24283b",
+    "overlay": "#414868",
+    "text": "#c0caf5",
+    "subtext": "#a9b1d6",
+    "accent": "#7aa2f7",
+    "accent2": "#bb9af7",
+    "urgent": "#f7768e",
+    "ok": "#9ece6a",
+    "warn": "#e0af68"
+  },
+  "ansi": [
+    "#24283b",
+    "#f7768e",
+    "#9ece6a",
+    "#e0af68",
+    "#7aa2f7",
+    "#bb9af7",
+    "#7ae2f7",
+    "#a9b1d6",
+    "#414868",
+    "#f99dae",
+    "#b2d889",
+    "#e7c18a",
+    "#a0bdf9",
+    "#d4c0fa",
+    "#a0eaf9",
+    "#c0caf5"
+  ],
+  "glass": {
+    "blur": true,
+    "xray": true,
+    "tint": "#1a1b26",
+    "opacity": 0.45,
+    "border": "#ffffff",
+    "borderOpacity": 0.14,
+    "radius": 14,
+    "noise": 0.02,
+    "saturation": 1.6,
+    "terminalOpacity": 0.85,
+    "shadow": "#00000066"
+  },
+  "wallpaper": {
+    "gradient": [
+      "#16161e",
+      "#2a3a6e",
+      "#6b4fa3"
+    ],
+    "image": ""
+  },
+  "fonts": {
+    "ui": "sans-serif",
+    "mono": "monospace",
+    "size": 11
+  },
+  "radii": {
+    "window": 12
+  }
+}

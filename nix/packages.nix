@@ -1,9 +1,11 @@
 # studio-linux packages.
 #
-#   studio-shell    the Quickshell shell (./src) with its runtime deps on PATH
-#   studio-session  niri + studio's base config + the shell, all from the store
-#   studio-dev      the same session, loading niri fragments, QML and themes
-#                   from a checkout so niri and Quickshell hot-reload on save
+#   studio                 the CLI: theme engine (render) + manager (cli/studio)
+#   studio-themes-builtin  the built-in packs, rendered by that same CLI
+#   studio-shell           the Quickshell shell (./src) with its runtime deps on PATH
+#   studio-session         niri + studio's base config + the shell, all from the store
+#   studio-dev             the same session, loading niri fragments, QML, templates
+#                          and themes from a checkout so everything hot-reloads
 #
 # Both sessions run nested as a window when started inside a Wayland/X11
 # session (niri's winit backend), or as a full session from a TTY.
@@ -20,17 +22,27 @@
         coreutils
       ];
 
-      builtinThemes = ../themes;
+      # The CLI's own tree: Python package + templates + built-in packs/schema.
+      cliSrc = lib.fileset.toSource {
+        root = ../.;
+        fileset = lib.fileset.unions [
+          ../cli
+          ../templates
+          ../themes
+        ];
+      };
 
-      # One niri config tree in the store: studio's base fragments plus a
-      # session entry that starts the shell.
-      sessionConfig = pkgs.runCommand "studio-niri-config" { } ''
-        mkdir -p $out
-        cp ${../niri}/*.kdl $out/
-        cat > $out/config.kdl <<EOF
-        include "base.kdl"
-        spawn-at-startup "${lib.getExe self'.packages.studio-shell}"
-        EOF
+      python = pkgs.python3.withPackages (ps: [ ps.jsonschema ]);
+
+      builtinRendered = self'.packages.studio-themes-builtin;
+
+      # Shared by both sessions: the state dir the shell, niri and `studio`
+      # agree on, seeded with the default theme from the store.
+      seedState = ''
+        state="''${STUDIO_STATE_DIR:-''${XDG_STATE_HOME:-$HOME/.local/state}/studio-linux}"
+        export STUDIO_STATE_DIR="$state"
+        mkdir -p "$state"
+        [ -e "$state/current" ] || ln -sfn ${builtinRendered}/default "$state/current"
       '';
     in
     {
@@ -39,10 +51,8 @@
           name = "studio-shell";
           runtimeInputs = runtimeDeps;
           text = ''
-            state="''${STUDIO_STATE_DIR:-''${XDG_STATE_HOME:-$HOME/.local/state}/studio-linux}"
             if [ -z "''${STUDIO_THEME_FILE:-}" ]; then
-              mkdir -p "$state"
-              [ -e "$state/current" ] || ln -sfn ${builtinThemes}/default "$state/current"
+              ${seedState}
               export STUDIO_THEME_FILE="$state/current/theme.json"
             fi
             exec quickshell --path ${../src} "$@"
@@ -53,7 +63,18 @@
           name = "studio-session";
           runtimeInputs = runtimeDeps;
           text = ''
-            exec niri --config ${sessionConfig}/config.kdl "$@"
+            ${seedState}
+            # The entry config is written at runtime: the theme fragment lives
+            # in the (runtime) state dir. It comes after base.kdl so it wins;
+            # niri watches it, including `current` being re-pointed.
+            dir="''${XDG_RUNTIME_DIR:-/tmp}/studio-session"
+            mkdir -p "$dir"
+            cat > "$dir/config.kdl" <<EOF
+            include "${../niri}/base.kdl"
+            include optional=true "$state/current/niri.kdl"
+            spawn-at-startup "${lib.getExe self'.packages.studio-shell}"
+            EOF
+            exec niri --config "$dir/config.kdl" "$@"
           '';
         };
 
@@ -82,13 +103,29 @@
             dir="''${XDG_RUNTIME_DIR:-/tmp}/studio-dev"
             mkdir -p "$dir"
 
-            # The active theme is a symlink to a theme dir; re-pointing it
-            # recolors the running shell (what `studio theme apply` will do).
-            # Kept across restarts; reset with `ln -sfn "$root/themes/NAME" "$dir/current"`.
-            [ -e "$dir/current" ] || ln -sfn "$(realpath "$root/themes/default")" "$dir/current"
+            # `studio` run against this session: checkout templates + themes,
+            # user-installed packs, state in $dir.
+            studio_env=(
+              "STUDIO_STATE_DIR=$dir"
+              "STUDIO_DATA_DIR=$root"
+              "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes"
+              "STUDIO_SHELL_PATH=$root/src"
+            )
 
+            # The active theme: `current` → a rendered theme dir. Kept across
+            # restarts (`studio --dev theme apply NAME` switches it); rendered
+            # when missing (from the default) or still a raw pack from before
+            # the renderer (no niri.kdl; re-rendered, keeping the choice).
+            if [ ! -e "$dir/current/niri.kdl" ]; then
+              theme=default
+              [ -e "$dir/current/theme.json" ] && theme="$(readlink -f "$dir/current")"
+              env "''${studio_env[@]}" STUDIO_HOOKS=none ${lib.getExe self'.packages.studio} theme apply "$theme" >/dev/null
+            fi
+
+            # The theme fragment comes after base.kdl so it wins, dev-local last.
             cat > "$dir/config.kdl" <<EOF
             include "$root/niri/base.kdl"
+            include optional=true "$dir/current/niri.kdl"
             include optional=true "$root/niri/dev-local.kdl"
             spawn-at-startup "env" "STUDIO_THEME_FILE=$dir/current/theme.json" "quickshell" "--path" "$root/src"
             EOF
@@ -111,7 +148,7 @@
               display="$(basename "$sock" | cut -d. -f2)"
               {
                 printf 'NIRI_SOCKET=%s\nWAYLAND_DISPLAY=%s\n' "$sock" "$display"
-                printf 'STUDIO_STATE_DIR=%s\nSTUDIO_THEME_PATH=%s\nSTUDIO_SHELL_PATH=%s\n' "$dir" "$root/themes" "$root/src"
+                printf '%s\n' "''${studio_env[@]}"
               } > "$dir/session.env"
             fi
 
@@ -134,16 +171,43 @@
           '';
         };
 
-        studio = pkgs.writeShellApplication {
-          name = "studio";
-          runtimeInputs = [
-            pkgs.quickshell
-            pkgs.coreutils
-          ];
-          text =
-            builtins.replaceStrings [ "@BUILTIN_THEMES@" "@SHELL_SRC@" ] [ "${builtinThemes}" "${../src}" ]
-              (builtins.readFile ../cli/studio.sh);
+        # One renderer for runtime and build time (Python stdlib + jsonschema):
+        # `studio theme render` here is what builds studio-themes-builtin.
+        studio = pkgs.stdenvNoCC.mkDerivation {
+          pname = "studio";
+          version = "0.1.0";
+          src = cliSrc;
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          dontBuild = true;
+          installPhase = ''
+            mkdir -p $out/share/studio-linux $out/bin
+            cp -r cli templates themes $out/share/studio-linux/
+            # Reload hooks call these; the user's own (newer) ones win on PATH.
+            makeWrapper ${python}/bin/python3 $out/bin/studio \
+              --add-flags "-B $out/share/studio-linux/cli/studio" \
+              --set-default STUDIO_SHELL_PATH ${../src} \
+              --suffix PATH : ${
+                lib.makeBinPath [
+                  pkgs.quickshell
+                  pkgs.niri
+                  pkgs.git
+                ]
+              }
+          '';
+          meta.mainProgram = "studio";
         };
+
+        # Built-in packs rendered at build time: <name>/{theme.json,niri.kdl,…}
+        # plus the `default` alias. Sessions seed `current` from here.
+        studio-themes-builtin = pkgs.runCommand "studio-themes-builtin" { } ''
+          mkdir -p $out
+          for pack in ${cliSrc}/themes/*/; do
+            pack="''${pack%/}"
+            [ -L "$pack" ] && continue
+            ${lib.getExe self'.packages.studio} theme render "$pack" "$out/$(basename "$pack")"
+          done
+          ln -s "$(readlink ${cliSrc}/themes/default)" $out/default
+        '';
 
         # Screenshot the running studio-dev session: `nix run .#shot -- out.png`.
         studio-shot = pkgs.writeShellApplication {

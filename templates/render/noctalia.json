@@ -1,0 +1,18 @@
+{
+  "mPrimary": "${accent}",
+  "mOnPrimary": "${on_accent}",
+  "mSecondary": "${accent2}",
+  "mOnSecondary": "${on_accent2}",
+  "mTertiary": "${ok}",
+  "mOnTertiary": "${on_ok}",
+  "mError": "${urgent}",
+  "mOnError": "${on_urgent}",
+  "mSurface": "${bg}",
+  "mOnSurface": "${text}",
+  "mSurfaceVariant": "${surface}",
+  "mOnSurfaceVariant": "${subtext}",
+  "mOutline": "${overlay}",
+  "mShadow": "#000000",
+  "mHover": "${overlay}",
+  "mOnHover": "${text}"
+}
