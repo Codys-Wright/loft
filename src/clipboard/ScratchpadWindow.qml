@@ -123,11 +123,16 @@ FloatingWindow {
         }
     }
 
+    // Active = niri's focused window is this one (the glass dims, the
+    // traffic lights turn grey otherwise).
+    readonly property bool focusedHere: !Niri.available || (Niri.focusedWindow?.title === window.title)
+
     GlassSurface {
         id: frame
         anchors.fill: parent
-        radius: 24
+        radius: window.fullscreen ? 0 : Theme.windowRadius
         strength: 1.8
+        active: window.focusedHere
 
         ColumnLayout {
             anchors {
@@ -141,11 +146,13 @@ FloatingWindow {
                 Layout.fillWidth: true
                 spacing: 8
 
-                Icon {
-                    Layout.leftMargin: 4
-                    text: G.notebook
-                    size: 16
-                    color: Theme.accent
+                TrafficLights {
+                    Layout.leftMargin: 6
+                    Layout.rightMargin: 6
+                    active: window.focusedHere
+                    onClose: Scratchpad.open = false
+                    onHide: Scratchpad.open = false
+                    onFullscreen: window.fullscreen = !window.fullscreen
                 }
 
                 Flickable {

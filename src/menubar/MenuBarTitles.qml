@@ -21,6 +21,9 @@ RowLayout {
 
     spacing: 2
 
+    // This output's bar text color (light/dark from the wallpaper, Theme).
+    readonly property color fg: Theme.barTextFor(screenName)
+
     readonly property var win: MenuState.window
     readonly property int fit: MenuState.fitOn(screenName)
     readonly property bool overflowing: fit < AppMenu.titles.length
@@ -68,7 +71,7 @@ RowLayout {
         Layout.rightMargin: 8
         text: "\uf313"
         size: 16
-        color: Theme.text
+        color: root.fg
 
         MouseArea {
             anchors.fill: parent
@@ -127,7 +130,7 @@ RowLayout {
         Rectangle {
             anchors.fill: parent
             radius: 6
-            color: title.lit ? Theme.withAlpha(Theme.text, 0.18) : hover.containsMouse && title.interactive ? Theme.withAlpha(Theme.text, 0.08) : "transparent"
+            color: title.lit ? Theme.withAlpha(root.fg, 0.18) : hover.containsMouse && title.interactive ? Theme.withAlpha(root.fg, 0.1) : "transparent"
             Behavior on color {
                 ColorAnimation {
                     duration: 120
@@ -139,7 +142,7 @@ RowLayout {
             id: label
             anchors.centerIn: parent
             text: title.text
-            color: Theme.text
+            color: root.fg
             opacity: title.enabled ? 1 : 0.45
             font.family: Theme.fontUi
             font.pixelSize: 13

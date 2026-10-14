@@ -83,3 +83,92 @@
 @define-color warning_color #df8e1d;
 @define-color error_color #d20f39;
 @define-color success_color #40a02b;
+
+/* ── Golden Gate shape (docs/DESIGN-GOLDEN-GATE.md) ───────────────────────
+ * One corner radius for every window (shape.windowRadius; niri clips to the
+ * same radius), and traffic-light window buttons like the shell's own
+ * windows: glassy red / yellow / green, glyphs on hover, grey when the window
+ * is in the background. GTK cannot move the buttons to the left; for that set
+ * gtk-decoration-layout=close,minimize,maximize: (GTK 3/4 settings.ini). */
+window.csd,
+window.csd decoration {
+  border-radius: 12px;
+}
+window.maximized,
+window.fullscreen,
+window.maximized decoration,
+window.fullscreen decoration {
+  border-radius: 0;
+}
+
+/* GTK 4 / libadwaita: the round part is the button's image. */
+windowcontrols {
+  border-spacing: 4px;
+}
+windowcontrols > button {
+  min-width: 16px;
+  min-height: 16px;
+  padding: 2px;
+  margin: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+windowcontrols > button > image {
+  padding: 0;
+  border-radius: 100%;
+  color: transparent;
+  -gtk-icon-transform: scale(0.75);
+  background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.525), transparent 55%);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14), inset 0 1px rgba(255, 255, 255, 0.4);
+  transition: color 120ms ease-out;
+}
+windowcontrols > button.close > image {
+  background-color: #ff5f57;
+}
+windowcontrols > button.minimize > image {
+  background-color: #febc2e;
+}
+windowcontrols > button.maximize > image {
+  background-color: #28c840;
+}
+windowcontrols:hover > button > image {
+  color: rgba(0, 0, 0, 0.55);
+}
+windowcontrols > button:backdrop:not(:hover) > image {
+  background-color: rgba(76, 79, 105, 0.22);
+  background-image: none;
+}
+
+/* GTK 3: titlebuttons are the round part themselves. */
+headerbar button.titlebutton.close,
+headerbar button.titlebutton.minimize,
+headerbar button.titlebutton.maximize {
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+  margin: 0 2px;
+  border: none;
+  border-radius: 100%;
+  color: transparent;
+  -gtk-icon-transform: scale(0.75);
+  background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.525), transparent 55%);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14), inset 0 1px rgba(255, 255, 255, 0.4);
+}
+headerbar button.titlebutton.close {
+  background-color: #ff5f57;
+}
+headerbar button.titlebutton.minimize {
+  background-color: #febc2e;
+}
+headerbar button.titlebutton.maximize {
+  background-color: #28c840;
+}
+headerbar button.titlebutton:hover {
+  color: rgba(0, 0, 0, 0.55);
+}
+headerbar button.titlebutton:backdrop:not(:hover) {
+  background-color: rgba(76, 79, 105, 0.22);
+  background-image: none;
+}
+

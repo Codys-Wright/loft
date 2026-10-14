@@ -17,24 +17,25 @@ Scope {
     // The open page lives in Panels so IPC (`themes open`) can choose it.
     readonly property string section: Panels.settingsSection
 
+    // Sidebar: icon + Theme.badgeColor name (System Settings style badges).
     readonly property var sections: [
-        { id: "appearance", icon: "󰏘", label: "Appearance" },
-        { id: "wallpaper", icon: "󰸉", label: "Wallpaper" },
-        { id: "lockscreen", icon: "󰌾", label: "Lock Screen" },
-        { id: "dock", icon: "󱂬", label: "Dock", feature: "dock" },
-        { id: "island", icon: "󰟜", label: "Dynamic Island", feature: "island" },
-        { id: "displays", icon: "󰍹", label: "Displays" },
-        { id: "input", icon: "󰌌", label: "Keyboard & Mouse" },
-        { id: "layout", icon: "󰕰", label: "Layout & Motion" },
-        { id: "keybinds", icon: "󰘳", label: "Keybinds" },
-        { id: "system", icon: "󰍛", label: "System" },
-        { id: "sound", icon: "󰕾", label: "Sound" },
-        { id: "capture", icon: "󰹑", label: "Capture", feature: "capture" },
-        { id: "features", icon: "󰐱", label: "Features" },
-        { id: "clipboard", icon: "󰨸", label: "Clipboard & Files" },
-        { id: "snippets", icon: "󱐋", label: "Snippets", feature: "snippets" },
-        { id: "menubar", icon: "󰍜", label: "Menu Bar" },
-        { id: "about", icon: "󰋼", label: "About" }
+        { id: "appearance", icon: "󰏘", badge: "graphite", label: "Appearance" },
+        { id: "wallpaper", icon: "󰸉", badge: "cyan", label: "Wallpaper" },
+        { id: "lockscreen", icon: "󰌾", badge: "indigo", label: "Lock Screen" },
+        { id: "dock", icon: "󱂬", badge: "blue", label: "Dock", feature: "dock" },
+        { id: "island", icon: "󰟜", badge: "purple", label: "Dynamic Island", feature: "island" },
+        { id: "displays", icon: "󰍹", badge: "teal", label: "Displays" },
+        { id: "input", icon: "󰌌", badge: "gray", label: "Keyboard & Mouse" },
+        { id: "layout", icon: "󰕰", badge: "mint", label: "Layout & Motion" },
+        { id: "keybinds", icon: "󰘳", badge: "graphite", label: "Keybinds" },
+        { id: "system", icon: "󰍛", badge: "gray", label: "System" },
+        { id: "sound", icon: "󰕾", badge: "pink", label: "Sound" },
+        { id: "capture", icon: "󰹑", badge: "orange", label: "Capture", feature: "capture" },
+        { id: "features", icon: "󰐱", badge: "green", label: "Features" },
+        { id: "clipboard", icon: "󰨸", badge: "yellow", label: "Clipboard & Files" },
+        { id: "snippets", icon: "󱐋", badge: "brown", label: "Snippets", feature: "snippets" },
+        { id: "menubar", icon: "󰍜", badge: "graphite", label: "Menu Bar" },
+        { id: "about", icon: "󰋼", badge: "gray", label: "About" }
     ]
 
     IpcHandler {
@@ -110,8 +111,8 @@ Scope {
         id: window
         visible: root.open
         title: "Studio Settings"
-        implicitWidth: 860
-        implicitHeight: 600
+        implicitWidth: 880
+        implicitHeight: 640
         color: "transparent"
         // Closing the window (niri's close-window, Escape) clears the state.
         onVisibleChanged: if (!visible)
@@ -120,350 +121,328 @@ Scope {
         BackgroundEffect.blurRegion: Theme.blur ? blur : null
         Region {
             id: blur
-            item: frame
-            radius: frame.radius
+            item: chrome.surface
+            radius: chrome.radius
         }
 
-        GlassSurface {
-            id: frame
-            anchors.fill: parent
-            radius: 24
-            strength: 1.7
+        WindowChrome {
+            id: chrome
+            hostWindow: window
+            title: root.sections.find(s => s.id === root.section)?.label ?? ""
+            searchable: true
+            onCloseRequested: Panels.settingsOpen = false
+            onHideRequested: Panels.settingsOpen = false
 
             focus: root.open
             Keys.onEscapePressed: Panels.settingsOpen = false
 
-            RowLayout {
+            // Sections of switched-off modules hide (Features page); the
+            // search field filters by name.
+            sidebar: Repeater {
+                model: root.sections.filter(s => (!s.feature || Features.on(s.feature)) && s.label.toLowerCase().includes(chrome.searchText.trim().toLowerCase()))
+                delegate: SidebarItem {
+                    required property var modelData
+                    icon: modelData.icon
+                    badge: modelData.badge
+                    label: modelData.label
+                    current: root.section === modelData.id
+                    windowActive: chrome.active
+                    onClicked: Panels.settingsSection = modelData.id
+                }
+            }
+
+            // Content
+            Flickable {
                 anchors.fill: parent
-                anchors.margins: 12
-                spacing: 12
+                anchors.leftMargin: 20
+                anchors.rightMargin: 20
+                contentHeight: pages.implicitHeight + 20
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
 
-                // Sidebar
                 ColumnLayout {
-                    Layout.preferredWidth: 200
-                    Layout.maximumWidth: 200
-                    Layout.fillHeight: true
-                    spacing: 4
+                    id: pages
+                    width: parent.width
+                    spacing: 12
 
-                    Text {
-                        Layout.leftMargin: 10
-                        Layout.topMargin: 6
-                        Layout.bottomMargin: 8
-                        text: "Settings"
-                        color: Theme.text
-                        font.family: Theme.fontUi
-                        font.pixelSize: 18
-                        font.weight: Font.DemiBold
-                    }
+                    // Appearance
+                    Card {
+                        visible: root.section === "appearance"
 
-                    Repeater {
-                        // Sections of switched-off modules hide (Features page).
-                        model: root.sections.filter(s => !s.feature || Features.on(s.feature))
-                        delegate: Rectangle {
-                            id: item
-                            required property var modelData
-                            readonly property bool current: root.section === modelData.id
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 36
-                            radius: 10
-                            color: current ? Theme.accent : mouse.containsMouse ? Theme.withAlpha(Theme.text, 0.08) : "transparent"
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 10
-                                spacing: 10
-
-                                Icon {
-                                    text: item.modelData.icon
-                                    size: 15
-                                    color: item.current ? Theme.bg : Theme.text
+                        Row_ {
+                            label: "Liquid Glass"
+                            hint: Settings.appearance.glass < 0 ? "Clear … Tinted · following the theme" : "Clear … Tinted"
+                            enabled: !Theme.reduceTransparency
+                            Slider_ {
+                                from: 0
+                                to: 1
+                                step: 0.01
+                                value: Theme.glass
+                                format: v => v < 0.08 ? "Clear" : v > 0.92 ? "Tinted" : Math.round(v * 100) + "%"
+                                // Live preview while dragging; saved on release.
+                                onMoved: v => Theme.glassPreview = v
+                                onCommitted: v => {
+                                    Settings.appearance.glass = v;
+                                    Theme.glassPreview = -1;
                                 }
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: item.modelData.label
-                                    color: item.current ? Theme.bg : Theme.text
-                                    font.family: Theme.fontUi
-                                    font.pixelSize: 13
-                                }
-                            }
-
-                            MouseArea {
-                                id: mouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: Panels.settingsSection = item.modelData.id
                             }
                         }
-                    }
 
-                    Item {
-                        Layout.fillHeight: true
-                    }
-                }
+                        Row_ {
+                            label: "Reduce transparency"
+                            hint: "Flat, opaque menus, panels and windows; no blur"
+                            Switch_ {
+                                checked: Theme.reduceTransparency
+                                onToggled: on => Settings.appearance.reduceTransparency = on
+                            }
+                        }
 
-                // Content
-                Flickable {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.preferredWidth: 560
-                    contentHeight: pages.implicitHeight
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
+                        Row_ {
+                            label: "Background blur"
+                            hint: Theme.reduceTransparency ? "Off with Reduce transparency" : Settings.appearance.blur < 0 ? "Following the theme" : "Overridden"
+                            enabled: !Theme.reduceTransparency
+                            Switch_ {
+                                checked: Theme.blur
+                                enabled: !Theme.reduceTransparency
+                                onToggled: on => Settings.appearance.blur = on ? 1 : 0
+                            }
+                        }
 
-                    ColumnLayout {
-                        id: pages
-                        width: parent.width
-                        spacing: 12
+                        Row_ {
+                            label: "Show menu bar background"
+                            hint: "Off: titles and icons sit on the wallpaper"
+                            Switch_ {
+                                checked: Theme.barBackground
+                                onToggled: on => Settings.appearance.barBackground = on ? 1 : 0
+                            }
+                        }
+
+                        Row_ {
+                            label: "Adaptive menu bar text"
+                            hint: Theme.barBackground ? "Only without the menu bar background" : "Light or dark from the wallpaper under the bar"
+                            enabled: !Theme.barBackground
+                            Switch_ {
+                                checked: Theme.barAdaptiveText
+                                enabled: !Theme.barBackground
+                                onToggled: on => Settings.appearance.barAdaptiveText = on ? 1 : 0
+                            }
+                        }
 
                         Text {
-                            Layout.topMargin: 6
-                            text: root.sections.find(s => s.id === root.section)?.label ?? ""
-                            color: Theme.text
+                            visible: Settings.appearance.blur >= 0 || Settings.appearance.glass >= 0 || Settings.appearance.barBackground >= 0 || Settings.appearance.barAdaptiveText >= 0
+                            text: "Reset to theme"
+                            color: Theme.accent
                             font.family: Theme.fontUi
-                            font.pixelSize: 22
-                            font.weight: Font.DemiBold
+                            font.pixelSize: 12
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    Settings.appearance.blur = -1;
+                                    Settings.appearance.glass = -1;
+                                    Settings.appearance.barBackground = -1;
+                                    Settings.appearance.barAdaptiveText = -1;
+                                }
+                            }
                         }
 
-                        // Appearance
-                        Card {
-                            visible: root.section === "appearance"
+                        Row_ {
+                            label: "Theme"
+                            hint: ThemeManager.applying ? "Applying…" : ThemeManager.error || "Recolors the shell, niri, terminals, GTK and the launcher"
+                        }
 
-                            Row_ {
-                                label: "Theme"
-                                hint: ThemeManager.applying ? "Applying…" : ThemeManager.error || "Recolors the shell, niri, terminals, GTK and the launcher"
-                            }
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 10
 
-                            Flow {
-                                Layout.fillWidth: true
-                                spacing: 10
+                            Repeater {
+                                model: ThemeManager.themes
 
-                                Repeater {
-                                    model: ThemeManager.themes
+                                delegate: Rectangle {
+                                    id: card
+                                    required property var modelData
+                                    readonly property var p: modelData.palette
+                                    readonly property bool current: modelData.name === Theme.name
 
-                                    delegate: Rectangle {
-                                        id: card
-                                        required property var modelData
-                                        readonly property var p: modelData.palette
-                                        readonly property bool current: modelData.name === Theme.name
+                                    width: 150
+                                    height: 104
+                                    radius: 14
+                                    color: p.bg
+                                    border.width: current ? 3 : 1
+                                    border.color: current ? Theme.accent : Theme.glassBorder
 
-                                        width: 150
-                                        height: 104
-                                        radius: 14
-                                        color: p.bg
-                                        border.width: current ? 3 : 1
-                                        border.color: current ? Theme.accent : Theme.glassBorder
+                                    // A tiny desktop: wallpaper strip, glass bar, accent dots.
+                                    Rectangle {
+                                        anchors {
+                                            left: parent.left
+                                            right: parent.right
+                                            top: parent.top
+                                            margins: 8
+                                        }
+                                        height: 50
+                                        radius: 8
+                                        gradient: Gradient {
+                                            orientation: Gradient.Horizontal
+                                            GradientStop { position: 0; color: (card.modelData.wallpaper?.gradient ?? [])[0] ?? card.p.surface }
+                                            GradientStop { position: 1; color: (card.modelData.wallpaper?.gradient ?? [])[2] ?? card.p.overlay }
+                                        }
 
-                                        // A tiny desktop: wallpaper strip, glass bar, accent dots.
                                         Rectangle {
                                             anchors {
                                                 left: parent.left
                                                 right: parent.right
                                                 top: parent.top
-                                                margins: 8
+                                                margins: 5
                                             }
-                                            height: 50
-                                            radius: 8
-                                            gradient: Gradient {
-                                                orientation: Gradient.Horizontal
-                                                GradientStop { position: 0; color: (card.modelData.wallpaper?.gradient ?? [])[0] ?? card.p.surface }
-                                                GradientStop { position: 1; color: (card.modelData.wallpaper?.gradient ?? [])[2] ?? card.p.overlay }
-                                            }
-
-                                            Rectangle {
-                                                anchors {
-                                                    left: parent.left
-                                                    right: parent.right
-                                                    top: parent.top
-                                                    margins: 5
-                                                }
-                                                height: 10
-                                                radius: 5
-                                                color: Theme.withAlpha(card.modelData.glass?.tint ?? card.p.bg, 0.6)
-                                            }
-
-                                            Row {
-                                                anchors {
-                                                    left: parent.left
-                                                    bottom: parent.bottom
-                                                    margins: 6
-                                                }
-                                                spacing: 4
-                                                Repeater {
-                                                    model: [card.p.accent, card.p.accent2, card.p.ok, card.p.warn, card.p.urgent]
-                                                    delegate: Rectangle {
-                                                        required property var modelData
-                                                        width: 10
-                                                        height: 10
-                                                        radius: 5
-                                                        color: modelData
-                                                    }
-                                                }
-                                            }
+                                            height: 10
+                                            radius: 5
+                                            color: Theme.withAlpha(card.modelData.glass?.tint ?? card.p.bg, 0.6)
                                         }
 
-                                        Text {
+                                        Row {
                                             anchors {
                                                 left: parent.left
                                                 bottom: parent.bottom
-                                                margins: 10
+                                                margins: 6
                                             }
-                                            text: card.modelData.name
-                                            color: card.p.text
-                                            font.family: Theme.fontUi
-                                            font.pixelSize: 13
-                                            font.weight: card.current ? Font.Bold : Font.Medium
+                                            spacing: 4
+                                            Repeater {
+                                                model: [card.p.accent, card.p.accent2, card.p.ok, card.p.warn, card.p.urgent]
+                                                delegate: Rectangle {
+                                                    required property var modelData
+                                                    width: 10
+                                                    height: 10
+                                                    radius: 5
+                                                    color: modelData
+                                                }
+                                            }
                                         }
+                                    }
 
+                                    Text {
+                                        anchors {
+                                            left: parent.left
+                                            bottom: parent.bottom
+                                            margins: 10
+                                        }
+                                        text: card.modelData.name
+                                        color: card.p.text
+                                        font.family: Theme.fontUi
+                                        font.pixelSize: 13
+                                        font.weight: card.current ? Font.Bold : Font.Medium
+                                    }
+
+                                    Text {
+                                        anchors {
+                                            right: parent.right
+                                            bottom: parent.bottom
+                                            margins: 10
+                                        }
+                                        text: card.modelData.polarity === "light" ? "󰖨" : "󰖔"
+                                        color: card.p.subtext
+                                        font.family: Theme.fontIcons
+                                        font.pixelSize: 12
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: ThemeManager.apply(card.modelData.name)
+                                    }
+                                }
+                            }
+                        }
+
+                    }
+
+                    WallpaperPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "wallpaper"
+                    }
+
+                    LockScreenPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "lockscreen"
+                    }
+
+                    // Dock
+                    Card {
+                        visible: root.section === "dock"
+
+                        Row_ {
+                            label: "Icon size"
+                            Slider_ {
+                                from: 32
+                                to: 80
+                                step: 1
+                                suffix: " px"
+                                value: Settings.dock.iconSize
+                                onMoved: v => Settings.dock.iconSize = v
+                            }
+                        }
+
+                        Row_ {
+                            label: "Magnification"
+                            Slider_ {
+                                from: 1
+                                to: 2
+                                step: 0.05
+                                decimals: 2
+                                suffix: "×"
+                                value: Settings.dock.magnification
+                                onMoved: v => Settings.dock.magnification = v
+                            }
+                        }
+
+                        Row_ {
+                            label: "Pinned apps"
+                            hint: "× to unpin"
+                        }
+
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Repeater {
+                                model: Settings.dock.pinned
+                                delegate: Rectangle {
+                                    id: pin
+                                    required property string modelData
+                                    required property int index
+                                    width: pinRow.implicitWidth + 20
+                                    height: 34
+                                    radius: 17
+                                    color: Theme.withAlpha(Theme.text, 0.08)
+
+                                    RowLayout {
+                                        id: pinRow
+                                        anchors.centerIn: parent
+                                        spacing: 8
+
+                                        Image {
+                                            Layout.preferredWidth: 20
+                                            Layout.preferredHeight: 20
+                                            source: Apps.icon(pin.modelData)
+                                            sourceSize: Qt.size(40, 40)
+                                        }
                                         Text {
-                                            anchors {
-                                                right: parent.right
-                                                bottom: parent.bottom
-                                                margins: 10
-                                            }
-                                            text: card.modelData.polarity === "light" ? "󰖨" : "󰖔"
-                                            color: card.p.subtext
-                                            font.family: Theme.fontIcons
+                                            text: Apps.name(pin.modelData)
+                                            color: Theme.text
+                                            font.family: Theme.fontUi
                                             font.pixelSize: 12
                                         }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: ThemeManager.apply(card.modelData.name)
-                                        }
-                                    }
-                                }
-                            }
-
-                            Row_ {
-                                label: "Background blur"
-                                hint: Settings.appearance.blur < 0 ? "Following the theme" : "Overridden"
-                                Switch_ {
-                                    checked: Theme.blur
-                                    onToggled: on => Settings.appearance.blur = on ? 1 : 0
-                                }
-                            }
-
-                            Row_ {
-                                label: "Glass opacity"
-                                hint: Settings.appearance.glassOpacity < 0 ? "Following the theme" : "Overridden"
-                                Slider_ {
-                                    from: 0.1
-                                    to: 0.95
-                                    step: 0.01
-                                    decimals: 2
-                                    value: Theme.glassOpacity
-                                    onMoved: v => Settings.appearance.glassOpacity = v
-                                }
-                            }
-
-                            Text {
-                                visible: Settings.appearance.blur >= 0 || Settings.appearance.glassOpacity >= 0
-                                text: "Reset to theme"
-                                color: Theme.accent
-                                font.family: Theme.fontUi
-                                font.pixelSize: 12
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        Settings.appearance.blur = -1;
-                                        Settings.appearance.glassOpacity = -1;
-                                    }
-                                }
-                            }
-                        }
-
-                        WallpaperPage {
-                            Layout.fillWidth: true
-                            visible: root.section === "wallpaper"
-                        }
-
-                        LockScreenPage {
-                            Layout.fillWidth: true
-                            visible: root.section === "lockscreen"
-                        }
-
-                        // Dock
-                        Card {
-                            visible: root.section === "dock"
-
-                            Row_ {
-                                label: "Icon size"
-                                Slider_ {
-                                    from: 32
-                                    to: 80
-                                    step: 1
-                                    suffix: " px"
-                                    value: Settings.dock.iconSize
-                                    onMoved: v => Settings.dock.iconSize = v
-                                }
-                            }
-
-                            Row_ {
-                                label: "Magnification"
-                                Slider_ {
-                                    from: 1
-                                    to: 2
-                                    step: 0.05
-                                    decimals: 2
-                                    suffix: "×"
-                                    value: Settings.dock.magnification
-                                    onMoved: v => Settings.dock.magnification = v
-                                }
-                            }
-
-                            Row_ {
-                                label: "Pinned apps"
-                                hint: "× to unpin"
-                            }
-
-                            Flow {
-                                Layout.fillWidth: true
-                                spacing: 8
-
-                                Repeater {
-                                    model: Settings.dock.pinned
-                                    delegate: Rectangle {
-                                        id: pin
-                                        required property string modelData
-                                        required property int index
-                                        width: pinRow.implicitWidth + 20
-                                        height: 34
-                                        radius: 17
-                                        color: Theme.withAlpha(Theme.text, 0.08)
-
-                                        RowLayout {
-                                            id: pinRow
-                                            anchors.centerIn: parent
-                                            spacing: 8
-
-                                            Image {
-                                                Layout.preferredWidth: 20
-                                                Layout.preferredHeight: 20
-                                                source: Apps.icon(pin.modelData)
-                                                sourceSize: Qt.size(40, 40)
-                                            }
-                                            Text {
-                                                text: Apps.name(pin.modelData)
-                                                color: Theme.text
-                                                font.family: Theme.fontUi
-                                                font.pixelSize: 12
-                                            }
-                                            Icon {
-                                                text: "󰅖"
-                                                size: 12
-                                                color: Theme.subtext
-                                                MouseArea {
-                                                    anchors.fill: parent
-                                                    anchors.margins: -6
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    onClicked: {
-                                                        const l = Array.from(Settings.dock.pinned);
-                                                        l.splice(pin.index, 1);
-                                                        Settings.dock.pinned = l;
-                                                    }
+                                        Icon {
+                                            text: "󰅖"
+                                            size: 12
+                                            color: Theme.subtext
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                anchors.margins: -6
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    const l = Array.from(Settings.dock.pinned);
+                                                    l.splice(pin.index, 1);
+                                                    Settings.dock.pinned = l;
                                                 }
                                             }
                                         }
@@ -471,122 +450,122 @@ Scope {
                                 }
                             }
                         }
+                    }
 
-                        // Island
-                        Card {
-                            visible: root.section === "island"
+                    // Island
+                    Card {
+                        visible: root.section === "island"
 
-                            Row_ {
-                                label: "Overheat alert"
-                                hint: "Border pulses red above this temperature"
-                                Slider_ {
-                                    from: 60
-                                    to: 105
-                                    step: 1
-                                    suffix: " °C"
-                                    value: Settings.island.maxTemp
-                                    onMoved: v => Settings.island.maxTemp = v
-                                }
-                            }
-
-                            Row_ {
-                                label: "Load alert"
-                                hint: "CPU or memory use that turns the border amber"
-                                Slider_ {
-                                    from: 0.5
-                                    to: 1
-                                    step: 0.01
-                                    decimals: 2
-                                    value: Settings.island.maxLoad
-                                    onMoved: v => Settings.island.maxLoad = v
-                                }
-                            }
-
-                            Row_ {
-                                label: "Focus session"
-                                Slider_ {
-                                    from: 5
-                                    to: 90
-                                    step: 5
-                                    suffix: " min"
-                                    value: Settings.island.focusMinutes
-                                    onMoved: v => Settings.island.focusMinutes = v
-                                }
+                        Row_ {
+                            label: "Overheat alert"
+                            hint: "Border pulses red above this temperature"
+                            Slider_ {
+                                from: 60
+                                to: 105
+                                step: 1
+                                suffix: " °C"
+                                value: Settings.island.maxTemp
+                                onMoved: v => Settings.island.maxTemp = v
                             }
                         }
 
-                        DisplaysPage {
-                            Layout.fillWidth: true
-                            visible: root.section === "displays"
-                        }
-
-                        InputPage {
-                            Layout.fillWidth: true
-                            visible: root.section === "input"
-                        }
-
-                        LayoutPage {
-                            Layout.fillWidth: true
-                            visible: root.section === "layout"
-                        }
-
-                        KeybindsPage {
-                            Layout.fillWidth: true
-                            visible: root.section === "keybinds"
-                        }
-
-                        FeaturesPage {
-                            Layout.fillWidth: true
-                            visible: root.section === "features"
-                        }
-
-                        SystemPage {
-                            Layout.fillWidth: true
-                            visible: root.section === "system"
-                        }
-
-                        SoundPage {
-                            Layout.fillWidth: true
-                            visible: root.section === "sound"
-                        }
-
-                        CapturePage {
-                            Layout.fillWidth: true
-                            visible: root.section === "capture"
-                        }
-
-                        MenuBarPage {
-                            Layout.fillWidth: true
-                            visible: root.section === "menubar"
-                        }
-
-                        // About
-                        Card {
-                            visible: root.section === "about"
-
-                            Row_ {
-                                label: "studio-linux"
-                                hint: "niri + Quickshell · github.com/Codys-Wright/studio-linux"
-                            }
-                            Row_ {
-                                label: "Settings file"
-                                hint: Settings.file
-                            }
-                            Row_ {
-                                label: "Design"
-                                hint: "Liquid Glass components ported from javiiervm/dotfiles"
+                        Row_ {
+                            label: "Load alert"
+                            hint: "CPU or memory use that turns the border amber"
+                            Slider_ {
+                                from: 0.5
+                                to: 1
+                                step: 0.01
+                                decimals: 2
+                                value: Settings.island.maxLoad
+                                onMoved: v => Settings.island.maxLoad = v
                             }
                         }
 
-                        ClipboardPage {
-                            Layout.fillWidth: true
-                            visible: root.section === "clipboard"
+                        Row_ {
+                            label: "Focus session"
+                            Slider_ {
+                                from: 5
+                                to: 90
+                                step: 5
+                                suffix: " min"
+                                value: Settings.island.focusMinutes
+                                onMoved: v => Settings.island.focusMinutes = v
+                            }
                         }
+                    }
 
-                        SnippetsPage {
-                            Layout.fillWidth: true
-                            visible: root.section === "snippets"
+                    DisplaysPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "displays"
+                    }
+
+                    InputPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "input"
+                    }
+
+                    LayoutPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "layout"
+                    }
+
+                    KeybindsPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "keybinds"
+                    }
+
+                    FeaturesPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "features"
+                    }
+
+                    SystemPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "system"
+                    }
+
+                    SoundPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "sound"
+                    }
+
+                    CapturePage {
+                        Layout.fillWidth: true
+                        visible: root.section === "capture"
+                    }
+
+                    MenuBarPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "menubar"
+                    }
+
+                    // About
+                    Card {
+                        visible: root.section === "about"
+
+                        Row_ {
+                            label: "studio-linux"
+                            hint: "niri + Quickshell · github.com/Codys-Wright/studio-linux"
                         }
+                        Row_ {
+                            label: "Settings file"
+                            hint: Settings.file
+                        }
+                        Row_ {
+                            label: "Design"
+                            hint: "Liquid Glass components ported from javiiervm/dotfiles"
+                        }
+                    }
+
+                    ClipboardPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "clipboard"
+                    }
+
+                    SnippetsPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "snippets"
                     }
                 }
             }

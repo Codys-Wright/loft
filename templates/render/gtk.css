@@ -83,3 +83,92 @@
 @define-color warning_color ${warn};
 @define-color error_color ${urgent};
 @define-color success_color ${ok};
+
+/* ── Golden Gate shape (docs/DESIGN-GOLDEN-GATE.md) ───────────────────────
+ * One corner radius for every window (shape.windowRadius; niri clips to the
+ * same radius), and traffic-light window buttons like the shell's own
+ * windows: glassy red / yellow / green, glyphs on hover, grey when the window
+ * is in the background. GTK cannot move the buttons to the left; for that set
+ * gtk-decoration-layout=close,minimize,maximize: (GTK 3/4 settings.ini). */
+window.csd,
+window.csd decoration {
+  border-radius: ${window_radius}px;
+}
+window.maximized,
+window.fullscreen,
+window.maximized decoration,
+window.fullscreen decoration {
+  border-radius: 0;
+}
+
+/* GTK 4 / libadwaita: the round part is the button's image. */
+windowcontrols {
+  border-spacing: 4px;
+}
+windowcontrols > button {
+  min-width: 16px;
+  min-height: 16px;
+  padding: 2px;
+  margin: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+windowcontrols > button > image {
+  padding: 0;
+  border-radius: 100%;
+  color: transparent;
+  -gtk-icon-transform: scale(0.75);
+  background-image: linear-gradient(to bottom, ${specular}, transparent 55%);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14), inset 0 1px rgba(255, 255, 255, 0.4);
+  transition: color 120ms ease-out;
+}
+windowcontrols > button.close > image {
+  background-color: ${traffic_close};
+}
+windowcontrols > button.minimize > image {
+  background-color: ${traffic_minimize};
+}
+windowcontrols > button.maximize > image {
+  background-color: ${traffic_zoom};
+}
+windowcontrols:hover > button > image {
+  color: ${traffic_glyph};
+}
+windowcontrols > button:backdrop:not(:hover) > image {
+  background-color: ${traffic_inactive};
+  background-image: none;
+}
+
+/* GTK 3: titlebuttons are the round part themselves. */
+headerbar button.titlebutton.close,
+headerbar button.titlebutton.minimize,
+headerbar button.titlebutton.maximize {
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+  margin: 0 2px;
+  border: none;
+  border-radius: 100%;
+  color: transparent;
+  -gtk-icon-transform: scale(0.75);
+  background-image: linear-gradient(to bottom, ${specular}, transparent 55%);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14), inset 0 1px rgba(255, 255, 255, 0.4);
+}
+headerbar button.titlebutton.close {
+  background-color: ${traffic_close};
+}
+headerbar button.titlebutton.minimize {
+  background-color: ${traffic_minimize};
+}
+headerbar button.titlebutton.maximize {
+  background-color: ${traffic_zoom};
+}
+headerbar button.titlebutton:hover {
+  color: ${traffic_glyph};
+}
+headerbar button.titlebutton:backdrop:not(:hover) {
+  background-color: ${traffic_inactive};
+  background-image: none;
+}
+
