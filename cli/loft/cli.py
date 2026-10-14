@@ -15,6 +15,8 @@ Environment (all optional):
                        shell,niri,kitty,ghostty,gtk (default: all; --dev: shell,niri)
   LOFT_THEME_INDEX     themes index (path, file:// or http(s) URL; `none` = off)
                        for curated vibe links (default: loft-themes on GitHub)
+  LOFT_THEME_ENGINE    `v1`: apply/render packs directly, bypassing the facet
+                       model (themecmds.py); default: resolve every theme name
 
 The STUDIO_* names from before the rename (studio-linux) are read when the
 LOFT_* one is unset.
@@ -38,7 +40,8 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import capture, cleaner, dock, hooks, importers, index, island, keys, library, media, ports, render, updates, utilities, vibes, wallsets
+from . import capture, cleaner, dock, hooks, importers, index, island, keys, library, media, ports, render, themecmds, updates, utilities, vibes, wallsets
+from .facets import FacetError
 from .pack import IGNORED, Pack, PackError, is_pack
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -167,6 +170,9 @@ def load_dev_env() -> None:
 
 
 def cmd_list(ctx: Ctx, args) -> None:
+    if args.themes or args.collection:
+        themecmds.cmd_theme_list(ctx, args)
+        return
     # First match on the theme path wins, as in `find` (user packs shadow built-ins).
     packs = ctx.packs()
     if not args.json:
@@ -234,6 +240,9 @@ def cmd_vibes(ctx: Ctx, args) -> None:
 
 
 def cmd_current(ctx: Ctx, args) -> None:
+    if args.json:
+        themecmds.cmd_current(ctx, args)
+        return
     f = ctx.current / "theme.json"
     if not f.is_file():
         print("(none — the shell uses its built-in default)")
@@ -242,6 +251,9 @@ def cmd_current(ctx: Ctx, args) -> None:
 
 
 def cmd_render(ctx: Ctx, args) -> None:
+    if not themecmds.legacy_engine():
+        themecmds.cmd_render(ctx, args)
+        return
     pack = ctx.find(args.pack)
     ctx.validate(pack)
     render.render(pack, Path(args.outdir), ctx.template_dir, curated=ctx.curated(pack))
@@ -267,6 +279,11 @@ def _swap_symlink(link: Path, target: Path) -> None:
 
 
 def cmd_apply(ctx: Ctx, args) -> None:
+    if not themecmds.legacy_engine():
+        themecmds.cmd_apply(ctx, args)
+        return
+    if not args.theme:
+        raise Fail("apply what? (LOFT_THEME_ENGINE=v1 needs a theme name)")
     pack = ctx.find(args.theme)
     ctx.validate(pack)
     # Cached by content: re-applying an unchanged pack is just a symlink swap,
@@ -881,10 +898,14 @@ def parser() -> argparse.ArgumentParser:
     theme = top.add_parser("theme", help="theme engine and manager")
     sub = theme.add_subparsers(dest="cmd", required=True)
 
-    s = sub.add_parser("list", help="list available theme packs")
+    s = sub.add_parser("list", help="list available theme packs (--themes: themes with variants)")
     s.add_argument("--json", action="store_true", help="names, paths and palettes as JSON")
+    s.add_argument("--themes", action="store_true", help="themes with their variants and collection (the facet model)")
+    s.add_argument("--collection", help="only this collection (builtin, user, cozytile, qylock, …); implies --themes")
     s.set_defaults(fn=cmd_list)
-    sub.add_parser("current", help="print the active theme").set_defaults(fn=cmd_current)
+    s = sub.add_parser("current", help="print the active theme")
+    s.add_argument("--json", action="store_true", help="theme, variant, customized and pinned kinds")
+    s.set_defaults(fn=cmd_current)
 
     s = sub.add_parser(
         "vibes",
@@ -900,17 +921,21 @@ def parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_vibes)
 
     s = sub.add_parser("apply", help="render (cached), make current, reload consumers")
-    s.add_argument("theme", help="theme name or pack path")
+    s.add_argument("theme", nargs="?", help="theme[@variant], an old pack name (alias) or a pack path")
+    s.add_argument("--mode", choices=["light", "dark", "auto"], help="pick the theme's variant for this appearance")
     s.set_defaults(fn=cmd_apply)
 
-    s = sub.add_parser("render", help="render a pack's consumer files into a directory")
-    s.add_argument("pack")
+    s = sub.add_parser("render", help="render a theme's consumer files into a directory (no apply)")
+    s.add_argument("pack", metavar="theme", help="theme[@variant], an old pack name or a pack path")
     s.add_argument("outdir")
+    s.add_argument("--no-user", action="store_true", help="without your pins, customizations and accessibility switches")
     s.set_defaults(fn=cmd_render)
 
     s = sub.add_parser("validate", help="check packs against themes/schema.json")
     s.add_argument("packs", nargs="+")
     s.set_defaults(fn=cmd_validate)
+
+    themecmds.add_theme_parsers(sub)
 
     s = sub.add_parser("new", help="scaffold a pack in the user theme dir")
     s.add_argument("name")
@@ -1011,6 +1036,8 @@ def parser() -> argparse.ArgumentParser:
     capture.add_parser(top)
     utilities.add_parser(top, lambda ctx: ctx.shell_path)
     keys.add_parser(top, lambda ctx: ctx.state_dir)
+    # Theme facets: loft colors|wallpapers|material|motion|… list/show/apply/set/reset/save-as.
+    themecmds.add_kind_parsers(top)
     return p
 
 
@@ -1026,7 +1053,7 @@ def main(argv: list[str] | None = None) -> int:
     except Fail as e:
         print(f"loft: {e}", file=sys.stderr)
         return 1
-    except PackError as e:
+    except (PackError, FacetError) as e:
         print(f"loft: {e}", file=sys.stderr)
         return 1
     return 0

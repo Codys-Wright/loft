@@ -1,0 +1,44 @@
+{
+  "polarity": "light",
+  "palette": {
+    "bg": "#e8eef3",
+    "surface": "#dce5ed",
+    "overlay": "#b5bfc8",
+    "text": "#2a3946",
+    "subtext": "#636f7a",
+    "accent": "#375a96",
+    "accent2": "#b2654d",
+    "urgent": "#a13654",
+    "ok": "#339959",
+    "warn": "#928431"
+  },
+  "glass": {
+    "blur": true,
+    "xray": true,
+    "tint": "#f3f6f9",
+    "opacity": 0.6,
+    "border": "#ffffff",
+    "borderOpacity": 0.55,
+    "radius": 14
+  },
+  "wallpaper": {
+    "images": [
+      {
+        "path": "wallpapers/day.jpg",
+        "video": "lock/qylock/day.mp4"
+      },
+      {
+        "path": "wallpapers/dawn.jpg",
+        "video": "lock/qylock/dawn.mp4"
+      },
+      {
+        "path": "wallpapers/dusk.jpg",
+        "video": "lock/qylock/dusk.mp4"
+      },
+      {
+        "path": "wallpapers/night.jpg",
+        "video": "lock/qylock/night.mp4"
+      }
+    ]
+  }
+}

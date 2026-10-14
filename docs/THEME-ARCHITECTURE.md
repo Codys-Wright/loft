@@ -1,6 +1,7 @@
 # Theme architecture: facets, themes, variants
 
-Status: **spec**, nothing here is implemented yet. It replaces the "a theme is one pack
+Status: **spec, partly implemented**: phases A (model + resolver) and D (CLI surface)
+have landed; see [§9 Status](#status). It replaces the "a theme is one pack
 with one `theme.json`" model of [THEME-FORMAT.md](THEME-FORMAT.md) and absorbs the
 `wallsets` branch (multi-display wallpaper sets). The companion spec
 [SPACES.md](SPACES.md) uses this model to give each functional space its own theme
@@ -1040,6 +1041,67 @@ in the same row can run in parallel.
 | **H. Motion adoption** | replace hard-coded durations / easings (197 sites) with `Theme.motion.*`, one agent per `src/<dir>` | E | F, G, I |
 | **I. Typography, Icons & Cursor, Launcher units** | `render/{gsettings,fonts,walker}.py`, `templates/render/*`, shell restart on icon change, `nix/modules/home.nix` (`extraIconThemes`, fonts) | B | F, G, H |
 | **J. Docs** | rewrite THEME-FORMAT.md as the v2 reference, README Themes section, FEATURES.md rows | C, D | anything |
+
+### Status
+
+**Done: A (model + resolver), D (CLI surface), golden gate.** Code is in `cli/loft/facets/`
+(`model.py` catalog, ids and merge rules; `refs.py`; `resolve.py`; `schema.py`, a
+JSON Schema subset checker so bare `python3` behaves like the Nix CLI;
+`appearance.py` for `appearance.json`, saves and pins; `compat.py`) and
+`cli/loft/themecmds.py`, with schemas in `schemas/` and the built-ins as the v2
+pack `packs/loft/`. Tests are in `tests/test_resolve.py`, and the `theme-golden`
+check also renders `loft@dark` / `loft@light`.
+
+- **Rendering is still v1.** `compat.py` turns the resolved facets back into a v1
+  `theme.json` dict and manifest and renders them with today's templates
+  (`render.write_bundle`). `loft theme apply` / `render` now go through the
+  resolver for every name: v2 themes, aliases and v1 packs (through
+  `pack.v1_documents`, the v1 adapter). With an empty user layer the output is
+  byte-identical to the v1 render (goldens, plus cozytile-sakura, qylock-genshin
+  and the glassless fixture). Bundles keep v1 names: `Resolved.name` is the alias
+  that points at the selection (`loft@dark` → `tokyonight`), else `theme@variant`,
+  so `perTheme` keys, `rendered/<name>` and `Theme.name` don't change.
+  `LOFT_THEME_ENGINE=v1` brings back the old pack-only apply/render.
+- **Not rendered yet (phase B / I):** motion, shape gaps / focus / border, icons,
+  typography beyond the v1 `fonts`, launcher, sounds, lock options. They resolve
+  and validate, and `loft theme state` shows them. B replaces `compat.py`
+  with units and keeps the gate.
+- **The catalog** is built from the library root (implicit pack `user`), the theme
+  path's pack dirs and `packs/`. The built-in v1 `themes/` dir is left out while
+  `packs/loft` exists, because its packs are now aliases of `loft`. `themes/`
+  stays for `loft-themes-builtin`, `theme validate` and the goldens until C.
+  Saves write into today's library root (`$LOFT_LIBRARY`, `~/Documents/Themes`):
+  `Themes/<id>.json`, `Themes/<theme>.variants.json`, and kind folders
+  (`Materials/` …). C moves that root to `~/Documents/Loft`.
+- **CLI:** `theme list --themes [--collection C] [--json]`, which leaves plain
+  `theme list [--json]` as the v1 pack list the shell reads; `theme current
+  --json`; `theme apply [T[@V]] [--mode]` (no `--greeter` yet); `theme render T[@V]
+  OUT [--no-user]`; `theme variants`, `state`, `diff`, `reset`, `save-variant`,
+  `save-as`; `theme accessibility --reduce-motion|--reduce-transparency|
+  --increase-contrast on|off` (not in §8; the Theme pages need it); and
+  `loft <kind> list|show|apply|set|reset|save-as [--pin]`. Every write re-applies
+  unless `--no-apply` is given. Not done: `preview` (B/E), `migrate` (C),
+  `<kind> import` (C), and `loft wallpapers plan|sets|…` (the `wallsets`
+  commands stay under `loft wallpaper`).
+- **Deviations from the text above, all small:**
+  - §4.2 storage rule: "selects k" means a ref or inline facet. A variant that
+    only patches k shares the `"*"` slot. On the base, a kind goes under the base
+    id when some variant replaces it, so a Dark palette tweak doesn't leak into
+    Light.
+  - `loft`'s Light variant patches the material (`tint`) without re-referencing
+    it, so the glass slider stays per theme (decision 3).
+  - `save-variant` clears only the `"*"` slot and the current variant's slot.
+    `reset KIND` drops those same two slots.
+  - Shape has `shadow.color` (null means black at the polar opacity), which
+    carries v1 `glass.shadow`.
+  - Lock data has `main` / `background`, and wallpaper items may note `kind`.
+  - Typography `mono.family: null` means `monospace` (v1), not JetBrainsMono.
+  - Auto mode uses 07:00–19:00 (or `$LOFT_AUTO_POLARITY`) until a Night Light
+    schedule exists.
+- **Pins vs saves:** a pin sits above theme and variant data. When a pin and a
+  customization touch the same keys, saving the customization into a variant or
+  theme lets the pin win again. `save-variant` / `save-as` print a note when the
+  look changes.
 
 **Test strategy.**
 

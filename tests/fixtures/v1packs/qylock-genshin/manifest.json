@@ -1,0 +1,19 @@
+{
+  "name": "qylock-genshin",
+  "author": "Darkkal44",
+  "version": "0.0.0+f6561e2ceae3",
+  "license": "GPL-3.0",
+  "source": "https://github.com/Darkkal44/qylock/tree/f6561e2ceae33f26e5e660742a5df2f725cbe514/themes/Genshin",
+  "description": "Genshin Qylock Theme (imported: palette from a frame of day.mp4, 4 backgrounds)",
+  "upstream": {
+    "importer": "qylock",
+    "url": "https://github.com/Darkkal44/qylock",
+    "ref": "HEAD",
+    "commit": "f6561e2ceae33f26e5e660742a5df2f725cbe514",
+    "path": "themes/Genshin"
+  },
+  "lock": {
+    "format": "qylock",
+    "path": "lock/qylock"
+  }
+}

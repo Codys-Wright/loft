@@ -8,7 +8,9 @@
 #                   helpers (scrolling-capture stitcher, Auto Scroll's stop logic with a fake
 #                   loft-pointer, recording zooms) and Apps to
 #                   leave alone → xremap (tests/test_keys.py) — all offline
-#   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte
+#   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte, and so
+#                   does `loft theme render loft@dark|loft@light` (the facet model's gate;
+#                   tests/test_resolve.py also checks imported packs through the v1 adapter)
 #   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`
 #   loft-niri       the crate builds and its tests pass (incl. `niri validate`)
@@ -46,6 +48,8 @@
           ../cli
           ../templates
           ../themes
+          ../packs
+          ../schemas
           ../tests
         ];
       };
@@ -73,6 +77,13 @@
         theme-golden = check "theme-golden" [ pkgs.diffutils ] ''
           for t in tokyonight latte; do
             diff -ru ${../tests/golden}/$t ${builtin}/$t
+          done
+          # The facet model's regression gate: the built-in `loft` theme (and
+          # the old names, now aliases) renders exactly what the v1 packs did.
+          export HOME=$TMPDIR LOFT_THEME_INDEX=none LOFT_LIBRARY=none LOFT_STATE_DIR=$TMPDIR/state
+          for pair in loft@dark:tokyonight loft@light:latte tokyonight:tokyonight latte:latte; do
+            ${loft} theme render "''${pair%%:*}" "out-''${pair%%:*}"
+            diff -ru ${../tests/golden}/''${pair##*:} "out-''${pair%%:*}"
           done
           touch $out
         '';
