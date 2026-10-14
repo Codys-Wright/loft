@@ -679,11 +679,16 @@ loft-niri space startup                                # open the `startup: "log
   `DockData.profileFor`), `menubar.extras` (`Controls.barShown`; Control Center always
   stays), `bar.hidden` (on outputs showing one of the space's workspaces), `focus`
   (DND + allow list by app name, restored on leave unless changed by hand). `theme`:
-  `Spaces.applyTheme()` is the P5 hook (logs only). Outputs changing: `space render`
-  then `space ensure <active>`, only once `overrides/spaces.kdl` exists (nothing is
+  `Spaces.applyTheme()` is the P5 hook (logs only). The shell runs loft-niri with
+  `--json` off the UI thread: `notes` of an activation ("Couldn't find the … window")
+  become an island banner; a first activation's spin-up stops holding the derivation
+  back after 1.5 s. Outputs changing: `space render`, `space ensure <active>`, `space
+  gather <active>`, only once `overrides/spaces.kdl` exists (nothing is
   rendered behind a user who hasn't opted in). Settings → Spaces: read-only list,
   Activate, Open (shown once `loft-niri space open` exists, P3). Feature id `spaces`.
-- **Not done in P4:** `dock.displays` per role (the shell has no role resolution; it
+- **Not done in P4:** notes of activations the niri binds run (Mod+N, ⌃⌘← →
+  spawn loft-niri directly) don't reach the shell; `space startup` belongs in the
+  session's autostart (fleet / loft-session, P8), not wired; `dock.displays` per role (the shell has no role resolution; it
   would need roles in `space list`); the fold "+1" badge (§3.3); after a replug,
   `ensure` puts workspaces back but the returning display shows its first workspace,
   not the active space's (re-activating would warp the pointer; left to the user).
