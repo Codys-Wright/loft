@@ -34,6 +34,30 @@ in parallel without touching each other.
 | App menu for every app (macOS ⌘-menu) | have | click the bold app name or Mod+F10 (`src/menubar/`): About, New Window + `.desktop` actions, Move to Workspace ▸ / Display ▸, Float/Tile, Full Screen, Maximize Column, Center, Hide / Hide Others / Show All (parking workspace `hidden-<output>`: niri has no minimize), Close Window, Quit (closes every window, confirms when several, optional SIGTERM after 3/10 s). Hold-to-quit: todo |
 | Global menu (File / Edit / View … in the bar) | have | `studio-appmenu` (crates/studio-appmenu): owns `com.canonical.AppMenu.Registrar` (never replaces another one, e.g. Plasma's), matches the focused window by pid (niri has no appmenu protocol) — registrar entries, then introspection of the process's bus connections, and `_NET_ACTIVE_WINDOW` for X11 windows. Reads DBusMenu (Qt/KDE, Electron on X11) and `org.gtk.Menus` (GtkApplication menubars). Verified: Qt/KDE (Kate, KCalc, PyQt), GTK3 GtkApplication (Mousepad, gtk3-demo-application), Electron under XWayland (needs libdbusmenu-glib). No: GTK4/libadwaita apps without a menubar (Text Editor), Firefox, Electron on Wayland |
 
+## Menu bar extras (top right) — wave 2 (status)
+macOS's own status items (vorssaint has none of these — macOS ships them), plus
+vorssaint's readouts/sound tools that already exist, in one style: an icon in the
+flush bar → a glass dropdown under it (one open at a time, hover-switch between
+open extras like real menus), scroll on the icon where it makes sense, ⌥-click
+(Alt-click) for details, "… Settings" at the bottom opens the Settings page.
+
+| Feature | Status | How |
+|---|---|---|
+| **Wi-Fi / network extra** — icon: signal bars, ethernet, offline, VPN badge | todo | Quickshell `Networking` (NetworkManager): Wi-Fi toggle; current network (signal, lock); known + other networks from a scan while open; click to connect, inline password field for new secured networks; "Other Network…" (hidden SSID); every wired link (Wired connection 1, 10G Jumbo) and VPNs (Tailscale) with state; ⌥-click details: IP, router, DNS, channel/band, link rate, RSSI; live traffic line (from `network`) |
+| **Bluetooth extra** — icon shows on / connected / off | todo | Quickshell `Bluetooth` (BlueZ): toggle; devices (connected first) with type icon and battery % (BlueZ Battery1); click = connect/disconnect; "Nearby Devices" (discovery only while open) → pair + trust; ⌥-click: address, RSSI; low-battery alert for headsets/mice (hooks `alerts`) |
+| **Sound extra** — icon reflects volume / headphones / muted | partial (icon, mixer) | output volume slider (+ scroll on icon), output device list (TF, Dante, Bluetooth with battery), "Sound Settings…", mixer chevron (`mixer`); ⌥-click: inputs + mic level, and the PipeWire graph clock — sample rate / quantum with quick switch (48/96 kHz, 64–1024 frames via `pw-metadata` clock.force-*) for studio work |
+| Now Playing extra (optional) | todo | MPRIS, like macOS's Now Playing item — for when the island is off |
+| Battery extra (only when a battery exists) | todo | UPower: %, time remaining, power source, power profile (power-profiles-daemon), energy-hungry apps (from `systemMonitor`) |
+| Clock in the bar (optional) | todo | the time lives in the island today; a setting shows date + time on the right like macOS; click → calendar / notification history |
+| Focus / Do Not Disturb indicator | todo | moon icon while DND is on (CC toggle exists) |
+| Recording indicator | partial (island) | a stop button in the bar while the Recorder runs (macOS shows one) |
+| Camera-in-use indicator | todo | green dot when a camera node is in use (PipeWire video sources / v4l2 users) — alongside the mic indicator (have) |
+| Input source (keyboard layout) | todo | only when more than one xkb layout; niri `switch-layout` |
+| Spotlight icon | todo | magnifier → `studio-launcher open` |
+| Control Center | have | the toggles icon |
+| Menu bar readouts (CPU, RAM, temps, net, battery) | have | `barReadouts` |
+| **Arrange the extras** (Bartender / Ice-style) | todo | Settings → Menu Bar: show/hide and reorder every extra and readout; tray (StatusNotifier) icons can be pinned or tucked behind a » overflow that expands on click/hover; per-item "only when active" (e.g. VPN, recording) |
+
 ## Windows and the dock — wave 2 (windows)
 | Feature | Status | How |
 |---|---|---|
