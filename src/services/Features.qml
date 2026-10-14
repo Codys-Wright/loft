@@ -53,6 +53,11 @@ Singleton {
         { id: "arrange", label: "Arrange windows", icon: "󰕴", group: "Windows", page: "EverydayPage.qml", description: "Halves, thirds, column widths and more from the app menu, the dock or ⌘⌃A" },
         { id: "quitOnClose", label: "Quit on close", icon: "󰗼", group: "Windows", page: "EverydayPage.qml", description: "Quit chosen apps when their last window closes" },
         { id: "quitProtection", label: "Quit protection", icon: "󰌾", group: "Windows", page: "EverydayPage.qml", description: "Hold ⌘Q to quit chosen apps, so a slip doesn't close them" },
+        // Utilities window (src/utilities/): one page per module.
+        { id: "portManager", label: "Port manager", icon: "󰒍", group: "Apps", description: "Listening ports with their process and project; open dev servers in the browser, stop your own" },
+        { id: "flakeUpdates", label: "Flake updates", icon: "󰚰", group: "Apps", description: "What `nix flake update` would change: inputs, commits, package versions — you run the switch" },
+        { id: "cleaner", label: "Cleaner", icon: "󰃢", group: "Apps", description: "Reclaimable space: caches, Trash, Nix garbage and generations; messaging-download limits; scheduled cleanup" },
+        { id: "mediaTools", label: "Media tools", icon: "󰕧", group: "Apps", description: "Compress video, convert images, make GIFs, add watermarks, extract audio (ffmpeg, ImageMagick)" },
         { id: "appMenu", label: "App menu", icon: "󰀻", group: "Desktop", page: "MenuBarPage.qml", description: "Click the app name (or Mod+F10): About, New Window, desktop actions, window commands, Hide, Quit" },
         // Controls: each lives in the Control Center, the menu bar, or both
         // (Controls.qml; arranged in Settings → Menu Bar and CC Edit Controls).

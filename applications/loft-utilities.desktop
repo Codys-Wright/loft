@@ -1,0 +1,27 @@
+[Desktop Entry]
+Type=Application
+Name=Utilities
+GenericName=Ports, Updates, Cleaner, Media Tools
+Comment=Listening ports, flake update summary, reclaimable space and media tools
+Exec=loft utilities open
+Icon=applications-utilities
+Categories=System;Monitor;
+Keywords=ports;listening;kill;port manager;updates;flake;nix flake update;cleaner;cache;garbage;nix store;disk space;trash;media;
+StartupNotify=false
+Actions=ports;updates;cleaner;media;
+
+[Desktop Action ports]
+Name=Port Manager
+Exec=loft utilities open ports
+
+[Desktop Action updates]
+Name=Flake Updates
+Exec=loft utilities open updates
+
+[Desktop Action cleaner]
+Name=Cleaner
+Exec=loft utilities open cleaner
+
+[Desktop Action media]
+Name=Media Tools
+Exec=loft utilities open media

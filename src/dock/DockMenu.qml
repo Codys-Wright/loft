@@ -15,6 +15,7 @@ import qs.everyday
 //            To, Move to Desktop / Display) · Show All Windows · Hide ·
 //            Hide Others · Quit (Alt: Force Quit)
 //   folder   Sort by ▸ · Display as ▸ · View content as ▸ · Open · Remove
+//   item     a stack item: Open · Show in Files · Quick Actions ▸ (Media Tools)
 //   trash    Open · Empty Trash…
 //   dock     Magnification · Position ▸ · recent apps · Dock Settings…
 Singleton {
@@ -275,6 +276,27 @@ Singleton {
             sep("s-remove"),
             { key: "remove", label: "Remove from Dock", enabled: true, run: () => DockData.removeFolder(index) }
         ];
+    }
+
+    // ── An item in a stack (right-click in the popup) ────────────────────
+    function openStackItem(screen, x, y, path) {
+        MenuState.openContext(screen, x, y, "bottom", () => root.stackItemItems(path));
+    }
+
+    function stackItemItems(path) {
+        const name = path.split("/").pop();
+        const items = [
+            { key: "open", label: "Open", enabled: true, run: () => DockData.openFile(path) },
+            { key: "show", label: "Show in Files", enabled: true, run: () => DockData.showInFiles(path) }
+        ];
+        // Quick Actions ▸ — Media Tools (Utilities window) for videos, images, audio.
+        const ext = (name.match(/\.([^.]+)$/)?.[1] ?? "").toLowerCase();
+        const kind = /^(mp4|mkv|mov|webm|avi|m4v|mpe?g|wmv|flv|ts|3gp|ogv)$/.test(ext) ? "video" : /^(png|jpe?g|webp|avif|gif|bmp|tiff?|heic|heif|jxl)$/.test(ext) ? "image" : /^(mp3|m4a|aac|flac|wav|ogg|opus|aiff?)$/.test(ext) ? "audio" : "";
+        if (Features.on("mediaTools") && kind !== "") {
+            const acts = MediaTools.ops.filter(o => o.kinds.includes(kind)).map(o => ({ key: "qa-" + o.id, label: o.label + "…", enabled: true, run: () => MediaTools.openWith([path], o.id) }));
+            items.push(sep("s-qa"), { key: "quick", label: "Quick Actions", enabled: true, submenu: true, children: acts });
+        }
+        return items;
     }
 
     // ── Trash ────────────────────────────────────────────────────────────

@@ -1,0 +1,32 @@
+[Desktop Entry]
+Type=Application
+Name=Media Tools
+GenericName=Compress, Convert, GIF, Watermark
+Comment=Compress videos, convert images, make GIFs, add watermarks, extract audio
+Exec=loft media open %F
+Icon=applications-multimedia
+Categories=AudioVideo;Video;
+Keywords=compress;video;convert;image;webp;avif;png;jpg;gif;watermark;extract audio;mp3;resize;
+MimeType=video/mp4;video/x-matroska;video/quicktime;video/webm;video/x-msvideo;video/mpeg;video/ogg;video/3gpp;video/x-m4v;image/png;image/jpeg;image/webp;image/avif;image/gif;image/bmp;image/tiff;image/heic;image/heif;audio/mpeg;audio/mp4;audio/flac;audio/x-wav;audio/ogg;
+StartupNotify=false
+Actions=compress;convert;gif;watermark;audio;
+
+[Desktop Action compress]
+Name=Compress Video
+Exec=loft media open --op compress %F
+
+[Desktop Action convert]
+Name=Convert Images
+Exec=loft media open --op convert %F
+
+[Desktop Action gif]
+Name=Make GIF
+Exec=loft media open --op gif %F
+
+[Desktop Action watermark]
+Name=Add Watermark
+Exec=loft media open --op watermark %F
+
+[Desktop Action audio]
+Name=Extract Audio
+Exec=loft media open --op audio %F

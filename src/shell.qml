@@ -20,6 +20,7 @@ import qs.clipboard
 import qs.desktopmenu
 import qs.palette
 import qs.everyday
+import qs.utilities
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
 // Optional modules are gated by the feature registry (services/Features.qml).
@@ -127,6 +128,12 @@ ShellRoot {
     LazyLoader {
         active: Features.on("alerts")
         SystemAlerts {}
+    }
+
+    // Utilities: ports, flake updates, cleaner, media tools.
+    LazyLoader {
+        active: Utilities.available
+        UtilitiesWindow {}
     }
 
     Variants {

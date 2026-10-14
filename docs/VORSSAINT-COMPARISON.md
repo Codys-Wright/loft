@@ -22,15 +22,15 @@ Legend: ✅ have · 🟡 partial · 🔨 in progress · ⬜ todo · ➖ not appl
 
 | | Count |
 |---|---|
-| ✅ Have | 30 |
+| ✅ Have | 37 |
 | 🧩 Handled by niri / fleet | 8 |
-| 🟡 Partial | 7 |
+| 🟡 Partial | 6 |
 | 🔨 In progress | 2 |
-| ⬜ Todo | 9 |
+| ⬜ Todo | 3 |
 | ➖ Not applicable on Linux/NixOS | 9 |
 
-Of the 56 rows that apply on Linux: 38 are covered (✅ + 🧩), 9 more are partial or being
-built, 9 are still todo — and Loft adds a whole desktop's worth of features vorssaint
+Of the 56 rows that apply on Linux: 45 are covered (✅ + 🧩), 8 more are partial or being
+built, 3 are still todo — and Loft adds a whole desktop's worth of features vorssaint
 doesn't need (bottom of this file).
 
 ## Sound
@@ -113,17 +113,17 @@ doesn't need (bottom of this file).
 | Camera preview | ✅ | Floating round mirror + island page |
 | Copy text from screen (OCR + QR) | ✅ | tesseract + zbar, offline |
 | Color picker | ✅ | Pixel loupe, formats, recents |
-| Media tools (compress, convert, watermark, GIF) | ⬜ | |
+| Media tools (compress, convert, watermark, GIF) | ✅ | Utilities → Media Tools: compress video, convert images, GIF, text/logo watermark, extract audio; drop files, dock Quick Actions ▸, Open With / Spotlight |
 
 ## App management
 | vorssaint | Loft | How |
 |---|---|---|
-| App updates (one list) | ⬜ | → a flake-update summary for NixOS |
-| Cleaner (caches, logs) | ⬜ | → nix store GC + caches |
-| Messaging downloads cleanup | ⬜ | later |
+| App updates (one list) | ✅ | Flake updates: what `nix flake update` would change (inputs, commits, package versions); you run `just update && just switch` |
+| Cleaner (caches, logs) | ✅ | Caches, Trash, Nix garbage + generations (GC is a command you run), scheduled cleanup (systemd user timer) |
+| Messaging downloads cleanup | ✅ | Retention per folder (Telegram, WhatsApp …) → old files to the Trash |
 | Uninstaller | ➖ | Declarative NixOS — remove from the flake |
 | Homebrew manager | ➖ | Nix replaces it |
-| Port manager | ⬜ | List listening processes, stop them |
+| Port manager | ✅ | Listening ports with process + project, open dev servers, stop (Force Quit) your own |
 
 ## Energy and display
 | vorssaint | Loft | How |

@@ -3,7 +3,8 @@
 #   theme-schema    built-in packs (and the test fixture) match themes/schema.json
 #   theme-unit      tests/test_*.py: renderer + manager against scratch dirs, the
 #                   cozytile:/qylock: importers against local fake upstream repos, and
-#                   vibes (pack collections, ranking, index links) — all offline
+#                   vibes (pack collections, ranking, index links), and the Utilities
+#                   helpers (ports, flake updates, cleaner, media tools) — all offline
 #   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte
 #   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`
@@ -49,7 +50,10 @@
           touch $out
         '';
 
-        theme-unit = check "theme-unit" [ pkgs.git ] ''
+        theme-unit = check "theme-unit" [
+          pkgs.git
+          pkgs.ffmpeg # tests/test_systools.py: a real Make GIF run
+        ] ''
           export HOME=$TMPDIR LOFT_THEME_INDEX=none
           cd ${testSrc}
           PYTHONPATH=cli PYTHONDONTWRITEBYTECODE=1 ${python}/bin/python3 -m unittest discover -s tests -v
