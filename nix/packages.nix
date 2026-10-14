@@ -10,6 +10,9 @@
 #                          runtime overrides → <state>/overrides/niri.kdl, keybinds
 #   studio-appmenu         global menu daemon (crates/studio-appmenu): AppMenu registrar
 #                          + DBusMenu / org.gtk.Menus reader for the bar
+#   studio-input           test driver (crates/studio-input): studio-input (virtual
+#                          mouse + keyboard) and studio-shot (screenshots), see
+#                          docs/TESTING.md
 #
 # Both sessions include <state>/overrides/niri.kdl FIRST (niri uses the first
 # `output` block matching a monitor, so output overrides must come first) and
@@ -166,133 +169,34 @@
             self'.packages.studio
             self'.packages.studio-niri
             self'.packages.studio-appmenu
+            self'.packages.studio-input # studio-input / studio-shot inside the session
+            pkgs.dbus # dbus-run-session: the private bus of isolated sessions
           ];
-          text = ''
-            usage() { echo "usage: studio-dev [--output NAME | --windowed] [CHECKOUT]" >&2; exit 2; }
-            output=""
-            windowed=0
-            root=""
-            while [ $# -gt 0 ]; do
-              case "$1" in
-                --output) [ $# -ge 2 ] || usage; output="$2"; shift 2 ;;
-                --windowed) windowed=1; shift ;;
-                -h|--help) usage ;;
-                *) root="$1"; shift ;;
-              esac
-            done
-            root="$(realpath "''${root:-$PWD}")"
-            if [ ! -f "$root/src/shell.qml" ] || [ ! -f "$root/niri/base.kdl" ]; then
-              echo "studio-dev: $root is not a studio-linux checkout (pass its path, or run from inside it)" >&2
-              exit 1
-            fi
-
-            # The entry config lives outside the checkout; it includes the live
-            # fragments by absolute path, so niri watches and reloads them.
-            dir="''${XDG_RUNTIME_DIR:-/tmp}/studio-dev"
-            mkdir -p "$dir"
-
-            # `studio` run against this session: checkout templates + themes,
-            # user-installed packs, state in $dir.
-            studio_env=(
-              "STUDIO_STATE_DIR=$dir"
-              "STUDIO_DATA_DIR=$root"
-              "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes"
-              "STUDIO_SHELL_PATH=$root/src"
-            )
-
-            sed "s|@IPC@|\"quickshell\" \"ipc\" \"--path\" \"$root/src\" \"call\"|g" \
-              "$root/niri/shell-binds.kdl.in" > "$dir/shell-binds.kdl"
-
-            # Relaunching replaces the running dev session instead of stacking a
-            # second one: stop the niri recorded in session.env, if it's ours.
-            if [ -f "$dir/session.env" ]; then
-              old_pid="$(sed -n 's/^NIRI_SOCKET=.*\.\([0-9]*\)\.sock$/\1/p' "$dir/session.env")"
-              if [ -n "$old_pid" ] && [ -r "/proc/$old_pid/cmdline" ] && tr '\0' ' ' < "/proc/$old_pid/cmdline" | grep -q "$dir/config.kdl"; then
-                echo "studio-dev: replacing the running session (niri $old_pid)"
-                kill "$old_pid" 2>/dev/null || true
-                for _ in $(seq 1 25); do kill -0 "$old_pid" 2>/dev/null || break; sleep 0.2; done
-              fi
-            fi
-
-            # The active theme: `current` → a rendered theme dir. Kept across
-            # restarts (`studio --dev theme apply NAME` switches it); rendered
-            # when missing (from the default) or still a raw pack from before
-            # the renderer (no niri.kdl; re-rendered, keeping the choice).
-            if [ ! -e "$dir/current/niri.kdl" ]; then
-              theme=default
-              [ -e "$dir/current/theme.json" ] && theme="$(readlink -f "$dir/current")"
-              env "''${studio_env[@]}" STUDIO_HOOKS=none ${lib.getExe self'.packages.studio} theme apply "$theme" >/dev/null
-            fi
-
-            # The theme fragment comes after base.kdl so it wins, then dev-local,
-            # then the runtime overrides (also first: see the header comment).
-            cat > "$dir/config.kdl" <<EOF
-            include optional=true "$dir/overrides/niri.kdl"
-            include "$root/niri/base.kdl"
-            include "$dir/shell-binds.kdl"
-            include optional=true "$dir/current/niri.kdl"
-            include optional=true "$root/niri/dev-local.kdl"
-            include optional=true "$dir/overrides/niri.kdl"
-            spawn-at-startup "env" "STUDIO_STATE_DIR=$dir" "STUDIO_LAUNCHER_DIR=$root/launcher" "studio-launcher" "service"
-            spawn-at-startup "env" "STUDIO_DEV=1" "STUDIO_STATE_DIR=$dir" "STUDIO_DATA_DIR=$root" "STUDIO_THEME_PATH=''${XDG_DATA_HOME:-$HOME/.local/share}/studio-linux/themes:$root/themes" "STUDIO_SHELL_PATH=$root/src" "STUDIO_NIRI_CONFIG=$dir/config.kdl" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "QML_IMPORT_PATH=${lockQmlPath}" "QT_PLUGIN_PATH=${pkgs.kdePackages.qtmultimedia}/lib/qt-6/plugins" "quickshell" "--path" "$root/src"
-            EOF
-
-            # Live everything, not just QML: `studio` runs the checkout's CLI,
-            # and fresh `cargo build` binaries (target/debug) shadow the
-            # packaged studio-niri & co. niri — and everything it spawns —
-            # inherits this PATH.
-            mkdir -p "$dir/bin"
-            printf '#!/bin/sh\nexec %s -B "%s" "$@"\n' "${python}/bin/python3" "$root/cli/studio" > "$dir/bin/studio"
-            chmod +x "$dir/bin/studio"
-            export PATH="$dir/bin:$PATH"
-            if [ -d "$root/target/debug" ]; then
-              export PATH="$root/target/debug:$PATH"
-            fi
-
-            echo "studio-dev: niri config $dir/config.kdl, shell from $root/src"
-            niri --config "$dir/config.kdl" &
-            niri_pid=$!
-            trap 'kill $niri_pid 2>/dev/null' INT TERM
-
-            # Record how to reach this session (used by `nix run .#shot`).
-            sock=""
-            for _ in $(seq 1 50); do
-              for s in "''${XDG_RUNTIME_DIR:-/tmp}"/niri.wayland-*."$niri_pid".sock; do
-                [ -S "$s" ] && sock="$s"
-              done
-              [ -n "$sock" ] && break
-              sleep 0.2
-            done
-            if [ -n "$sock" ]; then
-              display="$(basename "$sock" | cut -d. -f2)"
-              {
-                printf 'NIRI_SOCKET=%s\nWAYLAND_DISPLAY=%s\n' "$sock" "$display"
-                printf '%s\n' "''${studio_env[@]}"
-              } > "$dir/session.env"
-            fi
-
-            # Inside KDE: put the window fullscreen + borderless on one monitor,
-            # so the nested session is a real full-size output. Default: the
-            # rightmost enabled monitor (--output picks one, --windowed opts out).
-            if [ -z "$output" ] && [ "$windowed" = 0 ] && command -v kscreen-doctor >/dev/null; then
-              output="$(kscreen-doctor -j 2>/dev/null | jq -r '[.outputs[] | select(.enabled)] | max_by(.pos.x) | .name // empty' || true)"
-            fi
-            if [ -n "$output" ] && [ "$windowed" = 0 ]; then
-              echo "studio-dev: fullscreen on $output"
-              qdbus="$(command -v qdbus || command -v qdbus6 || true)"
-              if [ -z "$qdbus" ]; then
-                echo "studio-dev: --output needs KDE's qdbus; ignoring" >&2
-              else
-                sed -e "s/@OUTPUT@/$output/g" -e "s/@PID@/$niri_pid/g" ${./dev/kwin-place.js} > "$dir/kwin-place.js"
-                id="$("$qdbus" org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$dir/kwin-place.js" studio-dev-place)"
-                "$qdbus" org.kde.KWin "/Scripting/Script$id" org.kde.kwin.Script.run >/dev/null
-                # Stay loaded long enough to catch the window being mapped.
-                (sleep 5; "$qdbus" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript studio-dev-place >/dev/null) &
-              fi
-            fi
-
-            wait "$niri_pid"
-          '';
+          text =
+            builtins.replaceStrings
+              [
+                "@STUDIO@"
+                "@PYTHON@"
+                "@UI_FONT@"
+                "@ICON_FONT@"
+                "@LOCK_QML_PATH@"
+                "@QT_MM_PLUGINS@"
+                "@KWIN_PLACE@"
+                "@SWAY@"
+                "@MESA_EGL_VENDOR@"
+              ]
+              [
+                (lib.getExe self'.packages.studio)
+                "${python}/bin/python3"
+                uiFont
+                iconFont
+                lockQmlPath
+                "${pkgs.kdePackages.qtmultimedia}/lib/qt-6/plugins"
+                "${./dev/kwin-place.js}"
+                (lib.getExe' pkgs.sway-unwrapped "sway")
+                "${pkgs.mesa}/share/glvnd/egl_vendor.d/50_mesa.json"
+              ]
+              (builtins.readFile ./dev/studio-dev.sh);
         };
 
         # The keyboard layer (keyboard/keys.nix): Esc / Caps tap = Escape,
@@ -307,7 +211,11 @@
             name = "studio-keys";
             text = ''
               if [ "''${1:-}" = "--dual-role-only" ]; then
-                exec ${pkgs.xremap}/bin/xremap --watch=device --mouse ${config "keys-dual.json" (keys { appKeys = false; })}
+                exec ${pkgs.xremap}/bin/xremap --watch=device --mouse ${
+                  config "keys-dual.json" (keys {
+                    appKeys = false;
+                  })
+                }
               fi
               exec ${pkgs.xremap.niri}/bin/xremap --watch=device --mouse ${config "keys.json" (keys { })}
             '';
@@ -441,20 +349,52 @@
           meta.mainProgram = "studio-appmenu";
         };
 
-        # Screenshot the running studio-dev session: `nix run .#shot -- out.png`.
-        studio-shot = pkgs.writeShellApplication {
-          name = "studio-shot";
-          runtimeInputs = [ pkgs.grim ];
-          text = ''
-            env="''${XDG_RUNTIME_DIR:-/tmp}/studio-dev/session.env"
-            [ -f "$env" ] || { echo "studio-shot: no studio-dev session running" >&2; exit 1; }
-            # shellcheck disable=SC1090
-            . "$env"
-            out="''${1:-studio-$(date +%Y%m%d-%H%M%S).png}"
-            WAYLAND_DISPLAY="$WAYLAND_DISPLAY" grim "$out"
-            echo "$out"
+        # Test driver for agents (crates/studio-input): `studio-input` — a
+        # virtual mouse + keyboard for a session (Wayland virtual-pointer /
+        # virtual-keyboard; niri binds via IPC) — and `studio-shot` —
+        # screenshots with crop/zoom/grid/marks in global coordinates.
+        # See docs/TESTING.md.
+        studio-input = pkgs.rustPlatform.buildRustPackage {
+          pname = "studio-input";
+          version = "0.1.0";
+          src = lib.fileset.toSource {
+            root = ../.;
+            fileset = lib.fileset.unions [
+              ../Cargo.toml
+              ../Cargo.lock
+              ../crates
+            ];
+          };
+          cargoLock.lockFile = ../Cargo.lock;
+          cargoBuildFlags = [
+            "-p"
+            "studio-input"
+          ];
+          cargoTestFlags = [
+            "-p"
+            "studio-input"
+          ];
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          postInstall = ''
+            for b in studio-input studio-shot; do
+              wrapProgram $out/bin/$b --prefix PATH : ${
+                lib.makeBinPath [
+                  pkgs.grim
+                  pkgs.niri
+                ]
+              }
+            done
           '';
+          meta.mainProgram = "studio-input";
         };
+
+        # Screenshot a session: `nix run .#shot -- out.png` (the dev session),
+        # `nix run .#shot -- --session NAME --grid --max 1600`. Same package.
+        studio-shot = self'.packages.studio-input.overrideAttrs (old: {
+          meta = old.meta // {
+            mainProgram = "studio-shot";
+          };
+        });
 
         default = self'.packages.studio-session;
       };

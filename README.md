@@ -15,11 +15,17 @@ nix run .#dev                       # nested niri window running ./src, ./niri, 
 nix run .#dev -- --output DP-1      # inside KDE: fullscreen on that monitor (default: the rightmost)
 nix run .#studio -- --dev theme list
 nix run .#studio -- --dev theme apply latte   # recolors the running session live (checkout templates/themes)
-nix run .#shot -- out.png           # screenshot the dev session
+nix run .#shot -- out.png           # screenshot the dev session (--grid, --zoom, --window …)
 ```
 
 Inside the nested session Mod is Alt (Super in a real session): Mod+Return terminal,
 Mod+O overview, Mod+Shift+E quit.
+
+Testing (agents included): `nix run .#dev -- --session NAME` starts an isolated, headless test
+session (own bus, runtime dir and state; offscreen, software-rendered, exact size);
+`nix run .#shot -- --session NAME --grid` screenshots it with a coordinate grid, and
+`nix run .#input -- --session NAME click X Y` / `type` / `drag` / `bind mod+space` drives it.
+See [docs/TESTING.md](docs/TESTING.md) and the `skills/studio-drive` agent skill.
 
 ## Designing live
 
