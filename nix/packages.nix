@@ -54,8 +54,8 @@
           withXorg = false;
           enableDbus = false;
         })
-        walker # Spotlight launcher (frontend)
-        elephant # launcher data providers
+        self'.packages.studio-walker # Spotlight launcher (frontend)
+        self'.packages.studio-elephant # launcher data providers
         jq
         coreutils
         cliphist # Clipboard history (recorder + store)
@@ -221,9 +221,10 @@
             '';
           };
 
-        # DuckDuckGo-style !bangs for Spotlight (!yt lofi, !gh niri, !w …):
-        # unduck's bang list (github.com/T3-Content/unduck) → elephant's
-        # websearch.toml. Pinned; bump rev + hash to refresh.
+        # DuckDuckGo-style !bangs for Spotlight: unduck's bang list
+        # (github.com/T3-Content/unduck) → bangs.json, the data of the `bangs`
+        # elephant provider (launcher/elephant-bangs). Pinned; bump rev + hash
+        # to refresh the list (launcher/bangs.py adds a few Nix engines).
         studio-bangs =
           let
             unduck = pkgs.fetchFromGitHub {
@@ -235,24 +236,43 @@
           in
           pkgs.runCommand "studio-bangs" { nativeBuildInputs = [ pkgs.python3 ]; } ''
             mkdir -p $out
-            python3 ${../launcher/bangs.py} ${unduck}/src/bang.ts $out/websearch.toml
+            python3 ${../launcher/bangs.py} ${unduck}/src/bang.ts $out/bangs.json
           '';
+
+        # elephant with the `bangs` provider (!bangs, Quicklinks, the default
+        # engine) built in its own provider tree: Go plugins only load into
+        # the exact binary (toolchain + dependency versions) they were built
+        # with, so the provider is built by elephant's own derivation.
+        studio-elephant = pkgs.elephant.overrideAttrs (old: {
+          postPatch = (old.postPatch or "") + ''
+            cp -r ${../launcher/elephant-bangs} internal/providers/bangs
+            chmod -R u+w internal/providers/bangs
+          '';
+        });
+
+        # walker + launcher/walker-set-query.patch: lets an elephant provider
+        # replace the query text — how a !bang becomes a sub-search scope.
+        studio-walker = pkgs.walker.overrideAttrs (old: {
+          patches = (old.patches or [ ]) ++ [ ../launcher/walker-set-query.patch ];
+        });
 
         studio-launcher = pkgs.writeShellApplication {
           name = "studio-launcher";
-          runtimeInputs = with pkgs; [
-            walker
-            elephant
-            jq
-            coreutils
+          runtimeInputs = [
+            self'.packages.studio-walker
+            self'.packages.studio-elephant
+            pkgs.quickshell # opens Settings → Spotlight (Create Quicklink)
+            pkgs.jq
+            pkgs.coreutils
           ];
           text =
             builtins.replaceStrings
-              [ "@LAUNCHER@" "@LAYERSHELL@" "@BANGS@" ]
+              [ "@LAUNCHER@" "@LAYERSHELL@" "@BANGS@" "@SHELL@" ]
               [
                 "${../launcher}"
                 "${pkgs.gtk4-layer-shell}/lib/libgtk4-layer-shell.so"
-                "${self'.packages.studio-bangs}/websearch.toml"
+                "${self'.packages.studio-bangs}/bangs.json"
+                "${../src}"
               ]
               (builtins.readFile ../launcher/studio-launcher.sh);
         };

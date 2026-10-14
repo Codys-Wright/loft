@@ -12,9 +12,20 @@ blur_corner_radius = 26
 "default" = { input = "Spotlight Search", list = "No Results" }
 
 [providers]
-default = ["desktopapplications", "calc", "windows", "websearch", "niriactions"]
+# bangs: Quicklinks (yt, np, gm …), the default web search and "Open <url>"
+# (launcher/elephant-bangs); "!" browses every DuckDuckGo !bang.
+default = ["desktopapplications", "calc", "windows", "bangs", "niriactions"]
 empty = ["desktopapplications"]
 max_results = 40
+
+# walker's defaults give "!" to todo; prefixes merge by provider, so move it.
+[[providers.prefixes]]
+prefix = "+"
+provider = "todo"
+
+[[providers.prefixes]]
+prefix = "!"
+provider = "bangs"
 
 [[providers.prefixes]]
 prefix = ";"
@@ -43,3 +54,17 @@ provider = "calc"
 [[providers.prefixes]]
 prefix = "@"
 provider = "websearch"
+
+# !bangs and Quicklinks. Enter/Tab on a bang (or an exact quicklink) scopes
+# Spotlight to it — the query becomes "!nixpkgs " and the next words are the
+# search; Backspace on the empty term leaves. "scope" needs walker with
+# launcher/walker-set-query.patch.
+[providers.actions]
+bangs = [
+  { action = "scope", label = "search in", default = true, bind = "Return", after = "Nothing" },
+  { action = "scope", label = "complete", bind = "Tab", after = "Nothing" },
+  { action = "search", label = "search", default = true, bind = "Return" },
+  { action = "open", label = "open", default = true, bind = "Return" },
+  { action = "home", label = "open site", bind = "ctrl Return" },
+  { action = "quicklink", label = "create quicklink", bind = "ctrl k" },
+]
