@@ -54,6 +54,7 @@
           runtimeInputs = runtimeDeps;
           text = ''
             state="''${STUDIO_STATE_DIR:-''${XDG_STATE_HOME:-$HOME/.local/state}/studio-linux}"
+            export STUDIO_STATE_DIR="$state"
             if [ -z "''${STUDIO_THEME_FILE:-}" ]; then
               mkdir -p "$state"
               [ -e "$state/current" ] || ln -sfn ${builtinThemes}/default "$state/current"
@@ -110,7 +111,7 @@
             include "$dir/shell-binds.kdl"
             include optional=true "$root/niri/dev-local.kdl"
             spawn-at-startup "env" "STUDIO_STATE_DIR=$dir" "STUDIO_LAUNCHER_DIR=$root/launcher" "studio-launcher" "service"
-            spawn-at-startup "env" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "quickshell" "--path" "$root/src"
+            spawn-at-startup "env" "STUDIO_STATE_DIR=$dir" "STUDIO_THEME_FILE=$dir/current/theme.json" "STUDIO_UI_FONT=${uiFont}" "STUDIO_ICON_FONT=${iconFont}" "quickshell" "--path" "$root/src"
             EOF
 
             echo "studio-dev: niri config $dir/config.kdl, shell from $root/src"

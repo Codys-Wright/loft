@@ -6,4 +6,5 @@ binds {
     Mod+Shift+Tab { spawn @IPC@ "switcher" "prev"; }
     Mod+A hotkey-overlay-title="Control Center" { spawn @IPC@ "controlcenter" "toggle"; }
     Mod+I hotkey-overlay-title="Island" { spawn @IPC@ "island" "toggle"; }
+    Mod+Shift+W hotkey-overlay-title="Wallpapers" { spawn @IPC@ "wallpaper" "toggle"; }
 }

@@ -33,13 +33,16 @@ Singleton {
     readonly property color warn: theme.palette.warn
 
     // Glass: a tinted, semi-transparent fill the compositor blurs behind.
-    readonly property bool blur: theme.glass.blur
-    readonly property real glassOpacity: theme.glass.opacity
-    readonly property color glassFill: withAlpha(theme.glass.tint, theme.glass.opacity)
+    // Runtime overrides (Settings.appearance) win over the theme.
+    readonly property bool blur: Settings.appearance.blur >= 0 ? Settings.appearance.blur === 1 : theme.glass.blur
+    readonly property real glassOpacity: Settings.appearance.glassOpacity >= 0 ? Settings.appearance.glassOpacity : theme.glass.opacity
+    readonly property color glassFill: withAlpha(theme.glass.tint, glassOpacity)
     readonly property color glassBorder: withAlpha(theme.glass.border, theme.glass.borderOpacity)
     readonly property real radius: theme.glass.radius
 
     readonly property var wallpaperGradient: theme.wallpaper.gradient
+    // A theme pack's wallpaper image, relative to the pack (theme.json's dir).
+    readonly property string wallpaperImage: theme.wallpaper.image ? (theme.wallpaper.image.startsWith("/") ? theme.wallpaper.image : file.replace(/[^/]*$/, "") + theme.wallpaper.image) : ""
 
     // Fonts ship with the shell (store paths from the wrapper) so it looks the
     // same on any machine; fall back to whatever the system has.
@@ -113,6 +116,7 @@ Singleton {
 
             property JsonObject wallpaper: JsonObject {
                 property list<string> gradient: ["#16161e", "#2a3a6e", "#6b4fa3"]
+                property string image: ""
             }
         }
     }
