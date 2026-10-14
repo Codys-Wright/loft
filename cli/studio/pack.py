@@ -18,6 +18,10 @@ ROLES = ("bg", "surface", "overlay", "text", "subtext", "accent", "accent2", "ur
 # Files and dirs never part of a pack's identity or an installed copy.
 IGNORED = {".git", ".github", "__pycache__", ".DS_Store"}
 
+# Top-level dirs the renderer never reads (lock/greeter designs, often with
+# large videos): left out of the render-cache digest so `apply` stays cheap.
+NOT_RENDERED = {"lock", "greeter"}
+
 
 class PackError(Exception):
     pass
@@ -67,6 +71,8 @@ class Pack:
         """Content hash of the pack (plus renderer salt), for the render cache."""
         h = hashlib.sha256(salt.encode())
         for p in self.files():
+            if p.relative_to(self.path).parts[0] in NOT_RENDERED:
+                continue
             h.update(str(p.relative_to(self.path)).encode() + b"\0")
             h.update(p.read_bytes() + b"\0")
         return h.hexdigest()[:16]
@@ -101,6 +107,10 @@ class Pack:
         if isinstance(img, str) and img and not img.startswith("/"):
             if not (self.path / img).is_file():
                 errors.append(f"theme.json: wallpaper/image: {img} not found in the pack")
+        lock = (self.manifest or {}).get("lock")
+        if isinstance(lock, dict) and isinstance(lock.get("path"), str) and not lock["path"].startswith("/"):
+            if not (self.path / lock["path"]).is_dir():
+                errors.append(f"manifest.json: lock/path: {lock['path']} not found in the pack")
         if errors:
             raise PackError(f"{self.path}: invalid theme pack\n  " + "\n  ".join(errors))
 
@@ -206,7 +216,7 @@ def normalize(pack: Pack) -> tuple[dict, list[tuple[Path, str]]]:
 
 def normalized_manifest(pack: Pack) -> dict:
     m = pack.manifest or {}
-    return {
+    out = {
         "name": pack.name,
         "author": m.get("author", ""),
         "version": m.get("version", "0.0.0"),
@@ -214,3 +224,17 @@ def normalized_manifest(pack: Pack) -> dict:
         "source": m.get("source", ""),
         "description": m.get("description", ""),
     }
+    if isinstance(m.get("upstream"), dict):
+        out["upstream"] = m["upstream"]
+    lock = m.get("lock")
+    if isinstance(lock, dict) and lock.get("path"):
+        # The lock design is not copied into the rendered bundle: the loader
+        # reads it from the pack, so the path is made absolute here.
+        p = Path(lock["path"])
+        out["lock"] = {"format": lock.get("format", "qylock"), "path": str(p if p.is_absolute() else pack.path / p)}
+    elif (pack.path / "lock" / "Main.qml").is_file():
+        # A studio-format design (docs/THEME-FORMAT-LOCK.md) at the conventional place.
+        out["lock"] = {"format": "studio", "path": str(pack.path / "lock")}
+    if (pack.path / "greeter").is_dir():
+        out["greeter"] = {"path": str(pack.path / "greeter")}
+    return out

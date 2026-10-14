@@ -237,11 +237,6 @@ class Manager(unittest.TestCase):
         self.assertTrue((self.user / "glassless" / "wall.png").is_file())
         self.assertFalse((self.user / "glassless" / ".git").exists())
 
-    def test_importers_are_stubs(self):
-        rc, _, err = studio("theme", "install", "qylock:pixel")
-        self.assertEqual(rc, 1)
-        self.assertIn("not implemented", err)
-
 
 class Hooks(unittest.TestCase):
     def test_selection(self):

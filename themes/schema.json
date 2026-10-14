@@ -108,7 +108,30 @@
         "license": { "type": "string", "description": "SPDX identifier, or NOASSERTION" },
         "source": { "type": "string", "description": "Where the design/palette comes from (URL)" },
         "description": { "type": "string" },
-        "homepage": { "type": "string" }
+        "homepage": { "type": "string" },
+        "upstream": {
+          "description": "Set by importers: where the pack was converted from.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["importer", "url", "commit"],
+          "properties": {
+            "importer": { "type": "string", "description": "Importer key, e.g. cozytile, qylock" },
+            "url": { "type": "string" },
+            "ref": { "type": "string", "description": "The ref that was requested (HEAD = default branch)" },
+            "commit": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
+            "path": { "type": "string", "description": "Theme directory inside the upstream repo" }
+          }
+        },
+        "lock": {
+          "description": "Lock screen / greeter design shipped in the pack. Absent: the default design, colored by the palette.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["format", "path"],
+          "properties": {
+            "format": { "type": "string", "pattern": "^[a-z0-9-]+$", "description": "Design format the loader must understand. Known: qylock (an SDDM-API QML theme dir: metadata.desktop, theme.conf, MainScript)" },
+            "path": { "type": "string", "description": "Directory relative to the pack" }
+          }
+        }
       }
     }
   }

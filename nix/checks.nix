@@ -1,7 +1,8 @@
 # `nix flake check`: theme engine tests.
 #
 #   theme-schema    built-in packs (and the test fixture) match themes/schema.json
-#   theme-unit      tests/test_studio.py: renderer + manager against scratch dirs
+#   theme-unit      tests/test_*.py: renderer + manager against scratch dirs, and the
+#                   cozytile:/qylock: importers against local fake upstream repos (offline)
 #   theme-golden    rendering the built-ins reproduces tests/golden/ byte for byte
 #   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`
 #   ghostty-config  each rendered ghostty.conf passes `ghostty +validate-config`

@@ -229,7 +229,10 @@
           installPhase = ''
             mkdir -p $out/share/studio-linux $out/bin
             cp -r cli templates themes $out/share/studio-linux/
-            # Reload hooks call these; the user's own (newer) ones win on PATH.
+            # Reload hooks call quickshell/niri; installs and importers use git;
+            # the qylock importer samples (video) backgrounds with ffmpeg, whose
+            # libraries Quickshell's closure already carries. The user's own
+            # (newer) ones win on PATH.
             makeWrapper ${python}/bin/python3 $out/bin/studio \
               --add-flags "-B $out/share/studio-linux/cli/studio" \
               --set-default STUDIO_SHELL_PATH ${../src} \
@@ -238,6 +241,7 @@
                   pkgs.quickshell
                   pkgs.niri
                   pkgs.git
+                  pkgs.ffmpeg-headless
                 ]
               }
           '';

@@ -36,9 +36,25 @@ Scope {
 
     // The active pack's design, checked again at every lock so switching
     // themes switches lock designs without a restart.
+    // The rendered theme's manifest names the pack's design (absolute path):
+    // lock: { format: "studio" | "qylock", path } — see docs/THEME-FORMAT*.md.
     readonly property string themeDir: Theme.file.substring(0, Theme.file.lastIndexOf("/"))
-    readonly property string packDesign: themeDir !== "" ? themeDir + "/lock/Main.qml" : ""
+    property string packLockDir: ""
+    property string packFormat: ""
+    // qylock designs are SDDM themes; their entry is Main.qml by convention.
+    // One that needs SDDM modules we don't provide fails to compile and the
+    // built-in design is used instead.
+    readonly property string packDesign: packLockDir !== "" ? packLockDir + "/Main.qml" : ""
     property bool hasPackDesign: false
+
+    function readManifest() {
+        let lock = null;
+        try {
+            lock = JSON.parse(manifestView.text()).lock ?? null;
+        } catch (e) {}
+        packLockDir = lock?.path ?? "";
+        packFormat = lock?.format ?? "";
+    }
 
     // Present while locked. If the shell dies holding the lock, the
     // compositor keeps the screen locked with nothing on it; the restarted
@@ -57,6 +73,8 @@ Scope {
         info = "";
         busy = false;
         focusedScreen = "";
+        manifestView.reload();
+        readManifest();
         packCheck.reload();
         refreshCapsLock();
         state.locked = true;
@@ -151,6 +169,14 @@ Scope {
         path: root.marker
         printErrors: false
         onLoaded: root.lock()
+    }
+
+    FileView {
+        id: manifestView
+        path: root.themeDir !== "" ? root.themeDir + "/manifest.json" : ""
+        blockLoading: true
+        printErrors: false
+        onLoaded: root.readManifest()
     }
 
     FileView {

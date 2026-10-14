@@ -98,7 +98,7 @@ WlSessionLockSurface {
     // The pack's lock/theme.conf as a flat key → value map (SDDM's `config`).
     property var config: ({})
 
-    readonly property string packLockDir: host.themeDir + "/lock"
+    readonly property string packLockDir: host.packLockDir
 
     readonly property var avatarSources: [
         "file://" + (Quickshell.env("HOME") ?? "") + "/.face",
