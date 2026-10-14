@@ -128,7 +128,7 @@ GlassSurface {
                                         }
                                         Text {
                                             Layout.fillWidth: true
-                                            text: [item.canCc ? (item.modelData.sizes ?? []).join(" · ") : "Menu bar only", item.modelData.bar ? (Controls.onBar(item.modelData.id) ? "in the menu bar" : "") : ""].filter(x => x).join(" — ")
+                                            text: item.canCc ? (item.modelData.sizes ?? []).join(" · ") : "Menu bar only"
                                             color: Theme.subtext
                                             font.family: Theme.fontUi
                                             font.pixelSize: 10
@@ -138,20 +138,24 @@ GlassSurface {
                                     // Show in Menu Bar.
                                     Rectangle {
                                         visible: item.modelData.bar
-                                        Layout.preferredWidth: 28
+                                        readonly property bool on: Controls.onBar(item.modelData.id)
+                                        Layout.preferredWidth: barLabel.implicitWidth + 14
                                         Layout.preferredHeight: 22
-                                        radius: 6
-                                        color: Controls.onBar(item.modelData.id) ? Theme.accent : Theme.withAlpha(Theme.text, 0.12)
-                                        Icon {
+                                        radius: 11
+                                        color: on ? Theme.accent : Theme.withAlpha(Theme.text, 0.12)
+                                        Text {
+                                            id: barLabel
                                             anchors.centerIn: parent
-                                            text: "󰍜"
-                                            size: 12
-                                            color: Controls.onBar(item.modelData.id) ? Theme.bg : Theme.text
+                                            text: "Menu Bar"
+                                            color: parent.on ? Theme.bg : Theme.text
+                                            font.family: Theme.fontUi
+                                            font.pixelSize: 10
+                                            font.weight: Font.Medium
                                         }
                                         MouseArea {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: Controls.setOnBar(item.modelData.id, !Controls.onBar(item.modelData.id))
+                                            onClicked: Controls.setOnBar(item.modelData.id, !parent.on)
                                         }
                                     }
                                     Rectangle {

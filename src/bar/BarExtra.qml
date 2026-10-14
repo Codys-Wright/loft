@@ -32,7 +32,10 @@ Item {
     implicitHeight: 22
 
     function open(withDetails) {
-        if (isPanel) {
+        if (controlId === "controlcenter") {
+            MenuState.close();
+            Panels.toggleControlCenter(screenName);
+        } else if (isPanel) {
             MenuState.toggleExtra(screenName, controlId, root, withDetails);
         } else {
             MenuState.close();

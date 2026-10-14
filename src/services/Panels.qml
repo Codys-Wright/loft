@@ -52,7 +52,7 @@ Singleton {
         target: "controlcenter"
 
         function toggle(): void {
-            root.toggleControlCenter(Niri.focusedWorkspace?.output ?? "");
+            root.toggleControlCenter(Displays.activeName || (Niri.focusedWorkspace?.output ?? ""));
         }
 
         function close(): void {
@@ -63,7 +63,7 @@ Singleton {
         // shortcuts and screenshots.
         function expand(panel: string): void {
             if (!root.controlCenterOpen)
-                root.toggleControlCenter(Niri.focusedWorkspace?.output ?? "");
+                root.toggleControlCenter(Displays.activeName || (Niri.focusedWorkspace?.output ?? ""));
             root.ccEditing = false;
             root.ccExpanded = panel;
         }
@@ -90,7 +90,7 @@ Singleton {
         }
         function edit(): void {
             if (!root.controlCenterOpen)
-                root.toggleControlCenter(Niri.focusedWorkspace?.output ?? "");
+                root.toggleControlCenter(Displays.activeName || (Niri.focusedWorkspace?.output ?? ""));
             root.ccExpanded = "";
             root.ccEditing = !root.ccEditing;
         }

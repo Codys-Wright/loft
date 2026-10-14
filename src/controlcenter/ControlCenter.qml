@@ -271,7 +271,7 @@ PanelWindow {
             Item {
                 id: panel
                 width: root.panelWidth
-                height: root.expanded !== "" ? Math.min(root.height - 60, Math.max(root.gridHeight + 2 * root.pad, expander.wanted)) : root.gridHeight + 2 * root.pad + footer.height
+                height: root.expanded !== "" ? Math.min(root.height - 60, expander.wanted) : root.gridHeight + 2 * root.pad + footer.height
                 anchors {
                     top: parent.top
                     right: parent.right

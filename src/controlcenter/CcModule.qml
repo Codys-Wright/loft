@@ -113,20 +113,6 @@ GlassSurface {
         }
     }
 
-    // Edit mode: a label so empty-looking tiles still say what they are.
-    Text {
-        visible: mod.editing
-        anchors {
-            horizontalCenter: parent.horizontalCenter
-            bottom: parent.bottom
-            bottomMargin: 4
-        }
-        text: mod.size
-        color: Theme.subtext
-        font.family: Theme.fontUi
-        font.pixelSize: 9
-    }
-
     // ── Focusable: a keyboard target (Nav.ccFocus) with a focus ring ─────
     component Focusable: Item {
         id: f
