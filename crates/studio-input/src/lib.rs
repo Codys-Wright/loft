@@ -1,0 +1,21 @@
+//! studio-input / studio-shot: let agents (and people) see and drive a
+//! studio-linux desktop — a nested `studio-dev --session NAME` test session,
+//! or, when asked, the live one.
+//!
+//! - `backend`: Wayland virtual pointer + keyboard (zwlr_virtual_pointer_v1,
+//!   zwp_virtual_keyboard_v1), or uinput for the live seat
+//! - `keymap`: combos / text → keycodes, and the uploaded xkb keymap
+//! - `bind`: niri keybinds run through IPC (niri never sees virtual keys)
+//! - `niri`: outputs, windows, layers in global logical coordinates
+//! - `session`: which desktop (`session.env` of studio-dev sessions)
+//! - `shot` + `font`: screenshot post-processing (crop, scale, grid, marks)
+
+pub mod backend;
+pub mod bind;
+pub mod cli;
+pub mod exec;
+pub mod font;
+pub mod keymap;
+pub mod niri;
+pub mod session;
+pub mod shot;
