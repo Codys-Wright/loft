@@ -22,14 +22,14 @@ Legend: ✅ have · 🟡 partial · 🔨 in progress · ⬜ todo · ➖ not appl
 
 | | Count |
 |---|---|
-| ✅ Have | 37 |
-| 🧩 Handled by niri / fleet | 8 |
-| 🟡 Partial | 6 |
-| 🔨 In progress | 2 |
+| ✅ Have | 39 |
+| 🧩 Handled by niri / fleet | 9 |
+| 🟡 Partial | 4 |
+| 🔨 In progress | 1 |
 | ⬜ Todo | 3 |
 | ➖ Not applicable on Linux/NixOS | 9 |
 
-Of the 56 rows that apply on Linux: 45 are covered (✅ + 🧩), 8 more are partial or being
+Of the 56 rows that apply on Linux: 48 are covered (✅ + 🧩), 5 more are partial or being
 built, 3 are still todo — and Loft adds a whole desktop's worth of features vorssaint
 doesn't need (bottom of this file).
 
@@ -54,10 +54,10 @@ doesn't need (bottom of this file).
 ## Windows and the Dock
 | vorssaint | Loft | How |
 |---|---|---|
-| App switcher (live previews, search) | 🟡 | ⌘Tab by app with icons + titles; niri has no window-thumbnail API yet |
+| App switcher (live previews, search) | 🧩 | niri's recent-windows switcher: ⌘Tab / ⌥Tab with live window previews, ⌘` within the app |
 | Window layout (snapping, move between displays, restore) | ✅ | Arrange ▸ in the app menu and dock menu, ⌘⌃A palette: floating windows snap to halves / thirds / ⅔ / quarters / fill / center; tiled ones get column widths ⅓ ½ ⅔ full, heights, center, join/split columns; move to display |
 | Dock Preview (hover → windows, switch/close/move) | 🔨 | Dock agent: window list in the right-click menu (titles) |
-| Dock clicks (minimize / hide / cycle) | 🔨 | Hide via a parking workspace (niri has no minimize) |
+| Dock clicks (minimize / hide / cycle) | ✅ | Click focuses, again cycles the app's windows; Hide via a parking workspace (niri has no minimize) |
 | Maximize without a new Space | 🧩 | niri maximize-column / fullscreen |
 | Fixed Space order | ➖ | niri workspaces never reorder by use |
 | Quit on close | ✅ | Opt-in per app (Settings → Everyday, dock Options): SIGTERM a few seconds after the last window closes |
@@ -97,7 +97,7 @@ doesn't need (bottom of this file).
 |---|---|---|
 | Dynamic Island (music, notifications, calendars, timers, downloads) | ✅ | Music (+ synced lyrics, opt-in), notifications with action buttons, calendar page + next event in the pill with Join (khal / vdirsyncer, Evolution, ICS), multiple timers + stopwatches with alarm, downloads live activity + Downloaded banner (Open / Show in Files / drag out), quick toggles, focus, recording, system, screen time; pages reorderable |
 | AI agents usage in the island (Claude, Codex, …) | ✅ | Claude Code + Codex: running sessions, tokens and ≈ cost today / this week, 5-hour window (Codex rate limits), from local logs — counts only |
-| Command Bar (search, calculator, units, emoji, scripts) | ✅ | Spotlight (walker + elephant): apps, windows, system commands with confirm, Settings pages, calculator with units / currency / time zones, Raycast-compatible script commands, emoji, files with previews, clipboard, 13,570 web !bangs, quicklinks; `?` help 🔨 |
+| Command Bar (search, calculator, units, emoji, scripts) | ✅ | Spotlight (walker + elephant): apps, windows, system commands with confirm, Settings pages, calculator with units / currency / time zones, Raycast-compatible script commands, emoji, files with previews, clipboard, 13,570 web !bangs, quicklinks; `?` help |
 | Quick panel (floating palette) | ✅ | ⌃⌘V glass palette at the pointer: favorite tools from the action catalog, clipboard, snippets, type-to-filter |
 | Quick toggles | ✅ | Control Center controls (+ pin any to the menu bar) |
 | Radial menu | ✅ | Hold ⌃⌘Space or middle-button on the desktop: pointer-centered wheel, submenu rings, per-app profiles, release-to-activate |
@@ -152,7 +152,7 @@ vorssaint relies on macOS for these; on Linux Loft builds them, in the Golden Ga
 | Lock & login | Lock screen with qylock designs; matching SDDM login theme |
 | Dock | Liquid Glass dock; per-display docks with auto-hide rules, right-click menus, Downloads stack 🔨 |
 | Multi-monitor | Main / fallback display logic, status area follows fullscreen |
-| Spotlight | DuckDuckGo !bangs; Raycast-style quicklinks and script commands; time zones in the calculator 🔨 |
+| Spotlight | DuckDuckGo !bangs; Raycast-style quicklinks and script commands; time zones in the calculator |
 | Spaces | Functional desktops across all monitors (Main, Music, Video, per-project) 🔨 (design) |
 | Settings | Full Settings app incl. niri settings (displays, input, layout, keybinds) |
 | Phone | iPhone integration via tether (messages, notifications, calls) — researched, not started |
