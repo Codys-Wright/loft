@@ -309,6 +309,23 @@
             '';
           };
 
+        # DuckDuckGo-style !bangs for Spotlight (!yt lofi, !gh niri, !w …):
+        # unduck's bang list (github.com/T3-Content/unduck) → elephant's
+        # websearch.toml. Pinned; bump rev + hash to refresh.
+        studio-bangs =
+          let
+            unduck = pkgs.fetchFromGitHub {
+              owner = "T3-Content";
+              repo = "unduck";
+              rev = "c1b821de0ffa286cfd964817d1918c5e90545db4";
+              hash = "sha256-w1a5a51uJ2ehzi2ehMh5VIMDBRAjjUz35cA8yi+gBd4=";
+            };
+          in
+          pkgs.runCommand "studio-bangs" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+            mkdir -p $out
+            python3 ${../launcher/bangs.py} ${unduck}/src/bang.ts $out/websearch.toml
+          '';
+
         studio-launcher = pkgs.writeShellApplication {
           name = "studio-launcher";
           runtimeInputs = with pkgs; [
@@ -319,8 +336,12 @@
           ];
           text =
             builtins.replaceStrings
-              [ "@LAUNCHER@" "@LAYERSHELL@" ]
-              [ "${../launcher}" "${pkgs.gtk4-layer-shell}/lib/libgtk4-layer-shell.so" ]
+              [ "@LAUNCHER@" "@LAYERSHELL@" "@BANGS@" ]
+              [
+                "${../launcher}"
+                "${pkgs.gtk4-layer-shell}/lib/libgtk4-layer-shell.so"
+                "${self'.packages.studio-bangs}/websearch.toml"
+              ]
               (builtins.readFile ../launcher/studio-launcher.sh);
         };
 

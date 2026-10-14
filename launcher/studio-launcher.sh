@@ -1,7 +1,7 @@
 # studio-launcher — runs the Spotlight launcher (walker + elephant).
 #
 #   studio-launcher service   prepare walker's config and run elephant + the walker service
-#   studio-launcher [open]    open (or close) the launcher
+#   studio-launcher [open]    open (or close) the launcher (!bangs: !yt lofi, !gh niri, !w …)
 #   studio-launcher emoji     emoji / symbol picker (walker's symbols provider)
 #   studio-launcher clipboard clipboard history
 #
@@ -27,6 +27,11 @@ prepare() {
     printf 'additional_theme_location = "%s"\n' "$dir/walker/themes"
     cat "$src/walker/config.toml"
   } > "$dir/walker/config.toml"
+
+  # !bangs (elephant websearch engines). A user ~/.config/elephant/websearch.toml
+  # still wins — XDG_CONFIG_HOME comes before this dir.
+  mkdir -p "$dir/elephant"
+  ln -sfn "@BANGS@" "$dir/elephant/websearch.toml"
 
   # Until the theme engine renders walker.css (PLAN §4.2), derive the colors
   # from the active theme.json so the launcher is themed today.
