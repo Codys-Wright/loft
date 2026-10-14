@@ -286,6 +286,7 @@ studio theme apply <name>                        # render (cached) → swap curr
 studio theme install <git-url|tarball|path>      # any pack
 studio theme install qylock:<theme> | qylock:all # importer: sparse-checkout that theme dir
 studio theme install cozytile:<theme> | cozytile:all
+studio theme install --list qylock:              # what an importer offers
 studio theme new <name> [--from <theme>]         # scaffold a pack to author
 studio theme edit <name>                         # live token editing (selector does this too)
 studio theme export <name> [-o pack.tar.zst]     # share
@@ -295,13 +296,16 @@ studio theme remove <name>
 **Importers** convert upstream themes into packs at install time. Nothing
 third-party is committed here or built into a machine:
 - `qylock:<theme>`: brings its lock/greeter QML + assets as the pack's
-  `lock/`. Palette: from the theme's `theme.conf` colors when present,
-  otherwise extracted from `bg` (matugen/wallust), with an editable result.
-  Video backgrounds need gstreamer, which the engine module installs (cheap).
-  The theme's own fonts go in the pack.
+  `lock/qylock/` (manifest `lock: {format: qylock, path: lock/qylock}`).
+  Palette: from the theme's `theme.conf` colors when present, otherwise
+  extracted from its background (our own median cut + k-means in Python;
+  video frames via ffmpeg), with an editable result. Playing video
+  backgrounds needs gstreamer, which the engine module installs (cheap).
+  The theme's own fonts go in the pack (inside `lock/qylock/`).
 - `cozytile:<name>` (Cozy, Sakura, Natura, Everforest, Carbon): palette from
-  its qtile/rofi/dunst colors (Carbon: its `e-ink.json`), wallpaper, SDDM art
-  → `greeter/`.
+  its qtile/rofi colors and theme switcher (Carbon: its pywal `e-ink.json`),
+  wallpaper, SDDM art → `greeter/`. Cozytile's SDDM themes are themselves
+  qylock-format, so `greeter/` could also be declared as the pack's `lock`.
 
 **Index for sharing:** `studio theme` reads one or more index URLs (JSON:
 name → source, preview image). The default index is a repo of ours listing
@@ -514,19 +518,23 @@ updates live when KDL or QML is edited.
 blur), terminals, GTK and Noctalia live with no rebuild, and the default
 theme comes from Nix.
 
-### Phase 1b: Theme manager + importers *(manager done; index + importers TODO)*
+### Phase 1b: Theme manager + importers *(manager + importers done; index TODO)*
 
 > **Status:** `studio theme install <dir|tarball|tarball URL|git URL> [--subdir]
 > [--force]` (validated against the schema, manifest required), `new [--from]`,
-> `remove`, `export [-o pack.tar.zst]` are in. `qylock:` / `cozytile:` are
-> recognized but stubbed; index support is not started.
+> `remove`, `export [-o pack.tar.zst]` are in. Importers (branch `importers`):
+> `install [--list] cozytile:|qylock:<theme>[,…]|all[@ref]` fetch blob-less +
+> sparse at install time and write `cozytile-<theme>` / `qylock-<theme>` packs
+> (manifest `upstream` + `lock`; see docs/THEME-FORMAT.md "Importers").
+> `cozytile:all` downloads ~15 MB; a qylock theme downloads only its own
+> directory (0.3–78 MB). Index support is not started.
 
 - `install|new|export|remove`, index support, `~/.local/share/studio themes`.
 - `cozytile:` importer (all five) and `qylock:` importer (palette + assets;
   lock designs become usable in Phase 5).
 
-**Done when:** `studio theme install cozytile:all` followed by `apply sakura`
-works on a machine whose build contains none of them.
+**Done when:** `studio theme install cozytile:all` followed by `apply cozytile-sakura`
+works on a machine whose build contains none of them. *(Met.)*
 
 ### Phase 2: Shell skeleton
 - `src/` skeleton, `studio-shell` package, HM systemd user service, dev/installed split.

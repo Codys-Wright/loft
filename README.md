@@ -32,6 +32,8 @@ studio theme apply latte                      # render (cached) → swap `curren
 studio theme render tokyonight ./out          # just render a pack's files
 studio theme new mytheme --from latte         # scaffold in ~/.local/share/studio-linux/themes
 studio theme install ./pack | pack.tar.zst | https://…/repo.git [--subdir packs/x]
+studio theme install cozytile:all             # importers convert upstream themes at install time
+studio theme install qylock:pixel-sakura      #   (--list cozytile: / qylock: shows what's available)
 studio theme export mytheme -o mytheme.tar.zst
 studio theme remove mytheme
 studio theme validate ./pack                  # against themes/schema.json

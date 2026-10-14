@@ -28,7 +28,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import hooks, render
+from . import hooks, importers, render
 from .pack import IGNORED, Pack, PackError, is_pack
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -255,11 +255,29 @@ def _extract(archive: Path, into: Path) -> None:
         raise Fail(f"{archive}: cannot extract: {e}") from e
 
 
+def _import(ctx: Ctx, args) -> None:
+    def validate(path: Path) -> None:
+        ctx.validate(Pack(path), require_manifest=True)
+
+    try:
+        if args.list:
+            for theme, pack in importers.list_available(args.source):
+                print(f"{pack:28} {args.source.split(':', 1)[0]}:{theme}")
+            return
+        importers.install(args.source, ctx.user_themes, force=args.force, validate=validate)
+    except importers.ImporterError as e:
+        raise Fail(str(e)) from e
+
+
 def cmd_install(ctx: Ctx, args) -> None:
     ref = args.source
-    if ref.split(":", 1)[0] in ("qylock", "cozytile"):
-        # TODO(phase 1b): importers convert upstream themes into packs (PLAN §4.2).
-        raise Fail(f"the {ref.split(':', 1)[0]}: importer is not implemented yet (PLAN §4.2, Phase 1b)")
+    if importers.is_importer_ref(ref) or (args.list and ref.rstrip(":") in importers.REGISTRY):
+        if args.list and ":" not in ref:
+            args.source = ref + ":"
+        _import(ctx, args)
+        return
+    if args.list:
+        raise Fail(f"--list needs an importer: {', '.join(n + ':' for n in sorted(importers.REGISTRY))}")
     with tempfile.TemporaryDirectory(prefix="studio-install-") as tmpd:
         tmp = Path(tmpd)
         local = Path(ref).expanduser()
@@ -374,8 +392,19 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--from", dest="from_", default="default", metavar="THEME")
     s.set_defaults(fn=cmd_new)
 
-    s = sub.add_parser("install", help="install a pack from a directory, tarball or git URL")
-    s.add_argument("source", help="path | tarball | git URL (qylock:/cozytile: importers: TODO)")
+    s = sub.add_parser(
+        "install",
+        help="install a pack from a directory, tarball, git URL or importer",
+        description="Importers fetch and convert upstream themes: "
+        + "; ".join(f"{n}: {m.DESCRIPTION}" for n, m in sorted(importers.REGISTRY.items())),
+    )
+    s.add_argument(
+        "source",
+        help="path | tarball | git URL | IMPORTER:THEME[,THEME…]|all[@REF] (importers: "
+        + ", ".join(sorted(importers.REGISTRY))
+        + ")",
+    )
+    s.add_argument("--list", action="store_true", help="list what IMPORTER: can install")
     s.add_argument("--subdir", help="pack directory inside the repo/tarball")
     s.add_argument("--force", action="store_true", help="replace an installed pack of the same name")
     s.set_defaults(fn=cmd_install)
