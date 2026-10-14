@@ -291,6 +291,7 @@ class Ranking(unittest.TestCase):
                 "STUDIO_THEME_INDEX": str(self.idx),
             }
         )
+        os.environ.pop("STUDIO_LIBRARY", None)
         self.noff = mock.patch.object(palette, "have_ffmpeg", return_value=False)
         self.noff.start()
         navy_pink = lambda x, y: (40, 39, 56) if (x + y) % 3 else (229, 185, 198)  # noqa: E731

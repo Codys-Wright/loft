@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.services
 
 // Settings → Wallpaper: the theme's collection ("From <theme>": its own and
@@ -7,6 +8,8 @@ import qs.services
 // folder) ranked by how well it matches the theme's colors. Clicking one
 // applies it for this theme; rotation and per-workspace cycle the collection
 // when nothing is picked. All choices are remembered per theme (Vibes).
+// The Library card browses ~/Documents/Themes (Library) by topic, color
+// family + tone, or the theme an image goes with.
 ColumnLayout {
     id: page
     spacing: 12
@@ -14,7 +17,26 @@ ColumnLayout {
     property bool showAll: false
     readonly property int shown: 12
 
+    // ── Library browsing ────────────────────────────────────────────────
+    property string browse: "topic" // topic | color | theme
+    property string topicSel: "" // a topic, or "pack:" for the packs' images
+    property string colorSel: ""
+    property string toneSel: ""
+    property string themeSel: "" // "" = the active theme
+    property bool libShowAll: false
+    readonly property int libShown: 18
+
+    readonly property string topicCur: topicSel !== "" ? topicSel : (Library.topics[0]?.name ?? "pack:")
+    readonly property string themeCur: themeSel !== "" ? themeSel : Vibes.theme
+    readonly property var libItems: browse === "topic" ? (topicCur === "pack:" ? Library.ofPack("") : Library.ofTopic(topicCur)) : browse === "color" ? Library.ofColor(colorSel, toneSel) : Library.ofTheme(themeCur)
+
+    onVisibleChanged: if (visible)
+        Library.refresh()
+
     function label(w) {
+        const short = Library.byPath[w.path]?.short;
+        if (short)
+            return short;
         const name = w.path.split("/").pop();
         return name.replace(/\.[^.]+$/, "");
     }
@@ -22,6 +44,8 @@ ColumnLayout {
     function source(w) {
         if (w.origin === "own")
             return w.video ? "from a video" : "";
+        if (w.topic)
+            return w.topic;
         if (w.source_pack === "")
             return "Folder";
         return w.source_pack;
@@ -98,6 +122,7 @@ ColumnLayout {
                 delegate: VibeThumb {
                     required property var modelData
                     image: modelData.kind === "image" ? modelData.path : ""
+                    thumbnail: modelData.thumb ?? ""
                     title: page.label(modelData)
                     subtitle: modelData.origin === "curated" ? "Curated · " + modelData.source_pack : page.source(modelData)
                     badge: modelData.kind === "video" || modelData.video ? "video" : ""
@@ -107,6 +132,162 @@ ColumnLayout {
                     onClicked: Vibes.chooseWallpaper(modelData.path)
                 }
             }
+        }
+    }
+
+    SettingsCard {
+        visible: Library.exists || (Library.data === null && Library.loading)
+
+        PageHeader {
+            title: "Library"
+            SettingsSegmented {
+                options: [
+                    {
+                        value: "topic",
+                        label: "Topic"
+                    },
+                    {
+                        value: "color",
+                        label: "Color"
+                    },
+                    {
+                        value: "theme",
+                        label: "Theme"
+                    }
+                ]
+                current: page.browse
+                onActivated: v => {
+                    page.browse = v;
+                    page.libShowAll = false;
+                }
+            }
+            SettingsButton {
+                text: Library.loading ? "Sorting…" : "Sort"
+                icon: "󰒺"
+                enabled: !Library.loading
+                onClicked: {
+                    Library.refresh();
+                    Vibes.refresh();
+                }
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            text: Library.error !== "" ? Library.error : `${Library.rootDir.replace(Quickshell.env("HOME"), "~")} · ${Library.images.length} images · ` + (page.browse === "topic" ? "your topic folders and the theme packs' images" : page.browse === "color" ? "by dominant color family and lightness" : "the images closest to each theme's colors")
+            color: Library.error !== "" ? Theme.urgent : Theme.subtext
+            font.family: Theme.fontUi
+            font.pixelSize: 11
+            elide: Text.ElideMiddle
+        }
+
+        // Filter chips for the chosen dimension.
+        Flow {
+            Layout.fillWidth: true
+            spacing: 6
+
+            Repeater {
+                model: page.browse === "topic" ? Library.topics.map(t => ({
+                            value: t.name,
+                            label: t.name,
+                            count: t.count
+                        })).concat(Library.packs.length ? [
+                        {
+                            value: "pack:",
+                            label: "Theme packs",
+                            count: Library.packs.reduce((n, p) => n + p.count, 0)
+                        }
+                    ] : []) : page.browse === "color" ? [
+                    {
+                        value: "",
+                        label: "All",
+                        count: Library.images.length
+                    }
+                ].concat(Library.colors.map(c => ({
+                                value: c.name,
+                                label: c.name,
+                                count: c.count,
+                                dot: Library.familyColors[c.name] ?? ""
+                            }))) : Library.themes.map(t => ({
+                            value: t.name,
+                            label: t.name,
+                            count: t.images.length,
+                            dot: t.palette?.accent ?? ""
+                        }))
+                delegate: FilterChip {
+                    required property var modelData
+                    label: modelData.label
+                    count: modelData.count
+                    dot: modelData.dot ?? ""
+                    selected: modelData.value === (page.browse === "topic" ? page.topicCur : page.browse === "color" ? page.colorSel : page.themeCur)
+                    onClicked: {
+                        if (page.browse === "topic")
+                            page.topicSel = modelData.value;
+                        else if (page.browse === "color")
+                            page.colorSel = modelData.value;
+                        else
+                            page.themeSel = modelData.value;
+                        page.libShowAll = false;
+                    }
+                }
+            }
+        }
+
+        SettingsRow {
+            visible: page.browse === "color"
+            label: "Tone"
+            hint: "Dark suits dark themes and keeps glass readable"
+            SettingsSegmented {
+                options: [
+                    {
+                        value: "",
+                        label: "All"
+                    }
+                ].concat(Library.tones.map(t => ({
+                            value: t.name,
+                            label: `${t.name} ${Library.ofColor(page.colorSel, t.name).length}`
+                        })))
+                current: page.toneSel
+                onActivated: v => {
+                    page.toneSel = v;
+                    page.libShowAll = false;
+                }
+            }
+        }
+
+        Text {
+            visible: page.libItems.length === 0
+            Layout.fillWidth: true
+            text: Library.loading ? "Sorting the library…" : "Nothing here."
+            color: Theme.subtext
+            font.family: Theme.fontUi
+            font.pixelSize: 12
+        }
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 10
+
+            Repeater {
+                model: page.libShowAll ? page.libItems : page.libItems.slice(0, page.libShown)
+                delegate: VibeThumb {
+                    required property var modelData
+                    image: modelData.path
+                    thumbnail: modelData.thumb ?? ""
+                    title: modelData.short ?? modelData.name
+                    subtitle: modelData.colors.join(" + ") + " · " + modelData.tone + (page.browse === "topic" ? "" : " · " + (modelData.source === "pack" ? "pack" : modelData.topic))
+                    score: page.browse === "theme" && modelData.origin === "match" ? modelData.score : -1
+                    badge: page.browse === "theme" && modelData.origin !== "match" ? modelData.origin : ""
+                    selected: Vibes.chosenWallpaper === modelData.path
+                    onClicked: Vibes.chooseWallpaper(modelData.path)
+                }
+            }
+        }
+
+        SettingsButton {
+            visible: page.libItems.length > page.libShown
+            text: page.libShowAll ? "Show fewer" : `Show all ${page.libItems.length}`
+            onClicked: page.libShowAll = !page.libShowAll
         }
     }
 
@@ -137,6 +318,7 @@ ColumnLayout {
                 delegate: VibeThumb {
                     required property var modelData
                     image: modelData.kind === "image" ? modelData.path : ""
+                    thumbnail: modelData.thumb ?? ""
                     title: page.label(modelData)
                     subtitle: page.source(modelData)
                     score: modelData.score ?? -1
@@ -146,6 +328,62 @@ ColumnLayout {
                     onClicked: Vibes.chooseWallpaper(modelData.path)
                 }
             }
+        }
+    }
+
+    // A pill for the library filters: optional color dot, label, count.
+    component FilterChip: Rectangle {
+        id: chip
+        property string label
+        property int count: -1
+        property string dot: ""
+        property bool selected: false
+        signal clicked
+
+        implicitWidth: chipRow.implicitWidth + 20
+        implicitHeight: 26
+        radius: 13
+        color: selected ? Theme.accent : chipHover.containsMouse ? Theme.withAlpha(Theme.text, 0.16) : Theme.withAlpha(Theme.text, 0.08)
+
+        Row {
+            id: chipRow
+            anchors.centerIn: parent
+            spacing: 6
+
+            Rectangle {
+                visible: chip.dot !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                width: 10
+                height: 10
+                radius: 5
+                color: chip.dot || "transparent"
+                border.width: 1
+                border.color: Theme.withAlpha(chip.selected ? Theme.bg : Theme.text, 0.35)
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: chip.label
+                color: chip.selected ? Theme.bg : Theme.text
+                font.family: Theme.fontUi
+                font.pixelSize: 12
+                font.weight: chip.selected ? Font.DemiBold : Font.Normal
+            }
+            Text {
+                visible: chip.count >= 0
+                anchors.verticalCenter: parent.verticalCenter
+                text: chip.count
+                color: chip.selected ? Theme.withAlpha(Theme.bg, 0.75) : Theme.subtext
+                font.family: Theme.fontUi
+                font.pixelSize: 11
+            }
+        }
+
+        MouseArea {
+            id: chipHover
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: chip.clicked()
         }
     }
 }

@@ -10,6 +10,8 @@ Item {
     id: thumb
 
     property string image: ""
+    // A small cached copy of `image` (studio's <state>/cache/thumbs), shown when set.
+    property string thumbnail: ""
     property string title
     property string subtitle
     property bool selected: false
@@ -44,7 +46,7 @@ Item {
             Image {
                 anchors.fill: parent
                 visible: thumb.image !== "" && status === Image.Ready
-                source: thumb.image ? Vibes.url(thumb.image) : ""
+                source: thumb.thumbnail ? Vibes.url(thumb.thumbnail) : thumb.image ? Vibes.url(thumb.image) : ""
                 sourceSize: Qt.size(320, 180)
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true

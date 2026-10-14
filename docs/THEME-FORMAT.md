@@ -170,7 +170,8 @@ Fetching is git, blob-less and sparse: one depth-1 fetch of the trees (a few
 hundred KB, also what `--list` reads), then only the files a theme needs.
 `STUDIO_<IMPORTER>_URL` overrides the upstream repo (mirrors, tests). Packs
 are built in a staging dir, validated against the schema, then moved into
-`~/.local/share/studio-linux/themes/`. `all` skips installed packs; a single
+the library's `Packs/` (`~/Documents/Themes/Packs`, `$STUDIO_LIBRARY`) when
+it exists, else `~/.local/share/studio-linux/themes/`. `all` skips installed packs; a single
 installed theme is an error without `--force`.
 
 | Importer | Upstream (license) | Pack | Palette | Assets |
@@ -216,7 +217,8 @@ studio theme vibes --json --dir ~/Pictures/Wallpapers --limit 20   # what the sh
    installed packs resolve; the rest are skipped. The rendered manifest lists
    them too (and installing a linked pack re-renders on the next `apply`);
 3. **match**: every other installed pack's wallpapers and locks, plus the
-   images of `--dir`, ranked by distance (with a 0..1 `score`).
+   images of `--dir` and the library's topic folders (entries note their `topic`),
+   ranked by distance (with a 0..1 `score`).
 
 Distance, in CIELAB (CIEDE2000): between two palettes, the weighted mean
 over bg (3), accent (2), surface, text, accent2 (1 each; the accents are

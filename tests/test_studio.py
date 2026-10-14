@@ -149,6 +149,7 @@ class Manager(unittest.TestCase):
         )
         os.environ.pop("STUDIO_THEME_PATH", None)
         os.environ.pop("STUDIO_DATA_DIR", None)
+        os.environ.pop("STUDIO_LIBRARY", None)  # never the real ~/Documents/Themes
 
     def tearDown(self):
         os.environ.clear()
