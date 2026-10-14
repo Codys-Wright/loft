@@ -183,9 +183,18 @@ PanelWindow {
     }
     readonly property real baseLength: tiles.reduce((a, t) => a + baseSize(t), 0) + spacing * Math.max(0, tiles.length - 1) + 2 * pad
 
-    // Pointer position along the resting shelf, or -1.
-    readonly property real pointer: {
-        if (!hover.hovered || menuOpen)
+    // Pointer position along the resting shelf, or -1. While a menu, stack
+    // or window preview from this dock is open, the fisheye holds where the
+    // pointer last was (macOS keeps the icons magnified under a menu).
+    readonly property bool magnifyHeld: menuOpen || stackOpenHere || previewHere
+    property real heldPointer: -1
+    onLivePointerChanged: if (!magnifyHeld)
+        heldPointer = livePointer
+    onMagnifyHeldChanged: if (!magnifyHeld)
+        heldPointer = livePointer
+    readonly property real pointer: magnifyHeld ? heldPointer : livePointer
+    readonly property real livePointer: {
+        if (!hover.hovered)
             return -1;
         // Window coordinates: the shelf is centered in the window, so the
         // resting layout starts at center − baseLength / 2. (Nothing here
