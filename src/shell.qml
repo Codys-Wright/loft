@@ -104,6 +104,11 @@ ShellRoot {
     }
 
     Variants {
+        model: Features.on("capture") ? Quickshell.screens : []
+        ScrollCaptureHud {}
+    }
+
+    Variants {
         model: Features.on("capture") ? Capture.pins : []
         PinnedCapture {}
     }

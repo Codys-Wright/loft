@@ -174,7 +174,7 @@ ColumnLayout {
             }
         }
         Hint {
-            text: "After a recording, its thumbnail offers Trim and Export GIF. Stop from the island or the selector."
+            text: "After a recording, its thumbnail offers Trim & Zoom (trim, Auto Zoom, zoom segments) and Export GIF. Stop from the island or the selector."
         }
     }
 

@@ -7,7 +7,7 @@ import qs.services
 
 // The floating thumbnail after a capture (bottom-right, like macOS):
 // click → annotate (screenshots) or open (recordings); drag it out to drop
-// the file into another app; hover for Pin / GIF / Trim / Delete; it slides
+// the file into another app; hover for Pin / GIF / Trim & Zoom / Delete; it slides
 // away after a few seconds unless the pointer is on it.
 PanelWindow {
     id: root
@@ -267,7 +267,7 @@ PanelWindow {
                 Action {
                     visible: root.isVideo
                     icon: "󰆐"
-                    tip: "Trim"
+                    tip: "Trim & Zoom"
                     onClicked: Capture.startTrim(root.item.path)
                 }
                 Action {

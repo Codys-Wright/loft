@@ -6,9 +6,10 @@ import Quickshell.Io
 import qs.services
 
 // Capture and create (docs/FEATURES.md): the ⌘⇧5 selector, screenshots
-// (area / window / screen), area + screen recording (Recorder), text from
-// screen (OCR + QR), the color picker, and what follows a capture — the
-// floating thumbnail, annotate (satty), pins, GIF export and trim.
+// (area / window / screen / scrolling), area + screen recording (Recorder),
+// text from screen (OCR + QR), the color picker, and what follows a capture
+// — the floating thumbnail, annotate (satty), pins, GIF export and the
+// recording editor (trim + zooms).
 //
 // Area selection happens on a frozen frame: every output is grabbed with
 // grim first, then RegionOverlay shows the frames full-screen with a pixel
@@ -16,8 +17,15 @@ import qs.services
 // what you select is exactly what you saw.
 //
 // Settings: <state>/overrides/capture.json (CapturePage).
-// IPC: capture toggle|area|screen|window|recordArea|recordScreen|text|color|
-//      annotateLast|pinLast|gifLast|trimLast|unpinAll
+// Scrolling capture: select an area, then scroll it yourself; `loft capture
+// scroll` grabs it a few times a second and stitches the frames by their
+// overlap (cli/loft/stitch.py), ScrollCaptureHud shows the growing image
+// beside the area with Done / Cancel. Manual only: there is no Auto Scroll
+// (docs/FEATURES.md says why).
+//
+// IPC: capture toggle|area|screen|window|scrolling|scrollDone|scrollCancel|
+//      recordArea|recordScreen|text|color|annotateLast|pinLast|gifLast|
+//      trimLast|editLast|edit PATH|unpinAll
 //      camera toggle|on|off
 Singleton {
     id: root
@@ -41,7 +49,7 @@ Singleton {
 
     // ── State ───────────────────────────────────────────────────────────
     property bool selectorOpen: false
-    // Selector choice: shot | record | text | color, and its target.
+    // Selector choice: shot | scroll | record | text | color, and its target.
     property string mode: "shot"
     property string target: "area"
 
@@ -61,8 +69,20 @@ Singleton {
     // Pinned captures (always-on-top windows): [{ id, path, screen }].
     property var pins: []
     property int pinSerial: 0
-    // A recording being trimmed: { path, duration }.
+    // A recording in the editor (trim + zooms): { path, duration, width,
+    // height }.
     property var trimming: null
+
+    // Scrolling capture in progress: { screen, rect (screen-local logical),
+    // out } — and what the helper reported: the stitched size, the kept
+    // frames and where their rows go ([{path, sy, h, y}], for the preview).
+    property var scrolling: null
+    property int scrollWidth: 0
+    property int scrollHeight: 0
+    property int scrollFrameHeight: 0
+    property int scrollFrames: 0
+    property var scrollSegments: []
+    property bool scrollFinishing: false
     // Long-running post-processing (GIF export, trim) for the UI.
     property string busy: ""
 
@@ -108,17 +128,17 @@ Singleton {
     function captureSelected() {
         cfg.lastMode = mode;
         cfg.lastTarget = target;
-        capture(mode, mode === "text" || mode === "color" ? "area" : target, cfg.timer);
+        capture(mode, mode === "text" || mode === "color" || mode === "scroll" ? "area" : target, cfg.timer);
     }
 
-    // mode: shot | record | text | color; target: area | window | screen.
+    // mode: shot | scroll | record | text | color; target: area | window | screen.
     // Which capture kinds the enabled feature modules allow.
     function allowed(kind) {
         return kind === "color" ? Features.on("colorPicker") : kind === "text" ? Features.on("ocr") : Features.on("capture");
     }
 
     function capture(kind, where, delay) {
-        if (!allowed(kind) || selecting !== "")
+        if (!allowed(kind) || selecting !== "" || scrolling !== null)
             return;
         if (kind === "record" && Recorder.active) {
             Recorder.stop();
@@ -274,6 +294,8 @@ Singleton {
             Recorder.start({
                 geometry: geo
             });
+        } else if (kind === "scroll") {
+            startScroll(screen, rect);
         } else if (kind === "text") {
             const out = `${tmp}/ocr-${Date.now()}.png`;
             crop(src, px, out, () => recognize(out));
@@ -288,6 +310,77 @@ Singleton {
         // Even sizes aren't needed for PNG; clamp to at least 1 px.
         const w = Math.max(1, Math.round(px.width)), h = Math.max(1, Math.round(px.height));
         exec(["sh", "-c", 'mkdir -p "$(dirname "$2")" && ffmpeg -v error -y -i "$1" -vf "crop=$3:$4:$5:$6" -frames:v 1 -update 1 "$2"', "sh", src, out, `${w}`, `${h}`, `${Math.round(px.x)}`, `${Math.round(px.y)}`], (code, _o, err) => code === 0 ? then() : failed("Capture failed", err));
+    }
+
+    // ── Scrolling capture ───────────────────────────────────────────────
+    function startScroll(screen, rect) {
+        const r = Qt.rect(Math.round(rect.x), Math.round(rect.y), Math.round(rect.width), Math.round(rect.height));
+        const geo = `${Math.round(screen.x + r.x)},${Math.round(screen.y + r.y)} ${r.width}x${r.height}`;
+        scrollWidth = 0;
+        scrollHeight = 0;
+        scrollFrames = 0;
+        scrollSegments = [];
+        scrollFinishing = false;
+        scrolling = {
+            screen: screen.name,
+            rect: r,
+            out: newShotPath()
+        };
+        scrollProc.command = ["loft", "capture", "scroll", "--geometry", geo, "--out", scrolling.out, "--work", `${tmp}/scroll-${Date.now()}`];
+        scrollProc.running = true;
+    }
+
+    function scrollDone() {
+        if (!scrolling || scrollFinishing)
+            return;
+        scrollFinishing = true;
+        scrollProc.write("done\n");
+    }
+
+    function scrollCancel() {
+        if (!scrolling)
+            return;
+        if (scrollProc.running)
+            scrollProc.write("cancel\n");
+        scrolling = null;
+    }
+
+    Process {
+        id: scrollProc
+        stdinEnabled: true
+        stdout: SplitParser {
+            onRead: line => {
+                let e;
+                try {
+                    e = JSON.parse(line);
+                } catch (_) {
+                    return;
+                }
+                if (e.event === "frame") {
+                    root.scrollWidth = e.width;
+                    root.scrollHeight = e.height;
+                    root.scrollFrameHeight = e.frameHeight;
+                    root.scrollFrames = e.frames;
+                    root.scrollSegments = e.segments;
+                } else if (e.event === "done") {
+                    root.scrolling = null;
+                    root.shotDone(e.path);
+                } else if (e.event === "error") {
+                    root.scrolling = null;
+                    root.failed("Scrolling capture failed", e.message);
+                }
+            }
+        }
+        stderr: StdioCollector {
+            id: scrollErr
+        }
+        onExited: code => {
+            if (root.scrolling) {
+                root.scrolling = null;
+                if (code !== 0)
+                    root.failed("Scrolling capture failed", scrollErr.text);
+            }
+        }
     }
 
     // ── Text from screen (QR first, then OCR) ───────────────────────────
@@ -480,20 +573,77 @@ Singleton {
         });
     }
 
+    // Open the recording editor (CaptureTrim): trim, and zoom segments.
     function startTrim(path) {
         thumbnail = null;
-        exec(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", path], (code, out) => {
-            const d = parseFloat(out);
+        exec(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration", "-of", "json", path], (code, out) => {
+            let d = 0, w = 0, h = 0;
+            try {
+                const j = JSON.parse(out);
+                d = parseFloat(j.format.duration);
+                w = j.streams[0]?.width ?? 0;
+                h = j.streams[0]?.height ?? 0;
+            } catch (_) {}
             if (code !== 0 || !(d > 0)) {
                 root.failed("Can't read the recording", path);
                 return;
             }
             root.trimming = {
                 path: path,
-                duration: d
+                duration: d,
+                width: w,
+                height: h
             };
         });
     }
+
+    // Auto zoom: segments where the recording shows local activity (the
+    // pointer, clicks that change the UI, typing) — `loft capture zoom auto`.
+    // cb(segments | null).
+    property bool zoomAnalyzing: false
+    function autoZoom(path, cb) {
+        zoomAnalyzing = true;
+        exec(["loft", "capture", "zoom", "auto", path], (code, out, err) => {
+            root.zoomAnalyzing = false;
+            let segs = null;
+            try {
+                segs = code === 0 ? JSON.parse(out).segments : null;
+            } catch (_) {}
+            if (segs === null)
+                root.failed("Auto zoom failed", err);
+            cb(segs);
+        });
+    }
+
+    // Export the edit: zoom segments (source seconds) and the trim range go
+    // into a new "<name>-zoomed.mp4"; without segments it's a plain trim.
+    function exportEdit(path, start, end, duration, segments) {
+        if (!segments || segments.length === 0) {
+            trim(path, start, end);
+            return;
+        }
+        trimming = null;
+        busy = "Exporting zooms…";
+        const args = ["loft", "capture", "zoom", "render", path, "--segments", JSON.stringify(segments)];
+        if (start > 0.01)
+            args.push("--start", start.toFixed(3));
+        if (end < duration - 0.01)
+            args.push("--end", end.toFixed(3));
+        exec(args, (code, out, err) => {
+            root.busy = "";
+            let r = null;
+            try {
+                r = code === 0 ? JSON.parse(out) : null;
+            } catch (_) {}
+            if (!r) {
+                root.failed("Export failed", err);
+                return;
+            }
+            root.lastZoomExport = r.path;
+            root.recordingDone(r.path);
+        });
+    }
+    property string lastZoomExport: ""
 
     // Cut [start, end] seconds into "<name>-trimmed.<ext>" (re-encodes video
     // for a frame-exact start; audio tracks are kept).
@@ -633,6 +783,18 @@ Singleton {
         function window(): void {
             root.capture("shot", "window", 0);
         }
+        function scrolling(): void {
+            root.capture("scroll", "area", 0);
+        }
+        function scrollDone(): void {
+            root.scrollDone();
+        }
+        function scrollCancel(): void {
+            root.scrollCancel();
+        }
+        function scrollHeight(): int {
+            return root.scrollHeight;
+        }
         function recordArea(): void {
             root.capture("record", "area", 0);
         }
@@ -647,6 +809,7 @@ Singleton {
         }
         function cancel(): void {
             root.cancel();
+            root.scrollCancel();
             root.selectorOpen = false;
         }
         function annotateLast(): void {
@@ -664,6 +827,17 @@ Singleton {
         function trimLast(): void {
             if (root.lastVideo)
                 root.startTrim(root.lastVideo);
+        }
+        function editLast(): void {
+            if (root.lastVideo)
+                root.startTrim(root.lastVideo);
+        }
+        // Open any video in the recording editor (trim + zooms).
+        function edit(path: string): void {
+            root.startTrim(path);
+        }
+        function lastZoomExport(): string {
+            return root.lastZoomExport;
         }
         function unpinAll(): void {
             root.pins = [];
