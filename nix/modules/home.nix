@@ -38,6 +38,17 @@
           ${self}/niri/shell-binds.kdl.in > $out
       '';
 
+      # nix/migrate.sh, with the dirs this module uses (the activation may
+      # not have the XDG variables).
+      migrate = lib.concatStringsSep " " [
+        ''DRY_RUN="''${DRY_RUN:-}"''
+        "XDG_STATE_HOME=${lib.escapeShellArg config.xdg.stateHome}"
+        "XDG_DATA_HOME=${lib.escapeShellArg config.xdg.dataHome}"
+        "XDG_CACHE_HOME=${lib.escapeShellArg config.xdg.cacheHome}"
+        "XDG_CONFIG_HOME=${lib.escapeShellArg config.xdg.configHome}"
+        (lib.getExe sp.loft-migrate)
+      ];
+
       lockCmd = "${lib.getExe pkgs.quickshell} ipc --path ${shellSrc} call lock lock";
 
       # The theme + wallpaper library (cli/loft/library.py); "none" = off.
@@ -72,6 +83,44 @@
       };
     in
     {
+      # studio-linux (Loft's old name): programs.studio-linux.* still works,
+      # with a deprecation warning, until consumers move to programs.loft.
+      imports =
+        map
+          (
+            path:
+            lib.mkRenamedOptionModule
+              (
+                [
+                  "programs"
+                  "studio-linux"
+                ]
+                ++ path
+              )
+              (
+                [
+                  "programs"
+                  "loft"
+                ]
+                ++ path
+              )
+          )
+          [
+            [ "enable" ]
+            [ "devSource" ]
+            [
+              "idle"
+              "lockAfter"
+            ]
+            [
+              "idle"
+              "screenOffAfter"
+            ]
+            [ "iconTheme" ]
+            [ "library" ]
+            [ "theme" ]
+          ];
+
       options.programs.loft = {
         enable = lib.mkEnableOption "the Loft shell (Quickshell) and launcher on niri";
 
@@ -190,20 +239,45 @@
 
         systemd.user.services.loft-launcher = service "Loft launcher (walker + elephant)" "${lib.getExe sp.loft-launcher} service";
 
+        # studio-linux (Loft's old name): move its state, data and cache dirs
+        # before anything writes the new ones (nix/migrate.sh), and link the
+        # old config dir once home-manager has removed its old files there.
+        home.activation.loftMigrate = lib.hm.dag.entryBefore [ "writeBoundary" ] ''
+          ${migrate} || echo "loft-migrate failed; studio-linux's state stays where it was" >&2
+        '';
+        home.activation.loftMigrateConfig = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+          ${migrate} config || true
+        '';
+
         # Restart the shell/launcher when their unit changed — even when the
         # home's systemd.user.startServices is "suggest" (kept so a switch
         # never restarts other user services, e.g. audio). Compares a hash of
         # each unit as systemd now sees it with the one from the last switch.
         home.activation.loftRestart = lib.hm.dag.entryAfter [ "reloadSystemd" ] ''
           state="''${XDG_STATE_HOME:-$HOME/.local/state}/loft"
-          mkdir -p "$state"
+          run mkdir -p "$state"
+          # Units still running under their studio-linux names (a "suggest"
+          # switch leaves removed units running): hand over to the new ones.
+          started=" "
+          for pair in studio-shell:loft-shell studio-launcher:loft-launcher; do
+            if ${pkgs.systemd}/bin/systemctl --user is-active --quiet "''${pair%%:*}.service"; then
+              run ${pkgs.systemd}/bin/systemctl --user stop "''${pair%%:*}.service" || true
+              run ${pkgs.systemd}/bin/systemctl --user start "''${pair#*:}.service" || true
+              started="$started''${pair#*:} "
+            fi
+          done
           for unit in loft-shell loft-launcher; do
             new="$(${pkgs.systemd}/bin/systemctl --user cat "$unit.service" 2>/dev/null | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
             old="$(cat "$state/$unit.unit-hash" 2>/dev/null || true)"
             if [ "$new" != "$old" ]; then
-              if ${pkgs.systemd}/bin/systemctl --user is-active --quiet "$unit.service"; then
-                run ${pkgs.systemd}/bin/systemctl --user restart "$unit.service" || true
-              fi
+              case "$started" in
+                *" $unit "*) ;; # just started above
+                *)
+                  if ${pkgs.systemd}/bin/systemctl --user is-active --quiet "$unit.service"; then
+                    run ${pkgs.systemd}/bin/systemctl --user restart "$unit.service" || true
+                  fi
+                  ;;
+              esac
               [ -n "''${DRY_RUN:-}" ] || echo "$new" > "$state/$unit.unit-hash"
             fi
           done

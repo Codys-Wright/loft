@@ -106,8 +106,12 @@
       builtinRendered = self'.packages.loft-themes-builtin;
 
       # Shared by both sessions: the state dir the shell, niri and `loft`
-      # agree on, seeded with the default theme from the store.
+      # agree on, seeded with the default theme from the store. Without an
+      # explicit state dir, studio-linux's (Loft's old name) moves here first.
       seedState = ''
+        if [ -z "''${LOFT_STATE_DIR:-}" ]; then
+          ${lib.getExe self'.packages.loft-migrate} || true
+        fi
         state="''${LOFT_STATE_DIR:-''${XDG_STATE_HOME:-$HOME/.local/state}/loft}"
         export LOFT_STATE_DIR="$state"
         mkdir -p "$state"
@@ -416,6 +420,18 @@
             mainProgram = "loft-shot";
           };
         });
+
+        # The one-time move from studio-linux's paths (nix/migrate.sh), run by
+        # the sessions and the home-manager activation.
+        loft-migrate = pkgs.writeShellApplication {
+          name = "loft-migrate";
+          runtimeInputs = [
+            pkgs.coreutils
+            pkgs.gnugrep
+            pkgs.gnused
+          ];
+          text = builtins.readFile ./migrate.sh;
+        };
 
         default = self'.packages.loft-session;
       };
