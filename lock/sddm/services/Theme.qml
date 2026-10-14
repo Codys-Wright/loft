@@ -39,6 +39,33 @@ QtObject {
     readonly property color glassBorder: withAlpha(glass.border ?? "#ffffff", glass.borderOpacity ?? 0.14)
     readonly property real radius: glass.radius ?? 14
 
+    // The material API GlassSurface reads (src/services/Theme.qml). The
+    // greeter has no runtime settings: the theme's glass, never reduced.
+    readonly property bool reduceTransparency: false
+    readonly property real glassDefault: glassOpacity
+    readonly property real textShadowStrength: 0
+    readonly property color textShadow: "transparent"
+    readonly property color glassTint: glass.tint ?? "#1a1b26"
+    readonly property real edgeDarken: glass.edgeDarken ?? (dark ? 0.35 : 0.18)
+    readonly property real specular: glass.specular ?? (dark ? 0.5 : 0.75)
+    readonly property color edgeColor: withAlpha("#000000", edgeDarken * 0.55)
+    readonly property color specularColor: withAlpha("#ffffff", Math.min(1, specular * (dark ? 0.55 : 0.95)))
+    readonly property color sheenColor: withAlpha("#ffffff", specular * (dark ? 0.09 : 0.2))
+    readonly property real inactiveDim: 0.07
+    readonly property real windowRadius: json.shape?.windowRadius ?? json.radii?.window ?? 12
+    readonly property real panelRadius: json.shape?.panelRadius ?? 18
+    readonly property real controlRadius: json.shape?.controlRadius ?? 8
+
+    function glassAlpha(strength) {
+        return Math.min(0.97, glassOpacity * strength);
+    }
+    function fillFor(strength) {
+        return withAlpha(glassTint, glassAlpha(strength));
+    }
+    function clearFillFor(strength) {
+        return withAlpha("#ffffff", (dark ? 0.12 : 0.3) * Math.min(1.6, strength));
+    }
+
     readonly property var wallpaperGradient: json.wallpaper?.gradient ?? ["#16161e", "#2a3a6e", "#6b4fa3"]
 
     // Bundled next to the theme (copied in by nix/lock.nix).

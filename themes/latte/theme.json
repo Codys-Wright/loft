@@ -19,9 +19,20 @@
     "opacity": 0.5,
     "border": "#ffffff",
     "borderOpacity": 0.6,
-    "radius": 14
+    "radius": 14,
+    "edgeDarken": 0.18,
+    "specular": 0.75
   },
   "wallpaper": {
     "gradient": ["#dce0e8", "#a6c8ff", "#e3c6ff"]
+  },
+  "shape": {
+    "windowRadius": 12,
+    "panelRadius": 18,
+    "controlRadius": 8
+  },
+  "bar": {
+    "adaptiveText": true,
+    "background": false
   }
 }

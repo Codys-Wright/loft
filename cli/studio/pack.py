@@ -322,6 +322,31 @@ def _basic_check(theme: dict) -> list[str]:
             errors.append(f"theme.json: palette/{role}: expected #rrggbb, got {v!r}")
     if theme.get("polarity", "dark") not in ("dark", "light"):
         errors.append("theme.json: polarity: expected dark or light")
+
+    def section(key: str) -> dict:
+        v = theme.get(key, {})
+        if not isinstance(v, dict):
+            errors.append(f"theme.json: {key}: expected an object")
+            return {}
+        return v
+
+    def number(v) -> bool:
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+    glass = section("glass")
+    for k in ("opacity", "borderOpacity", "terminalOpacity", "edgeDarken", "specular"):
+        if k in glass and not (number(glass[k]) and 0 <= glass[k] <= 1):
+            errors.append(f"theme.json: glass/{k}: expected a number in 0..1, got {glass[k]!r}")
+    for k, v in section("shape").items():
+        if k not in ("windowRadius", "panelRadius", "controlRadius"):
+            errors.append(f"theme.json: shape/{k}: unknown key")
+        elif not (number(v) and v >= 0):
+            errors.append(f"theme.json: shape/{k}: expected a number >= 0, got {v!r}")
+    for k, v in section("bar").items():
+        if k not in ("adaptiveText", "background"):
+            errors.append(f"theme.json: bar/{k}: unknown key")
+        elif not isinstance(v, bool):
+            errors.append(f"theme.json: bar/{k}: expected true or false, got {v!r}")
     return errors
 
 
@@ -374,6 +399,10 @@ def normalize(pack: Pack) -> tuple[dict, list[tuple[Path, str]]]:
         # Terminals need more body than shell glass to stay readable.
         "terminalOpacity": float(g.get("terminalOpacity", 0.85 if blur else 1.0)),
         "shadow": g.get("shadow", "#00000066" if dark else "#0000002e").lower(),
+        # Golden Gate depth: a darkened inner rim and a brighter top specular
+        # (docs/DESIGN-GOLDEN-GATE.md). Light glass needs less rim, more shine.
+        "edgeDarken": float(g.get("edgeDarken", 0.35 if dark else 0.18)),
+        "specular": float(g.get("specular", 0.5 if dark else 0.75)),
     }
 
     assets: list[tuple[Path, str]] = []
@@ -399,6 +428,23 @@ def normalize(pack: Pack) -> tuple[dict, list[tuple[Path, str]]]:
 
     ansi = [color.hex6(c) for c in t["ansi"]] if "ansi" in t else derive_ansi(pal, dark)
 
+    # One corner radius for every window (niri and the shell's own windows);
+    # `radii.window` is the older spelling of shape.windowRadius.
+    sh = t.get("shape", {})
+    legacy_radius = t.get("radii", {}).get("window", 12)
+    shape = {
+        "windowRadius": sh.get("windowRadius", legacy_radius),
+        "panelRadius": sh.get("panelRadius", 18),
+        "controlRadius": sh.get("controlRadius", 8),
+    }
+    b = t.get("bar", {})
+    bar = {
+        # Menu bar text/icons follow the wallpaper under the bar (light/dark).
+        "adaptiveText": bool(b.get("adaptiveText", True)),
+        # The glass strip behind the menu bar (Golden Gate: none by default).
+        "background": bool(b.get("background", False)),
+    }
+
     norm = {
         "name": pack.name,
         "polarity": polarity,
@@ -407,7 +453,9 @@ def normalize(pack: Pack) -> tuple[dict, list[tuple[Path, str]]]:
         "glass": glass,
         "wallpaper": wallpaper,
         "fonts": fonts,
-        "radii": {"window": t.get("radii", {}).get("window", 12)},
+        "shape": shape,
+        "bar": bar,
+        "radii": {"window": shape["windowRadius"]},
     }
     return norm, assets
 

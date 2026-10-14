@@ -17,8 +17,11 @@ layout {
         urgent-color "#f7768e"
     }
 
+    // glass.shadow on the focused window, a fainter one on the rest
+    // (base.kdl makes the focused window's shadow larger, too).
     shadow {
         color "#00000066"
+        inactive-color "#00000029"
     }
 }
 
@@ -34,6 +37,8 @@ blur {
     saturation 1.6
 }
 
+// shape.windowRadius: one corner radius for every window, the shell's
+// own windows included (they draw their glass with the same radius).
 window-rule {
     geometry-corner-radius 12
     clip-to-geometry true

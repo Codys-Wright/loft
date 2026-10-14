@@ -98,7 +98,9 @@
             "noise": { "type": "number", "minimum": 0, "maximum": 10, "default": 0.02 },
             "saturation": { "type": "number", "minimum": 0, "maximum": 10, "default": 1.6 },
             "terminalOpacity": { "$ref": "#/$defs/unit", "description": "Terminal background opacity (default 0.85 with blur, 1 without)" },
-            "shadow": { "$ref": "#/$defs/colorAlpha", "description": "Window shadow (default #00000066 dark / #0000002e light)" }
+            "shadow": { "$ref": "#/$defs/colorAlpha", "description": "Focused window shadow (default #00000066 dark / #0000002e light); inactive windows get a fainter one" },
+            "edgeDarken": { "$ref": "#/$defs/unit", "description": "Darkened inner rim of glass surfaces (default 0.35 dark / 0.18 light)" },
+            "specular": { "$ref": "#/$defs/unit", "description": "Top specular highlight of glass surfaces (default 0.5 dark / 0.75 light)" }
           }
         },
         "wallpaper": {
@@ -120,11 +122,31 @@
             "size": { "type": "number", "exclusiveMinimum": 0 }
           }
         },
-        "radii": {
+        "shape": {
+          "description": "Corner radii (px). One radius for every window: niri windows and the shell's own.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "window": { "type": "number", "minimum": 0, "default": 12, "description": "niri window corner radius (px)" }
+            "windowRadius": { "type": "number", "minimum": 0, "default": 12, "description": "Every window (niri window rule + the shell's windows). Default: radii.window, else 12" },
+            "panelRadius": { "type": "number", "minimum": 0, "default": 18, "description": "Shell panels, popovers and cards" },
+            "controlRadius": { "type": "number", "minimum": 0, "default": 8, "description": "Buttons, fields, list rows" }
+          }
+        },
+        "bar": {
+          "description": "Menu bar.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "adaptiveText": { "type": "boolean", "default": true, "description": "Text and icons turn light or dark with the wallpaper under the bar" },
+            "background": { "type": "boolean", "default": false, "description": "Draw the glass strip behind the bar (Golden Gate: no background)" }
+          }
+        },
+        "radii": {
+          "description": "Legacy: radii.window is shape.windowRadius.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "window": { "type": "number", "minimum": 0, "default": 12, "description": "Same as shape.windowRadius (which wins)" }
           }
         }
       }

@@ -103,6 +103,48 @@ class Render(unittest.TestCase):
         self.assertIn("\n    on\n", (self.tmp / "niri.kdl").read_text())
         self.assertNotIn("xray false", (self.tmp / "niri.kdl").read_text())
 
+    def test_golden_gate_tokens(self):
+        # A pack without the newer tokens gets their defaults; the legacy
+        # radii.window still sets the window radius (glassless: 0).
+        rc, _, err = studio("theme", "render", str(FIXTURE), str(self.tmp / "legacy"))
+        self.assertEqual(rc, 0, err)
+        theme = json.loads((self.tmp / "legacy" / "theme.json").read_text())
+        self.assertEqual(theme["shape"], {"windowRadius": 0, "panelRadius": 18, "controlRadius": 8})
+        self.assertEqual(theme["radii"], {"window": 0})
+        self.assertEqual(theme["bar"], {"adaptiveText": True, "background": False})
+        self.assertEqual(theme["glass"]["edgeDarken"], 0.18)  # light polarity
+        self.assertEqual(theme["glass"]["specular"], 0.75)
+        # shape.windowRadius wins over radii.window, and reaches niri + GTK.
+        pack = self.tmp / "shaped"
+        copy_pack(FIXTURE, pack)
+        t = json.loads((pack / "theme.json").read_text())
+        t["shape"] = {"windowRadius": 10}
+        t["bar"] = {"background": True}
+        t["glass"]["shadow"] = "#00000080"
+        (pack / "theme.json").write_text(json.dumps(t))
+        rc, _, err = studio("theme", "render", str(pack), str(self.tmp / "out"))
+        self.assertEqual(rc, 0, err)
+        theme = json.loads((self.tmp / "out" / "theme.json").read_text())
+        self.assertEqual(theme["shape"]["windowRadius"], 10)
+        self.assertEqual(theme["radii"]["window"], 10)
+        self.assertEqual(theme["bar"], {"adaptiveText": True, "background": True})
+        niri = (self.tmp / "out" / "niri.kdl").read_text()
+        self.assertIn("geometry-corner-radius 10", niri)
+        self.assertIn('inactive-color "#00000033"', niri)  # 0x80 * 0.4
+        self.assertIn("border-radius: 10px", (self.tmp / "out" / "gtk.css").read_text())
+
+    def test_basic_check_new_tokens(self):
+        from studio.pack import _basic_check
+
+        t = json.loads((THEMES / "latte" / "theme.json").read_text())
+        self.assertEqual(_basic_check(t), [])
+        t["glass"]["specular"] = 2
+        t["shape"]["windowRadius"] = -1
+        t["bar"]["background"] = "yes"
+        errs = "\n".join(_basic_check(t))
+        for key in ("glass/specular", "shape/windowRadius", "bar/background"):
+            self.assertIn(key, errs)
+
     def test_invalid_pack(self):
         bad = self.tmp / "bad"
         bad.mkdir()

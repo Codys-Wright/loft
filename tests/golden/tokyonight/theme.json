@@ -42,7 +42,9 @@
     "noise": 0.02,
     "saturation": 1.6,
     "terminalOpacity": 0.85,
-    "shadow": "#00000066"
+    "shadow": "#00000066",
+    "edgeDarken": 0.35,
+    "specular": 0.5
   },
   "wallpaper": {
     "gradient": [
@@ -56,6 +58,15 @@
     "ui": "sans-serif",
     "mono": "monospace",
     "size": 11
+  },
+  "shape": {
+    "windowRadius": 12,
+    "panelRadius": 18,
+    "controlRadius": 8
+  },
+  "bar": {
+    "adaptiveText": true,
+    "background": false
   },
   "radii": {
     "window": 12
