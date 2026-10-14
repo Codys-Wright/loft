@@ -174,6 +174,17 @@
             sed "s|@IPC@|\"quickshell\" \"ipc\" \"--path\" \"$root/src\" \"call\"|g" \
               "$root/niri/shell-binds.kdl.in" > "$dir/shell-binds.kdl"
 
+            # Relaunching replaces the running dev session instead of stacking a
+            # second one: stop the niri recorded in session.env, if it's ours.
+            if [ -f "$dir/session.env" ]; then
+              old_pid="$(sed -n 's/^NIRI_SOCKET=.*\.\([0-9]*\)\.sock$/\1/p' "$dir/session.env")"
+              if [ -n "$old_pid" ] && tr '\0' ' ' < "/proc/$old_pid/cmdline" 2>/dev/null | grep -q "$dir/config.kdl"; then
+                echo "studio-dev: replacing the running session (niri $old_pid)"
+                kill "$old_pid" 2>/dev/null || true
+                for _ in $(seq 1 25); do kill -0 "$old_pid" 2>/dev/null || break; sleep 0.2; done
+              fi
+            fi
+
             # The active theme: `current` → a rendered theme dir. Kept across
             # restarts (`studio --dev theme apply NAME` switches it); rendered
             # when missing (from the default) or still a raw pack from before

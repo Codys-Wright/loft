@@ -61,9 +61,9 @@ PanelWindow {
             anchors.centerIn: parent
             spacing: 10
 
-            // The OS mark, like the Apple menu.
+            // The OS mark, like the Apple menu: the NixOS logo (nf-linux-nixos).
             Icon {
-                text: ""
+                text: "\uf313"
                 size: 18
                 color: Theme.accent
             }

@@ -21,6 +21,24 @@ nix run .#shot -- out.png           # screenshot the dev session
 Inside the nested session Mod is Alt (Super in a real session): Mod+Return terminal,
 Mod+O overview, Mod+Shift+E quit.
 
+## Designing live
+
+`nix run .#dev -- --output DP-1` runs the whole desktop from this checkout in a nested niri
+window (fullscreen on that monitor). Re-running it replaces the session.
+
+| You edit | What happens |
+|---|---|
+| QML (`src/**`) | hot reload on save — a "Reloaded" pill; open panels and the Settings page stay where they were |
+| QML with an error | the error (file:line) is pinned on screen, the last good version keeps running; saving the fix reloads |
+| niri KDL (`niri/*.kdl`) | niri reloads on save |
+| a theme (`themes/*`, `studio theme apply`) | recolors everything live |
+| launcher theme (`launcher/walker/themes/studio/*`) | next time the launcher opens |
+| the CLI (`cli/studio/*`) | live — `studio` runs the checkout |
+| Rust (`crates/*`) | `cargo build`; `target/debug` binaries shadow the packaged ones (restart the dev session once) |
+| Nix (`nix/*`, runtime deps) | re-run `nix run .#dev` |
+
+`Mod+Shift+R` (or `qs ipc call shell reload`) forces a reload.
+
 ## Themes
 
 A theme is a pack (`manifest.json` + `theme.json`: palette + glass), rendered at runtime into
