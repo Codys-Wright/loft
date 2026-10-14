@@ -15,6 +15,8 @@
 #   loft-input             test driver (crates/loft-input): loft-input (virtual
 #                          mouse + keyboard) and loft-shot (screenshots), see
 #                          docs/TESTING.md
+#   loft-pointer           Auto Scroll for scrolling capture (the same crate):
+#                          pointer motion + wheel notches over the capture area
 #
 # Both sessions include <state>/overrides/niri.kdl FIRST (niri uses the first
 # `output` block matching a monitor, so output overrides must come first) and
@@ -130,6 +132,7 @@
             self'.packages.loft-niri
             self'.packages.loft-appmenu
             self'.packages.loft-sleep # Settings → Everyday: `loft-sleep status`
+            self'.packages.loft-pointer # scrolling capture → Auto
           ];
           text = ''
             if [ -z "''${LOFT_THEME_FILE:-}" ]; then
@@ -463,6 +466,20 @@
           '';
           meta.mainProgram = "loft-input";
         };
+
+        # Auto Scroll for scrolling capture: `loft capture scroll` runs
+        # `loft-pointer scroll` after the user presses Auto in the HUD. Just
+        # that binary (its tests run in loft-input).
+        loft-pointer = self'.packages.loft-input.overrideAttrs (old: {
+          pname = "loft-pointer";
+          doCheck = false;
+          postInstall = ''
+            rm $out/bin/loft-input $out/bin/loft-shot
+          '';
+          meta = old.meta // {
+            mainProgram = "loft-pointer";
+          };
+        });
 
         # Screenshot a session: `nix run .#shot -- out.png` (the dev session),
         # `nix run .#shot -- --session NAME --grid --max 1600`. Same package.

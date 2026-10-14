@@ -8,10 +8,17 @@ import qs.services
 // Scrolling capture in progress (Capture.scrolling): the area stays clear
 // and outlined while the rest of the screen dims; beside it a glass strip
 // shows the stitched image growing as you scroll, and a pill under it says
-// how tall it is, with Cancel / Done. Only the strip and the pill take
+// how tall it is, with Auto / Cancel / Done. Only the strip and the pill take
 // input — the area itself (and everything else) stays usable, so you scroll
 // the app as usual. Nothing of the HUD sits inside the area, so none of it
 // ends up in the frames.
+//
+// Auto Scroll (Capture.scrollAuto): once the helper has put the pointer in
+// the middle of the area, the HUD takes input everywhere except a small hole
+// under the pointer — the wheel notches go through the hole to the app, and
+// the moment the real mouse moves the pointer out of it the guard sees it
+// and stops Auto Scroll. The HUD also holds the keyboard meanwhile, so any
+// key stops it (Return: Done).
 PanelWindow {
     id: root
 
@@ -20,11 +27,15 @@ PanelWindow {
 
     readonly property var job: Capture.scrolling
     readonly property rect area: job?.rect ?? Qt.rect(0, 0, 0, 0)
+    readonly property bool autoOn: Capture.scrollAuto === "starting" || Capture.scrollAuto === "running"
+    // The pointer is in place: guard everything but the hole under it.
+    readonly property bool guarding: visible && Capture.scrollAuto === "running"
+    readonly property int holeSize: 24
 
     visible: job !== null && job.screen === modelData.name
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "loft:capture-scroll"
-    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: !visible ? WlrKeyboardFocus.None : autoOn ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
     exclusionMode: ExclusionMode.Ignore
     anchors {
         top: true
@@ -34,10 +45,20 @@ PanelWindow {
     }
     color: "transparent"
 
-    mask: Region {
+    mask: guarding ? guardMask : handsMask
+    Region {
+        id: handsMask
         item: pill
         Region {
             item: strip.visible ? strip : null
+        }
+    }
+    Region {
+        id: guardMask
+        item: everything
+        Region {
+            item: hole
+            intersection: Intersection.Subtract
         }
     }
     BackgroundEffect.blurRegion: Theme.blur ? blur : null
@@ -60,8 +81,20 @@ PanelWindow {
     // anywhere) inside the area's bottom edge.
     readonly property string pillAt: height - (area.y + area.height) >= pill.height + 2 * gap ? "below" : area.y >= pill.height + 2 * gap ? "above" : side !== "none" ? "side" : "inside"
 
-    // Dim everything but the area (visual only; not in the input mask).
+    // Where the helper puts the pointer: the middle of the area (the same
+    // rounding as `loft capture scroll`'s area_center).
     Item {
+        id: hole
+        x: root.area.x + Math.floor(root.area.width / 2) - root.holeSize / 2
+        y: root.area.y + Math.floor(root.area.height / 2) - root.holeSize / 2
+        width: root.holeSize
+        height: root.holeSize
+    }
+
+    // Dim everything but the area (visual only; in the input mask only
+    // while guarding Auto Scroll).
+    Item {
+        id: everything
         anchors.fill: parent
         readonly property color shade: Qt.rgba(0, 0, 0, 0.28)
         Rectangle {
@@ -239,9 +272,19 @@ PanelWindow {
         }
 
         focus: root.visible
-        Keys.onEscapePressed: Capture.scrollCancel()
-        Keys.onReturnPressed: Capture.scrollDone()
-        Keys.onEnterPressed: Capture.scrollDone()
+        // Return / Enter: Done. While Auto Scroll runs any other key (Esc
+        // too) only stops it; otherwise Esc cancels.
+        Keys.onPressed: event => {
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                Capture.scrollDone();
+            else if (root.autoOn)
+                Capture.scrollAutoStop(false);
+            else if (event.key === Qt.Key_Escape)
+                Capture.scrollCancel();
+            else
+                return;
+            event.accepted = true;
+        }
 
         RowLayout {
             id: pillRow
@@ -253,24 +296,62 @@ PanelWindow {
                 size: 16
                 color: Theme.accent
             }
-            Text {
-                text: {
-                    if (Capture.scrollFinishing)
-                        return "Stitching…";
-                    if (Capture.scrollFrames <= 1)
-                        return "Scroll to capture";
-                    return `${Capture.scrollHeight.toLocaleString(Qt.locale(), "f", 0)} px tall`;
+            ColumnLayout {
+                spacing: 0
+                Text {
+                    readonly property string tall: `${Capture.scrollHeight.toLocaleString(Qt.locale(), "f", 0)} px`
+                    text: {
+                        if (Capture.scrollFinishing)
+                            return "Stitching…";
+                        if (root.autoOn || Capture.scrollAuto === "stopping")
+                            return Capture.scrollFrames <= 1 ? "Auto Scrolling…" : `Auto Scrolling · ${tall}`;
+                        if (Capture.scrollFrames <= 1)
+                            return "Scroll to capture";
+                        return `${tall} tall`;
+                    }
+                    color: Theme.text
+                    font.family: Theme.fontUi
+                    font.pixelSize: 13
+                    font.weight: Font.Medium
+                    font.features: {
+                        "tnum": 1
+                    }
                 }
-                color: Theme.text
-                font.family: Theme.fontUi
-                font.pixelSize: 13
-                font.weight: Font.Medium
-                font.features: {
-                    "tnum": 1
+                Text {
+                    readonly property var why: ({
+                            end: "Reached the end",
+                            pointer: "Stopped: the mouse moved",
+                            stop: "Auto Scroll stopped",
+                            timeout: "Auto Scroll timed out",
+                            limit: "Reached the height limit",
+                            error: "Auto Scroll failed",
+                            unavailable: "Auto Scroll unavailable"
+                        })
+                    text: root.autoOn ? "Move the mouse or press a key to stop" : Capture.scrollAuto === "" ? (why[Capture.scrollAutoReason] ?? "") : ""
+                    visible: text !== "" && !Capture.scrollFinishing
+                    color: Theme.subtext
+                    font.family: Theme.fontUi
+                    font.pixelSize: 10
                 }
             }
             Item {
                 Layout.preferredWidth: 4
+            }
+            PillButton {
+                id: autoButton
+                // Auto ⇄ Stop. Stop is for the record (and IPC): reaching
+                // for it with the mouse already stops Auto Scroll.
+                text: root.autoOn || Capture.scrollAuto === "stopping" ? "Stop" : "Auto"
+                visible: !Capture.scrollFinishing
+                opacity: Capture.scrollAutoCooling || Capture.scrollAuto === "stopping" ? 0.5 : 1
+                onClicked: {
+                    if (root.autoOn) {
+                        Capture.scrollAutoStop(false);
+                        return;
+                    }
+                    const p = autoButton.mapToItem(null, autoButton.width / 2, autoButton.height / 2);
+                    Capture.scrollAutoStart(root.modelData.x + p.x, root.modelData.y + p.y);
+                }
             }
             PillButton {
                 text: "Cancel"
@@ -283,5 +364,21 @@ PanelWindow {
                 onClicked: Capture.scrollDone()
             }
         }
+    }
+
+    // ── Auto Scroll guard ───────────────────────────────────────────────
+    // Over everything (the input mask leaves only the hole): the real mouse
+    // moving the pointer out of the hole, or any click / wheel on the HUD,
+    // stops Auto Scroll and leaves the pointer where the user put it.
+    MouseArea {
+        anchors.fill: parent
+        z: 100
+        enabled: root.guarding
+        hoverEnabled: true
+        acceptedButtons: Qt.AllButtons
+        onEntered: Capture.scrollAutoStop(true)
+        onPositionChanged: Capture.scrollAutoStop(true)
+        onPressed: Capture.scrollAutoStop(true)
+        onWheel: Capture.scrollAutoStop(true)
     }
 }

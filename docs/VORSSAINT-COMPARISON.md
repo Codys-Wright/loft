@@ -108,7 +108,7 @@ still todo — and Loft adds a whole desktop's worth of features vorssaint doesn
 | vorssaint | Loft | How |
 |---|---|---|
 | Screen capture selector (shot / record / OCR / color) | ✅ | ⌘⇧5 toolbar |
-| Screenshot (area / window / screen, annotate, share; scrolling) | ✅ | ⌘⇧3/⌘⇧4 + the Keychron key; Scrolling in ⌘⇧5: you scroll, Loft stitches by row overlap (sticky headers kept once) with a live preview. No Auto Scroll (it would inject input into the desktop) |
+| Screenshot (area / window / screen, annotate, share; scrolling) | ✅ | ⌘⇧3/⌘⇧4 + the Keychron key; Scrolling in ⌘⇧5: you scroll — or press Auto and Loft turns the wheel until the content ends (moving the mouse or any key stops it) — and Loft stitches by row overlap (sticky headers kept once) with a live preview |
 | Screen recording (system + mic, editing, GIF) | ✅ | Editor: trim, zoom segments (Auto Zoom from the recording's activity, drag / resize / depth / center), eased zoom export; GIF |
 | Camera preview | ✅ | Floating round mirror + island page |
 | Copy text from screen (OCR + QR) | ✅ | tesseract + zbar, offline |

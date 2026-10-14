@@ -1,7 +1,7 @@
 [package]
 name = "loft-input"
 version = "0.1.0"
-description = "Loft test driver: virtual pointer + keyboard (loft-input) and agent-friendly screenshots (loft-shot) for nested or live niri sessions"
+description = "Loft test driver: virtual pointer + keyboard (loft-input) and agent-friendly screenshots (loft-shot) for nested or live niri sessions; Auto Scroll helper for scrolling capture (loft-pointer)"
 edition.workspace = true
 repository.workspace = true
 
@@ -12,6 +12,11 @@ path = "src/bin/loft-input.rs"
 [[bin]]
 name = "loft-shot"
 path = "src/bin/loft-shot.rs"
+
+# Auto Scroll for scrolling capture (`loft capture scroll` → `auto`).
+[[bin]]
+name = "loft-pointer"
+path = "src/bin/loft-pointer.rs"
 
 [dependencies]
 anyhow = "1.0.104"
