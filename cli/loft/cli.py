@@ -7,7 +7,8 @@ Environment (all optional):
   LOFT_THEME_PATH      colon-separated dirs of theme packs
                        (default: $XDG_DATA_HOME/loft/themes, then built-ins);
                        the library's Packs/ always joins, before the built-ins
-  LOFT_LIBRARY         the theme + wallpaper library (default: ~/Documents/Themes;
+  LOFT_LIBRARY         the theme + wallpaper library (default: ~/Documents/Loft, or
+                       ~/Documents/Themes until `loft library migrate` moves it;
                        `none` = off). When it exists, packs install into its Packs/
   LOFT_SHELL_PATH      Quickshell config of the running shell, for IPC
   LOFT_DATA_DIR        root holding themes/ and templates/render/ (default: this tree)
@@ -522,6 +523,41 @@ def cmd_library_add(ctx: Ctx, args) -> None:
     print(f"loft: {'moved' if args.move else 'copied'} {len(added)} into {lib.topics_dir / args.topic}")
 
 
+def cmd_library_migrate(ctx: Ctx, args) -> None:
+    """docs/THEME-ARCHITECTURE.md §5.5 (cli/loft/migrate.py): a dry run unless --apply."""
+    from . import migrate
+
+    builtin = ctx.data_dir / "packs"
+    if args.undo is not None:
+        rep = Path(args.undo) if args.undo else migrate.latest_report(ctx.state_dir)
+        if rep is None or not rep.is_file():
+            raise Fail(f"no migration report to undo in {ctx.state_dir / migrate.REPORT_DIR}")
+        for line in migrate.undo(rep):
+            print(f"loft: {line}")
+        print(f"loft: undid {rep}")
+        return
+    home = Path.home()
+    data_home = Path(_env("XDG_DATA_HOME") or home / ".local" / "share")
+    state_home = Path(_env("XDG_STATE_HOME") or home / ".local" / "state")
+    p = migrate.plan(
+        ctx.state_dir, builtin,
+        Path(args.from_).expanduser() if args.from_ else None, Path(args.to).expanduser() if args.to else None,
+        data_home=data_home, state_home=state_home,
+    )  # fmt: skip
+    summary = migrate.summary(p, builtin)
+    undo: dict = {}
+    if args.apply:
+        undo = migrate.apply(p, builtin, hardlinks=not args.no_hardlinks)
+    text = migrate.render_report(p, summary, args.apply)
+    if args.apply:
+        rep = migrate.save_report(p, summary, undo, text)
+        text += f"\nreport: {rep}\nundo: loft library migrate --undo {rep}"
+    if args.json:
+        print(json.dumps({"applied": args.apply, "summary": summary, "plan": p.to_json(), "undo": undo}))
+    else:
+        print(text)
+
+
 # ── wallpaper sets ──────────────────────────────────────────────────────────
 
 
@@ -875,6 +911,16 @@ def run_dev(args: list[str]) -> int:
     return 1  # exec only returns by failing
 
 
+def _migrate_args(s) -> None:
+    s.add_argument("--apply", action="store_true", help="do it (default: a dry run that only reports)")
+    s.add_argument("--json", action="store_true", help="the plan and summary as JSON")
+    s.add_argument("--from", dest="from_", metavar="DIR", help="the old library root (default ~/Documents/Themes)")
+    s.add_argument("--to", metavar="DIR", help="the new root (default $LOFT_LIBRARY, else ~/Documents/Loft)")
+    s.add_argument("--no-hardlinks", action="store_true", help="leave duplicate media files as copies")
+    s.add_argument("--undo", nargs="?", const="", metavar="REPORT", help="put back an applied migration (default: the latest report)")
+    s.set_defaults(fn=cmd_library_migrate)
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="loft", description="Loft CLI")
     p.add_argument("--dev", action="store_true", help="target the `nix run .#dev` session")
@@ -940,6 +986,9 @@ def parser() -> argparse.ArgumentParser:
 
     themecmds.add_theme_parsers(sub)
 
+    s = sub.add_parser("migrate", help="= `loft library migrate` (themes, variants, settings; dry run)")
+    _migrate_args(s)
+
     s = sub.add_parser("new", help="scaffold a pack in the user theme dir")
     s.add_argument("name")
     s.add_argument("--from", dest="from_", default="default", metavar="THEME")
@@ -973,7 +1022,7 @@ def parser() -> argparse.ArgumentParser:
 
     lib = top.add_parser(
         "library",
-        help="the theme + wallpaper library ($LOFT_LIBRARY, default ~/Documents/Themes)",
+        help="the theme + wallpaper library ($LOFT_LIBRARY, default ~/Documents/Loft)",
         description="Packs/ and Wallpapers/Topics/<Topic>/ hold the files; sort generates symlink views "
         "in Wallpapers/Colors, Wallpapers/Tones and Wallpapers/Themes (and README.md).",
     )
@@ -991,6 +1040,13 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--move", action="store_true", help="move instead of copy")
     s.add_argument("--no-sort", action="store_true", help="don't re-sort afterwards")
     s.set_defaults(fn=cmd_library_add)
+    s = sub.add_parser(
+        "migrate",
+        help="move the library to ~/Documents/Loft and convert packs + settings to themes and variants (dry run)",
+        description="docs/THEME-ARCHITECTURE.md §5.5. Without --apply nothing changes: the report says what would. "
+        "Every step is idempotent; --undo puts an applied migration back from its report.",
+    )
+    _migrate_args(s)
 
     wall = top.add_parser(
         "wallpaper",

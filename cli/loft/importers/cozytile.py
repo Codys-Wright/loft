@@ -50,6 +50,11 @@ DESCRIPTION = "Darkkal44's Cozytile qtile rice themes (Cozy, Sakura, Natura, Eve
 
 HEX = r"#[0-9a-fA-F]{6}"
 
+# One rice: every Cozytile theme is a variant of one `cozytile` theme
+# (docs/THEME-ARCHITECTURE.md §5.5), the first listed being the base.
+RICE = ("Cozy", "Sakura", "Natura", "Everforest", "Carbon")
+TITLE = "Cozytile"
+
 
 def pack_name(theme: str) -> str:
     return f"cozytile-{theme.lower()}"

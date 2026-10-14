@@ -131,7 +131,7 @@ enum Cmd {
 
 #[derive(clap::Args)]
 struct SpaceOpts {
-    /// Space documents (default: $LOFT_SPACES_DIR, else ~/Documents/Loft/Spaces;
+    /// Space documents (default: $LOFT_SPACES_DIR, else $LOFT_LIBRARY/Spaces, ~/Documents/Loft/Spaces;
     /// LOFT_LIBRARY=none: built-ins only).
     #[arg(long, global = true)]
     spaces_dir: Option<PathBuf>,

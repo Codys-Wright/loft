@@ -68,6 +68,36 @@
           "additionalProperties": {
             "$ref": "#/$defs/selection"
           }
+        },
+        "author": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "upstream": {
+          "type": "object"
+        },
+        "v1": {
+          "type": "object",
+          "description": "Transitional link to the v1 pack a theme or variant came from (migration, \u00a75.5): {path, greeter?, vibes?}, paths relative to the theme's pack",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "greeter": {
+              "type": "string"
+            },
+            "vibes": {
+              "type": "object"
+            }
+          }
         }
       },
       "additionalProperties": false,
@@ -185,6 +215,24 @@
           "items": {
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9._-]*(@[a-z0-9][a-z0-9._-]*)?$"
+          }
+        },
+        "upstream": {
+          "type": "object"
+        },
+        "v1": {
+          "type": "object",
+          "description": "Transitional link to the v1 pack a theme or variant came from (migration, \u00a75.5): {path, greeter?, vibes?}, paths relative to the theme's pack",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "greeter": {
+              "type": "string"
+            },
+            "vibes": {
+              "type": "object"
+            }
           }
         }
       },

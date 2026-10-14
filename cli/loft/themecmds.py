@@ -120,9 +120,11 @@ def resolved(ctx, cat: Catalog, theme: Theme, variant: str | None, state: dict |
 
 
 def v1_pack(res: R.Resolved) -> Pack | None:
-    """The v1 pack a theme was adapted from (for validation and curated vibes), if any."""
-    v1 = res.theme.doc.get("v1")
-    return Pack(Path(v1["path"])) if isinstance(v1, dict) and v1.get("path") else None
+    """The v1 pack a selection was adapted or migrated from (for validation
+    and curated vibes), if any (render/identity.py)."""
+    from .render.identity import v1_pack as find
+
+    return find(res)
 
 
 def _validate_v1(ctx, res: R.Resolved) -> None:

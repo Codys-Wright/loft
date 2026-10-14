@@ -42,6 +42,11 @@ LICENSE = "GPL-3.0"
 DESCRIPTION = "Darkkal44's qylock SDDM/Quickshell lock designs (lock design + derived palette)"
 
 LOCK_PATH = "lock/qylock"
+
+# Designs that are a variant of another one (docs/THEME-ARCHITECTURE.md
+# §5.5): theme → (base theme, variant id). Everything else is a theme of its
+# own in the `qylock` collection.
+VARIANT_OF = {"osumania": ("osu", "mania"), "material-you-dark": ("material-you", "dark")}
 NOT_BACKGROUND = re.compile(r"(logo|avatar|pfp|title|icon|preview|screenshot)", re.I)
 SKIP_EXT = {".qml", ".js", ".ttf", ".otf", ".woff", ".woff2", ".conf", ".desktop", ".md", ".txt", ".json", ".svg", ".qmldir"}
 

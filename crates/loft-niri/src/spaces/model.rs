@@ -12,7 +12,7 @@
 //!
 //! - built-in templates and singletons: `spaces/templates/*.json` in the
 //!   repo, compiled in;
-//! - the library, `$LOFT_SPACES_DIR` (default `~/Documents/Loft/Spaces`;
+//! - the library, `$LOFT_SPACES_DIR` (default `<$LOFT_LIBRARY>/Spaces`, i.e. `~/Documents/Loft/Spaces`;
 //!   `LOFT_LIBRARY=none` turns it off): `<id>.json` singletons,
 //!   `templates/*.json` (override built-ins by id), `instances/*.json`.
 //!
@@ -406,15 +406,25 @@ fn parse_space(doc: Value, base: &str) -> Result<Space> {
     })
 }
 
-/// Where the library's space documents live.
+/// Where the library's space documents live: `$LOFT_SPACES_DIR`, else
+/// `<library>/Spaces`, the library being `$LOFT_LIBRARY` (default
+/// `~/Documents/Loft`; `none` / `off` turns it off), as in cli/loft/library.py.
 pub fn library_dir() -> Option<PathBuf> {
-    if std::env::var("LOFT_LIBRARY").is_ok_and(|v| v.trim() == "none") {
+    let lib = std::env::var("LOFT_LIBRARY").unwrap_or_default();
+    let lib = lib.trim();
+    if lib == "none" || lib == "off" {
         return None;
     }
     if let Some(v) = std::env::var_os("LOFT_SPACES_DIR").filter(|v| !v.is_empty()) {
         return Some(PathBuf::from(v));
     }
-    std::env::home_dir().map(|h| h.join("Documents/Loft/Spaces"))
+    let home = std::env::home_dir();
+    let root = match lib.strip_prefix("~/") {
+        _ if lib.is_empty() => home?.join("Documents/Loft"),
+        Some(rest) => home?.join(rest),
+        None => PathBuf::from(lib),
+    };
+    Some(root.join("Spaces"))
 }
 
 /// All spaces: active and archived, ordered; plus what couldn't be loaded.

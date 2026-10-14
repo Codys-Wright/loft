@@ -35,7 +35,15 @@ Singleton {
     readonly property string stateDir: Quickshell.env("LOFT_STATE_DIR") || `${Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state"}/loft`
     readonly property string spacesKdl: `${stateDir}/overrides/spaces.kdl`
     // Where the space JSON lives (loft-niri's library_dir), for display.
-    readonly property string libraryDir: Quickshell.env("LOFT_SPACES_DIR") || "~/Documents/Loft/Spaces"
+    // $LOFT_SPACES_DIR, else <library>/Spaces (the library follows $LOFT_LIBRARY,
+    // like cli/loft/library.py and crates/loft-niri's library_dir()).
+    readonly property string libraryDir: {
+        const dir = Quickshell.env("LOFT_SPACES_DIR");
+        if (dir)
+            return dir;
+        const lib = (Quickshell.env("LOFT_LIBRARY") || "").trim() || "~/Documents/Loft";
+        return lib === "none" || lib === "off" ? "" : `${lib}/Spaces`;
+    }
 
     readonly property bool enabled: Features.on("spaces")
 

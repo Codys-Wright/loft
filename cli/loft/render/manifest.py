@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ..pack import lock_json, read_kv, wallpaper_json
 from . import wallpapers as W
+from .identity import identity, v1_info
 from .unit import Source, Unit
 
 
@@ -34,20 +35,21 @@ def document(src: Source) -> dict:
     res, catalog = src.res, src.catalog
     t = res.theme
     doc = t.doc
+    ident = identity(res)
     pack_meta = catalog.pack_meta(t.pack)
     colors_doc = res.origins["colors"].doc if res.origins.get("colors") else {}
     v = t.variant(res.variant)
     base = doc.get("base") if isinstance(doc.get("base"), dict) else {}
     out = {
         "name": res.name,
-        "author": doc.get("author", pack_meta.get("author", "")),
-        "version": doc.get("version") or pack_meta.get("version") or "0.0.0",
-        "license": doc.get("license") or colors_doc.get("license") or pack_meta.get("license") or "NOASSERTION",
-        "source": doc.get("source") or colors_doc.get("source") or pack_meta.get("source") or "",
+        "author": ident.get("author", pack_meta.get("author", "")),
+        "version": ident.get("version") or pack_meta.get("version") or "0.0.0",
+        "license": ident.get("license") or colors_doc.get("license") or pack_meta.get("license") or "NOASSERTION",
+        "source": ident.get("source") or colors_doc.get("source") or pack_meta.get("source") or "",
         "description": (v or {}).get("description") or base.get("description") or doc.get("description", ""),
     }
-    if isinstance(doc.get("upstream"), dict):
-        out["upstream"] = doc["upstream"]
+    if isinstance(ident.get("upstream"), dict):
+        out["upstream"] = ident["upstream"]
     curated = src.curated or {}
     wdata = src.facet("wallpapers")
     entries = W.collection(wdata)
@@ -85,7 +87,7 @@ def document(src: Source) -> dict:
     sets = wdata.get("sets") or []
     if sets:
         out["wallpaperSets"] = [{"name": s["name"], "displays": dict(s.get("displays") or {}), "workspaces": dict(s.get("workspaces") or {})} for s in sets]
-    v1 = doc.get("v1") if isinstance(doc.get("v1"), dict) else {}
+    v1 = v1_info(res)
     if isinstance(v1.get("vibes"), dict):
         out["vibes"] = v1["vibes"]
     if v1.get("greeter"):

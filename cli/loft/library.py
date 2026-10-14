@@ -1,8 +1,14 @@
 """The library: one folder for every theme pack and wallpaper.
 
-Root: $LOFT_LIBRARY (default ~/Documents/Themes; `none` turns it off).
+Root: $LOFT_LIBRARY (default ~/Documents/Loft; `none` turns it off). Until
+`loft library migrate` has moved it there, a library still at the old
+~/Documents/Themes is used (default and explicit ~/Documents/Loft alike).
 
   Packs/<pack>/                     installed theme packs (real files; `loft theme install` puts them here)
+  Themes/<id>.json                  your themes and variants (Save as New Theme…, Save as Variant…)
+  Colors/ Materials/ Motion/ …      your facets (Save Facet As…)
+  Wallpapers/Sets/<id>.json         saved wallpaper arrangements
+  Spaces/                           space documents (docs/SPACES.md)
   Wallpapers/Topics/<Topic>/        curated images by topic (real files; `loft library add`)
   Wallpapers/Colors/<Family>/       generated: symlinks by dominant color family
   Wallpapers/Tones/<Tone>/          generated: symlinks by overall lightness (Dark, Medium, Light)
@@ -81,12 +87,22 @@ THEME_MAX = 24  # ranked matches per theme (own and curated images come on top)
 THUMB_WIDTH = 480
 
 
+DEFAULT_ROOT = Path("Documents") / "Loft"  # under $HOME
+LEGACY_ROOT = Path("Documents") / "Themes"  # before `loft library migrate`
+
+
 def root() -> Path | None:
-    """The library root ($LOFT_LIBRARY, default ~/Documents/Themes), None when turned off."""
+    """The library root ($LOFT_LIBRARY, default ~/Documents/Loft), None when
+    turned off. While ~/Documents/Loft doesn't exist and the old
+    ~/Documents/Themes does (not migrated yet), that one."""
     v = os.environ.get("LOFT_LIBRARY", "").strip()
     if v.lower() in ("none", "off"):
         return None
-    return Path(v).expanduser() if v else Path.home() / "Documents" / "Themes"
+    home = Path.home()
+    p = Path(v).expanduser() if v else home / DEFAULT_ROOT
+    if os.path.abspath(p) == os.path.abspath(home / DEFAULT_ROOT) and not p.exists() and (home / LEGACY_ROOT).is_dir():
+        return home / LEGACY_ROOT
+    return p
 
 
 def packs_dir(lib: Path | None) -> Path | None:
@@ -233,6 +249,7 @@ class Library:
         return out
 
     def pack_dirs(self) -> list[Path]:
+        """v1 packs (and v2 packs migrated in place, which keep their theme.json)."""
         if not self.packs.is_dir():
             return []
         return [d for d in sorted(self.packs.iterdir()) if (d / "theme.json").is_file()]
