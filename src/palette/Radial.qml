@@ -324,6 +324,8 @@ Singleton {
 
         // Bound to ⌃⌘Space: opens at the pointer; releasing the modifier picks.
         function hold(): void {
+            if (!root.open && Shortcuts.skip("Radial Menu"))
+                return;
             root.hold();
         }
         // Opens to click (no release-to-pick).

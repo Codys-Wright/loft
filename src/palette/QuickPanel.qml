@@ -130,6 +130,8 @@ Singleton {
         target: "quickpanel"
 
         function toggle(): void {
+            if (!root.open && Shortcuts.skip("Quick Panel"))
+                return;
             root.toggle();
         }
         function open(): void {

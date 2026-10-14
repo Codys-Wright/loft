@@ -15,6 +15,12 @@ Rectangle {
         input.forceActiveFocus();
     }
 
+    // Empty the field (e.g. after adding what was typed).
+    function clear() {
+        input.text = "";
+        text = "";
+    }
+
     implicitWidth: 200
     implicitHeight: 28
     radius: 8

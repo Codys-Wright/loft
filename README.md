@@ -323,8 +323,8 @@ run the nested session on a private bus: `dbus-run-session -- nix run .#dev`.
 
 ## niri settings
 
-Loft Settings has Displays, Keyboard & Mouse, Layout & Motion and Keybinds pages,
-backed by `loft-niri` (`crates/loft-niri`). Your own niri KDL is never edited:
+Loft Settings has Displays, Keyboard & Mouse, Layout & Motion and Keyboard Shortcuts
+pages, backed by `loft-niri` (`crates/loft-niri`). Your own niri KDL is never edited:
 changes are stored in `<state>/overrides/niri.json` and rendered (validated with
 `niri validate`) into `<state>/overrides/niri.kdl`, which the Loft sessions include
 **first** (niri uses the first `output` block matching a monitor) and **last** (every
@@ -333,13 +333,23 @@ by connector. With the home-manager module, `~/.config/loft/niri.kdl` includes
 it last; add `include optional=true "~/.config/loft/niri-early.kdl"` at the top
 of your niri config for display overrides to win over your own `output` blocks.
 
+**Keyboard Shortcuts** lists every bind — Loft's and your own config's — and edits them
+like macOS: click to record, replace on conflict, turn off, add custom shortcuts (a Loft
+action, a command or a niri action), restore one or all. A changed bind is written to
+the same fragment, which niri lets override a key bound in an earlier file; a shortcut
+turned off is rebound to a no-op (niri can't unbind). Its **Apps to Leave Alone** tab
+pauses Loft's window shortcuts in games / VMs / remote desktops, and
+`loft keys xremap --base <xremap config as JSON>` writes an xremap config with every
+remap off in those apps (point xremap at `<state>/xremap/config.json`, `--watch=config`).
+
 ```sh
 loft-niri outputs                         # live outputs, modes, identities
 loft-niri output set DP-1 --scale 1.25 --render     # live + recorded (by identity)
 loft-niri set layout.gaps 8 --render      # see `loft-niri keys`
 loft-niri show                            # value + source (override / file:line / default)
 loft-niri binds --conflicts               # keys bound more than once, and which wins
+loft-niri apply '{"bind_ops":[{"op":"set","id":"d:Mod+Shift+T","combo":"Mod+Alt+T"}]}'
 loft-niri reset [input|layout.gaps|…]     # drop overrides and re-render
 ```
 
-Status: Phase 0 (dev loop), Phase 1 (theme engine + selector + Cozytile/qylock importers), the shell port (bar, dock, Control Center, Dynamic Island, OSD, switcher, notifications, wallpaper picker, Settings incl. niri Displays/Input/Layout/Keybinds), the Spotlight launcher, the System module (monitor, bar readouts, network, alerts; `qs ipc call monitor toggle`) and Phase 5 (lock + login screen). See [docs/PLAN.md](docs/PLAN.md). Themes: [loft-themes](https://github.com/Codys-Wright/loft-themes).
+Status: Phase 0 (dev loop), Phase 1 (theme engine + selector + Cozytile/qylock importers), the shell port (bar, dock, Control Center, Dynamic Island, OSD, switcher, notifications, wallpaper picker, Settings incl. niri Displays/Input/Layout/Keyboard Shortcuts), the Spotlight launcher, the System module (monitor, bar readouts, network, alerts; `qs ipc call monitor toggle`) and Phase 5 (lock + login screen). See [docs/PLAN.md](docs/PLAN.md). Themes: [loft-themes](https://github.com/Codys-Wright/loft-themes).

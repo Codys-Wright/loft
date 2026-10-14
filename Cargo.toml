@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/loft-appmenu", "crates/loft-input", "crates/loft-niri"]
+members = ["crates/loft-appmenu", "crates/loft-input", "crates/loft-niri", "crates/loft-sleep"]
 
 [workspace.package]
 edition = "2024"

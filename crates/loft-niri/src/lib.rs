@@ -12,6 +12,7 @@ pub mod kdl_out;
 pub mod keys;
 pub mod outputs;
 pub mod render;
+pub mod shortcuts;
 pub mod state;
 
 use std::path::Path;
@@ -83,8 +84,12 @@ pub fn show(paths: &Paths, entry: Option<&Path>) -> Result<Value> {
 ///   "unset": [ "input.mouse" ],
 ///   "reset_outputs": [ "<identity>" ],
 ///   "window_rules": { "<app-id>": { "open-on-workspace": "Desktop 2" } | null },
+///   "bind_ops": [ { "op": "set", "id": "d:Mod+Shift+T", "combo": "Mod+Alt+T" } ],
 ///   "live": true, "record": true, "render": true }
 /// ```
+///
+/// `bind_ops`: Settings → Keyboard Shortcuts (see `shortcuts::apply_ops`),
+/// resolved against the config's binds (without our fragment).
 #[derive(Debug, Clone, Copy)]
 pub struct ApplyOpts<'a> {
     pub entry: Option<&'a Path>,
@@ -171,6 +176,11 @@ pub fn apply(paths: &Paths, data: &Value, opts: ApplyOpts) -> Result<Value> {
                 }
             }
         }
+        if let Some(ops) = data.get("bind_ops").and_then(Value::as_array) {
+            let base = render::base_tree(opts.entry, paths);
+            let base_binds = base.as_ref().map(binds::collect).unwrap_or_default();
+            shortcuts::apply_ops(&mut ov, &base_binds, ops)?;
+        }
         for id in data
             .get("reset_outputs")
             .and_then(Value::as_array)
@@ -228,8 +238,7 @@ pub fn commit(
 }
 
 pub fn load_tree(entry: Option<&Path>) -> Result<ConfigTree> {
-    let entry = entry.context(
-        "no niri config found (pass --config, or set $LOFT_NIRI_CONFIG / $NIRI_CONFIG)",
-    )?;
+    let entry = entry
+        .context("no niri config found (pass --config, or set $LOFT_NIRI_CONFIG / $NIRI_CONFIG)")?;
     ConfigTree::load(entry, &|_| false)
 }

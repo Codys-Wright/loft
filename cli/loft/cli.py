@@ -38,7 +38,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import capture, cleaner, dock, hooks, importers, index, island, library, media, ports, render, updates, utilities, vibes, wallsets
+from . import capture, cleaner, dock, hooks, importers, index, island, keys, library, media, ports, render, updates, utilities, vibes, wallsets
 from .pack import IGNORED, Pack, PackError, is_pack
 
 NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -1010,6 +1010,7 @@ def parser() -> argparse.ArgumentParser:
     media.add_parser(top, lambda ctx: ctx.shell_path)
     capture.add_parser(top)
     utilities.add_parser(top, lambda ctx: ctx.shell_path)
+    keys.add_parser(top, lambda ctx: ctx.state_dir)
     return p
 
 

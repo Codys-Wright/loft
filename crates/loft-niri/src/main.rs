@@ -419,12 +419,19 @@ fn run(cli: Cli) -> Result<()> {
                         "errors": tree.errors,
                     })
                 } else {
+                    // Settings → Keyboard Shortcuts: the config's binds
+                    // (without our fragment) with the user's changes.
+                    let base = render::base_tree(entry, &paths);
+                    let base_binds = base.as_ref().map(binds::collect).unwrap_or_default();
+                    let ov = Overrides::load(&paths.json)?;
                     json!({
                         "config": tree.entry,
                         "files": files,
                         "binds": all,
                         "conflicts": conf.keys().collect::<Vec<_>>(),
                         "errors": tree.errors,
+                        "shortcuts": loft_niri::shortcuts::rows(&base_binds, &ov),
+                        "overrides_kdl": paths.kdl,
                     })
                 };
                 println!("{v}");

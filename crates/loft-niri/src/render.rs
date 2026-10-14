@@ -240,6 +240,7 @@ pub fn render(ov: &Overrides, base: Option<&ConfigTree>, live: Option<&Outputs>)
     }
     nodes.extend(render_rules(ov));
     nodes.extend(render_settings(ov, base));
+    nodes.extend(crate::shortcuts::render(ov));
     let mut out = String::from(HEADER);
     if !nodes.is_empty() {
         out.push('\n');

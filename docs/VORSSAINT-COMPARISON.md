@@ -22,14 +22,14 @@ Legend: ✅ have · 🟡 partial · 🔨 in progress · ⬜ todo · ➖ not appl
 
 | | Count |
 |---|---|
-| ✅ Have | 41 |
+| ✅ Have | 43 |
 | 🧩 Handled by niri / fleet | 9 |
 | 🟡 Partial | 3 |
 | 🔨 In progress | 0 |
-| ⬜ Todo | 3 |
+| ⬜ Todo | 1 |
 | ➖ Not applicable on Linux/NixOS | 9 |
 
-Of the 56 rows that apply on Linux: 50 are covered (✅ + 🧩), 3 more are partial, 3 are
+Of the 56 rows that apply on Linux: 52 are covered (✅ + 🧩), 3 more are partial, 1 is
 still todo — and Loft adds a whole desktop's worth of features vorssaint doesn't need
 (bottom of this file).
 
@@ -76,10 +76,10 @@ still todo — and Loft adds a whole desktop's worth of features vorssaint doesn
 | Side buttons (Back / Forward) | 🧩 | Apps map buttons 8/9 to Back / Forward themselves |
 | Mouse button shortcuts | 🧩 | niri binds MouseBack / MouseForward / MouseMiddle (+ modifiers) |
 | Middle click (three-finger) | 🧩 | touchpad click method |
-| Apps to leave alone | ⬜ | Per-app exclusions for remaps |
-| Extra click filter / key debounce | ⬜ | Hardware-specific (later) |
+| Apps to leave alone | 🟡 | Settings → Keyboard Shortcuts → Apps to Leave Alone: Loft's window shortcuts (⌘Q, paste, snippets, palettes, Arrange) do nothing there; `loft keys xremap` writes xremap's config with every remap off in those apps — ✅ once the consumer's xremap service reads it (fleet diff pending). niri's own binds can't be per app |
+| Extra click filter / key debounce | ⬜ | No clean per-device way on Linux: libinput debounces mouse buttons by itself but never keys, keyd has no debounce, xremap's experimental `throttle_ms` is per key for every keyboard (FEATURES.md) |
 | Super key (Caps / right modifier as a combo) | ✅ | Esc / Caps hold = window key (xremap); Super = ⌘ for apps |
-| Keyboard shortcuts hub (+ macOS shortcut takeover) | 🟡 | Keybinds page read-only; ⌘C/V/⌘⇧3/4/5 work; editable hub todo |
+| Keyboard shortcuts hub (+ macOS shortcut takeover) | ✅ | Settings → Keyboard Shortcuts: every niri bind (Loft's and your Nix config's) grouped and searchable; click to record, conflicts ask before replacing, turn off, custom shortcuts (Loft action, command, niri action), restore per shortcut or all; validated with `niri validate`. ⌘C/V/⌘⇧3/4/5 work |
 
 ## Clipboard, files and links
 | vorssaint | Loft | How |
@@ -131,7 +131,7 @@ still todo — and Loft adds a whole desktop's worth of features vorssaint doesn
 | Keep awake (timer, lid, apps, power, displays) | ✅ | 15 min … indefinitely; while apps are open, on power, a display connected; lid closed (logind) |
 | Displays (per-display brightness, hardware/software, dimming) | ✅ | Control Center Display: ddcutil / backlight per display |
 | Extra brightness (XDR) | ➖ | Apple hardware |
-| Bluetooth off on sleep | ⬜ | systemd sleep hook |
+| Bluetooth off on sleep | ✅ | Settings → Everyday → Sleep: the `loft-sleep` user service switches powered adapters off on logind's PrepareForSleep and back on after the wake (no root) |
 
 ## Panel and app settings
 | vorssaint | Loft | How |
@@ -154,6 +154,6 @@ vorssaint relies on macOS for these; on Linux Loft builds them, in the Golden Ga
 | Multi-monitor | Main / fallback display logic, status area follows fullscreen |
 | Spotlight | DuckDuckGo !bangs; Raycast-style quicklinks and script commands; time zones in the calculator |
 | Spaces | Functional desktops across all monitors (Main, Music, Video, per-project) 🔨 (design) |
-| Settings | Full Settings app incl. niri settings (displays, input, layout, keybinds) |
+| Settings | Full Settings app incl. niri settings (displays, input, layout, keyboard shortcuts) |
 | Phone | iPhone integration via tether (messages, notifications, calls) — researched, not started |
 | Testing | `loft-input` / `loft-shot` / headless sessions so agents can drive the desktop |

@@ -1,88 +1,18 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Io
 import qs.components
 import qs.services
 
-// Settings → Everyday: Keep Awake rules, Cleaning Mode, Quit on close,
-// Quit protection, Arrange and mouse notes. Each card shows while its
-// module is on (Settings → Features). Values: services/EverydayConfig.qml.
+// Settings → Everyday: Keep Awake rules, Sleep (Bluetooth off), Cleaning
+// Mode, Quit on close, Quit protection, Arrange and mouse notes. Each card
+// shows while its module is on (Settings → Features). Values:
+// services/EverydayConfig.qml.
 ColumnLayout {
     id: page
     spacing: 12
 
     readonly property var cfg: EverydayConfig
-
-    // Apps to pick from: running ones first, then those already listed.
-    function candidates(listed) {
-        const ids = [...new Set(Niri.windows.map(w => w.app_id).filter(a => a && Apps.own[a] === undefined))];
-        return ids.filter(a => !listed.includes(a)).sort((a, b) => Apps.name(a).localeCompare(Apps.name(b))).map(a => ({ value: a, label: Apps.name(a) }));
-    }
-
-    // An editable list of app ids: a row per app (icon, name, remove) and
-    // an "Add app" picker of running apps.
-    component AppList: ColumnLayout {
-        id: list
-        property var apps: []
-        property string emptyText: "No apps yet"
-        signal changed(var apps)
-        Layout.fillWidth: true
-        spacing: 6
-
-        Repeater {
-            model: list.apps
-            delegate: RowLayout {
-                required property string modelData
-                Layout.fillWidth: true
-                spacing: 10
-                AppIcon {
-                    Layout.preferredWidth: 20
-                    Layout.preferredHeight: 20
-                    appId: modelData
-                    pixelSize: 40
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: `${Apps.name(modelData)}  ·  ${modelData}`
-                    color: Theme.text
-                    font.family: Theme.fontUi
-                    font.pixelSize: 13
-                    elide: Text.ElideRight
-                }
-                SettingsButton {
-                    text: "Remove"
-                    onClicked: list.changed(list.apps.filter(a => a !== modelData))
-                }
-            }
-        }
-        Text {
-            visible: list.apps.length === 0
-            text: list.emptyText
-            color: Theme.subtext
-            font.family: Theme.fontUi
-            font.pixelSize: 12
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            SettingsSelect {
-                Layout.fillWidth: true
-                placeholder: "Add a running app…"
-                options: page.candidates(list.apps)
-                current: null
-                onActivated: v => list.changed(list.apps.concat([v]))
-            }
-            SettingsTextField {
-                implicitWidth: 180
-                placeholder: "or an app id"
-                onCommitted: t => {
-                    const id = t.trim();
-                    if (id !== "" && !list.apps.includes(id))
-                        list.changed(list.apps.concat([id]));
-                    text = "";
-                }
-            }
-        }
-    }
 
     component Note: Text {
         Layout.fillWidth: true
@@ -148,10 +78,63 @@ ColumnLayout {
         SettingsRow {
             label: "While these apps have a window open"
         }
-        AppList {
+        AppIdList {
             apps: Array.from(page.cfg.keepAwake.apps)
             emptyText: "No apps — e.g. a video player or a presentation app"
             onChanged: l => page.cfg.keepAwake.apps = l
+        }
+    }
+
+    // ── Sleep (the loft-sleep user service does the work)
+    SettingsCard {
+        id: sleepCard
+
+        // `loft-sleep status`: { enabled, remembered, adapters: [{ path, powered }] }
+        property var status: null
+        property bool serviceActive: false
+        readonly property var adapters: status?.adapters ?? []
+
+        function refresh() {
+            sleepStatus.running = true;
+            sleepUnit.running = true;
+        }
+        Component.onCompleted: refresh()
+        onVisibleChanged: if (visible)
+            refresh()
+
+        Process {
+            id: sleepStatus
+            command: ["loft-sleep", "status"]
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    try {
+                        sleepCard.status = JSON.parse(text);
+                    } catch (e) {
+                        sleepCard.status = null;
+                    }
+                }
+            }
+        }
+        // Read-only: is the user service there and running?
+        Process {
+            id: sleepUnit
+            command: ["systemctl", "--user", "is-active", "--quiet", "loft-sleep.service"]
+            onExited: code => sleepCard.serviceActive = code === 0
+        }
+
+        PageHeader {
+            title: "Sleep"
+        }
+        SettingsRow {
+            label: "Turn Bluetooth off during sleep"
+            hint: sleepCard.adapters.length === 0 ? "No Bluetooth adapter found" : sleepCard.adapters.map(a => `${a.path.replace(/^.*\//, "")}: ${a.powered ? "on" : "off"}`).join(" · ") + " — back on after the wake if it was on"
+            SettingsSwitch {
+                checked: page.cfg.sleep.bluetoothOff
+                onToggled: on => page.cfg.sleep.bluetoothOff = on
+            }
+        }
+        Note {
+            text: (sleepCard.serviceActive ? "" : "The loft-sleep service isn't running, so this has no effect yet (programs.loft.sleepWatcher in home-manager starts it). ") + "Before the system suspends or hibernates, every Bluetooth adapter that's on is switched off, so headphones and mice don't wake it or drain; after the wake the same adapters are switched back on. Adapters that were off stay off. A user service listens for logind's PrepareForSleep (no root) and holds a short sleep delay so the adapters are off first."
         }
     }
 
@@ -216,7 +199,7 @@ ColumnLayout {
                 onActivated: v => page.cfg.quit.holdMs = v
             }
         }
-        AppList {
+        AppIdList {
             visible: !page.cfg.quit.protectAll
             apps: Array.from(page.cfg.quit.protect)
             emptyText: "No apps — or right-click an app in the dock → Options → Hold ⌘Q to Quit"
@@ -242,7 +225,7 @@ ColumnLayout {
                 onActivated: v => page.cfg.quit.graceSeconds = v
             }
         }
-        AppList {
+        AppIdList {
             apps: Array.from(page.cfg.quit.onClose)
             emptyText: "No apps — or right-click an app in the dock → Options → Quit When Last Window Closes"
             onChanged: l => page.cfg.quit.onClose = l

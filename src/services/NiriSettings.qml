@@ -12,7 +12,9 @@ import Quickshell.Io
 //   outputs   live outputs (modes, scale, transform, position, VRR, identity)
 //   keys      every managed setting: { value, source: override|config|default,
 //             config, default, file, line, kind, min, max, options }
-//   binds     every keybind in the config tree, with source and shadowing
+//   binds     every keybind in the config tree, with source and shadowing,
+//             and `shortcuts`: the rows of Settings → Keyboard Shortcuts
+//             (the config's binds with the user's changes, bind_ops)
 //
 // Setters send one JSON batch to `loft-niri apply`, which records, renders,
 // validates with `niri validate`, swaps the fragment in and reloads niri.
@@ -92,6 +94,18 @@ Singleton {
         apply({ reset_outputs: [identity] });
     }
 
+    // Settings → Keyboard Shortcuts: [{ op: set|disable|enable|reset|add|reset_all,
+    // id, combo, record }] (crates/loft-niri/src/shortcuts.rs). Validated with
+    // `niri validate`; a rejected change leaves the previous shortcuts.
+    function bindOps(ops, done) {
+        apply({ bind_ops: ops }, done);
+    }
+
+    // Shortcut rows: { id, combo, modifiers, trigger, default_combo, label,
+    // action, args, action_text, category, origin, file, line, state,
+    // replaced_by, also_defined, record, loft }.
+    readonly property var shortcuts: bindsData.shortcuts ?? []
+
     function identify() {
         identifying = true;
         identifyTimer.restart();
@@ -134,6 +148,8 @@ Singleton {
             if (code !== 0 && root.error === "")
                 root.error = `loft-niri exited with ${code}`;
             root.refresh();
+            if (runner.job?.batch?.bind_ops)
+                root.refreshBinds();
             root.next();
         }
     }
