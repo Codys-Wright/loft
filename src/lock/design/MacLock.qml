@@ -25,6 +25,8 @@ FocusScope {
     // Show the card + input here (false on screens without keyboard focus).
     property bool showInput: true
     property string placeholder: "Enter Password"
+    // Wallpaper image URL; "" = the theme gradient (the login screen).
+    property string wallpaper: ""
     // Informational line under the pill (PAM prompts, greeter messages).
     property string info: ""
     // Optional extra under the clock, e.g. the lock's now-playing card.
@@ -58,6 +60,7 @@ FocusScope {
     Backdrop {
         id: backdrop
         anchors.fill: parent
+        image: root.wallpaper
     }
 
     // A light scrim keeps text legible over bright wallpapers.

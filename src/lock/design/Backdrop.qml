@@ -36,4 +36,17 @@ Rectangle {
             color: Theme.withAlpha(modelData.color, 0.35)
         }
     }
+
+    // An image wallpaper over the gradient when the host provides one (the
+    // shell passes the user's choice / the theme pack's image; SDDM doesn't).
+    property string image: ""
+
+    Image {
+        anchors.fill: parent
+        visible: status === Image.Ready
+        source: root.image
+        fillMode: Image.PreserveAspectCrop
+        asynchronous: true
+        sourceSize: Qt.size(root.width, root.height)
+    }
 }

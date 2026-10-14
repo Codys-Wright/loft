@@ -38,6 +38,15 @@ WlSessionLockSurface {
         readonly property var screen: surface.screen
         readonly property bool isGreeter: false
         readonly property var theme: Theme
+        // The desktop's wallpaper image (the user's choice, else the theme
+        // pack's), as a URL; "" = the theme gradient.
+        readonly property string wallpaper: {
+            const p = Settings.wallpaper.path || Theme.wallpaperImage;
+            if (!p)
+                return "";
+            const abs = p.startsWith("~/") ? Quickshell.env("HOME") + p.slice(1) : p;
+            return abs.startsWith("/") ? "file://" + abs : abs;
+        }
 
         signal failed(string message)
 
@@ -154,6 +163,7 @@ WlSessionLockSurface {
             info: surface.host.info
             capsLock: surface.host.capsLock
             showInput: surface.showInput
+            wallpaper: surface.lock.wallpaper
             accessory: nowPlaying
             onSubmitted: password => surface.host.tryUnlock(password)
             onCapsLockPressed: surface.host.capsLockPressed()
