@@ -14,6 +14,7 @@ import qs.wallpaper
 import qs.settings
 
 // Entry point: instantiate per-screen surfaces only. Logic lives in services/.
+// Optional modules are gated by the feature registry (services/Features.qml).
 ShellRoot {
     // Background services are lazy singletons; touch them so they run from
     // startup (screen time, Bluetooth banners).
@@ -29,32 +30,32 @@ ShellRoot {
     }
 
     Variants {
-        model: Quickshell.screens
+        model: Features.on("dock") ? Quickshell.screens : []
         Dock {}
     }
 
     Variants {
-        model: Quickshell.screens
+        model: Features.on("controlcenter") ? Quickshell.screens : []
         ControlCenter {}
     }
 
     Variants {
-        model: Quickshell.screens
+        model: Features.on("island") ? Quickshell.screens : []
         Island {}
     }
 
     Variants {
-        model: Quickshell.screens
+        model: Features.on("osd") ? Quickshell.screens : []
         Osd {}
     }
 
     Variants {
-        model: Quickshell.screens
+        model: Features.on("switcher") ? Quickshell.screens : []
         Switcher {}
     }
 
     Variants {
-        model: Quickshell.screens
+        model: Features.on("wallpaperPicker") ? Quickshell.screens : []
         WallpaperPicker {}
     }
 

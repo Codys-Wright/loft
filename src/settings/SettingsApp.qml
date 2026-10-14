@@ -20,12 +20,13 @@ Scope {
     readonly property var sections: [
         { id: "appearance", icon: "󰏘", label: "Appearance" },
         { id: "wallpaper", icon: "󰸉", label: "Wallpaper" },
-        { id: "dock", icon: "󱂬", label: "Dock" },
-        { id: "island", icon: "󰟜", label: "Dynamic Island" },
+        { id: "dock", icon: "󱂬", label: "Dock", feature: "dock" },
+        { id: "island", icon: "󰟜", label: "Dynamic Island", feature: "island" },
         { id: "displays", icon: "󰍹", label: "Displays" },
         { id: "input", icon: "󰌌", label: "Keyboard & Mouse" },
         { id: "layout", icon: "󰕰", label: "Layout & Motion" },
         { id: "keybinds", icon: "󰘳", label: "Keybinds" },
+        { id: "features", icon: "󰐱", label: "Features" },
         { id: "about", icon: "󰋼", label: "About" }
     ]
 
@@ -49,6 +50,10 @@ Scope {
         }
         function keybinds(): void {
             root.show("keybinds");
+        }
+
+        function features(): void {
+            root.show("features");
         }
     }
 
@@ -133,7 +138,8 @@ Scope {
                     }
 
                     Repeater {
-                        model: root.sections
+                        // Sections of switched-off modules hide (Features page).
+                        model: root.sections.filter(s => !s.feature || Features.on(s.feature))
                         delegate: Rectangle {
                             id: item
                             required property var modelData
@@ -525,6 +531,11 @@ Scope {
                         KeybindsPage {
                             Layout.fillWidth: true
                             visible: root.section === "keybinds"
+                        }
+
+                        FeaturesPage {
+                            Layout.fillWidth: true
+                            visible: root.section === "features"
                         }
 
                         // About

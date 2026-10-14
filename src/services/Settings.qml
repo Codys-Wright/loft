@@ -21,6 +21,8 @@ Singleton {
     readonly property alias island: settings.island
     readonly property alias wallpaper: settings.wallpaper
     readonly property alias appearance: settings.appearance
+    // Feature id → on/off (Features.qml); absent = the module's default.
+    property alias features: settings.features
 
     FileView {
         id: view
@@ -60,6 +62,8 @@ Singleton {
                 // Where the picker looks for images.
                 property string directory: "~/Pictures/Wallpapers"
             }
+
+            property var features: ({})
 
             property JsonObject appearance: JsonObject {
                 // Runtime overrides on top of the theme (-1 / "" = theme value).
