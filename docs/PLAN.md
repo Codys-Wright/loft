@@ -528,6 +528,51 @@ JSON in the repo, and it is the default after the next `just switch`.
 **Done when:** `studio theme install qylock:nier-automata` + `apply --greeter`
 changes both the lock screen and the login screen with no rebuild.
 
+**Status (2026-10-13): lock + greeter landed; wiring to the fleet pending.**
+- Lock: `src/lock/` (`WlSessionLock` + `PamContext`, IPC `lock lock`,
+  `Mod+Ctrl+Q`). The built-in design lives in `src/lock/design/` and is
+  host-agnostic (QtQuick + `Theme` + the glass components only). Frost is
+  rendered in-scene (`FrostedGlass`: MultiEffect blur of the lock's own
+  wallpaper under a `GlassSurface`), since a lock surface is opaque and there
+  is nothing behind it for niri to blur.
+- Greeter: `lock/sddm/` + `nix/lock.nix` → `packages.studio-sddm-theme`. The
+  build copies `src/lock/design` + `GlassSurface`/`Icon` into the theme with
+  `qs.*` imports rewritten to relative ones; `lock/sddm/services/Theme.qml`
+  stands in for the shell's Theme. The build fails if the shared design ever
+  imports Quickshell. `nix run .#greeter-preview` runs it in SDDM test mode.
+- Pack designs: `<pack>/lock/Main.qml`, one file for both hosts; contract in
+  [THEME-FORMAT-LOCK.md](THEME-FORMAT-LOCK.md).
+- Robustness: a design that doesn't compile falls back to the built-in one.
+  A marker in `$XDG_RUNTIME_DIR` makes a restarted shell re-lock if it died
+  holding the lock, since niri keeps the session locked, showing a blank
+  screen.
+
+**Deviations from §4.5:**
+- **qylock's shim is not vendored.** The default design is shared with SDDM
+  by the build-time import rewrite. The lock's SDDM-API facade is ~60 lines
+  routed to our single PAM conversation, while qylock's `SddmShim.qml` runs
+  its own PamContext, calls `loginctl unlock-session` and enumerates sessions
+  through bash, none of which suits a `WlSessionLock`. What qylock designs
+  still need (its `SddmComponents` / Qt 5 `QtGraphicalEffects` compatibility
+  modules, plus qt5compat/qtmultimedia on the shell's QML import path) belongs
+  with the `qylock:` importer (Phase 1b), so the "Done when" above is not met
+  yet.
+- **Pack contract:** SDDM's API subset (so qylock-style designs load) plus a
+  studio-native `lock` object (`tryUnlock`, `failed`, `busy`, `showInput`,
+  `theme`, …), so one design file works under both hosts.
+- **Not done yet:** swayidle wiring (documented in the README only), replacing
+  MacTahoe-Dark in the fleet's `sddm.nix`, `apply --greeter` + polkit helper,
+  and the greeter's `QML_XHR_ALLOW_FILE_READ=1` environment (fleet module).
+
+**Known issues:**
+- Quickshell 0.3.2 can't hot-reload while locked. `WlSessionLock`'s reload
+  path creates new lock surfaces before taking over the old windows, and niri
+  disconnects the client with a protocol error. The lock fails closed, and the
+  marker re-lock recovers once the shell restarts. This only affects the dev
+  loop (editing QML while locked), because installed configs never reload.
+- Multi-monitor focus handling (password field only on the focused output)
+  is untested: the nested dev session has a single output.
+
 ### Phase 6: Cut-over + keyboard parity
 - Replace Noctalia in `startup.kdl`/aspects. Delete `noctalia` bits and
   `wlr-which-key` if the shell takes it over.
@@ -554,8 +599,8 @@ complete menu-bar system does":
 ```
 flake.nix                 # flake-parts; outputs in §1a
 src/                      # studio-shell QML
-  shell.qml  services/  bar/  dock/  controlcenter/  island/  switcher/  osd/  settings/  theme-selector/
-lock/                     # loader lock + loader SDDM theme; vendor/qylock-shim/ (GPL-3.0 + LICENSE)
+  shell.qml  services/  bar/  dock/  controlcenter/  island/  switcher/  osd/  lock/  settings/  theme-selector/
+lock/                     # SDDM loader theme (sddm/); the Quickshell lock is src/lock/
 cli/                      # `studio` CLI: render, theme manager, importers (qylock, cozytile), diff/save, greeter helper
 templates/render/         # per-consumer templates: niri.kdl, kitty.conf, ghostty, gtk.css, walker css, noctalia
 themes/                   # built-in packs only (default + basics)
