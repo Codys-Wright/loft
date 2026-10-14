@@ -12,6 +12,7 @@ nix run github:Codys-Wright/loft              # try it: opens as a nested niri w
 
 ```sh
 nix run .#dev                       # nested niri window running ./src, ./niri, ./themes — hot reload on save
+                                    #   (`loft dev …` is the same as `loft-dev …`)
 nix run .#dev -- --output DP-1      # inside KDE: fullscreen on that monitor (default: the rightmost)
 nix run .#loft -- --dev theme list
 nix run .#loft -- --dev theme apply latte     # recolors the running session live (checkout templates/themes)
@@ -26,6 +27,19 @@ session (own bus, runtime dir and state; offscreen, software-rendered, exact siz
 `nix run .#shot -- --session NAME --grid` screenshots it with a coordinate grid, and
 `nix run .#input -- --session NAME click X Y` / `type` / `drag` / `bind mod+space` drives it.
 See [docs/TESTING.md](docs/TESTING.md) and the `skills/loft-drive` agent skill.
+
+### Upgrading from studio-linux
+
+Everything is named `loft` now: the CLI (`studio` → `loft`), packages (`studio-*` →
+`loft-*`, `.#studio` → `.#loft`), `STUDIO_*` → `LOFT_*`, `programs.studio-linux` →
+`programs.loft`, the user services `loft-shell` / `loft-launcher`, the SDDM theme `loft`,
+layer namespaces `loft:*` and the paths below. On first start (the home-manager activation,
+or `loft-session` / `loft-shell` without `LOFT_STATE_DIR`) `loft-migrate` moves
+`~/.local/state`, `~/.local/share` and `~/.cache` `studio-linux` → `loft` and leaves a
+symlink at each old path; the home-manager module also links `~/.config/studio-linux` →
+`loft`. For one release `programs.studio-linux.*` still evaluates (renamed options), the CLI
+reads `STUDIO_*` when the `LOFT_*` variable is unset, lock format `studio` is read as
+`loft`, and the library's `.studio-library.json` becomes `.loft-library.json` on the next sort.
 
 ## Designing live
 

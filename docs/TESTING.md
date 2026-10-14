@@ -5,7 +5,7 @@ whether you're an agent or a person:
 
 | Tool | What it does |
 |---|---|
-| `loft-dev --session NAME` | starts an isolated test session: the whole desktop (niri + the shell from a checkout) on an offscreen output |
+| `loft-dev --session NAME` (or `loft dev …`) | starts an isolated test session: the whole desktop (niri + the shell from a checkout) on an offscreen output |
 | `loft-shot --session NAME …` | screenshots it — whole session, an output, a region, a window — with zoom, a coordinate grid and crosshair marks |
 | `loft-input --session NAME …` | drives it with a virtual mouse and keyboard: move, click, drag, scroll, type, key combos, niri keybinds |
 

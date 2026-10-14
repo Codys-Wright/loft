@@ -6,7 +6,7 @@ description: See and drive the Loft desktop in an isolated test session — star
 # Driving a Loft test session
 
 Full reference: `docs/TESTING.md` in the Loft checkout. The tools are `nix run .#dev`,
-`.#shot` and `.#input`, or `loft-dev`, `loft-shot` and `loft-input` on PATH.
+`.#shot` and `.#input`, or `loft-dev` (also `loft dev`), `loft-shot` and `loft-input` on PATH.
 
 ## Rules
 
