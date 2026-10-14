@@ -662,3 +662,16 @@ Also decided: the AOC monitor (`HDMI-A-2`) is matched by identity in the fleet's
   key should the switcher get?
 - **Q-S5.** Cody's AOC (`HDMI-A-2`, x=-2560) becomes `left-2`. No built-in space binds
   it, so it's always `keep`. Is that right?
+
+### Follow-up decisions (2026-10-14, lead, under Cody's "go with defaults")
+
+- **Q-S1** (switch a display's workspace without moving focus or the pointer): propose it
+  upstream, and carry it as an opt-in Loft niri patch once written; until then the pointer
+  jump is accepted.
+- **Q-S2**: `code` stays a utility workspace (editor rules keep working); projects are the
+  programming spaces.
+- **Q-S3**: Main keeps the left display (chat stays visible).
+- **Q-S4**: the space switcher gets **Mod+Ctrl+S** (Mod+Ctrl+Space stays the Radial Menu);
+  next / previous space: **Mod+Ctrl+→ / ←**.
+- **Q-S5**: yes, the AOC is `keep` in the built-ins.
+
