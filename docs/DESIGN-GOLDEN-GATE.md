@@ -73,22 +73,41 @@ values below are ours — tokens, so themes can tune them.
   Scratchpad keeps its tab bar and gets the lights, radius and dimming.
 - **GTK / libadwaita** — `templates/render/gtk.css`: accent and palette, the
   window radius, traffic-light window buttons (glyphs on hover, grey in
-  backdrop).
+  backdrop or when the compositor can't act on them).
   `programs.loft.gtk` (default on) imports it from `~/.config/gtk-{3,4}.0/gtk.css`
   and puts the window buttons on the left (settings.ini + GNOME's `button-layout`
   key, which libadwaita reads through the portal).
-- **Glass sidebars (Nautilus)** — the same `gtk.css` makes Files' window
-  transparent, its `.sidebar-pane` a thin tint of the theme's glass
-  (`gtk_sidebar_glass`; opaque when the theme turns blur off) and its file view
-  opaque; a niri window rule (`templates/render/niri.kdl`) blurs behind it.
-  Edge-to-edge, a hairline instead of a shadow, accent-colored sidebar icons,
-  rounded selection pills, traffic lights in the sidebar like Finder's.
+- **Golden Gate sidebars (every libadwaita app)** — any `.sidebar-pane` is
+  edge to edge (no inset card, margin or shadow), the theme's sidebar color, a
+  hairline toward the content, rows in the text color with accent icons and a
+  soft selection pill (Settings-like apps, Characters, …). GTK's own file
+  chooser gets the same rows.
+- **Glass sidebars (Nautilus and its file chooser)** — the same `gtk.css` makes
+  Files' window (`.nautilus-window`) and the portal file chooser GTK apps get
+  (`.nautilus-file-chooser`: xdg-desktop-portal-gnome hands it to Nautilus)
+  transparent, the `.sidebar-pane` a tint of the theme's glass
+  (`gtk_sidebar_glass`, dense enough to read over any wallpaper; opaque when the
+  theme turns blur off) and the file view opaque; a niri window rule
+  (`templates/render/niri.kdl`, `org.gnome.Nautilus`) blurs behind it. Narrow
+  windows (collapsed split view) go opaque. Selected files are an accent tint,
+  grey in the background, like Finder's; traffic lights sit in the sidebar.
+  Glass is per app on purpose: GTK CSS can't match an app id and libadwaita
+  gives windows no per-app class, so a generic transparent window would show
+  the desktop unblurred in every app niri doesn't blur. A new glass app needs
+  its window class in gtk.css and its app id in niri.kdl, together.
 - **GTK 4 base theme (optional)** — `programs.loft.gtkBase.{dark,light}`: a full
   libadwaita stylesheet (MacTahoe's `-l` CSS: Tahoe toolbars, pill buttons, Finder
   path bar) imported under the theme's gtk.css. The `gtk` hook links
-  `<state>/gtk-base.css` to the one matching the theme's polarity; the theme's
-  palette and the Golden Gate rules above still win (the sidebar is forced edge
-  to edge over MacTahoe's inset card).
+  `<state>/gtk-base.css` to the one matching the theme's polarity. MacTahoe
+  hardcodes its own greys and blue (#2E7CF7) instead of libadwaita's named
+  colors, so gtk.css repeats those selectors with the palette: opaque windows
+  (MacTahoe's blur build makes every `.background` 75% translucent, which
+  niri doesn't blur), headerbars, views, opaque popovers / menus / dialogs
+  (`gtk_raised`: surface in dark themes, near-white in light ones), and the
+  accent on selections, checked / suggested buttons, switches, checks, sliders,
+  progress, links, focus rings and rubberbands. Disabled window buttons (niri has
+  no minimize) are grey. The same rules cover GTK 3 apps on MacTahoe's GTK 3
+  theme.
 
 ## Not copied
 - The notch, HDR UI highlights, and iOS-style app icon layers.

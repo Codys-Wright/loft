@@ -55,7 +55,12 @@ window-rule {
 
 
 // Glass sidebars (docs/DESIGN-GOLDEN-GATE.md): Loft's gtk.css makes these apps'
-// sidebars translucent; niri blurs what is behind them.
+// windows transparent and their sidebars a tint of the glass; niri blurs what is
+// behind them. One app id per glass window class in gtk.css (GTK CSS can't see
+// app ids): Nautilus, which also draws the portal file chooser GTK apps get
+// (.nautilus-file-chooser, same app id). Add an app here only together with
+// its CSS: a blur rule alone does nothing, a transparent window alone shows
+// the desktop unblurred.
 window-rule {
     match app-id="^org\\.gnome\\.Nautilus$"
     background-effect {

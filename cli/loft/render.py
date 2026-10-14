@@ -84,14 +84,27 @@ def variables(norm: dict, fonts_set: bool) -> dict[str, str]:
             "launcher_glass": c.rgba(g["tint"], min(g["opacity"] * 1.6, 0.92)),
             "launcher_selection": c.rgba(p["text"], 0.12),
             # Glass sidebars in GTK apps (Nautilus): the theme's glass tint over
-            # the blur niri draws behind the window; opaque without blur.
+            # the blur niri draws behind the window; opaque without blur. Dense
+            # enough that sidebar text stays readable over any wallpaper (a
+            # light theme over a dark wallpaper needs the most).
             "gtk_sidebar_glass": (
-                c.rgba(c.mix(g["tint"], p["surface"], 0.5), min(max(g["opacity"] * 0.8, 0.25), 0.65))
+                c.rgba(
+                    c.mix(g["tint"], p["surface"], 0.5),
+                    min(max(g["opacity"] * 1.4, 0.62 if dark else 0.72), 0.88),
+                )
                 if g["blur"]
                 else p["surface"]
             ),
             "gtk_sidebar_hover": c.rgba(p["text"], 0.07),
             "gtk_sidebar_selected": c.rgba(p["text"], 0.13 if dark else 0.1),
+            "gtk_hairline": c.rgba(p["text"], 0.1 if dark else 0.14),
+            # Selected files / items: the accent as a tint, so the item's own
+            # text color stays readable on every palette.
+            "gtk_selection": c.rgba(p["accent"], 0.32 if dark else 0.24),
+            "gtk_selection_hover": c.rgba(p["accent"], 0.4 if dark else 0.3),
+            # Raised surfaces (popovers, menus, dialogs, cards): a step toward
+            # the text side in dark themes, toward white in light ones.
+            "gtk_raised": p["surface"] if dark else c.mix(p["bg"], "#ffffff", 0.6),
             "niri_blur": "on" if g["blur"] else "off",
             "kitty_blur": "1" if g["blur"] else "0",
             "wallpaper_image": norm["wallpaper"]["image"],
