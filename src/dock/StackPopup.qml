@@ -383,7 +383,9 @@ PanelWindow {
                     }
                     horizontalAlignment: Text.AlignHCenter
                     text: gcell.modelData.name
-                    wrapMode: Text.WrapAnywhere
+                    // Break between words when there are any ("Reference
+                    // Images", not "Reference Image|s").
+                    wrapMode: Text.Wrap
                     maximumLineCount: 2
                     elide: Text.ElideRight
                     color: Theme.text
