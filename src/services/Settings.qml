@@ -36,6 +36,9 @@ Singleton {
     // (the wallpaper keys: cli/loft/wallsets.py).
     // A key a theme doesn't have falls back to the global value above it.
     property alias perTheme: settings.perTheme
+    // Where each image is cropped, per display role (Vibes.focusFor):
+    // { "<image path>": { "<role>" | "*": [fx, fy] } } (cli/loft/wallsets.py).
+    property alias wallpaperFraming: settings.wallpaperFraming
     // Menu bar module (AppMenu.pref): key → value; absent = the default.
     property alias menubar: settings.menubar
     // Control Center layout and the menu bar's status items (Controls.qml).
@@ -171,6 +174,8 @@ Singleton {
             }
 
             property var perTheme: ({})
+
+            property var wallpaperFraming: ({})
 
             property var menubar: ({})
 

@@ -796,6 +796,9 @@ def wallpaper_plan(ctx: Ctx, pack: Pack, layout: dict, choices: dict) -> dict:
                 fr = frames.get(Path(p))
                 if fr:
                     framing[p] = {"focus": fr["focus"], "size": fr["size"]}
+                    video = wallsets.paired_video(Path(p))
+                    if video:
+                        framing[p]["video"] = str(video)
     finally:
         cache.save()
         frames.save()
@@ -1003,6 +1006,35 @@ def cmd_wall_shuffle(ctx: Ctx, args) -> None:
     pack = _wall_theme(ctx, args)
     c = _update_choices(ctx, pack.name, lambda c: c.__setitem__("autoSeed", int(c.get("autoSeed", 0) or 0) + 1))
     print(f"loft: reshuffled {pack.name}'s auto wallpapers (seed {c['autoSeed']})")
+
+
+def cmd_wall_focus(ctx: Ctx, args) -> None:
+    img = Path(args.image).expanduser().resolve()
+    if not img.is_file():
+        raise Fail(f"no such image: {img}")
+    path = str(img)
+    shell = wallsets.load_shell(ctx.state_dir)
+    if args.clear or args.x is not None:
+        if args.x is not None and args.y is None:
+            raise Fail("focus: give both X and Y (0..1 from the top left)")
+        focus = None if args.clear else [args.x, args.y]
+        shell = wallsets.set_focus_override(shell, path, args.role, focus)
+        wallsets.save_shell(ctx.state_dir, shell)
+    if args.fit:
+        shell = wallsets.set_fit(shell, path, args.fit)
+        wallsets.save_shell(ctx.state_dir, shell)
+    over = wallsets.focus_overrides(shell, path)
+    fr = wallsets.framing(img)
+    auto = fr["focus"] if fr else [0.5, 0.5]
+    video = wallsets.paired_video(img)
+    if args.json:
+        print(json.dumps({"path": path, "auto": auto, "overrides": over, "video": str(video) if video else None}))
+        return
+    print(f"{_short(path)}  auto focus {auto}" + (f"  [video: {video.name}]" if video else ""))
+    for role, f in over.items():
+        print(f"  {role:12} {f}")
+    if not over:
+        print("  (no overrides: every display crops around the auto focus)")
 
 
 def cmd_wall_auto(ctx: Ctx, args) -> None:
@@ -1238,6 +1270,23 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("state", choices=["on", "off", "default"])
     common(s, layout=False)
     s.set_defaults(fn=cmd_wall_auto)
+    s = sub.add_parser(
+        "focus",
+        help="where an image is cropped on each kind of display",
+        description="Show or set the point (0..1 from the top left) an image's crop is centered on, per display role "
+        "(ultrawide, portrait, landscape, main, left, display-N, … or * for all). Without one a display crops around "
+        "the image's auto focus. Stored globally in shell.json wallpaperFraming; the running shell picks it up.",
+    )
+    s.add_argument("image")
+    s.add_argument("x", type=float, nargs="?")
+    s.add_argument("y", type=float, nargs="?")
+    s.add_argument("--role", default="*", help="display role (default: * = every display)")
+    s.add_argument("--clear", action="store_true", help="drop the role's override")
+    s.add_argument(
+        "--fit", choices=wallsets.FITS, help="cover: scaled to cover each display (default); native: pixel for pixel, cropped, never shrunk"
+    )
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_wall_focus)
 
     dock.add_parser(top, lambda ctx: ctx.state_dir)
     island.add_parser(top, lambda ctx: str(ctx.shell_path))

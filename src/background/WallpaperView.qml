@@ -1,21 +1,34 @@
 import QtQuick
+import QtMultimedia
 import qs.services
 
 // What a wallpaper surface draws: `path`'s image cropped around its interest
-// (Vibes.focusFor, from the plan's framing) rather than its center, else the
-// theme's gradient. Image changes crossfade (~400 ms); the outgoing image
-// stays until the incoming one has decoded, so there is no flash.
+// (Vibes.focusFor: the user's per-role override for `screenName`, else the
+// plan's framing) rather than its center, else the theme's gradient. Image
+// changes crossfade (~400 ms); the outgoing image stays until the incoming
+// one has decoded, so there is no flash.
+//
+// A live wallpaper (Vibes.videoFor: a same-stem video next to the still)
+// plays muted and looping over its still, with the still's crop: the video
+// must have the still's aspect. It plays only while `playVideo` (the surface
+// is what the screen shows); otherwise it holds its frame, and the still
+// shows until the first frame is up.
 //
 // `decodeScale` < 1 decodes the image smaller (sourceSize × scale) and draws
 // it scaled back up: the overview shows workspaces at its zoom, so a
 // workspace seen only there needs no full-size copy (WorkspaceWallpapers).
+// Such a surface never loads its video.
 Item {
     id: root
 
     // Absolute path, "~/…" or "" (the gradient).
     property string path: ""
+    // The screen this is drawn on: picks its role's focus override.
+    property string screenName: ""
     property real decodeScale: 1
+    property bool playVideo: true
     readonly property string source: Vibes.url(path)
+    readonly property bool videoAllowed: decodeScale >= 1
     // The current image has decoded (or there is none: the gradient).
     readonly property bool ready: source === "" || (flip ? a : b).status === Image.Ready
     // Bytes of decoded image data held (both layers), for the stats.
@@ -54,6 +67,19 @@ Item {
         }
     }
 
+    function videoUrl(p) {
+        return videoAllowed ? Vibes.url(Vibes.videoFor(p)) : "";
+    }
+
+    // How a layer is fitted: its crop focus, and for fit "native" the image's
+    // size (drawn 1:1, scaled up only to cover the screen). Unknown size:
+    // cover, until the plan brings it.
+    function fitLayer(layer) {
+        layer.crop = Vibes.focusFor(path, screenName);
+        const size = Vibes.sizeFor(path);
+        layer.natural = Vibes.fitFor(path) === "native" && size ? size : null;
+    }
+
     // Two images: `flip` says which one is current (true = a). The outgoing
     // one stays until the incoming one has loaded, then they crossfade.
     property bool flip: true
@@ -62,38 +88,62 @@ Item {
             return;
         flip = !flip;
         const layer = flip ? a : b;
-        layer.crop = Vibes.focusFor(path);
+        layer.crop = Vibes.focusFor(path, screenName);
+        layer.video = videoUrl(path);
         layer.source = source;
     }
     Component.onCompleted: {
-        a.crop = Vibes.focusFor(path);
+        a.crop = Vibes.focusFor(path, screenName);
+        a.video = videoUrl(path);
         a.source = source;
     }
 
-    // Once the incoming image shows, the outgoing one lets go of its pixels.
+    // Once the incoming image shows, the outgoing one lets go of its pixels
+    // (and its video).
     Timer {
         id: release
         interval: 450
         onTriggered: {
             const old = root.flip ? b : a;
-            if (old.status === Image.Ready && old.opacity === 0)
+            if (old.status === Image.Ready && old.opacity === 0) {
                 old.source = "";
+                old.video = "";
+            }
         }
     }
     onReadyChanged: if (ready)
         release.restart()
 
-    // A plan arriving later (framing) re-centers what is showing.
+    // A plan arriving later (framing, a paired video), a focus override or a
+    // new decode scale re-fits what is showing.
+    function refit() {
+        const cur = flip ? a : b;
+        cur.crop = Vibes.focusFor(path, screenName);
+        const v = videoUrl(path);
+        if (cur.video !== v)
+            cur.video = v;
+    }
+    onVideoAllowedChanged: refit()
     Connections {
         target: Vibes
         function onPlanChanged() {
-            (root.flip ? a : b).crop = Vibes.focusFor(root.path);
+            root.refit();
+        }
+    }
+    Connections {
+        target: Settings
+        function onWallpaperFramingChanged() {
+            root.refit();
         }
     }
 
     component Layer: Item {
         id: layer
         property alias source: img.source
+        // The live wallpaper's video URL; "" = a still.
+        property string video: ""
+        // The layer showing (not the outgoing one): only it plays.
+        property bool current: false
         readonly property alias status: img.status
         readonly property real bytes: img.status === Image.Ready ? img.implicitWidth * img.implicitHeight * 4 : 0
         // The image point (0..1) to keep near the screen's center.
@@ -126,15 +176,45 @@ Item {
             x: Math.min(0, Math.max(root.width - width, root.width / 2 - layer.crop[0] * width))
             y: Math.min(0, Math.max(root.height - height, root.height / 2 - layer.crop[1] * height))
         }
+
+        // The video in the still's rectangle (same aspect, so the same crop).
+        // No audio output: muted.
+        MediaPlayer {
+            id: player
+            source: layer.video
+            loops: MediaPlayer.Infinite
+            videoOutput: out
+            readonly property bool wanted: layer.video !== "" && layer.current && root.playVideo
+            onWantedChanged: wanted ? play() : pause()
+            onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && wanted)
+                play()
+        }
+        VideoOutput {
+            id: out
+            x: img.x
+            y: img.y
+            width: img.width
+            height: img.height
+            fillMode: VideoOutput.Stretch
+            // Up once playback has started; the still is beneath until then.
+            opacity: layer.video !== "" && player.hasVideo && player.playbackState !== MediaPlayer.StoppedState ? 1 : 0
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 300
+                }
+            }
+        }
     }
 
     Layer {
         id: a
+        current: root.flip
         opacity: root.source !== "" && a.status === Image.Ready && (root.flip || b.status !== Image.Ready) ? 1 : 0
     }
 
     Layer {
         id: b
+        current: !root.flip
         opacity: root.source !== "" && b.status === Image.Ready && (!root.flip || a.status !== Image.Ready) ? 1 : 0
     }
 }

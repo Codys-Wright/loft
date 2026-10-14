@@ -446,8 +446,26 @@
                   ;;
               esac
               [ -n "''${DRY_RUN:-}" ] || echo "$new" > "$state/$unit.unit-hash"
+              started="$started$unit "
             fi
           done
+          # Installed apps changed (a .desktop added or removed in the profile
+          # or the system): the launcher's index watches the old profile path,
+          # so re-index by restarting it.
+          apps="$( { ${pkgs.coreutils}/bin/ls "$newGenPath/home-path/share/applications" 2>/dev/null; \
+            ${pkgs.coreutils}/bin/ls /run/current-system/sw/share/applications 2>/dev/null; } \
+            | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
+          if [ "$apps" != "$(cat "$state/apps.hash" 2>/dev/null || true)" ]; then
+            case "$started" in
+              *" loft-launcher "*) ;;
+              *)
+                if ${pkgs.systemd}/bin/systemctl --user is-active --quiet loft-launcher.service; then
+                  run ${pkgs.systemd}/bin/systemctl --user restart loft-launcher.service || true
+                fi
+                ;;
+            esac
+            [ -n "''${DRY_RUN:-}" ] || echo "$apps" > "$state/apps.hash"
+          fi
         '';
       };
     };

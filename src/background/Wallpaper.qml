@@ -42,6 +42,8 @@ PanelWindow {
     WallpaperView {
         anchors.fill: parent
         path: root.stepAside ? "" : Vibes.wallpaperFor(root.modelData.name)
+        screenName: root.modelData.name
+        playVideo: !root.stepAside
         onDecodedBytesChanged: WorkspaceWallpapers.report("base|" + root.modelData.name, decodedBytes)
     }
 

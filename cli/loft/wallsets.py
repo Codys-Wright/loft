@@ -60,7 +60,7 @@ import struct
 from pathlib import Path
 
 from . import color, library, palette, vibes
-from .pack import SET_ROLE
+from .pack import SET_ROLE, VIDEO_EXT
 
 ULTRAWIDE = 2.2
 DIRECTIONS = ("left", "right", "top", "bottom")
@@ -378,6 +378,19 @@ def framing(path: Path) -> dict | None:
     }
 
 
+def paired_video(path: Path) -> Path | None:
+    """A video of the same stem next to a still (a live wallpaper), else None.
+
+    The video plays over its still with the still's crop, so it must have the
+    still's aspect; the still is what shows until the video's first frame."""
+    path = Path(path)
+    for ext in sorted(VIDEO_EXT):
+        v = path.with_suffix(ext)
+        if v.is_file():
+            return v
+    return None
+
+
 def crop_window(focus: float, frac: float) -> tuple[float, float]:
     """The visible [start, end) (0..1) of a crop keeping `frac` of the image, centered on focus."""
     start = min(max(focus - frac / 2, 0.0), 1.0 - frac)
@@ -675,3 +688,60 @@ def set_theme_choices(shell: dict, theme: str, choices: dict) -> dict:
     pt = dict(shell.get("perTheme") or {})
     pt[theme] = choices
     return dict(shell, perTheme=pt)
+
+
+# ── focus overrides: where to crop an image, per display role ───────────────
+# shell.json wallpaperFraming: {"<image path>": {"<role>" | "*": [fx, fy],
+# "fit"?: "native"}}. Global, not per theme: it is a fact about the picture.
+# A display uses its most specific role that has one (roles()), then "*",
+# then the auto focus. fit "native" draws the image pixel for pixel (scaled
+# up only to cover a larger screen) instead of scaled to cover: a master
+# made larger than every display (a 5120×2560 live wallpaper) is then
+# cropped, never shrunk, so its subject is the same size on every display.
+
+FITS = ("cover", "native")
+
+
+def set_fit(shell: dict, path: str, fit: str) -> dict:
+    """shell with `path`'s fit set ("cover", the default, drops the key)."""
+    if fit not in FITS:
+        raise ValueError(f"fit: one of {', '.join(FITS)}")
+    wf = dict(shell.get("wallpaperFraming") or {})
+    o = {k: v for k, v in (wf.get(path) or {}).items() if k != "fit"}
+    if fit != "cover":
+        o["fit"] = fit
+    if o:
+        wf[path] = o
+    else:
+        wf.pop(path, None)
+    return dict(shell, wallpaperFraming=wf)
+
+
+def focus_overrides(shell: dict, path: str) -> dict:
+    wf = shell.get("wallpaperFraming") if isinstance(shell.get("wallpaperFraming"), dict) else {}
+    o = wf.get(path)
+    return o if isinstance(o, dict) else {}
+
+
+def set_focus_override(shell: dict, path: str, role: str, focus: list[float] | None) -> dict:
+    """shell with `role`'s focus for `path` set (None clears it; an image with
+    none left drops out)."""
+    wf = dict(shell.get("wallpaperFraming") or {})
+    o = dict(wf.get(path) or {})
+    if focus is None:
+        o.pop(role, None)
+    else:
+        o[role] = [round(min(max(float(v), 0.0), 1.0), 3) for v in focus]
+    if o:
+        wf[path] = o
+    else:
+        wf.pop(path, None)
+    return dict(shell, wallpaperFraming=wf)
+
+
+def focus_for_roles(overrides: dict, roles_: list[str], auto: list[float]) -> list[float]:
+    """The focus a display with these roles (most specific first) crops around."""
+    for r in [*roles_, "*"]:
+        if isinstance(overrides.get(r), list) and len(overrides[r]) == 2:
+            return overrides[r]
+    return auto

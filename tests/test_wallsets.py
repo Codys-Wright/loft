@@ -129,6 +129,29 @@ class Framing(unittest.TestCase):
         self.assertEqual(wallsets.crop_window(0.05, 0.3), (0.0, 0.3))
         self.assertEqual(wallsets.crop_window(0.95, 0.3), (0.7, 1.0))
 
+    def test_paired_video(self):
+        still = write(self.tmp / "night.png", blob(0.5, 0.5))
+        self.assertIsNone(wallsets.paired_video(still))
+        write(self.tmp / "other.mp4", b"\x00")
+        self.assertIsNone(wallsets.paired_video(still))  # a different stem
+        video = write(self.tmp / "night.mp4", b"\x00")
+        self.assertEqual(wallsets.paired_video(still), video)
+
+    def test_focus_overrides(self):
+        shell = {"perTheme": {"night": {"rotate": 5}}}
+        shell = wallsets.set_focus_override(shell, "/w/a.jpg", "portrait", [0.4, 1.7])
+        shell = wallsets.set_focus_override(shell, "/w/a.jpg", "*", [0.5, 0.52])
+        self.assertEqual(shell["perTheme"], {"night": {"rotate": 5}})  # untouched
+        over = wallsets.focus_overrides(shell, "/w/a.jpg")
+        self.assertEqual(over, {"portrait": [0.4, 1.0], "*": [0.5, 0.52]})  # clamped to 0..1
+        auto = [0.3, 0.3]
+        self.assertEqual(wallsets.focus_for_roles(over, ["left", "portrait", "display-1"], auto), [0.4, 1.0])
+        self.assertEqual(wallsets.focus_for_roles(over, ["main", "ultrawide"], auto), [0.5, 0.52])  # "*"
+        self.assertEqual(wallsets.focus_for_roles({}, ["main"], auto), auto)
+        shell = wallsets.set_focus_override(shell, "/w/a.jpg", "portrait", None)
+        shell = wallsets.set_focus_override(shell, "/w/a.jpg", "*", None)
+        self.assertEqual(shell["wallpaperFraming"], {})  # an image with none left drops out
+
 
 class Plan(unittest.TestCase):
     """`loft wallpaper …` over a scratch theme path and state."""

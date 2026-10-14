@@ -369,9 +369,38 @@ Singleton {
         return true;
     }
 
-    // Where to center an image's crop (0..1), from its framing; the middle when unknown.
-    function focusFor(path) {
+    // Where to center an image's crop (0..1) on a screen: the user's override
+    // for the screen's most specific role, or for "*" (Settings
+    // .wallpaperFraming, `loft wallpaper focus`), else its framing's focus,
+    // else the middle.
+    function focusFor(path, screenName) {
+        const over = Settings.wallpaperFraming?.[path];
+        if (over) {
+            for (const r of [...(roles[screenName] ?? []), "*"]) {
+                if (Array.isArray(over[r]) && over[r].length === 2)
+                    return over[r];
+            }
+        }
         return plan?.framing?.[path]?.focus ?? [0.5, 0.5];
+    }
+
+    // "native" (pixel for pixel, cropped, never shrunk) or "cover" (scaled to
+    // cover the screen, the default): Settings.wallpaperFraming[path].fit.
+    function fitFor(path) {
+        return Settings.wallpaperFraming?.[path]?.fit === "native" ? "native" : "cover";
+    }
+
+    // An image's [width, height] from its framing, else null.
+    function sizeFor(path) {
+        return plan?.framing?.[path]?.size ?? null;
+    }
+
+    // A live wallpaper's video (a same-stem video next to the still, from the
+    // plan's framing, or the collection entry's), else "".
+    function videoFor(path) {
+        if (!path)
+            return "";
+        return plan?.framing?.[path]?.video ?? wallpapers.find(w => w.path === path)?.video ?? "";
     }
 
     // The plan follows the theme, the layout and the choices it builds on.
