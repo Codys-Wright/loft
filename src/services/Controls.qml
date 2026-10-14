@@ -285,14 +285,14 @@ Singleton {
         { match: /pasystray|pavucontrol|volumeicon|pnmixer|pa-applet|kmix/i, control: "sound" }
     ]
 
-    // The control a tray item duplicates ("" = none), while that control is
-    // actually in the menu bar.
+    // The control a tray item duplicates ("" = none), while Loft offers that
+    // control (in the menu bar or the Control Center).
     function trayDuplicateOf(item) {
         if (!item)
             return "";
         const key = [item.id, item.title, item.tooltipTitle, String(item.icon ?? "")].join(" ");
         const hit = trayDuplicates.find(d => d.match.test(key));
-        return hit && available(hit.control) && onBar(hit.control) ? hit.control : "";
+        return hit && available(hit.control) ? hit.control : "";
     }
 
     function isTrayTucked(item) {
