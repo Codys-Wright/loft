@@ -1,0 +1,68 @@
+{
+  "$schema": "https://loft.dev/schema/space-1.json",
+  "kind": "space",
+  "id": "music",
+  "name": "Music",
+  "icon": "󰝚",
+  "order": 2,
+  "displays": {
+    "main": {
+      "workspace": "music",
+      "apps": [
+        {
+          "id": "reaper",
+          "exec": [
+            "reaper"
+          ],
+          "match": {
+            "appId": "^REAPER$",
+            "title": "REAPER v"
+          },
+          "open": "maximized"
+        }
+      ]
+    },
+    "right": {
+      "apps": [
+        {
+          "id": "patchbay",
+          "exec": [
+            "qpwgraph"
+          ],
+          "match": {
+            "appId": "^org\\.rncbc\\.qpwgraph$"
+          }
+        }
+      ]
+    },
+    "left": "keep",
+    "*": "keep"
+  },
+  "dock": {
+    "pinned": [
+      "REAPER",
+      "org.rncbc.qpwgraph",
+      "kitty"
+    ],
+    "mode": "replace"
+  },
+  "focus": {
+    "dnd": true,
+    "allow": [
+      "Slack"
+    ]
+  },
+  "menubar": {
+    "extras": [
+      "clock",
+      "sound",
+      "cpu",
+      "cpuTemp"
+    ]
+  },
+  "theme": null,
+  "facets": {
+    "motion": "motion:minimal"
+  },
+  "startup": "first-activate"
+}

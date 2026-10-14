@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loft.dev/schema/space-1.json",
+  "title": "Loft space",
+  "description": "A space (a functional desktop across every display), a space template, or an instance of a template. See docs/SPACES.md §2. Strings in templates may contain ${…} interpolations (§2.2).",
+  "oneOf": [
+    { "$ref": "#/$defs/space" },
+    { "$ref": "#/$defs/template" },
+    { "$ref": "#/$defs/instance" }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^([a-z0-9][a-z0-9-]*|.*\\$\\{.*)$",
+      "description": "Lowercase letters, digits and dashes (or a ${…} interpolation in a template)."
+    },
+    "role": {
+      "description": "A display role (§1): main, left/right/top/bottom (left-2 … further out), portrait/landscape/ultrawide, display-N, or * (any).",
+      "type": "string",
+      "pattern": "^(main|(left|right|top|bottom)(-([2-9]|[1-9][0-9]+))?|portrait|landscape|ultrawide|display-[1-9][0-9]*|\\*)$"
+    },
+    "match": {
+      "description": "How a window is recognized: app-id and title regexes (niri syntax), optional working directory.",
+      "type": ["object", "string", "null"],
+      "properties": {
+        "appId": { "type": "string" },
+        "title": { "type": "string" },
+        "cwd": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "app": {
+      "description": "An app the space launches or gathers on a display, in column order (§4).",
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "when": { "description": "Dropped when this interpolates to an empty or false value.", "type": ["string", "boolean"] },
+        "exec": { "type": "array", "items": { "type": "string" } },
+        "match": { "$ref": "#/$defs/match" },
+        "launch": { "description": "false: gather an existing window, never spawn one.", "type": ["boolean", "string"] },
+        "open": { "enum": ["maximized", "fullscreen", "floating", "normal"] },
+        "width": { "description": "Column width as a proportion of the display.", "type": ["number", "string"], "exclusiveMinimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "layout": {
+      "description": "niri workspace `layout {}` overrides, as KDL in JSON: {\"struts\": {\"top\": 0}, \"focus-ring\": {\"off\": true}}. true = a bare flag node, false/null = omitted, numbers/strings = the node's argument, arrays = several arguments.",
+      "type": "object"
+    },
+    "binding": {
+      "description": "What the space puts on a display: \"keep\" (leave it alone), or its workspace and apps.",
+      "oneOf": [
+        { "const": "keep" },
+        {
+          "type": "object",
+          "properties": {
+            "workspace": { "description": "niri workspace name. Default: the space's workspace base for main, <base>/<role> otherwise.", "type": "string", "minLength": 1 },
+            "apps": { "type": "array", "items": { "$ref": "#/$defs/app" } },
+            "layout": { "$ref": "#/$defs/layout" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "displays": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/role" },
+      "additionalProperties": { "$ref": "#/$defs/binding" }
+    },
+    "fields": {
+      "description": "The per-space settings shared by spaces, templates and instance overrides (§5).",
+      "properties": {
+        "$schema": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "order": { "type": "number" },
+        "displays": { "$ref": "#/$defs/displays" },
+        "dock": {
+          "type": ["object", "null"],
+          "properties": {
+            "pinned": { "type": "array", "items": { "type": "string" } },
+            "mode": { "enum": ["replace", "prepend", "append"] },
+            "visible": { "enum": ["show", "autohide", "hidden"] },
+            "displays": { "type": "object", "propertyNames": { "$ref": "#/$defs/role" } }
+          }
+        },
+        "bar": { "type": ["object", "null"], "properties": { "hidden": { "type": "boolean" } } },
+        "menubar": { "type": ["object", "null"], "properties": { "extras": { "type": "array", "items": { "type": "string" } } } },
+        "focus": {
+          "description": "Do Not Disturb while the space is active (§5).",
+          "type": ["object", "null"],
+          "properties": { "dnd": { "type": "boolean" }, "allow": { "type": "array", "items": { "type": "string" } } }
+        },
+        "target": {
+          "description": "Where keyboard focus lands on activation (§3.1): main, or stay on the display you were on when it is bound.",
+          "enum": ["main", "stay"]
+        },
+        "fold": {
+          "description": "A bound display that isn't connected (§3.3): stack its workspace below main's, gather its apps into main as columns, or skip it.",
+          "enum": ["stack", "columns", "skip"]
+        },
+        "theme": {
+          "type": ["object", "null"],
+          "properties": { "theme": { "type": "string" }, "scope": { "enum": ["desktop", "all"] } }
+        },
+        "facets": { "type": ["object", "null"] },
+        "wallpapers": { "type": ["object", "null"], "additionalProperties": { "type": "string" } },
+        "startup": { "enum": ["first-activate", "login", "never"] }
+      }
+    },
+    "space": {
+      "type": "object",
+      "required": ["kind", "id", "name", "displays"],
+      "properties": {
+        "kind": { "const": "space" },
+        "id": { "$ref": "#/$defs/id" },
+        "archived": { "type": "boolean" }
+      },
+      "allOf": [{ "$ref": "#/$defs/fields" }],
+      "unevaluatedProperties": false
+    },
+    "param": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["string", "dir", "url", "enum", "match", "bool", "number"] },
+        "required": { "type": "boolean" },
+        "default": {},
+        "label": { "type": "string" },
+        "hint": { "type": "string" },
+        "values": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "template": {
+      "type": "object",
+      "required": ["kind", "id", "name", "params", "instance", "displays"],
+      "properties": {
+        "kind": { "const": "space-template" },
+        "id": { "$ref": "#/$defs/id" },
+        "params": { "type": "object", "additionalProperties": { "$ref": "#/$defs/param" } },
+        "instance": {
+          "type": "object",
+          "required": ["id"],
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "workspace": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "allOf": [{ "$ref": "#/$defs/fields" }],
+      "unevaluatedProperties": false
+    },
+    "instance": {
+      "type": "object",
+      "required": ["kind", "template", "params"],
+      "properties": {
+        "$schema": { "type": "string" },
+        "kind": { "const": "space-instance" },
+        "template": { "type": "string" },
+        "id": { "$ref": "#/$defs/id" },
+        "params": { "type": "object" },
+        "order": { "type": "number" },
+        "created": { "type": "string" },
+        "archived": { "type": "boolean" },
+        "overrides": { "description": "An RFC 7386 merge patch over the instantiated space.", "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

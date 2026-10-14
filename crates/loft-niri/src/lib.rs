@@ -13,6 +13,7 @@ pub mod keys;
 pub mod outputs;
 pub mod render;
 pub mod shortcuts;
+pub mod spaces;
 pub mod state;
 
 use std::path::Path;

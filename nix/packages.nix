@@ -373,6 +373,12 @@
               ../Cargo.toml
               ../Cargo.lock
               ../crates
+              # Spaces: built-in templates (compiled in), the shared wallsets
+              # role fixtures, instance fixtures, and base.kdl for `niri validate`.
+              ../spaces
+              ../tests/fixtures/wallsets
+              ../tests/fixtures/spaces
+              ../niri/base.kdl
             ];
           };
           cargoLock.lockFile = ../Cargo.lock;
@@ -451,6 +457,7 @@
               ../Cargo.toml
               ../Cargo.lock
               ../crates
+              ../spaces # loft-niri (a dependency) compiles the built-in spaces in
             ];
           };
           cargoLock.lockFile = ../Cargo.lock;

@@ -1,0 +1,187 @@
+{
+  "$schema": "https://loft.dev/schema/space-1.json",
+  "kind": "space-template",
+  "id": "project",
+  "name": "Project",
+  "icon": "󰅩",
+  "params": {
+    "name": {
+      "type": "string",
+      "required": true,
+      "label": "Name"
+    },
+    "dir": {
+      "type": "dir",
+      "required": true,
+      "label": "Folder"
+    },
+    "preview": {
+      "type": "string",
+      "default": "",
+      "label": "Preview",
+      "hint": "URL (http…) or a command (dx serve, cargo run …)"
+    },
+    "previewMatch": {
+      "type": "match",
+      "default": null,
+      "hint": "app-id / title of a native preview window"
+    },
+    "docs": {
+      "type": "url",
+      "default": "",
+      "label": "Documentation"
+    },
+    "editor": {
+      "type": "enum",
+      "values": [
+        "zed",
+        "code",
+        "nvim"
+      ],
+      "default": "zed"
+    }
+  },
+  "instance": {
+    "id": "proj-${slug(name)}",
+    "name": "Project: ${name}",
+    "workspace": "${slug(name)}"
+  },
+  "order": 100,
+  "displays": {
+    "main": {
+      "apps": [
+        {
+          "id": "editor",
+          "when": "${editor == 'zed'}",
+          "exec": [
+            "zeditor",
+            "${dir}"
+          ],
+          "match": {
+            "appId": "^dev\\.zed\\.Zed$",
+            "title": "^${re(basename(dir))}\\b"
+          },
+          "width": 0.67
+        },
+        {
+          "id": "editor",
+          "when": "${editor == 'code'}",
+          "exec": [
+            "code",
+            "--new-window",
+            "${dir}"
+          ],
+          "match": {
+            "appId": "^(code|Code)$",
+            "title": "${re(basename(dir))}"
+          },
+          "width": 0.67
+        },
+        {
+          "id": "editor",
+          "when": "${editor == 'nvim'}",
+          "exec": [
+            "kitty",
+            "--class",
+            "loft.${id}.editor",
+            "--directory",
+            "${dir}",
+            "nvim",
+            "."
+          ],
+          "match": {
+            "appId": "^loft\\.${id}\\.editor$"
+          },
+          "width": 0.67
+        },
+        {
+          "id": "debug",
+          "exec": [
+            "kitty",
+            "--class",
+            "loft.${id}.debug",
+            "--directory",
+            "${dir}"
+          ],
+          "match": {
+            "appId": "^loft\\.${id}\\.debug$"
+          },
+          "width": 0.33
+        }
+      ]
+    },
+    "right": {
+      "apps": [
+        {
+          "id": "preview",
+          "when": "${isUrl(preview)}",
+          "exec": [
+            "chromium",
+            "--app=${preview}",
+            "--class=loft.${id}.preview",
+            "--user-data-dir=${state}/browser/${id}"
+          ],
+          "match": {
+            "appId": "^loft\\.${id}\\.preview$"
+          },
+          "open": "maximized"
+        },
+        {
+          "id": "preview-cmd",
+          "when": "${preview && !isUrl(preview)}",
+          "exec": [
+            "kitty",
+            "--class",
+            "loft.${id}.run",
+            "--directory",
+            "${dir}",
+            "--hold",
+            "sh",
+            "-c",
+            "${preview}"
+          ],
+          "match": {
+            "appId": "^loft\\.${id}\\.run$"
+          },
+          "width": 0.33
+        },
+        {
+          "id": "preview-app",
+          "when": "${previewMatch}",
+          "launch": false,
+          "match": "${previewMatch}",
+          "width": 0.67
+        }
+      ]
+    },
+    "left": {
+      "apps": [
+        {
+          "id": "docs",
+          "when": "${docs}",
+          "exec": [
+            "chromium",
+            "--app=${docs}",
+            "--class=loft.${id}.docs",
+            "--user-data-dir=${state}/browser/${id}"
+          ],
+          "match": {
+            "appId": "^loft\\.${id}\\.docs$"
+          },
+          "open": "maximized"
+        }
+      ]
+    },
+    "*": "keep"
+  },
+  "dock": {
+    "pinned": [
+      "dev.zed.Zed",
+      "kitty",
+      "chromium"
+    ],
+    "mode": "prepend"
+  },
+  "theme": null,
+  "startup": "first-activate"
+}

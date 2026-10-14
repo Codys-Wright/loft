@@ -1,0 +1,48 @@
+{
+  "$schema": "https://loft.dev/schema/space-1.json",
+  "kind": "space",
+  "id": "comms",
+  "name": "Communication",
+  "icon": "󰭹",
+  "order": 4,
+  "displays": {
+    "left": {
+      "workspace": "comms",
+      "apps": [
+        {
+          "id": "chat",
+          "exec": [
+            "equibop"
+          ],
+          "match": {
+            "appId": "^(equibop|vesktop)$"
+          }
+        },
+        {
+          "id": "slack",
+          "exec": [
+            "slack"
+          ],
+          "match": {
+            "appId": "^Slack$"
+          }
+        }
+      ]
+    },
+    "main": {
+      "workspace": "comms/main",
+      "apps": [
+        {
+          "id": "zoom",
+          "launch": false,
+          "match": {
+            "appId": "^zoom$"
+          },
+          "open": "maximized"
+        }
+      ]
+    },
+    "*": "keep"
+  },
+  "startup": "first-activate"
+}
