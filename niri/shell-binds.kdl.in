@@ -1,9 +1,9 @@
 // Shell keybinds — generated from shell-binds.kdl.in (IPC command substituted).
-// Included by studio-session / studio-dev after base.kdl.
+// Included by loft-session / loft-dev after base.kdl.
 binds {
     Mod+Shift+R hotkey-overlay-title="Reload shell" { spawn @IPC@ "shell" "reload"; }
-    Mod+Space hotkey-overlay-title="Spotlight" { spawn "studio-launcher" "open"; }
-    Mod+Period hotkey-overlay-title="Emoji & Symbols" { spawn "studio-launcher" "emoji"; }
+    Mod+Space hotkey-overlay-title="Spotlight" { spawn "loft-launcher" "open"; }
+    Mod+Period hotkey-overlay-title="Emoji & Symbols" { spawn "loft-launcher" "emoji"; }
     Mod+A hotkey-overlay-title="Control Center" { spawn @IPC@ "controlcenter" "toggle"; }
     Mod+I hotkey-overlay-title="Island" { spawn @IPC@ "island" "toggle"; }
     Mod+Shift+T hotkey-overlay-title="Themes" { spawn @IPC@ "themes" "open"; }

@@ -47,9 +47,9 @@ ColumnLayout {
                 case "external":
                     return "Running — another menu registrar (e.g. Plasma) is active; menus are found by introspection";
                 case "off":
-                    return "Running — registrar disabled (STUDIO_APPMENU_REGISTRAR=0)";
+                    return "Running — registrar disabled (LOFT_APPMENU_REGISTRAR=0)";
                 default:
-                    return "Not running (studio-appmenu missing from PATH?)";
+                    return "Not running (loft-appmenu missing from PATH?)";
                 }
             }
             hintColor: AppMenu.registrar === "" ? Theme.warn : Theme.subtext

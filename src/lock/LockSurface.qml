@@ -26,7 +26,7 @@ WlSessionLockSurface {
 
     readonly property bool showInput: host.focusedScreen === "" || host.focusedScreen === (screen?.name ?? "")
 
-    // ── studio-native contract ──────────────────────────────────────────
+    // ── loft-native contract ──────────────────────────────────────────
     readonly property QtObject lock: QtObject {
         readonly property string userName: surface.host.userName
         readonly property string realName: surface.host.realName || surface.host.userName

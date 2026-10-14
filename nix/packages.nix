@@ -1,23 +1,23 @@
-# studio-linux packages.
+# Loft packages.
 #
-#   studio                 the CLI: theme engine (render) + manager (cli/studio)
-#   studio-themes-builtin  the built-in packs, rendered by that same CLI
-#   studio-shell           the Quickshell shell (./src) with its runtime deps on PATH
-#   studio-session         niri + studio's base config + the shell, all from the store
-#   studio-dev             the same session, loading niri fragments, QML, templates
+#   loft                   the CLI: theme engine (render) + manager (cli/loft)
+#   loft-themes-builtin    the built-in packs, rendered by that same CLI
+#   loft-shell             the Quickshell shell (./src) with its runtime deps on PATH
+#   loft-session           niri + Loft's base config + the shell, all from the store
+#   loft-dev               the same session, loading niri fragments, QML, templates
 #                          and themes from a checkout so everything hot-reloads
-#   studio-niri            niri settings backend (crates/studio-niri): live outputs,
+#   loft-niri              niri settings backend (crates/loft-niri): live outputs,
 #                          runtime overrides → <state>/overrides/niri.kdl, keybinds
-#   studio-appmenu         global menu daemon (crates/studio-appmenu): AppMenu registrar
+#   loft-appmenu           global menu daemon (crates/loft-appmenu): AppMenu registrar
 #                          + DBusMenu / org.gtk.Menus reader for the bar
-#   studio-input           test driver (crates/studio-input): studio-input (virtual
-#                          mouse + keyboard) and studio-shot (screenshots), see
+#   loft-input             test driver (crates/loft-input): loft-input (virtual
+#                          mouse + keyboard) and loft-shot (screenshots), see
 #                          docs/TESTING.md
 #
 # Both sessions include <state>/overrides/niri.kdl FIRST (niri uses the first
 # `output` block matching a monitor, so output overrides must come first) and
 # LAST (every other section merges, later wins). Both expose their entry
-# config as $STUDIO_NIRI_CONFIG, since niri hides $NIRI_CONFIG from children.
+# config as $LOFT_NIRI_CONFIG, since niri hides $NIRI_CONFIG from children.
 #
 # Both sessions run nested as a window when started inside a Wayland/X11
 # session (niri's winit backend), or as a full session from a TTY.
@@ -54,8 +54,8 @@
           withXorg = false;
           enableDbus = false;
         })
-        self'.packages.studio-walker # Spotlight launcher (frontend)
-        self'.packages.studio-elephant # launcher data providers
+        self'.packages.loft-walker # Spotlight launcher (frontend)
+        self'.packages.loft-elephant # launcher data providers
         jq
         coreutils
         cliphist # Clipboard history (recorder + store)
@@ -82,8 +82,8 @@
       iconFont = "${pkgs.nerd-fonts.symbols-only}/share/fonts/truetype/NerdFonts/Symbols/SymbolsNerdFont-Regular.ttf";
 
       # Shell keybinds for the packaged session: the IPC command targets the
-      # store copy of the shell (studio-dev renders its own for the checkout).
-      shellBinds = pkgs.runCommand "studio-shell-binds.kdl" { } ''
+      # store copy of the shell (loft-dev renders its own for the checkout).
+      shellBinds = pkgs.runCommand "loft-shell-binds.kdl" { } ''
         sed 's|@IPC@|"${lib.getExe pkgs.quickshell}" "ipc" "--path" "${../src}" "call"|g' \
           ${../niri/shell-binds.kdl.in} > $out
       '';
@@ -103,51 +103,55 @@
 
       python = pkgs.python3.withPackages (ps: [ ps.jsonschema ]);
 
-      builtinRendered = self'.packages.studio-themes-builtin;
+      builtinRendered = self'.packages.loft-themes-builtin;
 
-      # Shared by both sessions: the state dir the shell, niri and `studio`
-      # agree on, seeded with the default theme from the store.
+      # Shared by both sessions: the state dir the shell, niri and `loft`
+      # agree on, seeded with the default theme from the store. Without an
+      # explicit state dir, studio-linux's (Loft's old name) moves here first.
       seedState = ''
-        state="''${STUDIO_STATE_DIR:-''${XDG_STATE_HOME:-$HOME/.local/state}/studio-linux}"
-        export STUDIO_STATE_DIR="$state"
+        if [ -z "''${LOFT_STATE_DIR:-}" ]; then
+          ${lib.getExe self'.packages.loft-migrate} || true
+        fi
+        state="''${LOFT_STATE_DIR:-''${XDG_STATE_HOME:-$HOME/.local/state}/loft}"
+        export LOFT_STATE_DIR="$state"
         mkdir -p "$state"
         [ -e "$state/current" ] || ln -sfn ${builtinRendered}/default "$state/current"
       '';
     in
     {
       packages = {
-        studio-shell = pkgs.writeShellApplication {
-          name = "studio-shell";
+        loft-shell = pkgs.writeShellApplication {
+          name = "loft-shell";
           runtimeInputs = runtimeDeps ++ [
-            self'.packages.studio
-            self'.packages.studio-niri
-            self'.packages.studio-appmenu
+            self'.packages.loft
+            self'.packages.loft-niri
+            self'.packages.loft-appmenu
           ];
           text = ''
-            if [ -z "''${STUDIO_THEME_FILE:-}" ]; then
+            if [ -z "''${LOFT_THEME_FILE:-}" ]; then
               ${seedState}
-              export STUDIO_THEME_FILE="$state/current/theme.json"
+              export LOFT_THEME_FILE="$state/current/theme.json"
             fi
-            export STUDIO_UI_FONT="${uiFont}" STUDIO_ICON_FONT="${iconFont}"
+            export LOFT_UI_FONT="${uiFont}" LOFT_ICON_FONT="${iconFont}"
             export QML_IMPORT_PATH="${lockQmlPath}''${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
             ${qtMultimediaEnv}
-            # STUDIO_SHELL_SRC runs the QML from a checkout instead (hot reload);
+            # LOFT_SHELL_SRC runs the QML from a checkout instead (hot reload);
             # the CLI's IPC hooks must target the same path.
-            src="''${STUDIO_SHELL_SRC:-${../src}}"
-            export STUDIO_SHELL_PATH="$src"
+            src="''${LOFT_SHELL_SRC:-${../src}}"
+            export LOFT_SHELL_PATH="$src"
             exec quickshell --path "$src" "$@"
           '';
         };
 
-        studio-session = pkgs.writeShellApplication {
-          name = "studio-session";
-          runtimeInputs = runtimeDeps ++ [ self'.packages.studio-launcher ];
+        loft-session = pkgs.writeShellApplication {
+          name = "loft-session";
+          runtimeInputs = runtimeDeps ++ [ self'.packages.loft-launcher ];
           text = ''
             ${seedState}
             # The entry config is written at runtime: the theme fragment lives
             # in the (runtime) state dir. It comes after base.kdl so it wins;
             # niri watches it, including `current` being re-pointed.
-            dir="''${XDG_RUNTIME_DIR:-/tmp}/studio-session"
+            dir="''${XDG_RUNTIME_DIR:-/tmp}/loft-session"
             mkdir -p "$dir"
             cat > "$dir/config.kdl" <<EOF
             include optional=true "$state/overrides/niri.kdl"
@@ -155,28 +159,28 @@
             include "${shellBinds}"
             include optional=true "$state/current/niri.kdl"
             include optional=true "$state/overrides/niri.kdl"
-            spawn-at-startup "${lib.getExe self'.packages.studio-shell}"
-            spawn-at-startup "${lib.getExe self'.packages.studio-launcher}" "service"
+            spawn-at-startup "${lib.getExe self'.packages.loft-shell}"
+            spawn-at-startup "${lib.getExe self'.packages.loft-launcher}" "service"
             EOF
-            export STUDIO_NIRI_CONFIG="$dir/config.kdl"
+            export LOFT_NIRI_CONFIG="$dir/config.kdl"
             exec niri --config "$dir/config.kdl" "$@"
           '';
         };
 
-        studio-dev = pkgs.writeShellApplication {
-          name = "studio-dev";
+        loft-dev = pkgs.writeShellApplication {
+          name = "loft-dev";
           runtimeInputs = runtimeDeps ++ [
-            self'.packages.studio-launcher
-            self'.packages.studio
-            self'.packages.studio-niri
-            self'.packages.studio-appmenu
-            self'.packages.studio-input # studio-input / studio-shot inside the session
+            self'.packages.loft-launcher
+            self'.packages.loft
+            self'.packages.loft-niri
+            self'.packages.loft-appmenu
+            self'.packages.loft-input # loft-input / loft-shot inside the session
             pkgs.dbus # dbus-run-session: the private bus of isolated sessions
           ];
           text =
             builtins.replaceStrings
               [
-                "@STUDIO@"
+                "@LOFT@"
                 "@PYTHON@"
                 "@UI_FONT@"
                 "@ICON_FONT@"
@@ -187,7 +191,7 @@
                 "@MESA_EGL_VENDOR@"
               ]
               [
-                (lib.getExe self'.packages.studio)
+                (lib.getExe self'.packages.loft)
                 "${python}/bin/python3"
                 uiFont
                 iconFont
@@ -197,19 +201,19 @@
                 (lib.getExe' pkgs.sway-unwrapped "sway")
                 "${pkgs.mesa}/share/glvnd/egl_vendor.d/50_mesa.json"
               ]
-              (builtins.readFile ./dev/studio-dev.sh);
+              (builtins.readFile ./dev/loft-dev.sh);
         };
 
         # The keyboard layer (keyboard/keys.nix): Esc / Caps tap = Escape,
         # hold = the window-manager key; Super = Cmd for apps. Needs read
         # access to /dev/input and /dev/uinput (the input + uinput groups).
-        studio-keys =
+        loft-keys =
           let
             keys = import ../keyboard/keys.nix { inherit lib; };
             config = name: cfg: pkgs.writeText name (builtins.toJSON cfg);
           in
           pkgs.writeShellApplication {
-            name = "studio-keys";
+            name = "loft-keys";
             text = ''
               if [ "''${1:-}" = "--dual-role-only" ]; then
                 exec ${pkgs.xremap}/bin/xremap --watch=device --mouse ${
@@ -226,7 +230,7 @@
         # (github.com/T3-Content/unduck) → bangs.json, the data of the `bangs`
         # elephant provider (launcher/elephant-bangs). Pinned; bump rev + hash
         # to refresh the list (launcher/bangs.py adds a few Nix engines).
-        studio-bangs =
+        loft-bangs =
           let
             unduck = pkgs.fetchFromGitHub {
               owner = "T3-Content";
@@ -235,7 +239,7 @@
               hash = "sha256-w1a5a51uJ2ehzi2ehMh5VIMDBRAjjUz35cA8yi+gBd4=";
             };
           in
-          pkgs.runCommand "studio-bangs" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+          pkgs.runCommand "loft-bangs" { nativeBuildInputs = [ pkgs.python3 ]; } ''
             mkdir -p $out
             python3 ${../launcher/bangs.py} ${unduck}/src/bang.ts $out/bangs.json
           '';
@@ -244,7 +248,7 @@
         # engine) built in its own provider tree: Go plugins only load into
         # the exact binary (toolchain + dependency versions) they were built
         # with, so the provider is built by elephant's own derivation.
-        studio-elephant = pkgs.elephant.overrideAttrs (old: {
+        loft-elephant = pkgs.elephant.overrideAttrs (old: {
           postPatch = (old.postPatch or "") + ''
             cp -r ${../launcher/elephant-bangs} internal/providers/bangs
             chmod -R u+w internal/providers/bangs
@@ -253,15 +257,15 @@
 
         # walker + launcher/walker-set-query.patch: lets an elephant provider
         # replace the query text — how a !bang becomes a sub-search scope.
-        studio-walker = pkgs.walker.overrideAttrs (old: {
+        loft-walker = pkgs.walker.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [ ../launcher/walker-set-query.patch ];
         });
 
-        studio-launcher = pkgs.writeShellApplication {
-          name = "studio-launcher";
+        loft-launcher = pkgs.writeShellApplication {
+          name = "loft-launcher";
           runtimeInputs = [
-            self'.packages.studio-walker
-            self'.packages.studio-elephant
+            self'.packages.loft-walker
+            self'.packages.loft-elephant
             pkgs.quickshell # opens Settings → Spotlight (Create Quicklink)
             pkgs.jq
             pkgs.coreutils
@@ -272,30 +276,30 @@
               [
                 "${../launcher}"
                 "${pkgs.gtk4-layer-shell}/lib/libgtk4-layer-shell.so"
-                "${self'.packages.studio-bangs}/bangs.json"
+                "${self'.packages.loft-bangs}/bangs.json"
                 "${../src}"
               ]
-              (builtins.readFile ../launcher/studio-launcher.sh);
+              (builtins.readFile ../launcher/loft-launcher.sh);
         };
 
         # One renderer for runtime and build time (Python stdlib + jsonschema):
-        # `studio theme render` here is what builds studio-themes-builtin.
-        studio = pkgs.stdenvNoCC.mkDerivation {
-          pname = "studio";
+        # `loft theme render` here is what builds loft-themes-builtin.
+        loft = pkgs.stdenvNoCC.mkDerivation {
+          pname = "loft";
           version = "0.1.0";
           src = cliSrc;
           nativeBuildInputs = [ pkgs.makeWrapper ];
           dontBuild = true;
           installPhase = ''
-            mkdir -p $out/share/studio-linux $out/bin
-            cp -r cli templates themes $out/share/studio-linux/
+            mkdir -p $out/share/loft $out/bin
+            cp -r cli templates themes $out/share/loft/
             # Reload hooks call quickshell/niri; installs and importers use git;
             # the qylock importer samples (video) backgrounds with ffmpeg, whose
             # libraries Quickshell's closure already carries. The user's own
             # (newer) ones win on PATH.
-            makeWrapper ${python}/bin/python3 $out/bin/studio \
-              --add-flags "-B $out/share/studio-linux/cli/studio" \
-              --set-default STUDIO_SHELL_PATH ${../src} \
+            makeWrapper ${python}/bin/python3 $out/bin/loft \
+              --add-flags "-B $out/share/loft/cli/loft" \
+              --set-default LOFT_SHELL_PATH ${../src} \
               --suffix PATH : ${
                 lib.makeBinPath [
                   pkgs.quickshell
@@ -305,25 +309,25 @@
                 ]
               }
           '';
-          meta.mainProgram = "studio";
+          meta.mainProgram = "loft";
         };
 
         # Built-in packs rendered at build time: <name>/{theme.json,niri.kdl,…}
         # plus the `default` alias. Sessions seed `current` from here.
-        studio-themes-builtin = pkgs.runCommand "studio-themes-builtin" { } ''
+        loft-themes-builtin = pkgs.runCommand "loft-themes-builtin" { } ''
           mkdir -p $out
           for pack in ${cliSrc}/themes/*/; do
             pack="''${pack%/}"
             [ -L "$pack" ] && continue
-            STUDIO_THEME_INDEX=none ${lib.getExe self'.packages.studio} theme render "$pack" "$out/$(basename "$pack")"
+            LOFT_THEME_INDEX=none ${lib.getExe self'.packages.loft} theme render "$pack" "$out/$(basename "$pack")"
           done
           ln -s "$(readlink ${cliSrc}/themes/default)" $out/default
         '';
 
         # niri settings backend for the shell's Displays / Input / Layout /
         # Keybinds pages. Its tests run `niri validate` on rendered fragments.
-        studio-niri = pkgs.rustPlatform.buildRustPackage {
-          pname = "studio-niri";
+        loft-niri = pkgs.rustPlatform.buildRustPackage {
+          pname = "loft-niri";
           version = "0.1.0";
           src = lib.fileset.toSource {
             root = ../.;
@@ -336,19 +340,19 @@
           cargoLock.lockFile = ../Cargo.lock;
           cargoBuildFlags = [
             "-p"
-            "studio-niri"
+            "loft-niri"
           ];
           cargoTestFlags = [
             "-p"
-            "studio-niri"
+            "loft-niri"
           ];
           nativeCheckInputs = [ pkgs.niri ];
-          meta.mainProgram = "studio-niri";
+          meta.mainProgram = "loft-niri";
         };
 
         # Global menu daemon for the bar (src/services/AppMenu.qml runs it).
-        studio-appmenu = pkgs.rustPlatform.buildRustPackage {
-          pname = "studio-appmenu";
+        loft-appmenu = pkgs.rustPlatform.buildRustPackage {
+          pname = "loft-appmenu";
           version = "0.1.0";
           src = lib.fileset.toSource {
             root = ../.;
@@ -361,22 +365,22 @@
           cargoLock.lockFile = ../Cargo.lock;
           cargoBuildFlags = [
             "-p"
-            "studio-appmenu"
+            "loft-appmenu"
           ];
           cargoTestFlags = [
             "-p"
-            "studio-appmenu"
+            "loft-appmenu"
           ];
-          meta.mainProgram = "studio-appmenu";
+          meta.mainProgram = "loft-appmenu";
         };
 
-        # Test driver for agents (crates/studio-input): `studio-input` — a
+        # Test driver for agents (crates/loft-input): `loft-input` — a
         # virtual mouse + keyboard for a session (Wayland virtual-pointer /
-        # virtual-keyboard; niri binds via IPC) — and `studio-shot` —
+        # virtual-keyboard; niri binds via IPC) — and `loft-shot` —
         # screenshots with crop/zoom/grid/marks in global coordinates.
         # See docs/TESTING.md.
-        studio-input = pkgs.rustPlatform.buildRustPackage {
-          pname = "studio-input";
+        loft-input = pkgs.rustPlatform.buildRustPackage {
+          pname = "loft-input";
           version = "0.1.0";
           src = lib.fileset.toSource {
             root = ../.;
@@ -389,15 +393,15 @@
           cargoLock.lockFile = ../Cargo.lock;
           cargoBuildFlags = [
             "-p"
-            "studio-input"
+            "loft-input"
           ];
           cargoTestFlags = [
             "-p"
-            "studio-input"
+            "loft-input"
           ];
           nativeBuildInputs = [ pkgs.makeWrapper ];
           postInstall = ''
-            for b in studio-input studio-shot; do
+            for b in loft-input loft-shot; do
               wrapProgram $out/bin/$b --prefix PATH : ${
                 lib.makeBinPath [
                   pkgs.grim
@@ -406,18 +410,30 @@
               }
             done
           '';
-          meta.mainProgram = "studio-input";
+          meta.mainProgram = "loft-input";
         };
 
         # Screenshot a session: `nix run .#shot -- out.png` (the dev session),
         # `nix run .#shot -- --session NAME --grid --max 1600`. Same package.
-        studio-shot = self'.packages.studio-input.overrideAttrs (old: {
+        loft-shot = self'.packages.loft-input.overrideAttrs (old: {
           meta = old.meta // {
-            mainProgram = "studio-shot";
+            mainProgram = "loft-shot";
           };
         });
 
-        default = self'.packages.studio-session;
+        # The one-time move from studio-linux's paths (nix/migrate.sh), run by
+        # the sessions and the home-manager activation.
+        loft-migrate = pkgs.writeShellApplication {
+          name = "loft-migrate";
+          runtimeInputs = [
+            pkgs.coreutils
+            pkgs.gnugrep
+            pkgs.gnused
+          ];
+          text = builtins.readFile ./migrate.sh;
+        };
+
+        default = self'.packages.loft-session;
       };
     };
 }

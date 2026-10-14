@@ -1,5 +1,5 @@
 {
-  description = "studio-linux — a creative-work desktop: niri + a Quickshell shell, Liquid Glass, runtime-themeable";
+  description = "Loft — a creative-work desktop: niri + a Quickshell shell, Liquid Glass, runtime-themeable";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

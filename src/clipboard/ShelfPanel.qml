@@ -38,7 +38,7 @@ PanelWindow {
 
     visible: expanded || hasItems || reveal
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.namespace: "studio:shelf"
+    WlrLayershell.namespace: "loft:shelf"
     WlrLayershell.keyboardFocus: Shelf.open && onThisScreen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors {

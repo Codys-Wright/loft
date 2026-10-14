@@ -23,11 +23,11 @@ Scope {
     property string realName: ""
 
     // The PAM service. "login" exists on every distro; a dedicated
-    // `security.pam.services.studio-lock` can be selected with STUDIO_LOCK_PAM.
-    readonly property string pamService: Quickshell.env("STUDIO_LOCK_PAM") || "login"
+    // `security.pam.services.loft-lock` can be selected with LOFT_LOCK_PAM.
+    readonly property string pamService: Quickshell.env("LOFT_LOCK_PAM") || "login"
 
     // Only for automated tests of the dev session; never set in a real one.
-    readonly property bool devMode: Quickshell.env("STUDIO_DEV") === "1"
+    readonly property bool devMode: Quickshell.env("LOFT_DEV") === "1"
 
     property bool busy: false
     property string info: ""
@@ -39,7 +39,7 @@ Scope {
     // The active pack's design, checked again at every lock so switching
     // themes switches lock designs without a restart.
     // The rendered theme's manifest names the pack's design (absolute path):
-    // lock: { format: "studio" | "qylock", path } — see docs/THEME-FORMAT*.md.
+    // lock: { format: "loft" | "qylock", path } — see docs/THEME-FORMAT*.md.
     readonly property string themeDir: Theme.file.substring(0, Theme.file.lastIndexOf("/"))
     property string packLockDir: ""
     property string packFormat: ""
@@ -84,7 +84,7 @@ Scope {
     // compositor keeps the screen locked with nothing on it; the restarted
     // shell sees this file and locks again, so the user gets a way back in.
     // Per Wayland display, so nested dev sessions don't lock each other.
-    readonly property string marker: `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/studio-lock.${Quickshell.env("WAYLAND_DISPLAY") || "wayland"}.locked`
+    readonly property string marker: `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/loft-lock.${Quickshell.env("WAYLAND_DISPLAY") || "wayland"}.locked`
 
     signal failed(string message)
 
@@ -142,7 +142,7 @@ Scope {
     // new WlSessionLock takes the old one over when it starts out locked).
     PersistentProperties {
         id: state
-        reloadableId: "studio-lock"
+        reloadableId: "loft-lock"
         property bool locked: false
     }
 
@@ -273,18 +273,18 @@ Scope {
             return sessionLock.locked;
         }
 
-        // Dev-session test hooks (STUDIO_DEV=1 only): unlock without a
+        // Dev-session test hooks (LOFT_DEV=1 only): unlock without a
         // password / show the failure state without running PAM.
         function devUnlock(): string {
             if (!root.devMode)
-                return "refused: STUDIO_DEV is not set";
+                return "refused: LOFT_DEV is not set";
             root.unlock();
             return "unlocked";
         }
 
         function devFail(): string {
             if (!root.devMode)
-                return "refused: STUDIO_DEV is not set";
+                return "refused: LOFT_DEV is not set";
             root.failed("Incorrect password");
             return "failed";
         }

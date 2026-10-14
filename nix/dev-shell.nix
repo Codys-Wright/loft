@@ -10,7 +10,7 @@
           kdePackages.qtdeclarative # qmllint / qmlformat
           niri # niri validate
           nixfmt
-          (python3.withPackages (ps: [ ps.jsonschema ])) # python3 cli/studio …, tests
+          (python3.withPackages (ps: [ ps.jsonschema ])) # python3 cli/loft …, tests
         ];
       };
     };

@@ -1,4 +1,4 @@
-// Package main is elephant's "bangs" provider for the studio-linux Spotlight:
+// Package main is elephant's "bangs" provider for the Loft Spotlight:
 // DuckDuckGo !bangs (unduck's list) and Quicklinks, with a sub-search scope.
 //
 //	!            browse: quicklinks, favorites, then the most used bangs
@@ -16,7 +16,7 @@
 // It also answers plain queries with the default engine ("Search Google for
 // …") and URLs ("Open https://…"), replacing elephant's websearch there.
 //
-// Built into elephant's own provider tree (nix/packages.nix studio-elephant),
+// Built into elephant's own provider tree (nix/packages.nix loft-elephant),
 // so the plugin matches the host binary's toolchain and dependencies exactly.
 package main
 
@@ -915,7 +915,7 @@ func asURL(s string) string {
 	return link
 }
 
-// favicons: icons.duckduckgo.com/ip3/<domain>.ico → <cache>/studio-linux/favicons/<domain>.png,
+// favicons: icons.duckduckgo.com/ip3/<domain>.ico → <cache>/loft/favicons/<domain>.png,
 // fetched in the background for rows being shown; the row updates when it lands.
 var favicons = &faviconCache{inflight: map[string]bool{}, missing: map[string]bool{}}
 
@@ -928,7 +928,7 @@ type faviconCache struct {
 
 func (f *faviconCache) dir() string {
 	d, _ := os.UserCacheDir()
-	return filepath.Join(d, "studio-linux", "favicons")
+	return filepath.Join(d, "loft", "favicons")
 }
 
 func safeDomain(d string) bool {

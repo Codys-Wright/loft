@@ -544,7 +544,7 @@ Singleton {
 
     function desktopItems() {
         return [
-            { key: "about", label: "About studio-linux", enabled: true, run: () => root.showAbout(null) },
+            { key: "about", label: "About loft", enabled: true, run: () => root.showAbout(null) },
             sep("s1"),
             { key: "settings", label: "Settings…", enabled: true, shortcut: [["Super", ","]], run: () => Panels.settingsOpen = true },
             { key: "overview", label: "Overview", enabled: true, shortcut: niriShortcut("toggle-overview"), run: () => Niri.toggleOverview() },
@@ -721,7 +721,7 @@ Singleton {
         if (own || shared || !w.pid || delay <= 0)
             return;
         // Same process (comm unchanged) still alive after the delay → TERM.
-        Quickshell.execDetached(["sh", "-c", 'c=$(cat /proc/$1/comm 2>/dev/null) || exit 0; sleep "$2"; [ "$(cat /proc/$1/comm 2>/dev/null)" = "$c" ] && kill -TERM "$1"', "studio-quit", String(w.pid), String(delay)]);
+        Quickshell.execDetached(["sh", "-c", 'c=$(cat /proc/$1/comm 2>/dev/null) || exit 0; sleep "$2"; [ "$(cat /proc/$1/comm 2>/dev/null)" = "$c" ] && kill -TERM "$1"', "loft-quit", String(w.pid), String(delay)]);
     }
 
     // ── About ────────────────────────────────────────────────────────────

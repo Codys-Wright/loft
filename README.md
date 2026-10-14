@@ -1,20 +1,21 @@
-# studio-linux
+# Loft
 
-A desktop for creative work, music production and programming: [niri](https://github.com/niri-wm/niri)
+(Formerly studio-linux.) A desktop for creative work, music production and programming: [niri](https://github.com/niri-wm/niri)
 plus our own [Quickshell](https://quickshell.org) shell, with a macOS-inspired Liquid Glass design language
 that is fully themeable at runtime.
 
 ```sh
-nix run github:Codys-Wright/studio-linux      # try it: opens as a nested niri window
+nix run github:Codys-Wright/loft              # try it: opens as a nested niri window
 ```
 
 ## Develop
 
 ```sh
 nix run .#dev                       # nested niri window running ./src, ./niri, ./themes — hot reload on save
+                                    #   (`loft dev …` is the same as `loft-dev …`)
 nix run .#dev -- --output DP-1      # inside KDE: fullscreen on that monitor (default: the rightmost)
-nix run .#studio -- --dev theme list
-nix run .#studio -- --dev theme apply latte   # recolors the running session live (checkout templates/themes)
+nix run .#loft -- --dev theme list
+nix run .#loft -- --dev theme apply latte     # recolors the running session live (checkout templates/themes)
 nix run .#shot -- out.png           # screenshot the dev session (--grid, --zoom, --window …)
 ```
 
@@ -25,7 +26,20 @@ Testing (agents included): `nix run .#dev -- --session NAME` starts an isolated,
 session (own bus, runtime dir and state; offscreen, software-rendered, exact size);
 `nix run .#shot -- --session NAME --grid` screenshots it with a coordinate grid, and
 `nix run .#input -- --session NAME click X Y` / `type` / `drag` / `bind mod+space` drives it.
-See [docs/TESTING.md](docs/TESTING.md) and the `skills/studio-drive` agent skill.
+See [docs/TESTING.md](docs/TESTING.md) and the `skills/loft-drive` agent skill.
+
+### Upgrading from studio-linux
+
+Everything is named `loft` now: the CLI (`studio` → `loft`), packages (`studio-*` →
+`loft-*`, `.#studio` → `.#loft`), `STUDIO_*` → `LOFT_*`, `programs.studio-linux` →
+`programs.loft`, the user services `loft-shell` / `loft-launcher`, the SDDM theme `loft`,
+layer namespaces `loft:*` and the paths below. On first start (the home-manager activation,
+or `loft-session` / `loft-shell` without `LOFT_STATE_DIR`) `loft-migrate` moves
+`~/.local/state`, `~/.local/share` and `~/.cache` `studio-linux` → `loft` and leaves a
+symlink at each old path; the home-manager module also links `~/.config/studio-linux` →
+`loft`. For one release `programs.studio-linux.*` still evaluates (renamed options), the CLI
+reads `STUDIO_*` when the `LOFT_*` variable is unset, lock format `studio` is read as
+`loft`, and the library's `.studio-library.json` becomes `.loft-library.json` on the next sort.
 
 ## Designing live
 
@@ -38,9 +52,9 @@ KDE it goes fullscreen and borderless on the rightmost monitor (`--output NAME` 
 | QML (`src/**`) | hot reload on save — a "Reloaded" pill; open panels and the Settings page stay where they were |
 | QML with an error | the error (file:line) is pinned on screen, the last good version keeps running; saving the fix reloads |
 | niri KDL (`niri/*.kdl`) | niri reloads on save |
-| a theme (`themes/*`, `studio theme apply`) | recolors everything live |
-| launcher theme (`launcher/walker/themes/studio/*`) | next time the launcher opens |
-| the CLI (`cli/studio/*`) | live — `studio` runs the checkout |
+| a theme (`themes/*`, `loft theme apply`) | recolors everything live |
+| launcher theme (`launcher/walker/themes/loft/*`) | next time the launcher opens |
+| the CLI (`cli/loft/*`) | live — `loft` runs the checkout |
 | Rust (`crates/*`) | `cargo build`; `target/debug` binaries shadow the packaged ones (restart the dev session once) |
 | Nix (`nix/*`, runtime deps) | re-run `nix run .#dev` |
 
@@ -49,25 +63,25 @@ KDE it goes fullscreen and borderless on the rightmost monitor (`--output NAME` 
 ## Themes
 
 A theme is a pack (`manifest.json` + `theme.json`: palette + glass), rendered at runtime into
-per-app fragments under `~/.local/state/studio-linux/current/`. Format: [docs/THEME-FORMAT.md](docs/THEME-FORMAT.md).
+per-app fragments under `~/.local/state/loft/current/`. Format: [docs/THEME-FORMAT.md](docs/THEME-FORMAT.md).
 
 ```sh
-studio theme list | current
-studio theme apply latte                      # render (cached) → swap `current` → reload shell, niri, kitty, Ghostty, GTK
-studio theme render tokyonight ./out          # just render a pack's files
-studio theme new mytheme --from latte         # scaffold in the library's Packs/ (else ~/.local/share/studio-linux/themes)
-studio theme install ./pack | pack.tar.zst | https://…/repo.git [--subdir packs/x]
-studio theme install cozytile:all             # importers convert upstream themes at install time
-studio theme install qylock:pixel-sakura      #   (--list cozytile: / qylock: shows what's available)
-studio theme export mytheme -o mytheme.tar.zst
-studio theme remove mytheme
-studio theme validate ./pack                  # against themes/schema.json
-studio theme vibes [theme] [--json] [--dir ~/Pictures/Wallpapers]   # wallpapers + lock designs that fit
+loft theme list | current
+loft theme apply latte                        # render (cached) → swap `current` → reload shell, niri, kitty, Ghostty, GTK
+loft theme render tokyonight ./out            # just render a pack's files
+loft theme new mytheme --from latte           # scaffold in the library's Packs/ (else ~/.local/share/loft/themes)
+loft theme install ./pack | pack.tar.zst | https://…/repo.git [--subdir packs/x]
+loft theme install cozytile:all               # importers convert upstream themes at install time
+loft theme install qylock:pixel-sakura        #   (--list cozytile: / qylock: shows what's available)
+loft theme export mytheme -o mytheme.tar.zst
+loft theme remove mytheme
+loft theme validate ./pack                    # against themes/schema.json
+loft theme vibes [theme] [--json] [--dir ~/Pictures/Wallpapers]     # wallpapers + lock designs that fit
 ```
 
 **Vibes.** A pack carries a collection of wallpapers (`wallpapers/`, `wallpaper.images`) and lock
 designs (`locks`), plus curated links to other packs' (`vibes`, and groups in the
-[themes index](https://github.com/Codys-Wright/studio-linux-themes)). `studio theme vibes` lists
+[themes index](https://github.com/Codys-Wright/loft-themes)). `loft theme vibes` lists
 the theme's own, the curated ones, then every other installed pack's wallpapers and locks (and
 loose images) ranked by color closeness (CIEDE2000 between palettes and between image swatches).
 Settings → Wallpaper / Lock Screen and the wallpaper picker (`wallpaper toggle`) show the same
@@ -80,14 +94,14 @@ desk; theme packs ship them as `wallpaperSets` ([THEME-FORMAT.md](docs/THEME-FOR
 Settings → Wallpaper → Displays & Workspaces, or:
 
 ```sh
-studio wallpaper plan                         # every display + workspace: what it shows and why
-studio wallpaper sets | set apply|save|delete NAME | shuffle | auto on|off
+loft wallpaper plan                           # every display + workspace: what it shows and why
+loft wallpaper sets | set apply|save|delete NAME | shuffle | auto on|off
 ```
 
-**Library.** `~/Documents/Themes` (`$STUDIO_LIBRARY`; home-manager: `programs.studio-linux.library`)
+**Library.** `~/Documents/Themes` (`$LOFT_LIBRARY`; home-manager: `programs.loft.library`)
 is one folder for everything: installed packs in `Packs/` (searched first; `install` and `new`
 put packs there when the library exists) and your wallpapers in `Wallpapers/Topics/<Topic>/`.
-`studio library sort` generates symlink views beside them, regenerated idempotently and never
+`loft library sort` generates symlink views beside them, regenerated idempotently and never
 touching real files or links it didn't make:
 
 ```
@@ -97,9 +111,9 @@ Wallpapers/Themes/<theme>/          # own + curated + the closest images (vibes 
 ```
 
 ```sh
-studio library sort [--json]                     # views + README.md + the index Settings → Wallpaper reads
-studio library add a.jpg b.png --topic "Studio Ghibli" [--move]
-studio library status [--json]
+loft library sort [--json]                       # views + README.md + the index Settings → Wallpaper reads
+loft library add a.jpg b.png --topic "Studio Ghibli" [--move]
+loft library status [--json]
 ```
 
 Topic images also rank among `theme vibes` matches (and in the wallpaper picker); Settings →
@@ -110,20 +124,20 @@ Point your apps at the rendered fragments once; `apply` keeps them current:
 
 | App | Add to its config |
 |---|---|
-| niri | `include optional=true "~/.local/state/studio-linux/current/niri.kdl"` (after studio's `base.kdl`; the studio sessions do this) |
-| kitty | `include ~/.local/state/studio-linux/current/kitty.conf` |
-| Ghostty | `config-file = ?~/.local/state/studio-linux/current/ghostty.conf` |
-| GTK 3/4 | `@import url("file:///home/you/.local/state/studio-linux/current/gtk.css");` in `~/.config/gtk-{3,4}.0/gtk.css` |
+| niri | `include optional=true "~/.local/state/loft/current/niri.kdl"` (after Loft's `base.kdl`; the Loft sessions do this) |
+| kitty | `include ~/.local/state/loft/current/kitty.conf` |
+| Ghostty | `config-file = ?~/.local/state/loft/current/ghostty.conf` |
+| GTK 3/4 | `@import url("file:///home/you/.local/state/loft/current/gtk.css");` in `~/.config/gtk-{3,4}.0/gtk.css` |
 
-`STUDIO_HOOKS=none|all|shell,niri,kitty,ghostty,gtk` picks the reload hooks. From a checkout,
-`python3 cli/studio …` runs the same CLI (the dev shell has `jsonschema`), and
+`LOFT_HOOKS=none|all|shell,niri,kitty,ghostty,gtk` picks the reload hooks. From a checkout,
+`python3 cli/loft …` runs the same CLI (the dev shell has `jsonschema`), and
 `nix flake check` runs the schema, unit, golden-render and `niri validate` checks.
 
 ## Lock screen and login screen
 
 `Mod+Ctrl+Q` (Ctrl+Cmd+Q on a Mac) locks: a session lock with PAM, a big clock, now playing
 and a frosted card with the password field. The same design is the login screen, shipped as the
-SDDM theme `studio` (`packages.studio-sddm-theme`). A theme pack can replace both with its own
+SDDM theme `loft` (`packages.loft-sddm-theme`). A theme pack can replace both with its own
 `lock/Main.qml` ([docs/THEME-FORMAT-LOCK.md](docs/THEME-FORMAT-LOCK.md)) or ship several designs;
 Settings → Lock Screen picks one per theme (any installed pack's) and previews it.
 
@@ -135,26 +149,26 @@ qs ipc --path <shell> call lock lock
 Locking on idle (swayidle):
 
 ```sh
-swayidle -w timeout 300 'studio-lock' before-sleep 'studio-lock'
-# where studio-lock = quickshell ipc --path <shell src> call lock lock
+swayidle -w timeout 300 'loft-lock' before-sleep 'loft-lock'
+# where loft-lock = quickshell ipc --path <shell src> call lock lock
 ```
 
 Using the login screen on NixOS:
 
 ```nix
-environment.systemPackages = [ studio-linux.packages.${system}.studio-sddm-theme ];
+environment.systemPackages = [ loft.packages.${system}.loft-sddm-theme ];
 services.displayManager.sddm = {
-  theme = "studio";
-  # lets the greeter read /var/lib/studio-linux/greeter/theme.json
+  theme = "loft";
+  # lets the greeter read /var/lib/loft/greeter/theme.json
   settings.General.GreeterEnvironment = "QML_XHR_ALLOW_FILE_READ=1";
 };
 # optional: a dedicated PAM service for the lock (default: "login")
-security.pam.services.studio-lock = { };   # + STUDIO_LOCK_PAM=studio-lock in the shell's environment
+security.pam.services.loft-lock = { };     # + LOFT_LOCK_PAM=loft-lock in the shell's environment
 ```
 
 ## Spotlight: apps, !bangs and Quicklinks
 
-`Mod+Space` opens Spotlight (walker + elephant, `studio-launcher`). Besides apps, windows,
+`Mod+Space` opens Spotlight (walker + elephant, `loft-launcher`). Besides apps, windows,
 the calculator and niri actions:
 
 | Type | |
@@ -175,11 +189,11 @@ reorder, test. They live in `<state>/spotlight.json`, seeded from
 `launcher/spotlight-defaults.json`, and apply on the next keystroke.
 
 How: an elephant provider, `launcher/elephant-bangs` (Go, built inside elephant's own
-derivation as `studio-elephant`, since Go plugins only load into the exact binary they were
+derivation as `loft-elephant`, since Go plugins only load into the exact binary they were
 built with), ranks the bangs (~3 ms for all of them per keystroke) and answers plain queries
 with the quicklinks, URLs and the default engine. Scoping needs walker to let a provider set
-its query: `launcher/walker-set-query.patch` (`studio-walker`). The bang list is unduck's
-`src/bang.ts` at a pinned rev (`studio-bangs` in `nix/packages.nix`: bump `rev` and `hash`
+its query: `launcher/walker-set-query.patch` (`loft-walker`). The bang list is unduck's
+`src/bang.ts` at a pinned rev (`loft-bangs` in `nix/packages.nix`: bump `rev` and `hash`
 to refresh), converted by `launcher/bangs.py`, which also fixes the NixOS search URLs and adds
 `!nixopts`, `!hmopts`, `!noogle` and `!kagi`.
 
@@ -190,12 +204,12 @@ app's actions, Options ▸ (Keep in Dock, Open at Login, Show in Files, Assign T
 Display), Hide, Quit (hold Alt: Force Quit). Downloads sits left of the Trash as a stack (fan,
 grid or list; drag files out), any folder can be added in Settings → Dock, and recent apps get
 their own section. Each display has its own dock: position, and auto-hide never / always / when
-windows are open. The helpers behind it are `studio dock …` (JSON for the shell):
+windows are open. The helpers behind it are `loft dock …` (JSON for the shell):
 
 ```sh
-studio dock recents | folder xdg:DOWNLOAD --sort added | trash [--empty]
-studio dock autostart list | set ID on|off | run --once KEY
-studio dock open ID FILE… | show PATH|ID | apps [ID…]
+loft dock recents | folder xdg:DOWNLOAD --sort added | trash [--empty]
+loft dock autostart list | set ID on|off | run --once KEY
+loft dock open ID FILE… | show PATH|ID | apps [ID…]
 ```
 
 ## Clipboard, snippets, shelf, scratchpad
@@ -226,7 +240,7 @@ Close and Quit. The app's own menus (File, Edit, View …) follow it in the bar;
 take the keyboard (arrows, Enter, Esc, type to select) and hovering across titles
 switches between them. Settings → Menu Bar.
 
-The global menu comes from `studio-appmenu` (`crates/studio-appmenu`), which the shell
+The global menu comes from `loft-appmenu` (`crates/loft-appmenu`), which the shell
 runs. It owns `com.canonical.AppMenu.Registrar`, so Qt/KDE apps started afterwards move
 their menubar into the bar; it never takes the name from another registrar (Plasma's),
 and finds menus by introspection then. GTK apps with a GtkApplication menubar show
@@ -235,7 +249,7 @@ libdbusmenu-glib is loadable. GTK4/libadwaita apps, Firefox and Wayland Electron
 no exported menubar.
 
 ```sh
-printf '{"cmd":"focus","pid":%s}\n' "$(pidof kate)" | studio-appmenu   # → {"menu":{…}}
+printf '{"cmd":"focus","pid":%s}\n' "$(pidof kate)" | loft-appmenu     # → {"menu":{…}}
 ```
 
 To try it from inside another desktop (KDE has its own registrar on your session bus),
@@ -243,23 +257,23 @@ run the nested session on a private bus: `dbus-run-session -- nix run .#dev`.
 
 ## niri settings
 
-Studio Settings has Displays, Keyboard & Mouse, Layout & Motion and Keybinds pages,
-backed by `studio-niri` (`crates/studio-niri`). Your own niri KDL is never edited:
+Loft Settings has Displays, Keyboard & Mouse, Layout & Motion and Keybinds pages,
+backed by `loft-niri` (`crates/loft-niri`). Your own niri KDL is never edited:
 changes are stored in `<state>/overrides/niri.json` and rendered (validated with
-`niri validate`) into `<state>/overrides/niri.kdl`, which the studio sessions include
+`niri validate`) into `<state>/overrides/niri.kdl`, which the Loft sessions include
 **first** (niri uses the first `output` block matching a monitor) and **last** (every
 other section merges, later wins). Displays are recorded by make/model/serial, never
-by connector. With the home-manager module, `~/.config/studio-linux/niri.kdl` includes
-it last; add `include optional=true "~/.config/studio-linux/niri-early.kdl"` at the top
+by connector. With the home-manager module, `~/.config/loft/niri.kdl` includes
+it last; add `include optional=true "~/.config/loft/niri-early.kdl"` at the top
 of your niri config for display overrides to win over your own `output` blocks.
 
 ```sh
-studio-niri outputs                       # live outputs, modes, identities
-studio-niri output set DP-1 --scale 1.25 --render   # live + recorded (by identity)
-studio-niri set layout.gaps 8 --render    # see `studio-niri keys`
-studio-niri show                          # value + source (override / file:line / default)
-studio-niri binds --conflicts             # keys bound more than once, and which wins
-studio-niri reset [input|layout.gaps|…]   # drop overrides and re-render
+loft-niri outputs                         # live outputs, modes, identities
+loft-niri output set DP-1 --scale 1.25 --render     # live + recorded (by identity)
+loft-niri set layout.gaps 8 --render      # see `loft-niri keys`
+loft-niri show                            # value + source (override / file:line / default)
+loft-niri binds --conflicts               # keys bound more than once, and which wins
+loft-niri reset [input|layout.gaps|…]     # drop overrides and re-render
 ```
 
-Status: Phase 0 (dev loop), Phase 1 (theme engine + selector + Cozytile/qylock importers), the shell port (bar, dock, Control Center, Dynamic Island, OSD, switcher, notifications, wallpaper picker, Settings incl. niri Displays/Input/Layout/Keybinds), the Spotlight launcher, the System module (monitor, bar readouts, network, alerts; `qs ipc call monitor toggle`) and Phase 5 (lock + login screen). See [docs/PLAN.md](docs/PLAN.md). Themes: [studio-linux-themes](https://github.com/Codys-Wright/studio-linux-themes).
+Status: Phase 0 (dev loop), Phase 1 (theme engine + selector + Cozytile/qylock importers), the shell port (bar, dock, Control Center, Dynamic Island, OSD, switcher, notifications, wallpaper picker, Settings incl. niri Displays/Input/Layout/Keybinds), the Spotlight launcher, the System module (monitor, bar readouts, network, alerts; `qs ipc call monitor toggle`) and Phase 5 (lock + login screen). See [docs/PLAN.md](docs/PLAN.md). Themes: [loft-themes](https://github.com/Codys-Wright/loft-themes).

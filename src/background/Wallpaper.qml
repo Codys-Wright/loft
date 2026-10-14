@@ -20,7 +20,7 @@ PanelWindow {
     screen: modelData
 
     WlrLayershell.layer: WlrLayer.Background
-    WlrLayershell.namespace: "studio:wallpaper"
+    WlrLayershell.namespace: "loft:wallpaper"
     exclusionMode: ExclusionMode.Ignore
     anchors {
         top: true

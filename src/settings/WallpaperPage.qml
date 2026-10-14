@@ -307,7 +307,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: Vibes.matchingWallpapers.length === 0 ? (Vibes.loading ? "Ranking…" : "Nothing else installed yet: `studio theme install …` adds packs.") : "Other installed themes' wallpapers and your folder, closest colors first"
+            text: Vibes.matchingWallpapers.length === 0 ? (Vibes.loading ? "Ranking…" : "Nothing else installed yet: `loft theme install …` adds packs.") : "Other installed themes' wallpapers and your folder, closest colors first"
             color: Theme.subtext
             font.family: Theme.fontUi
             font.pixelSize: 11

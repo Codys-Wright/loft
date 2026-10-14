@@ -156,4 +156,4 @@ vorssaint relies on macOS for these; on Linux Loft builds them, in the Golden Ga
 | Spaces | Functional desktops across all monitors (Main, Music, Video, per-project) 🔨 (design) |
 | Settings | Full Settings app incl. niri settings (displays, input, layout, keybinds) |
 | Phone | iPhone integration via tether (messages, notifications, calls) — researched, not started |
-| Testing | `studio-input` / `studio-shot` / headless sessions so agents can drive the desktop |
+| Testing | `loft-input` / `loft-shot` / headless sessions so agents can drive the desktop |

@@ -1,6 +1,6 @@
 # Lock screen + login greeter (PLAN §4.5).
 #
-#   studio-sddm-theme  the `studio` SDDM theme: $out/share/sddm/themes/studio
+#   loft-sddm-theme    the `loft` SDDM theme: $out/share/sddm/themes/loft
 #   greeter-preview    `nix run .#greeter-preview` — the greeter in SDDM's test mode
 #
 # The Quickshell lock itself ships with the shell (src/lock/). The SDDM theme
@@ -17,8 +17,8 @@
 
       sddm = pkgs.kdePackages.sddm;
 
-      studio-sddm-theme = pkgs.runCommand "studio-sddm-theme" { } ''
-        dir=$out/share/sddm/themes/studio
+      loft-sddm-theme = pkgs.runCommand "loft-sddm-theme" { } ''
+        dir=$out/share/sddm/themes/loft
         mkdir -p $dir/design $dir/components $dir/services $dir/fonts $dir/default
 
         cp ${../lock/sddm}/{Main.qml,metadata.desktop,theme.conf} $dir/
@@ -35,37 +35,37 @@
         # The design must stay host-agnostic: no Quickshell, and only the
         # modules provided above.
         if grep -rnE '^import (Quickshell|qs\.)' $dir; then
-          echo "studio-sddm-theme: the shared lock design imports something sddm-greeter lacks" >&2
+          echo "loft-sddm-theme: the shared lock design imports something sddm-greeter lacks" >&2
           exit 1
         fi
         for imp in $(grep -rhoE '^import "\.\./[a-z]+"' $dir | sort -u | sed -E 's|.*/([a-z]+)"|\1|'); do
-          [ -d $dir/$imp ] || { echo "studio-sddm-theme: missing shared module $imp" >&2; exit 1; }
+          [ -d $dir/$imp ] || { echo "loft-sddm-theme: missing shared module $imp" >&2; exit 1; }
         done
       '';
 
       greeter-preview = pkgs.writeShellApplication {
-        name = "studio-greeter-preview";
+        name = "loft-greeter-preview";
         runtimeInputs = [ sddm ];
         text = ''
           # Reading theme.json from QML needs this (also set it in the real
           # greeter's environment, see README).
           export QML_XHR_ALLOW_FILE_READ=1
-          exec sddm-greeter-qt6 --test-mode --theme "''${1:-${studio-sddm-theme}/share/sddm/themes/studio}"
+          exec sddm-greeter-qt6 --test-mode --theme "''${1:-${loft-sddm-theme}/share/sddm/themes/loft}"
         '';
       };
     in
     {
       packages = {
-        inherit studio-sddm-theme;
-        studio-greeter-preview = greeter-preview;
+        inherit loft-sddm-theme;
+        loft-greeter-preview = greeter-preview;
       };
 
       apps.greeter-preview = {
         type = "app";
         program = lib.getExe greeter-preview;
-        meta.description = "Preview the studio login screen (SDDM test mode, opens a window)";
+        meta.description = "Preview the Loft login screen (SDDM test mode, opens a window)";
       };
 
-      checks.studio-sddm-theme = studio-sddm-theme;
+      checks.loft-sddm-theme = loft-sddm-theme;
     };
 }

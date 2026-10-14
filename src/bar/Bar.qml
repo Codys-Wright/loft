@@ -22,7 +22,7 @@ PanelWindow {
     screen: modelData
 
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.namespace: "studio:bar"
+    WlrLayershell.namespace: "loft:bar"
     anchors {
         top: true
         left: true

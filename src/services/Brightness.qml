@@ -11,12 +11,12 @@ import Quickshell.Io
 // ddcutil is slow (I²C), so displays are probed when a panel asks
 // (`refresh()`), at most once a minute, and writes are debounced.
 //
-// STUDIO_FAKE_BRIGHTNESS=1 (dev/testing) replaces all of it with two
+// LOFT_FAKE_BRIGHTNESS=1 (dev/testing) replaces all of it with two
 // in-memory displays, so nothing touches real monitors.
 Singleton {
     id: root
 
-    readonly property bool fake: Quickshell.env("STUDIO_FAKE_BRIGHTNESS") === "1"
+    readonly property bool fake: Quickshell.env("LOFT_FAKE_BRIGHTNESS") === "1"
 
     // [{ key, name, kind: "backlight" | "ddc" | "fake", value (0..1), max, bus }]
     property var displays: []

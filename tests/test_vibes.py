@@ -16,9 +16,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from studio import color, index, palette, vibes
-from studio.cli import main
-from studio.pack import Pack, PackError, normalized_manifest
+from loft import color, index, palette, vibes
+from loft.cli import main
+from loft.pack import Pack, PackError, normalized_manifest
 from test_importers import make_png
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -32,7 +32,7 @@ except ImportError:
     HAVE_JSONSCHEMA = False
 
 
-def studio(*argv: str) -> tuple[int, str, str]:
+def loft(*argv: str) -> tuple[int, str, str]:
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         rc = main(list(argv))
@@ -115,7 +115,7 @@ class Format(unittest.TestCase):
             PINK_DARK,
             theme={"wallpaper": {"images": ["extra/one.png", {"path": "extra/frame.jpg", "video": "extra/clip.mp4"}]}},
             manifest={
-                "lock": {"format": "studio", "path": "lock"},
+                "lock": {"format": "loft", "path": "lock"},
                 "locks": [{"name": "alt", "path": "designs/alt", "preview": "designs/alt.png"}],
                 "vibes": {"wallpapers": ["other:walls/b.png"], "locks": ["other"]},
             },
@@ -159,7 +159,7 @@ class Format(unittest.TestCase):
     def test_lock_collection(self):
         p = Pack(self.rich_pack())
         locks = p.lock_entries()
-        self.assertEqual([(lk["name"], lk["format"]) for lk in locks], [("rich", "studio"), ("alt", "qylock"), ("third", "studio")])
+        self.assertEqual([(lk["name"], lk["format"]) for lk in locks], [("rich", "loft"), ("alt", "qylock"), ("third", "loft")])
         alt = locks[1]
         self.assertEqual(alt["main"], p.path / "designs/alt/Entry.qml")  # MainScript
         self.assertEqual(alt["preview"], p.path / "designs/alt.png")
@@ -172,14 +172,14 @@ class Format(unittest.TestCase):
         self.assertTrue(all(Path(w["path"]).is_absolute() for w in m["wallpapers"]))
         self.assertEqual(m["wallpapers"][-1], {"path": "/x/y.png", "source_pack": "other", "kind": "image", "curated": True})
         self.assertEqual(m["defaults"], {"wallpaper": str(p.path / "extra/one.png"), "lock": str(p.path / "lock")})
-        self.assertEqual(m["lock"], {"name": "rich", "format": "studio", "path": str(p.path / "lock"), "main": str(p.path / "lock/Main.qml")})
+        self.assertEqual(m["lock"], {"name": "rich", "format": "loft", "path": str(p.path / "lock"), "main": str(p.path / "lock/Main.qml")})
         self.assertEqual(m["locks"][1]["source_pack"], "rich")
         self.assertEqual(m["vibes"]["locks"], ["other"])
 
     def test_render_copies_default(self):
         d = self.rich_pack()
         out = self.tmp / "out"
-        rc, _, err = studio("theme", "render", str(d), str(out))
+        rc, _, err = loft("theme", "render", str(d), str(out))
         self.assertEqual(rc, 0, err)
         self.assertEqual(json.loads((out / "theme.json").read_text())["wallpaper"]["image"], "wallpaper.png")
         self.assertEqual((out / "wallpaper.png").read_bytes(), (d / "extra/one.png").read_bytes())
@@ -193,7 +193,7 @@ class Format(unittest.TestCase):
         write(d / "wall.png", make_png(2, 2, solid((1, 2, 3))))
         write(d / "lock" / "Main.qml", "import QtQuick\nItem {}\n")
         m = normalized_manifest(Pack(d))
-        self.assertEqual(m["lock"]["format"], "studio")
+        self.assertEqual(m["lock"]["format"], "loft")
         self.assertEqual(m["lock"]["path"], str(d.resolve() / "lock"))
         self.assertEqual([w["path"] for w in m["wallpapers"]], [str(d.resolve() / "wall.png")])
         # And a pack with nothing: empty lists, empty defaults, no `lock`.
@@ -255,17 +255,17 @@ class Index(unittest.TestCase):
 
     def test_load_local_and_disabled(self):
         f = write(self.tmp / "index.json", {"vibes": [{"packs": ["a", "b"]}]})
-        os.environ["STUDIO_THEME_INDEX"] = str(f)
+        os.environ["LOFT_THEME_INDEX"] = str(f)
         self.assertEqual(index.load(self.tmp)["vibes"][0]["packs"], ["a", "b"])
-        os.environ["STUDIO_THEME_INDEX"] = f"file://{f}"
+        os.environ["LOFT_THEME_INDEX"] = f"file://{f}"
         self.assertIn("vibes", index.load(None))
-        os.environ["STUDIO_THEME_INDEX"] = "none"
+        os.environ["LOFT_THEME_INDEX"] = "none"
         self.assertEqual(index.load(self.tmp), {})
-        os.environ["STUDIO_THEME_INDEX"] = str(self.tmp / "missing.json")
+        os.environ["LOFT_THEME_INDEX"] = str(self.tmp / "missing.json")
         self.assertEqual(index.load(self.tmp), {})
 
     def test_remote_falls_back_to_cache(self):
-        os.environ["STUDIO_THEME_INDEX"] = "https://example.invalid/index.json"
+        os.environ["LOFT_THEME_INDEX"] = "https://example.invalid/index.json"
         with mock.patch("urllib.request.urlopen", side_effect=OSError("offline")):
             self.assertEqual(index.load(self.tmp), {})
             write(self.tmp / "cache" / "index.json", {"vibes": [], "_source": "https://example.invalid/index.json"})
@@ -274,7 +274,7 @@ class Index(unittest.TestCase):
 
 
 class Ranking(unittest.TestCase):
-    """`studio theme vibes` over a scratch theme path."""
+    """`loft theme vibes` over a scratch theme path."""
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -285,13 +285,13 @@ class Ranking(unittest.TestCase):
         os.environ.update(
             {
                 "HOME": str(self.tmp / "home"),
-                "STUDIO_STATE_DIR": str(self.state),
-                "STUDIO_HOOKS": "none",
-                "STUDIO_THEME_PATH": str(self.packs),
-                "STUDIO_THEME_INDEX": str(self.idx),
+                "LOFT_STATE_DIR": str(self.state),
+                "LOFT_HOOKS": "none",
+                "LOFT_THEME_PATH": str(self.packs),
+                "LOFT_THEME_INDEX": str(self.idx),
             }
         )
-        os.environ.pop("STUDIO_LIBRARY", None)
+        os.environ.pop("LOFT_LIBRARY", None)
         self.noff = mock.patch.object(palette, "have_ffmpeg", return_value=False)
         self.noff.start()
         navy_pink = lambda x, y: (40, 39, 56) if (x + y) % 3 else (229, 185, 198)  # noqa: E731
@@ -323,7 +323,7 @@ class Ranking(unittest.TestCase):
         shutil.rmtree(self.tmp)
 
     def vibes(self, *args) -> dict:
-        rc, out, err = studio("theme", "vibes", *args, "--json")
+        rc, out, err = loft("theme", "vibes", *args, "--json")
         self.assertEqual(rc, 0, err)
         return json.loads(out)
 
@@ -355,7 +355,7 @@ class Ranking(unittest.TestCase):
         shutil.rmtree(self.packs / "pixel")
         v = self.vibes("sakura")
         self.assertNotIn("curated", [w["origin"] for w in v["wallpapers"]])
-        rc, out, err = studio("theme", "vibes", "sakura")
+        rc, out, err = loft("theme", "vibes", "sakura")
         self.assertEqual(rc, 0, err)
         self.assertIn("own", out)
         self.assertIn("cozy-lock", out)
@@ -393,9 +393,9 @@ class Ranking(unittest.TestCase):
         self.assertIn("swatches", some)
 
     def test_current_and_list(self):
-        self.assertEqual(studio("theme", "apply", "sakura")[0], 0)
+        self.assertEqual(loft("theme", "apply", "sakura")[0], 0)
         self.assertEqual(self.vibes()["theme"], "sakura")
-        rc, out, _ = studio("theme", "list", "--json")
+        rc, out, _ = loft("theme", "list", "--json")
         by = {p["name"]: p for p in json.loads(out)}
         self.assertEqual(by["sakura"]["vibes"], ["pixel"])
         self.assertEqual(by["sakura"]["locks"], ["sakura"])
@@ -408,14 +408,14 @@ class Ranking(unittest.TestCase):
 
     def test_apply_rerenders_when_linked_pack_appears(self):
         shutil.move(str(self.packs / "pixel"), str(self.tmp / "pixel-away"))
-        studio("theme", "apply", "sakura")
+        loft("theme", "apply", "sakura")
         first = (self.state / "current").resolve()
         shutil.move(str(self.tmp / "pixel-away"), str(self.packs / "pixel"))
-        studio("theme", "apply", "sakura")
+        loft("theme", "apply", "sakura")
         self.assertNotEqual((self.state / "current").resolve(), first)
 
     def test_importer_writes_index_links(self):
-        from studio.importers import add_index_vibes
+        from loft.importers import add_index_vibes
 
         d = make_pack(self.tmp / "staging", "absent", PINK_DARK, manifest={"vibes": {"locks": ["x:y"]}})
         add_index_vibes(d, json.loads(self.idx.read_text()))

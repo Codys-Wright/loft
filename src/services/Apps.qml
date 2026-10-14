@@ -7,7 +7,7 @@ import Quickshell
 Singleton {
     id: root
 
-    // The shell's own windows (Quickshell's app-id) present as studio apps.
+    // The shell's own windows (Quickshell's app-id) present as Loft apps.
     readonly property var own: ({
             "org.quickshell": { name: "Settings", icon: "preferences-system" }
         })

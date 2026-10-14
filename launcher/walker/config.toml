@@ -1,5 +1,5 @@
-# studio-linux walker config (merged over walker's defaults).
-theme = "studio"
+# Loft walker config (merged over walker's defaults).
+theme = "loft"
 force_keyboard_focus = true
 close_when_open = true
 click_to_close = true

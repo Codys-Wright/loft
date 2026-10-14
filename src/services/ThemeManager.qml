@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Io
 
 // The theme selector's backend: lists installed theme packs and applies one,
-// both through the `studio` CLI (the same engine `studio theme apply` uses,
+// both through the `loft` CLI (the same engine `loft theme apply` uses,
 // so the shell, niri, terminals, GTK and the launcher all switch together).
 Singleton {
     id: root
@@ -24,7 +24,7 @@ Singleton {
             return;
         error = "";
         applying = true;
-        applyProc.command = ["studio", "theme", "apply", name];
+        applyProc.command = ["loft", "theme", "apply", name];
         applyProc.running = true;
     }
 
@@ -32,12 +32,12 @@ Singleton {
 
     Process {
         id: list
-        command: ["studio", "theme", "list", "--json"]
+        command: ["loft", "theme", "list", "--json"]
         stdout: StdioCollector {
             onStreamFinished: {
-                // No output: the `studio` CLI isn't on PATH (or failed) — say so once.
+                // No output: the `loft` CLI isn't on PATH (or failed) — say so once.
                 if (text.trim() === "") {
-                    root.error = "Theme list unavailable (is the studio CLI on PATH?)";
+                    root.error = "Theme list unavailable (is the Loft CLI on PATH?)";
                     return;
                 }
                 try {
@@ -58,7 +58,7 @@ Singleton {
         onExited: code => {
             root.applying = false;
             if (code !== 0 && root.error === "")
-                root.error = `studio theme apply exited with ${code}`;
+                root.error = `loft theme apply exited with ${code}`;
         }
     }
 

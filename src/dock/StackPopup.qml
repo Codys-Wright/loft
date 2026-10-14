@@ -33,7 +33,7 @@ PanelWindow {
 
     visible: shown
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:dock-stack"
+    WlrLayershell.namespace: "loft:dock-stack"
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors {

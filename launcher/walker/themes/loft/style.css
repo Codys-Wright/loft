@@ -1,0 +1,168 @@
+/* Loft — Spotlight-style walker theme.
+ *
+ * A Liquid Glass sheet in the upper third of the screen (niri blurs behind it
+ * via ext-background-effect; see config.toml). Colors come from colors.css,
+ * a symlink to the active Loft theme's rendered walker.css, so applying a
+ * theme recolors the launcher on its next open (walker re-reads CSS). */
+@import "colors.css";
+
+* {
+  all: unset;
+  font-family: "Inter", "Adwaita Sans", sans-serif;
+}
+
+.box-wrapper {
+  background: @loft_glass;
+  border: 1px solid @loft_glass_border;
+  border-radius: 26px;
+  padding: 12px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.35);
+}
+
+.search-container {
+  padding: 6px 10px 10px 10px;
+  border-bottom: 1px solid @loft_glass_border;
+}
+
+.input {
+  font-size: 24px;
+  font-weight: 300;
+  color: @loft_text;
+  caret-color: @loft_accent;
+  padding: 6px 4px;
+}
+
+.input placeholder {
+  color: @loft_subtext;
+}
+
+.input selection {
+  background: @loft_selection;
+}
+
+.content-container {
+  padding-top: 8px;
+}
+
+.list,
+.placeholder,
+.elephant-hint,
+.preview-box {
+  color: @loft_text;
+}
+
+.placeholder,
+.elephant-hint {
+  color: @loft_subtext;
+  padding: 20px;
+}
+
+.item-box {
+  border-radius: 14px;
+  padding: 8px 12px;
+}
+
+child:selected .item-box,
+row:selected .item-box {
+  background: @loft_accent;
+  color: @loft_accent_text;
+}
+
+child:selected .item-subtext,
+row:selected .item-subtext {
+  color: @loft_accent_text;
+  opacity: 0.8;
+}
+
+.item-text {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.item-subtext {
+  font-size: 12px;
+  color: @loft_subtext;
+}
+
+.item-image {
+  margin-right: 10px;
+}
+
+.large-icons {
+  -gtk-icon-size: 34px;
+}
+
+.normal-icons {
+  -gtk-icon-size: 18px;
+}
+
+.item-image-text {
+  font-size: 28px;
+}
+
+.item-quick-activation {
+  background: @loft_selection;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.calc .item-text {
+  font-size: 26px;
+  font-weight: 300;
+}
+
+.symbols .item-image {
+  font-size: 24px;
+}
+
+.preview {
+  border: 1px solid @loft_glass_border;
+  border-radius: 14px;
+  color: @loft_text;
+  padding: 8px;
+}
+
+.keybinds {
+  padding-top: 10px;
+  border-top: 1px solid @loft_glass_border;
+  font-size: 11px;
+  color: @loft_subtext;
+}
+
+.keybind-button {
+  opacity: 0.6;
+}
+
+.keybind-button:hover {
+  opacity: 0.9;
+}
+
+.keybind-bind {
+  text-transform: lowercase;
+  opacity: 0.5;
+}
+
+.keybind-label {
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid @loft_glass_border;
+}
+
+.error {
+  padding: 10px;
+  border-radius: 12px;
+  background: @loft_urgent;
+  color: @loft_accent_text;
+}
+
+scrollbar {
+  opacity: 0;
+}
+
+popover {
+  background: @loft_glass;
+  border: 1px solid @loft_glass_border;
+  border-radius: 16px;
+  padding: 8px;
+}

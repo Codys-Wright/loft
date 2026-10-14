@@ -66,7 +66,7 @@ Singleton {
 
         function test(): void {
             root.show({
-                appName: "studio",
+                appName: "loft",
                 appIcon: "preferences-desktop-theme",
                 summary: "Theme applied",
                 body: "tokyonight — palette, glass and wallpaper updated across the desktop.",

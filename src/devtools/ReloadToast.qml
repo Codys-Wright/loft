@@ -73,7 +73,7 @@ Scope {
         screen: Quickshell.screens.find(s => s.name === (Niri.focusedWorkspace?.output ?? "")) ?? Quickshell.screens[0]
 
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.namespace: "studio:reload"
+        WlrLayershell.namespace: "loft:reload"
         exclusionMode: ExclusionMode.Ignore
         anchors {
             top: true

@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
-members = ["crates/studio-appmenu", "crates/studio-input", "crates/studio-niri"]
+members = ["crates/loft-appmenu", "crates/loft-input", "crates/loft-niri"]
 
 [workspace.package]
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/Codys-Wright/studio-linux"
+repository = "https://github.com/Codys-Wright/loft"

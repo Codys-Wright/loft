@@ -603,7 +603,7 @@ Singleton {
     // ── Actions ──────────────────────────────────────────────────────────
     function openTerminal() {
         // ~/Desktop when there is one; the first terminal found.
-        Quickshell.execDetached(["sh", "-c", 'd="$HOME/Desktop"; [ -d "$d" ] || d="$HOME"; cd "$d" || exit 1; for t in "$TERMINAL" xdg-terminal-exec ghostty kitty foot alacritty wezterm konsole gnome-terminal xterm; do [ -n "$t" ] && command -v "$t" >/dev/null 2>&1 && exec "$t"; done', "studio-terminal"]);
+        Quickshell.execDetached(["sh", "-c", 'd="$HOME/Desktop"; [ -d "$d" ] || d="$HOME"; cd "$d" || exit 1; for t in "$TERMINAL" xdg-terminal-exec ghostty kitty foot alacritty wezterm konsole gnome-terminal xterm; do [ -n "$t" ] && command -v "$t" >/dev/null 2>&1 && exec "$t"; done', "loft-terminal"]);
     }
 
     // Data the submenus show.

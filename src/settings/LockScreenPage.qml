@@ -13,11 +13,11 @@ ColumnLayout {
     id: page
     spacing: 12
 
-    readonly property bool devMode: Quickshell.env("STUDIO_DEV") === "1"
+    readonly property bool devMode: Quickshell.env("LOFT_DEV") === "1"
 
     readonly property string currentName: {
         if (Vibes.chosenLock === "builtin" || (Vibes.chosenLock === "" && Vibes.defaultLock === ""))
-            return "Studio (built-in)";
+            return "Loft (built-in)";
         const path = Vibes.chosenLock || Vibes.defaultLock;
         const l = Vibes.locks.find(x => x.path === path);
         return l ? `${l.name} · ${l.source_pack}` : path.split("/").pop();
@@ -85,7 +85,7 @@ ColumnLayout {
             spacing: 10
 
             VibeThumb {
-                title: "Studio"
+                title: "Loft"
                 subtitle: "built-in · follows the theme"
                 isDefault: Vibes.defaultLock === ""
                 selected: Vibes.isCurrentLock("builtin")

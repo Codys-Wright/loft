@@ -494,7 +494,7 @@ iPhone ──BT (MAP/PBAP/ANCS/HFP)──┐
   [Quickshell Socket docs](https://quickshell.org/docs/types/Quickshell.Io/Socket/)), plus a
   second short-lived socket for request/response. Everything else (island pages, panel,
   Control Center tile) binds to that service. No Rust is needed in phase 1–2. Add a small
-  `crates/studio-phone` later only if JSON handling in QML gets heavy, or to normalise
+  `crates/loft-phone` later only if JSON handling in QML gets heavy, or to normalise
   tether, BlueFerry, KDE Connect and a Matrix bridge behind one model.
 - **Inline reply:** Loft's `NotificationServer` currently sets `actionsSupported: true`. Turn
   on `inlineReplySupported` and route the reply for `desktop-entry=com.tether.*`

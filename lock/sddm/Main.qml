@@ -4,7 +4,7 @@ import "services"
 import "components"
 import "design"
 
-// studio's SDDM theme: a static loader. It shows the greeter pack's own
+// Loft's SDDM theme: a static loader. It shows the greeter pack's own
 // design (<packDir>/lock/Main.qml) when there is one, else the built-in
 // MacLock — the very same design the Quickshell lock screen uses (shared
 // from src/lock/design by nix/lock.nix), colored by the pack's theme.json.
@@ -16,8 +16,8 @@ Item {
     height: 1080
 
     // A directory holding theme.json (+ optionally lock/Main.qml); normally
-    // a symlink to a pack under /var/lib/studio-linux/themes (PLAN §4.5).
-    readonly property string packDir: config.packDir || "/var/lib/studio-linux/greeter"
+    // a symlink to a pack under /var/lib/loft/themes (PLAN §4.5).
+    readonly property string packDir: config.packDir || "/var/lib/loft/greeter"
 
     // SDDM makes one view per screen; only the primary one takes input.
     readonly property bool primary: typeof primaryScreen === "undefined" || primaryScreen
@@ -57,7 +57,7 @@ Item {
         }
     }
 
-    // ── studio-native contract for pack designs (docs/THEME-FORMAT-LOCK.md);
+    // ── loft-native contract for pack designs (docs/THEME-FORMAT-LOCK.md);
     // SDDM's own sddm/userModel/sessionModel/config/keyboard are context
     // properties, visible to a loaded design as they are.
     readonly property QtObject lock: QtObject {

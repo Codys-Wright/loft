@@ -2,7 +2,7 @@
 
 No network: palettes are checked against config snippets and images
 generated here, and the install path runs against small local git repos
-laid out like the upstream ones (STUDIO_<IMPORTER>_URL points at them).
+laid out like the upstream ones (LOFT_<IMPORTER>_URL points at them).
 ffmpeg is disabled so results don't depend on the host.
 """
 
@@ -21,11 +21,11 @@ import zlib
 from pathlib import Path
 from unittest import mock
 
-from studio import color
-from studio.cli import main
-from studio import palette
-from studio.importers import REGISTRY, ImporterError, cozytile, parse_ref, qylock
-from studio.importers.upstream import literal
+from loft import color
+from loft.cli import main
+from loft import palette
+from loft.importers import REGISTRY, ImporterError, cozytile, parse_ref, qylock
+from loft.importers.upstream import literal
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -37,7 +37,7 @@ except ImportError:
     HAVE_JSONSCHEMA = False
 
 
-def studio(*argv: str) -> tuple[int, str, str]:
+def loft(*argv: str) -> tuple[int, str, str]:
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         rc = main(list(argv))
@@ -409,19 +409,19 @@ class Install(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.saved = dict(os.environ)
-        self.user = self.tmp / "data" / "studio-linux" / "themes"
+        self.user = self.tmp / "data" / "loft" / "themes"
         os.environ.update(
             {
                 "HOME": str(self.tmp / "home"),
                 "XDG_DATA_HOME": str(self.tmp / "data"),
-                "STUDIO_STATE_DIR": str(self.tmp / "state"),
-                "STUDIO_HOOKS": "none",
-                "STUDIO_THEME_INDEX": "none",
-                "STUDIO_COZYTILE_URL": cozytile_repo(self.tmp / "cozytile"),
-                "STUDIO_QYLOCK_URL": qylock_repo(self.tmp / "qylock"),
+                "LOFT_STATE_DIR": str(self.tmp / "state"),
+                "LOFT_HOOKS": "none",
+                "LOFT_THEME_INDEX": "none",
+                "LOFT_COZYTILE_URL": cozytile_repo(self.tmp / "cozytile"),
+                "LOFT_QYLOCK_URL": qylock_repo(self.tmp / "qylock"),
             }
         )
-        for k in ("STUDIO_THEME_PATH", "STUDIO_DATA_DIR", "STUDIO_LIBRARY"):
+        for k in ("LOFT_THEME_PATH", "LOFT_DATA_DIR", "LOFT_LIBRARY"):
             os.environ.pop(k, None)
         self.noff = mock.patch.object(palette, "have_ffmpeg", return_value=False)
         self.noff.start()
@@ -433,17 +433,17 @@ class Install(unittest.TestCase):
         shutil.rmtree(self.tmp)
 
     def test_list(self):
-        rc, out, err = studio("theme", "install", "--list", "cozytile:")
+        rc, out, err = loft("theme", "install", "--list", "cozytile:")
         self.assertEqual(rc, 0, err)
         self.assertEqual([line.split()[0] for line in out.splitlines()], ["cozytile-carbon", "cozytile-sakura"])
-        rc, out, err = studio("theme", "install", "--list", "qylock")
+        rc, out, err = loft("theme", "install", "--list", "qylock")
         self.assertEqual(rc, 0, err)
         self.assertIn("qylock-video", out)
         self.assertIn("qylock-multi", out)
-        self.assertEqual(studio("theme", "install", "--list", "./somewhere")[0], 1)
+        self.assertEqual(loft("theme", "install", "--list", "./somewhere")[0], 1)
 
     def test_cozytile_all(self):
-        rc, out, err = studio("theme", "install", "cozytile:all")
+        rc, out, err = loft("theme", "install", "cozytile:all")
         self.assertEqual(rc, 0, err)
         sakura = self.user / "cozytile-sakura"
         theme = json.loads((sakura / "theme.json").read_text())
@@ -457,7 +457,7 @@ class Install(unittest.TestCase):
         self.assertEqual((m["license"], m["upstream"]["importer"]), ("NOASSERTION", "cozytile"))
         self.assertRegex(m["upstream"]["commit"], "^[0-9a-f]{40}$")
         self.assertEqual(m["lock"], {"name": "sakura", "format": "qylock", "path": "greeter"})
-        from studio.pack import Pack
+        from loft.pack import Pack
 
         walls = [str(e["path"].relative_to(sakura)) for e in Pack(sakura).wallpaper_entries()]
         self.assertEqual(walls, ["wallpapers/120_-_knfpx73.jpg", "greeter/Background.jpg", "wallpapers/pexels-1.png"])
@@ -469,23 +469,23 @@ class Install(unittest.TestCase):
         self.assertFalse((carbon_dir / "wallpapers").exists())
 
         # Re-running `all` skips installed packs; a single theme refuses; --force replaces.
-        rc, out, _ = studio("theme", "install", "cozytile:all")
+        rc, out, _ = loft("theme", "install", "cozytile:all")
         self.assertEqual(rc, 0)
         self.assertIn("skipped", out)
-        rc, _, err = studio("theme", "install", "cozytile:sakura")
+        rc, _, err = loft("theme", "install", "cozytile:sakura")
         self.assertEqual(rc, 1)
         self.assertIn("--force", err)
         (sakura / "marker").write_text("x")
-        self.assertEqual(studio("theme", "install", "--force", "cozytile:Sakura")[0], 0)
+        self.assertEqual(loft("theme", "install", "--force", "cozytile:Sakura")[0], 0)
         self.assertFalse((sakura / "marker").exists())
         # No staging leftovers next to the packs.
         self.assertEqual(sorted(p.name for p in self.user.iterdir()), ["cozytile-carbon", "cozytile-sakura"])
 
-        rc, _, err = studio("theme", "apply", "cozytile-sakura")
+        rc, _, err = loft("theme", "apply", "cozytile-sakura")
         self.assertEqual(rc, 0, err)
 
     def test_qylock(self):
-        rc, out, err = studio("theme", "install", "qylock:all")
+        rc, out, err = loft("theme", "install", "qylock:all")
         self.assertEqual(rc, 0, err)
         still = self.user / "qylock-still"
         m = json.loads((still / "manifest.json").read_text())
@@ -503,7 +503,7 @@ class Install(unittest.TestCase):
         # conf accent on a neutral palette.
         v = json.loads((self.user / "qylock-video" / "theme.json").read_text())
         self.assertEqual(v["wallpaper"], {"images": ["lock/qylock/bg.mp4"]})
-        from studio.pack import Pack
+        from loft.pack import Pack
 
         vp = Pack(self.user / "qylock-video")
         self.assertEqual([e["kind"] for e in vp.wallpaper_entries()], ["video"])
@@ -516,13 +516,13 @@ class Install(unittest.TestCase):
 
         # The rendered manifest points the lock loader at the installed design.
         out_dir = self.tmp / "r"
-        rc, _, err = studio("theme", "render", "qylock-still", str(out_dir))
+        rc, _, err = loft("theme", "render", "qylock-still", str(out_dir))
         self.assertEqual(rc, 0, err)
         rm = json.loads((out_dir / "manifest.json").read_text())
         self.assertEqual(rm["lock"]["path"], str((still / "lock" / "qylock").resolve()))
 
     def test_qylock_backgrounds(self):
-        self.assertEqual(studio("theme", "install", "qylock:multi")[0], 0)
+        self.assertEqual(loft("theme", "install", "qylock:multi")[0], 0)
         t = json.loads((self.user / "qylock-multi" / "theme.json").read_text())
         self.assertEqual(t["wallpaper"], {"image": "lock/qylock/background/A Glow.jpg", "images": ["lock/qylock/background/B Glow.jpg"]})
         self.assertIn("2 backgrounds", json.loads((self.user / "qylock-multi" / "manifest.json").read_text())["description"])
@@ -537,22 +537,22 @@ class Install(unittest.TestCase):
             mock.patch.object(palette, "ffmpeg_frame", side_effect=frame),
             mock.patch.object(palette, "ffmpeg_sample", return_value=[(20, 24, 40)] * 50 + [(240, 140, 40)] * 20),
         ):
-            self.assertEqual(studio("theme", "install", "qylock:clips")[0], 0)
+            self.assertEqual(loft("theme", "install", "qylock:clips")[0], 0)
         clips = self.user / "qylock-clips"
         t = json.loads((clips / "theme.json").read_text())
         self.assertEqual(
             t["wallpaper"],
             {"images": [{"path": "wallpapers/day.jpg", "video": "lock/qylock/day.mp4"}, {"path": "wallpapers/night.jpg", "video": "lock/qylock/night.mp4"}]},
         )
-        from studio.pack import Pack
+        from loft.pack import Pack
 
         p = Pack(clips)
         self.assertEqual(p.default_wallpaper()["path"], clips.resolve() / "wallpapers/day.jpg")
         self.assertEqual(p.default_wallpaper()["video"], clips.resolve() / "lock/qylock/day.mp4")
 
     def test_lock_dir_not_in_digest(self):
-        self.assertEqual(studio("theme", "install", "qylock:still")[0], 0)
-        from studio.pack import Pack
+        self.assertEqual(loft("theme", "install", "qylock:still")[0], 0)
+        from loft.pack import Pack
 
         p = Pack(self.user / "qylock-still")
         d = p.digest()
@@ -564,21 +564,21 @@ class Install(unittest.TestCase):
 
     @unittest.skipUnless(HAVE_JSONSCHEMA, "needs jsonschema")
     def test_installed_packs_validate(self):
-        self.assertEqual(studio("theme", "install", "qylock:all")[0], 0)
-        self.assertEqual(studio("theme", "install", "cozytile:all")[0], 0)
+        self.assertEqual(loft("theme", "install", "qylock:all")[0], 0)
+        self.assertEqual(loft("theme", "install", "cozytile:all")[0], 0)
         names = sorted(p.name for p in self.user.iterdir())
-        rc, _, err = studio("theme", "validate", *names)
+        rc, _, err = loft("theme", "validate", *names)
         self.assertEqual(rc, 0, err)
 
     def test_errors(self):
-        rc, _, err = studio("theme", "install", "qylock:does-not-exist")
+        rc, _, err = loft("theme", "install", "qylock:does-not-exist")
         self.assertEqual(rc, 1)
         self.assertIn("no qylock theme", err)
-        rc, _, err = studio("theme", "install", "cozytile:")
+        rc, _, err = loft("theme", "install", "cozytile:")
         self.assertEqual(rc, 1)
         self.assertIn("cozytile:all", err)
-        os.environ["STUDIO_QYLOCK_URL"] = f"file://{self.tmp}/missing"
-        rc, _, err = studio("theme", "install", "qylock:still")
+        os.environ["LOFT_QYLOCK_URL"] = f"file://{self.tmp}/missing"
+        rc, _, err = loft("theme", "install", "qylock:still")
         self.assertEqual(rc, 1)
         self.assertIn("network down", err)
         self.assertFalse(self.user.exists() and any(self.user.iterdir()))

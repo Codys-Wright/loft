@@ -22,7 +22,7 @@ PanelWindow {
 
     visible: (shown || Capture.busy !== "") && onThisScreen
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:capture-thumbnail"
+    WlrLayershell.namespace: "loft:capture-thumbnail"
     exclusionMode: ExclusionMode.Ignore
     anchors {
         bottom: true

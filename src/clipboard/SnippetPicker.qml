@@ -20,7 +20,7 @@ PanelWindow {
 
     visible: open
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:snippets"
+    WlrLayershell.namespace: "loft:snippets"
     WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors {

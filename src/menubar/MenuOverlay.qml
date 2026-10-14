@@ -27,7 +27,7 @@ PanelWindow {
 
     visible: shown
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:menu"
+    WlrLayershell.namespace: "loft:menu"
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors {
@@ -250,7 +250,7 @@ PanelWindow {
                         return MenuState.pendingAsk.title;
                     if (MenuState.mode === "confirm")
                         return `Quit ${Apps.name(root.w?.app_id)}?`;
-                    return root.w ? Apps.name(root.w.app_id) : "studio-linux";
+                    return root.w ? Apps.name(root.w.app_id) : "Loft";
                 }
                 color: Theme.text
                 font.family: Theme.fontUi

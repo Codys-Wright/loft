@@ -7,7 +7,7 @@ import QtQuick
 // glass components run unchanged under SDDM.
 //
 // Main.qml calls load() with candidate theme.json paths: the greeter pack
-// (/var/lib/studio-linux/greeter, machine-wide, PLAN §4.5), then the bundled
+// (/var/lib/loft/greeter, machine-wide, PLAN §4.5), then the bundled
 // default. Reading files through XMLHttpRequest needs
 // QML_XHR_ALLOW_FILE_READ=1 in the greeter environment; without it the
 // defaults below (the built-in default theme) are used.
@@ -101,7 +101,7 @@ QtObject {
                     return;
                 }
             } catch (e) {
-                console.warn(`studio greeter: ${url}: ${e}`);
+                console.warn(`Loft greeter: ${url}: ${e}`);
             }
             root.load(candidates.slice(1));
         };
@@ -109,7 +109,7 @@ QtObject {
             xhr.open("GET", url);
             xhr.send();
         } catch (e) {
-            console.warn(`studio greeter: cannot read ${url}: ${e}`);
+            console.warn(`Loft greeter: cannot read ${url}: ${e}`);
             root.load(candidates.slice(1));
         }
     }

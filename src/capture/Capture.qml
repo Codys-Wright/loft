@@ -23,8 +23,8 @@ Singleton {
     id: root
 
     readonly property string home: Quickshell.env("HOME")
-    readonly property bool dev: Quickshell.env("STUDIO_DEV") === "1"
-    readonly property string tmp: `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/studio-capture`
+    readonly property bool dev: Quickshell.env("LOFT_DEV") === "1"
+    readonly property string tmp: `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/loft-capture`
 
     // ── Settings ────────────────────────────────────────────────────────
     readonly property alias cfg: cfg
@@ -675,7 +675,7 @@ Singleton {
             return root.lastColor;
         }
 
-        // Tests (STUDIO_DEV=1 only): finish the open area selection with a
+        // Tests (LOFT_DEV=1 only): finish the open area selection with a
         // fixed rect / pick a fixed pixel, since slurp-style dragging needs
         // real pointer input.
         function testSelect(): void {

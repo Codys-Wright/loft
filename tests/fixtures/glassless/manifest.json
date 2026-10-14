@@ -1,6 +1,6 @@
 {
   "name": "glassless",
-  "author": "studio-linux tests",
+  "author": "loft tests",
   "version": "0.1.0",
   "license": "CC0-1.0",
   "source": "tests/fixtures"

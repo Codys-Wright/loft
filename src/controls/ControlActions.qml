@@ -82,7 +82,7 @@ Singleton {
             break;
         case "spotlight":
             closePanels();
-            Quickshell.execDetached(["studio-launcher", "open"]);
+            Quickshell.execDetached(["loft-launcher", "open"]);
             break;
         }
     }

@@ -27,7 +27,7 @@ PanelWindow {
     screen: modelData
 
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "studio:island"
+    WlrLayershell.namespace: "loft:island"
     // Sit inside the bar's strip rather than below its exclusive zone.
     exclusionMode: ExclusionMode.Ignore
     anchors.top: true
