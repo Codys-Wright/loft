@@ -220,6 +220,8 @@ loft dock open ID FILE… | show PATH|ID | apps [ID…]
 | `Mod+Shift+Alt+V` | paste as plain text |
 | `Mod+Shift+Period` | snippet picker (edit snippets in Settings → Snippets) |
 | `Mod+Shift+N` | scratchpad: tabbed, autosaved Markdown notes |
+| `Mod+Ctrl+V` (⌃⌘V) | Quick panel: your favorite tools, the latest clipboard entries and snippets, at the pointer (Settings → Quick Panel) |
+| hold `Mod+Ctrl+Space` (⌃⌘Space) | Radial menu: point at a slice, let go; also the middle button on the desktop (Settings → Radial Menu) |
 
 The shell records the clipboard itself (`wl-paste --watch cliphist store`, into cliphist's
 usual db — turn it off in Settings → Clipboard & Files if you already run a recorder).

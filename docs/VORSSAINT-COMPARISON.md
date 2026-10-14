@@ -22,11 +22,11 @@ Legend: ✅ have · 🟡 partial · 🔨 in progress · ⬜ todo · ➖ not appl
 
 | | Count |
 |---|---|
-| ✅ Have | 24 |
+| ✅ Have | 26 |
 | 🧩 Handled by niri / fleet | 5 |
 | 🟡 Partial | 11 |
 | 🔨 In progress | 2 |
-| ⬜ Todo | 14 |
+| ⬜ Todo | 12 |
 | ➖ Not applicable on Linux/NixOS | 9 |
 
 Of the 56 rows that apply on Linux: 29 are covered (✅ + 🧩), 13 more are partial or being
@@ -98,9 +98,9 @@ doesn't need (bottom of this file).
 | Dynamic Island (music, notifications, calendars, timers, downloads) | 🟡 | Music, notifications, live activities, focus timer, system pages; calendars/downloads todo |
 | AI agents usage in the island (Claude, Codex, …) | ⬜ | |
 | Command Bar (search, calculator, units, emoji, scripts) | 🟡 | Spotlight (walker): apps, calculator, emoji, files, clipboard, 13,570 web !bangs; quicklinks + bang picker 🔨 |
-| Quick panel (floating palette) | ⬜ | |
+| Quick panel (floating palette) | ✅ | ⌃⌘V glass palette at the pointer: favorite tools from the action catalog, clipboard, snippets, type-to-filter |
 | Quick toggles | ✅ | Control Center controls (+ pin any to the menu bar) |
-| Radial menu | ⬜ | |
+| Radial menu | ✅ | Hold ⌃⌘Space or middle-button on the desktop: pointer-centered wheel, submenu rings, per-app profiles, release-to-activate |
 | Scratchpad (tabbed Markdown notes) | ✅ | |
 | Cleaning Mode | ⬜ | Lock input while cleaning |
 

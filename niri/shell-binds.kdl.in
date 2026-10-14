@@ -22,6 +22,12 @@ binds {
     Mod+Shift+Alt+V hotkey-overlay-title="Paste as Plain Text" { spawn @IPC@ "clipboard" "pastePlain"; }
     Mod+Shift+Period hotkey-overlay-title="Snippets" { spawn @IPC@ "snippets" "toggle"; }
     Mod+Shift+N hotkey-overlay-title="Scratchpad" { spawn @IPC@ "scratchpad" "toggle"; }
+    // macOS ⌃⌘V / hold ⌃⌘Space. Physical ⌘ is Mod (lv3:lwin_switch), and
+    // xremap only rewrites ⌘+key without Ctrl, so these reach niri. The
+    // wheel takes the keyboard: releasing ⌃ or ⌘ picks the slice under
+    // the pointer (a tap leaves it open to click).
+    Mod+Ctrl+V hotkey-overlay-title="Quick Panel" { spawn @IPC@ "quickpanel" "toggle"; }
+    Mod+Ctrl+Space repeat=false hotkey-overlay-title="Radial Menu" { spawn @IPC@ "radial" "hold"; }
     Mod+Shift+O hotkey-overlay-title="Next Audio Output" { spawn @IPC@ "audio" "nextOutput"; }
     Mod+Shift+M hotkey-overlay-title="Mute Microphones" { spawn @IPC@ "mic" "toggleMute"; }
 }
