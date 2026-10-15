@@ -43,6 +43,9 @@ Singleton {
     property alias menubar: settings.menubar
     // Control Center layout and the menu bar's status items (Controls.qml).
     property alias controlCenter: settings.controlCenter
+    // Reduce Motion (Motion.qml): shapes jump and content cross-fades
+    // instead of morphing and sliding.
+    property alias reduceMotion: settings.reduceMotion
 
     FileView {
         id: view
@@ -183,6 +186,7 @@ Singleton {
                 // A lock design directory, "builtin", or "" = the theme's default.
                 property string design: ""
             }
+            property bool reduceMotion: false
 
             property var perTheme: ({})
 

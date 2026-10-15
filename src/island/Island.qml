@@ -227,25 +227,25 @@ PanelWindow {
 
         Behavior on width {
             NumberAnimation {
-                duration: 320
+                duration: Motion.ms(320)
                 easing.type: Easing.OutQuint
             }
         }
         Behavior on height {
             NumberAnimation {
-                duration: 320
+                duration: Motion.ms(320)
                 easing.type: Easing.OutQuint
             }
         }
         Behavior on radius {
             NumberAnimation {
-                duration: 320
+                duration: Motion.ms(320)
                 easing.type: Easing.OutQuint
             }
         }
         Behavior on shoulder {
             NumberAnimation {
-                duration: 320
+                duration: Motion.ms(320)
                 easing.type: Easing.OutQuint
             }
         }
@@ -320,7 +320,7 @@ PanelWindow {
 
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: 150
+                        duration: Motion.ms(150)
                     }
                 }
 
@@ -448,7 +448,7 @@ PanelWindow {
 
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: 150
+                        duration: Motion.ms(150)
                     }
                 }
 
@@ -488,7 +488,7 @@ PanelWindow {
 
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: 150
+                        duration: Motion.ms(150)
                     }
                 }
 
@@ -523,7 +523,7 @@ PanelWindow {
 
                             Behavior on width {
                                 NumberAnimation {
-                                    duration: 100
+                                    duration: Motion.ms(100)
                                 }
                             }
                         }
@@ -580,7 +580,7 @@ PanelWindow {
 
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: 180
+                        duration: Motion.ms(180)
                     }
                 }
             }
@@ -596,7 +596,7 @@ PanelWindow {
 
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: 180
+                        duration: Motion.ms(180)
                     }
                 }
             }
@@ -617,7 +617,7 @@ PanelWindow {
 
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: 220
+                        duration: Motion.ms(220)
                     }
                 }
 
@@ -636,7 +636,7 @@ PanelWindow {
 
                         Behavior on x {
                             NumberAnimation {
-                                duration: 300
+                                duration: Motion.ms(300)
                                 easing.type: Easing.OutQuint
                             }
                         }
@@ -694,7 +694,7 @@ PanelWindow {
 
                             Behavior on width {
                                 NumberAnimation {
-                                    duration: 200
+                                    duration: Motion.ms(200)
                                 }
                             }
                         }
@@ -719,14 +719,14 @@ PanelWindow {
                         target: flash
                         property: "opacity"
                         to: 0.9
-                        duration: 40
+                        duration: Motion.ms(40)
                         easing.type: Easing.OutExpo
                     }
                     NumberAnimation {
                         target: flash
                         property: "opacity"
                         to: 0
-                        duration: 320
+                        duration: Motion.ms(320)
                         easing.type: Easing.InExpo
                     }
                 }
