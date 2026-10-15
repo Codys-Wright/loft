@@ -370,8 +370,12 @@ cleanup_host() {
 # history, favicons, qalc) and script commands in the session, and never run
 # Spotlight's power / session / trash commands: they're logged to launcher-dryrun.log.
 launcher_env=""
+# …and never eject a real drive: the shell's udisksctl calls (Drives.qml)
+# go to eject-dryrun.log.
+shell_env=""
 if [ "$named" = 1 ]; then
   launcher_env="\"XDG_CACHE_HOME=$dir/cache\" \"LOFT_SCRIPTS_DIR=$dir/scripts\" \"LOFT_LAUNCHER_DRYRUN=$dir/launcher-dryrun.log\" "
+  shell_env="\"LOFT_EJECT_DRYRUN=$dir/eject-dryrun.log\" "
 fi
 
 # The theme fragment comes after base.kdl so it wins, then dev-local, then
@@ -399,7 +403,7 @@ include optional=true "$dir/overrides/niri.kdl"
 $ws_kdl
 $extra_kdl
 spawn-at-startup "env" $launcher_env"LOFT_STATE_DIR=$dir" "LOFT_LAUNCHER_DIR=$root/launcher" "LOFT_SHELL_SRC=$root/src" "loft-launcher" "service"
-spawn-at-startup "env" $ws_env"LOFT_DEV=1" "LOFT_STATE_DIR=$dir" "LOFT_DATA_DIR=$root" "LOFT_THEME_PATH=${XDG_DATA_HOME:-$HOME/.local/share}/loft/themes:$root/themes" "LOFT_SHELL_PATH=$root/src" "LOFT_NIRI_CONFIG=$dir/config.kdl" "LOFT_THEME_FILE=$dir/current/theme.json" "LOFT_UI_FONT=@UI_FONT@" "LOFT_ICON_FONT=@ICON_FONT@" "QML_IMPORT_PATH=@LOCK_QML_PATH@" "QT_PLUGIN_PATH=@QT_MM_PLUGINS@" "quickshell" "--path" "$root/src"
+spawn-at-startup "env" $ws_env$shell_env"LOFT_DEV=1" "LOFT_STATE_DIR=$dir" "LOFT_DATA_DIR=$root" "LOFT_THEME_PATH=${XDG_DATA_HOME:-$HOME/.local/share}/loft/themes:$root/themes" "LOFT_SHELL_PATH=$root/src" "LOFT_NIRI_CONFIG=$dir/config.kdl" "LOFT_THEME_FILE=$dir/current/theme.json" "LOFT_UI_FONT=@UI_FONT@" "LOFT_ICON_FONT=@ICON_FONT@" "QML_IMPORT_PATH=@LOCK_QML_PATH@" "QT_PLUGIN_PATH=@QT_MM_PLUGINS@" "quickshell" "--path" "$root/src"
 EOF
 
 # Live everything, not just QML: `loft` runs the checkout's CLI,

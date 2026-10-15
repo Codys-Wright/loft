@@ -34,7 +34,7 @@ import qs.services
 // notifications, calendar, media, timers, controls, system, screen time, AI
 // agents; scroll to switch.
 // IPC: island toggle|media|system|usage|notifications|live|calendar|timers|
-// controls|ai|flash.
+// controls|ai|scratchpad|flash.
 PanelWindow {
     id: root
 
@@ -45,6 +45,8 @@ PanelWindow {
     WlrLayershell.namespace: "loft:island"
     // Sit inside the bar's strip rather than below its exclusive zone.
     exclusionMode: ExclusionMode.Ignore
+    // The keyboard only for a page with a text field (Scratchpad), on click.
+    WlrLayershell.keyboardFocus: expanded && page === "scratchpad" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     anchors.top: true
     margins.top: attached ? 0 : 3
     implicitWidth: 560
@@ -73,6 +75,8 @@ PanelWindow {
             return Agenda.enabled;
         case "ai":
             return AiUsage.enabled && AiUsage.available;
+        case "scratchpad":
+            return Scratchpad.enabled;
         }
         return true;
     }
@@ -100,7 +104,9 @@ PanelWindow {
     // An incoming iPhone call (Phone.qml): Answer / Decline over everything.
     readonly property var ringingCall: Phone.ringingCall
     readonly property bool ringing: ringingCall !== null
-    readonly property bool expanded: !ringing && (pinned || (hover.hovered && banner === null))
+    // Typing into a page (the Scratchpad's quick add) keeps it open.
+    property bool typing: false
+    readonly property bool expanded: !ringing && (pinned || typing || (hover.hovered && banner === null))
     // A call (a "call" live activity) keeps the island to itself.
     readonly property bool calling: liveActivities.includes("call")
     // What just changed (Hud.qml), on the focused output's island: over
@@ -672,6 +678,8 @@ PanelWindow {
                                     return controlsPage;
                                 case "ai":
                                     return aiPage;
+                                case "scratchpad":
+                                    return scratchpadPage;
                                 default:
                                     return usagePage;
                                 }
@@ -805,6 +813,13 @@ PanelWindow {
         id: aiPage
         AiPage {}
     }
+    Component {
+        id: scratchpadPage
+        ScratchpadPage {
+            onTypingChanged: root.typing = typing
+            Component.onDestruction: root.typing = false
+        }
+    }
 
     IpcHandler {
         target: "island"
@@ -847,6 +862,10 @@ PanelWindow {
 
         function ai(): void {
             root.showPage("ai");
+        }
+
+        function scratchpad(): void {
+            root.showPage("scratchpad");
         }
 
         // Exercise the shutter flash without taking a screenshot.

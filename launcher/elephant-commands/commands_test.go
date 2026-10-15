@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func testConfig(t *testing.T) {
@@ -182,5 +183,32 @@ func TestActivateNowRunsWithoutConfirm(t *testing.T) {
 	pendMu.Unlock()
 	if p != nil {
 		t.Fatalf("now must not ask for confirmation")
+	}
+}
+
+// The shell's drives.json → "Eject “USB STICK”" + "Eject All"; odd ids
+// (they go into a shell line) are skipped; the file is re-read when it changes.
+func TestDriveCommands(t *testing.T) {
+	testConfig(t)
+	f := filepath.Join(t.TempDir(), "drives.json")
+	config.Drives = f
+	if got := driveCommands(); got != nil {
+		t.Fatalf("no file → no commands, got %d", len(got))
+	}
+	os.WriteFile(f, []byte(`{"drives":[{"id":"sdb","name":"USB STICK","size":"29G","kind":"disk"},{"id":"x; rm -rf ~","name":"bad","kind":"disk"}]}`), 0o644)
+	got := driveCommands()
+	if len(got) != 2 || got[0].id != "eject-sdb" || got[0].title != "Eject “USB STICK”" || got[0].cmd != "{ipc} drives eject sdb" || got[1].id != "ejectall" {
+		t.Fatalf("drive commands = %+v", got)
+	}
+	if s, _ := match("eject usb", got[0].title, got[0].keywords, false); s <= config.MinScore {
+		t.Errorf("“eject usb” should match, score %d", s)
+	}
+	if driveCommand("ejectall") == nil {
+		t.Errorf("Activate must find ejectall")
+	}
+	os.WriteFile(f, []byte(`{"drives":[]}`), 0o644)
+	os.Chtimes(f, time.Now().Add(time.Second), time.Now().Add(time.Second))
+	if got := driveCommands(); len(got) != 0 {
+		t.Errorf("drives gone → no commands, got %d", len(got))
 	}
 }

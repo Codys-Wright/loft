@@ -50,6 +50,7 @@ type Config struct {
 	Scripts        string `koanf:"scripts" desc:"your script commands" default:"~/.local/share/loft/scripts"`
 	BuiltinScripts string `koanf:"builtin_scripts" desc:"Loft's own script commands" default:""`
 	Settings       string `koanf:"settings" desc:"spotlight.json (scripts.disabled)" default:""`
+	Drives         string `koanf:"drives" desc:"the shell's external drives (drives.json): Eject commands" default:""`
 	DryRun         string `koanf:"dry_run" desc:"tests: log power / session / trash commands to this file instead of running them" default:""`
 	MinChars       int    `koanf:"min_chars" desc:"shortest query that lists commands next to apps" default:"2"`
 }
@@ -222,7 +223,7 @@ func Query(conn net.Conn, query string, single bool, exact bool, format uint8) [
 		return items
 	}
 
-	for _, c := range cmds {
+	for _, c := range append(cmds[:len(cmds):len(cmds)], driveCommands()...) {
 		s, pos := match(trim, c.title, c.keywords, exact)
 		if s <= config.MinScore {
 			continue
@@ -453,6 +454,9 @@ func Activate(single bool, identifier, action string, query string, args string,
 
 	case kind == "cmd":
 		c := cmdByID[id]
+		if c == nil {
+			c = driveCommand(id)
+		}
 		if c == nil {
 			return
 		}

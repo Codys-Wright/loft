@@ -17,6 +17,28 @@ GlassSurface {
     id: panel
 
     property var items: []
+    // The rows actually drawn. Menus that rebuild their items on every
+    // hover (the app menu's appItems, the system menu) hand over fresh but
+    // identical objects each time; replacing the Repeater's model would
+    // destroy the row under the pointer between press and release (the new
+    // rows sit at y 0 until the layout's next polish), so a mouse click
+    // never arrived. Rows are swapped only when something visible changed.
+    property var rowItems: []
+    property string rowSig: ""
+    onItemsChanged: {
+        const sig = signature(items);
+        if (sig === rowSig)
+            return;
+        rowSig = sig;
+        rowItems = items;
+    }
+    Component.onCompleted: {
+        rowSig = signature(items);
+        rowItems = items;
+    }
+    function signature(list) {
+        return JSON.stringify((list ?? []).map(i => [MenuState.keyOf(i), i.label ?? "", i.enabled !== false, i.checked === true, i.toggle ?? "", i.submenu === true, i.separator === true, i.header === true, i.icon ?? "", i.swatch ?? null, i.thumb ?? "", i.shortcut ?? null]));
+    }
     property int level: 0
     // Key of the highlighted row (MenuState.path[level]).
     property var highlighted
@@ -25,9 +47,9 @@ GlassSurface {
     signal clicked(var item)
 
     readonly property int pad: 6
-    readonly property bool anyToggle: items.some(i => i.toggle)
+    readonly property bool anyToggle: rowItems.some(i => i.toggle)
     // The leading picture column (icons, swatches, thumbnails), if any.
-    readonly property int leadWidth: items.some(i => i.thumb) ? 44 : items.some(i => i.swatch) ? 30 : items.some(i => i.icon) ? 16 : 0
+    readonly property int leadWidth: rowItems.some(i => i.thumb) ? 44 : rowItems.some(i => i.swatch) ? 30 : rowItems.some(i => i.icon) ? 16 : 0
     readonly property int leadX: anyToggle ? 22 : 10
     readonly property int labelX: leadX + (leadWidth > 0 ? leadWidth + 8 : 0)
     // 0 = as tall as the rows; otherwise the list scrolls inside this.
@@ -93,7 +115,7 @@ GlassSurface {
 
             Repeater {
                 id: rows
-                model: panel.items
+                model: panel.rowItems
 
                 delegate: Item {
                     id: row

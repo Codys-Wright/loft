@@ -58,6 +58,10 @@ A named session is, by default:
   - its own launcher caches (`XDG_CACHE_HOME` for elephant/walker: files index, history,
     favicons) and script-commands folder, and Spotlight's Lock / Log Out / Restart / Shut
     Down / Sleep / Empty Trash are only logged to `<state>/launcher-dryrun.log`, never run.
+  - the shell's Eject (Drives.qml) only logs its `udisksctl unmount / lock / power-off` and
+    `eject` calls to `<state>/eject-dryrun.log`. To give it drives to list, put an `lsblk`
+    shim that prints a fixed `lsblk -J` tree in `<state>/bin` (it's first on the session's
+    PATH; create the dir before starting the session), then `quickshell ipc … call drives refresh`.
 - **silent**: no audio server, so dragging the volume slider can't change the real volume.
   `--share-audio` links the host's PipeWire in, but only do that when the test is about audio.
 - **no screen capture**: niri runs on a software renderer here, so it offers dmabuf only at v3,

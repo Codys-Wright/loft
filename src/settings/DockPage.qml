@@ -5,7 +5,8 @@ import qs.components
 import qs.services
 
 // Settings → Dock: size and magnification, window previews (hover / click,
-// delay, thumbnails), per-display dock (show, auto-hide, position),
+// delay, thumbnails), per-display dock (on/off; show / auto-hide /
+// hidden; position),
 // behavior, the recent-apps section, docked folders and the Trash, and the
 // pinned apps.
 ColumnLayout {
@@ -122,10 +123,11 @@ ColumnLayout {
 
     SettingsCard {
         PageHeader {
-            title: "Displays"
+            title: Quickshell.screens.length > 1 ? "Displays" : "Show and position"
         }
 
         SettingsRow {
+            visible: Quickshell.screens.length > 1
             label: "Default position"
             hint: "For displays without their own choice"
             SettingsSegmented {
@@ -139,6 +141,16 @@ ColumnLayout {
             }
         }
 
+        // The active space's `dock.visible` wins over every display's own
+        // choice while it's active (SPACES §5).
+        SettingsRow {
+            readonly property string spaceVis: Spaces.dock?.visible ?? ""
+            visible: spaceVis !== ""
+            label: `The space “${Spaces.active?.name ?? ""}” sets the Dock`
+            hint: `${spaceVis === "show" ? "Shown" : spaceVis === "autohide" ? "Automatically hidden" : "Hidden"} on every display while it's active; your choices below apply in other spaces`
+        }
+
+        // One block per display (with one display: just its rows).
         Repeater {
             model: Quickshell.screens
 
@@ -146,19 +158,22 @@ ColumnLayout {
                 id: disp
                 required property var modelData
                 readonly property var prefs: DockData.displayPrefs(modelData)
+                readonly property bool several: Quickshell.screens.length > 1
                 Layout.fillWidth: true
-                Layout.topMargin: 8
+                Layout.topMargin: several ? 8 : 0
                 spacing: 8
 
                 Rectangle {
+                    visible: disp.several
                     Layout.fillWidth: true
                     height: 1
                     color: Theme.withAlpha(Theme.text, 0.08)
                 }
 
                 SettingsRow {
+                    visible: disp.several
                     label: DockData.displayLabel(disp.modelData)
-                    hint: `${disp.modelData.name} · ${disp.modelData.width}×${disp.modelData.height}`
+                    hint: `${disp.modelData.name} · ${disp.modelData.width}×${disp.modelData.height}` + (disp.prefs.enabled ? "" : " · no Dock on this display")
                     SettingsSwitch {
                         checked: disp.prefs.enabled
                         onToggled: on => DockData.setDisplayPref(disp.modelData, "enabled", on)
@@ -166,11 +181,24 @@ ColumnLayout {
                 }
                 SettingsRow {
                     visible: disp.prefs.enabled
-                    label: "Automatically hide and show the Dock"
-                    hint: "Move the pointer to the edge to show it. Every dock steps aside while a window is fullscreen"
+                    label: disp.several ? "Dock" : "Dock on this display"
+                    hint: disp.prefs.visibility === "hidden" ? "Hidden: no Dock and no edge to summon it, unless a space shows it" : disp.prefs.visibility === "autohide" ? "Move the pointer to the edge to show it" : "Always there. Every dock steps aside while a window is fullscreen"
                     SettingsSegmented {
                         options: [
-                            { value: "never", label: "Never" },
+                            { value: "show", label: "Show" },
+                            { value: "autohide", label: "Auto-hide" },
+                            { value: "hidden", label: "Hidden" }
+                        ]
+                        current: disp.prefs.visibility
+                        onActivated: v => DockData.setDisplayVisibility(disp.modelData, v)
+                    }
+                }
+                SettingsRow {
+                    visible: disp.prefs.enabled && disp.prefs.visibility === "autohide"
+                    label: "Automatically hide"
+                    hint: "With windows: shown on an empty desktop, hidden once a window is open there"
+                    SettingsSegmented {
+                        options: [
                             { value: "whenWindows", label: "With windows" },
                             { value: "always", label: "Always" }
                         ]
@@ -179,7 +207,7 @@ ColumnLayout {
                     }
                 }
                 SettingsRow {
-                    visible: disp.prefs.enabled
+                    visible: disp.prefs.enabled && disp.prefs.visibility !== "hidden"
                     label: "Position on screen"
                     SettingsSegmented {
                         options: [

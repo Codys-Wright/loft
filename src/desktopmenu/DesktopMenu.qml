@@ -53,6 +53,7 @@ Singleton {
         { id: "sep-panels", separator: true },
         { id: "screenshot", label: "Screenshot", icon: "󰹑", submenu: true, feature: "capture", hint: "Capture selector, screen or area" },
         { id: "terminal", label: "Open Terminal Here", icon: "󰆍", hint: "In ~/Desktop, or your home folder" },
+        { id: "eject", label: "Eject", icon: "\u{F01EA}", submenu: true, hint: "External drives: shown while one is mounted" },
         { id: "sep-tools", separator: true },
         { id: "lock", label: "Lock Screen", hint: "Lock now" },
         { id: "settings", label: "System Settings…", icon: "󰒓", hint: "The Settings app" }
@@ -310,6 +311,9 @@ Singleton {
             const c = entry(o.id);
             if (!o.shown || !available(c))
                 continue;
+            // Eject ▸ only while there's a drive to eject.
+            if (c.id === "eject" && Drives.count === 0)
+                continue;
             // No separator first or twice in a row.
             if (c.separator && (out.length === 0 || out[out.length - 1].separator))
                 continue;
@@ -364,6 +368,9 @@ Singleton {
         case "terminal":
             it.run = () => root.openTerminal();
             break;
+        case "eject":
+            it.build = () => root.ejectItems();
+            break;
         case "lock":
             it.run = () => Vibes.previewLock();
             break;
@@ -374,6 +381,21 @@ Singleton {
             break;
         }
         return it;
+    }
+
+    // Eject ▸ — each external drive, then Eject All (Drives.qml).
+    function ejectItems() {
+        const items = Drives.list.map(d => ({
+                    key: `eject-${d.id}`,
+                    label: `Eject “${d.name}”`,
+                    enabled: !Drives.busy.includes(d.id),
+                    run: () => Drives.eject(d.id)
+                }));
+        if (items.length > 1) {
+            items.push(sep("s-eject"));
+            items.push({ key: "eject-all", label: "Eject All", enabled: true, run: () => Drives.ejectAll() });
+        }
+        return items;
     }
 
     // Wallpaper ▸ — the theme's vibe set.

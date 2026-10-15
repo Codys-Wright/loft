@@ -49,7 +49,8 @@ Singleton {
     // The layers: Settings.dock (defaults) ← the active space's `dock`
     // (Spaces.dock, SPACES §5: pinned replace / prepend / append, visible
     // show / autohide / hidden) ← the display's own prefs (enabled /
-    // position; its auto-hide only while the space says nothing).
+    // position; its visibility — show / auto-hide / hidden — only while
+    // the space says nothing).
     function profileFor(screen) {
         const d = Settings.dock;
         const disp = displayPrefs(screen);
@@ -72,8 +73,10 @@ Singleton {
             indicators: d.indicators,
             enabled: disp.enabled,
             autoHide: visible === "show" ? "never" : visible === "autohide" ? "always" : disp.autoHide,
-            // A space's `visible: "hidden"`: no dock, no edge to summon it.
-            hidden: visible === "hidden",
+            // `visible: "hidden"` (the space's, else the display's own): no
+            // dock, no edge to summon it. A space that says show / autohide
+            // brings back a display's hidden dock.
+            hidden: visible !== "" ? visible === "hidden" : disp.hidden,
             position: disp.position
         };
     }
@@ -94,20 +97,44 @@ Singleton {
         return ["never", "always", "whenWindows"].includes(v) ? v : "never";
     }
 
-    // { enabled, autoHide (mode), position } for a screen: its own entry in
-    // Settings.dock.displays, else the dock-wide defaults (an ultrawide,
-    // ≥ 2.2:1, hides when windows are open).
+    // { enabled, autoHide (mode), hidden, visibility, position } for a
+    // screen: its own entry in Settings.dock.displays, else the dock-wide
+    // defaults (an ultrawide, ≥ 2.2:1, hides when windows are open).
+    // visibility: "show" | "autohide" | "hidden" — the display's choice in
+    // the same words as a space's `dock.visible` (SPACES §5). Hidden keeps
+    // the dock (unlike enabled: false), so a space can still show it.
     function displayPrefs(screen) {
         const all = Settings.dock.displays ?? {};
         const p = all[displayKey(screen)] ?? all[screen.name] ?? {};
         const ultrawide = screen.width / Math.max(1, screen.height) >= 2.2;
         const pos = p.position ?? Settings.dock.position;
         const fallback = Settings.dock.autoHide !== false && Settings.dock.autoHide !== "never" ? Settings.dock.autoHide : ultrawide ? "whenWindows" : "never";
+        const autoHide = hideMode(p.autoHide ?? fallback);
+        const hidden = p.hidden === true;
         return {
             enabled: p.enabled ?? true,
-            autoHide: hideMode(p.autoHide ?? fallback),
+            autoHide: autoHide,
+            hidden: hidden,
+            visibility: hidden ? "hidden" : autoHide === "never" ? "show" : "autohide",
             position: pos === "left" || pos === "right" ? pos : "bottom"
         };
+    }
+
+    // Settings → Dock: Show / Automatically Hide / Hidden for one display.
+    // Auto-hide keeps the display's mode (always / with windows).
+    function setDisplayVisibility(screen, v) {
+        const cur = displayPrefs(screen);
+        const all = Object.assign({}, Settings.dock.displays ?? {});
+        const k = displayKey(screen);
+        const e = Object.assign({}, all[k] ?? all[screen.name] ?? {});
+        delete all[screen.name];
+        e.hidden = v === "hidden";
+        if (v === "show")
+            e.autoHide = "never";
+        else if (v === "autohide")
+            e.autoHide = cur.autoHide !== "never" ? cur.autoHide : "always";
+        all[k] = e;
+        Settings.dock.displays = all;
     }
 
     function setDisplayPref(screen, key, value) {

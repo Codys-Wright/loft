@@ -68,6 +68,7 @@ shell_path = "$shell"
 scripts = "$scripts"
 builtin_scripts = "$src/scripts"
 settings = "$state_dir/spotlight.json"
+drives = "$state_dir/drives.json"
 EOF
   # Tests (named loft-dev sessions): power / session / trash commands are
   # logged, never run.
