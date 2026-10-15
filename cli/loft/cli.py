@@ -45,7 +45,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import capture, cleaner, dock, greeter, hooks, importers, index, island, keys, library, media, ports, render, spotify, themecmds, updates, utilities, vibes, wallsets
+from . import capture, cleaner, dock, doctor, greeter, hooks, importers, index, island, keys, library, media, ports, render, spotify, themecmds, updates, utilities, vibes, wallsets, wallvideo
 from .facets import FacetError
 from .pack import IGNORED, Pack, PackError, is_any_pack, is_pack, is_pack_v2, pack_id, validate_v2
 
@@ -1312,6 +1312,7 @@ def parser() -> argparse.ArgumentParser:
     )
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_wall_focus)
+    wallvideo.add_wallpaper_parser(sub)
 
     s = top.add_parser(
         "windows",
@@ -1338,6 +1339,7 @@ def parser() -> argparse.ArgumentParser:
     # The login screen (SDDM) following the lock screen (PLAN §4.5).
     greeter.add_parser(top)
     spotify.add_parser(top, _fail)
+    doctor.add_parser(top)
     return p
 
 

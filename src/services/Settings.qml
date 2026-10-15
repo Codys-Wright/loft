@@ -164,6 +164,17 @@ Singleton {
                 // workspace's wallpaper slides with it and shows behind it in
                 // the overview (WorkspaceWallpapers). Off: swap on switch.
                 property bool moveWithWorkspaces: true
+                // Live (video) wallpapers (VideoWallpapers): "play", or
+                // "still" = only ever their still frame.
+                property string video: "play"
+                // Hold the video (paused, no decoding) while a window fills
+                // the screen (not only fullscreen opaque ones), on battery /
+                // in power saver, after N idle minutes (0 = never).
+                property bool pauseWhenMaximized: false
+                property bool pauseOnBattery: true
+                property real pauseWhenIdleMinutes: 5
+                // Play display-sized 8-bit copies (made once, cached).
+                property bool smallerCopies: true
             }
 
             property var features: ({})
@@ -212,6 +223,9 @@ Singleton {
                 property bool alertDisk: false
                 property real diskThreshold: 0.9 // any mounted fs, 0..1
                 property bool alertBattery: true
+                // The shell's own watchdog (Perf): a notification, once per
+                // session, when it stays slow (lag or CPU) for 30 s.
+                property bool perfHint: false
                 property int batteryThreshold: 15 // %
             }
 

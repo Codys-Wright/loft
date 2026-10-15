@@ -103,6 +103,62 @@ ColumnLayout {
         }
 
         SettingsRow {
+            label: "Video wallpapers"
+            hint: VideoWallpapers.stillOnly ? "Live wallpapers show their still frame" : VideoWallpapers.playingCount > 0 ? `${VideoWallpapers.playingCount} playing · ${VideoWallpapers.decodePath}` : VideoWallpapers.globalReason !== "" ? `Paused: ${VideoWallpapers.globalReason}` : "Live wallpapers play on the workspace you see, and hold their frame everywhere else"
+            SettingsSegmented {
+                options: [
+                    { value: "play", label: "Play" },
+                    { value: "still", label: "Still frame" }
+                ]
+                current: Settings.wallpaper.video
+                onActivated: v => Settings.wallpaper.video = v
+            }
+        }
+
+        SettingsRow {
+            visible: !VideoWallpapers.stillOnly
+            label: "    Pause while a window fills the screen"
+            hint: "Not only fullscreen opaque windows (those always pause it): any window covering most of the screen"
+            SettingsSwitch {
+                checked: Settings.wallpaper.pauseWhenMaximized
+                onToggled: on => Settings.wallpaper.pauseWhenMaximized = on
+            }
+        }
+
+        SettingsRow {
+            visible: !VideoWallpapers.stillOnly
+            label: "    Pause on battery or in power saver"
+            SettingsSwitch {
+                checked: Settings.wallpaper.pauseOnBattery
+                onToggled: on => Settings.wallpaper.pauseOnBattery = on
+            }
+        }
+
+        SettingsRow {
+            visible: !VideoWallpapers.stillOnly
+            label: "    Pause when idle"
+            hint: "After this long without input (and always while locked)"
+            SettingsSlider {
+                from: 0
+                to: 30
+                step: 1
+                value: Settings.wallpaper.pauseWhenIdleMinutes
+                format: v => v === 0 ? "Never" : `${v} min`
+                onCommitted: v => Settings.wallpaper.pauseWhenIdleMinutes = v
+            }
+        }
+
+        SettingsRow {
+            visible: !VideoWallpapers.stillOnly
+            label: "    Play display-sized copies"
+            hint: "Each screen plays a copy of just the part it shows, made once in the background (NVENC on NVIDIA) and cached; the originals are untouched"
+            SettingsSwitch {
+                checked: Settings.wallpaper.smallerCopies
+                onToggled: on => Settings.wallpaper.smallerCopies = on
+            }
+        }
+
+        SettingsRow {
             label: "Folder"
             hint: Settings.wallpaper.directory + " · its images are ranked under Matching vibes"
             SettingsButton {

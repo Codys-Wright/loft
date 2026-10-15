@@ -1,5 +1,6 @@
 import QtQuick
 import QtMultimedia
+import Quickshell
 import qs.services
 
 // What a wallpaper surface draws: `path`'s image cropped around its interest
@@ -11,8 +12,11 @@ import qs.services
 // A live wallpaper (Vibes.videoFor: a same-stem video next to the still)
 // plays muted and looping over its still, with the still's crop: the video
 // must have the still's aspect. It plays only while `playVideo` (the surface
-// is what the screen shows); otherwise it unloads and the still shows, as
-// it does until the first frame is up.
+// is what the screen shows) and VideoWallpapers lets it (it can be seen:
+// not locked, idle, covered by an opaque window, …); otherwise it holds its
+// frame (paused: no decoding), and the still shows until the first frame is
+// up. Once the still is laid out, the layer plays a display-sized copy of
+// just the part it shows (VideoWallpapers.variant), when there is one.
 //
 // `decodeScale` < 1 decodes the image smaller (sourceSize × scale) and draws
 // it scaled back up: the overview shows workspaces at its zoom, so a
@@ -33,6 +37,10 @@ Item {
     readonly property bool ready: source === "" || (flip ? a : b).status === Image.Ready
     // Bytes of decoded image data held (both layers), for the stats.
     readonly property real decodedBytes: a.bytes + b.bytes
+    // The screen's device pixels per logical pixel (display-sized copies).
+    readonly property real dpr: Quickshell.screens.find(s => s.name === screenName)?.devicePixelRatio ?? 1
+    // Why the video holds even though playVideo ("" = it may play).
+    readonly property string holdReason: VideoWallpapers.holdReason(screenName)
 
     // Gradient fallback (no image), with soft color fields for the blur.
     Item {
@@ -182,26 +190,44 @@ Item {
             y: Math.min(0, Math.max(root.height - height, root.height / 2 - layer.crop[1] * height))
         }
 
-        // The video in the still's rectangle (same aspect, so the same crop).
-        // No audio output: muted. Loaded only while it may play: a paused
-        // decoder holds its frame pool in VRAM (hundreds of MB for a large
-        // video), and the still beneath stands in for it.
+        // The display-sized copy of what this layer shows: the visible part
+        // of the image's rectangle (fractions of the frame) at the screen's
+        // pixel size. "" until it exists (or with smallerCopies off): the
+        // original plays, drawn in the image's rectangle.
+        readonly property var visibleCrop: img.width > 0 && img.height > 0 ? [Math.max(0, -img.x / img.width), Math.max(0, -img.y / img.height), Math.min(1, root.width / img.width), Math.min(1, root.height / img.height)] : null
+        readonly property bool laidOut: layer.video !== "" && img.status === Image.Ready && root.width > 0 && visibleCrop !== null
+        readonly property string variant: laidOut ? VideoWallpapers.variant(layer.video, visibleCrop, root.width * root.dpr, root.height * root.dpr) : ""
+        onLaidOutChanged: if (laidOut)
+            Qt.callLater(() => {
+                if (layer.laidOut)
+                    VideoWallpapers.request(layer.video, layer.visibleCrop, root.width * root.dpr, root.height * root.dpr);
+            })
+        onVisibleCropChanged: if (laidOut)
+            Qt.callLater(() => {
+                if (layer.laidOut)
+                    VideoWallpapers.request(layer.video, layer.visibleCrop, root.width * root.dpr, root.height * root.dpr);
+            })
+        readonly property string playSource: layer.video === "" ? "" : variant !== "" ? variant : layer.video
+
+        // The video over the still (same aspect, so the same crop). No
+        // audio output: muted.
         MediaPlayer {
             id: player
-            source: root.playVideo ? layer.video : ""
+            source: layer.playSource
             loops: MediaPlayer.Infinite
             videoOutput: out
-            readonly property bool wanted: layer.video !== "" && layer.current && root.playVideo
+            readonly property bool wanted: layer.video !== "" && layer.current && root.playVideo && root.holdReason === ""
             onWantedChanged: wanted ? play() : pause()
             onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && wanted)
                 play()
         }
         VideoOutput {
             id: out
-            x: img.x
-            y: img.y
-            width: img.width
-            height: img.height
+            // A copy shows exactly the screen; the original, the image's rectangle.
+            x: layer.variant !== "" ? 0 : img.x
+            y: layer.variant !== "" ? 0 : img.y
+            width: layer.variant !== "" ? root.width : img.width
+            height: layer.variant !== "" ? root.height : img.height
             fillMode: VideoOutput.Stretch
             // Up once playback has started; the still is beneath until then.
             opacity: layer.video !== "" && player.hasVideo && player.playbackState !== MediaPlayer.StoppedState ? 1 : 0
@@ -211,6 +237,24 @@ Item {
                 }
             }
         }
+
+        // Report to VideoWallpapers (perf status, doctor).
+        property int statsId: 0
+        readonly property var info: layer.video === "" ? null : {
+            screen: root.screenName,
+            path: layer.video.split("/").pop(),
+            copy: layer.variant !== "",
+            playing: player.playbackState === MediaPlayer.PlayingState,
+            held: layer.current && root.playVideo ? root.holdReason : "",
+            size: player.metaData.value(MediaMetaData.Resolution) ? `${player.metaData.value(MediaMetaData.Resolution).width}x${player.metaData.value(MediaMetaData.Resolution).height}` : ""
+        }
+        onInfoChanged: if (statsId)
+            VideoWallpapers.report(statsId, info)
+        Component.onCompleted: {
+            statsId = VideoWallpapers.newId();
+            VideoWallpapers.report(statsId, info);
+        }
+        Component.onDestruction: VideoWallpapers.report(statsId, null)
     }
 
     Layer {
