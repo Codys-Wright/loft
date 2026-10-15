@@ -16,6 +16,31 @@ ColumnLayout {
 
     SettingsCard {
         PageHeader {
+            title: "Full screen"
+        }
+
+        SettingsRow {
+            label: "Hide in full screen"
+            hint: AppMenu.pref("hideInFullscreen") ? "The menu bar slides away while a window is full screen on its display" : "The menu bar stays, drawn over the full-screen app"
+            SettingsSwitch {
+                checked: AppMenu.pref("hideInFullscreen")
+                onToggled: on => AppMenu.setPref("hideInFullscreen", on)
+            }
+        }
+
+        SettingsRow {
+            visible: AppMenu.pref("hideInFullscreen")
+            label: "Show menu bar when pointer reaches top"
+            hint: "Rest the pointer at the top edge of the screen and the bar slides back down, with the Dynamic Island"
+            SettingsSwitch {
+                checked: AppMenu.pref("revealAtTop")
+                onToggled: on => AppMenu.setPref("revealAtTop", on)
+            }
+        }
+    }
+
+    SettingsCard {
+        PageHeader {
             title: "Menus"
         }
 

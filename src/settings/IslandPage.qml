@@ -90,6 +90,15 @@ ColumnLayout {
         }
 
         SettingsRow {
+            label: "Hide in full screen"
+            hint: page.isl.hideInFullscreen !== false ? "Slides away while a window is full screen on its display and comes back with the menu bar; calls and notifications still show" : "Stays over full-screen apps"
+            SettingsSwitch {
+                checked: page.isl.hideInFullscreen !== false
+                onToggled: on => page.isl.hideInFullscreen = on
+            }
+        }
+
+        SettingsRow {
             label: "Reduce motion"
             hint: Motion.reduce ? "It changes size at once; the content cross-fades" : "It morphs with a slight spring, and the content follows the shape"
             SettingsSwitch {

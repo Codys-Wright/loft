@@ -123,6 +123,9 @@ Singleton {
                 // Volume, brightness and sound announcements widen the
                 // collapsed island (Hud.qml); off = the pill above the dock.
                 property bool hud: true
+                // Slides away while a window is fullscreen on its display
+                // (FullscreenChrome); comes back with the menu bar.
+                property bool hideInFullscreen: true
                 // Alert border when a temperature (°C) or load (0..1) exceeds these.
                 // 100 °C: desktop CPUs (Tjmax 100) are designed to boost up to it.
                 property real maxTemp: 100
