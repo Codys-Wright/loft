@@ -1107,7 +1107,7 @@ check also renders `loft@dark` / `loft@light`.
   (`Materials/` …). C moves that root to `~/Documents/Loft`.
 - **CLI:** `theme list --themes [--collection C] [--json]`, which leaves plain
   `theme list [--json]` as the v1 pack list the shell reads; `theme current
-  --json`; `theme apply [T[@V]] [--mode]` (no `--greeter` yet); `theme render T[@V]
+  --json`; `theme apply [T[@V]] [--mode] [--greeter [REF]]` (`loft greeter sync|status|reset|follow`); `theme render T[@V]
   OUT [--no-user]`; `theme variants`, `state`, `diff`, `reset`, `save-variant`,
   `save-as`; `theme accessibility --reduce-motion|--reduce-transparency|
   --increase-contrast on|off` (not in §8; the Theme pages need it); and

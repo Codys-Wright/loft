@@ -20,6 +20,7 @@
         ./nix/dev-shell.nix
         ./nix/checks.nix
         ./nix/modules/home.nix
+        ./nix/modules/nixos.nix
         ./nix/lock.nix
       ];
     };

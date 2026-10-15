@@ -1,7 +1,8 @@
 # `nix flake check`: theme engine tests.
 #
 #   theme-schema    built-in packs (and the test fixture) match themes/schema.json
-#   theme-unit      tests/test_*.py: renderer + manager against scratch dirs, the
+#   theme-unit      tests/test_*.py: renderer + manager against scratch dirs (greeter
+#                   sync + its privileged helper: tests/test_greeter.py), the
 #                   cozytile:/qylock: importers against local fake upstream repos, and
 #                   vibes (pack collections, ranking, index links), and the Utilities
 #                   helpers (ports, flake updates, cleaner, media tools), the capture

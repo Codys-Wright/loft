@@ -191,17 +191,26 @@ swayidle -w timeout 300 'loft-lock' before-sleep 'loft-lock'
 # where loft-lock = quickshell ipc --path <shell src> call lock lock
 ```
 
-Using the login screen on NixOS:
+Using the login screen on NixOS (the module installs the theme, makes it SDDM's, and lets
+active local `wheel` users copy their lock design to it without a password):
 
 ```nix
-environment.systemPackages = [ loft.packages.${system}.loft-sddm-theme ];
-services.displayManager.sddm = {
-  theme = "loft";
-  # lets the greeter read /var/lib/loft/greeter/theme.json
-  settings.General.GreeterEnvironment = "QML_XHR_ALLOW_FILE_READ=1";
-};
+imports = [ loft.nixosModules.default ];
+programs.loft.greeter.enable = true;
+# programs.loft.greeter.group = "wheel";     # who may sync the login screen
+# programs.loft.greeter.followLock = true;   # `loft theme apply` re-syncs it
 # optional: a dedicated PAM service for the lock (default: "login")
 security.pam.services.loft-lock = { };     # + LOFT_LOCK_PAM=loft-lock in the shell's environment
+```
+
+Then show your lock design (and colors) on the login screen:
+
+```sh
+loft greeter sync          # = loft theme apply --greeter; `builtin` or a lock: ref picks another
+loft greeter status        # what the login screen shows, who synced it
+loft greeter reset         # back to the built-in design
+loft greeter follow off    # stop re-syncing on every theme apply
+LOFT_GREETER_PACK=/var/lib/loft/greeter nix run .#greeter-preview   # preview it (opens a window)
 ```
 
 ## Spotlight: a command bar

@@ -285,7 +285,7 @@ class Manager(unittest.TestCase):
 
 class Hooks(unittest.TestCase):
     def test_selection(self):
-        self.assertEqual(hooks.selected(None, dev=False), list(hooks.ALL))
+        self.assertEqual(hooks.selected(None, dev=False), [*hooks.ALL, "greeter"])
         self.assertEqual(hooks.selected(None, dev=True), ["shell", "niri", "wallpapers"])
         self.assertEqual(hooks.selected("none", dev=False), [])
         self.assertEqual(hooks.selected("kitty,gtk", dev=True), ["kitty", "gtk"])

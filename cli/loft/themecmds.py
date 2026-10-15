@@ -172,6 +172,11 @@ def apply_resolved(ctx, cat: Catalog, res: R.Resolved, quiet: bool = False, relo
     wanted = render.hooks_for(changed)
     run = [h for h in selected if h in wanted]
     hooks.run(run, ctx)
+    # The login screen follows the lock screen (machine opt-in, see greeter.py).
+    if "greeter" in selected and not getattr(ctx, "greeter_explicit", False):
+        from . import greeter
+
+        greeter.follow(ctx, cat, res)
     for e in res.errors:
         print(f"loft: skipped {e}", file=sys.stderr)
     if verbose:
@@ -187,6 +192,14 @@ def apply_resolved(ctx, cat: Catalog, res: R.Resolved, quiet: bool = False, relo
 
 
 def cmd_apply(ctx, args) -> None:
+    from . import greeter
+
+    want_greeter = getattr(args, "greeter", None)
+    if want_greeter is not None:
+        ctx.greeter_explicit = True  # synced below, in the foreground
+    if not args.theme and not args.mode and want_greeter is not None:
+        greeter.cmd_sync(ctx, args)  # `loft theme apply --greeter [REF]`: the login screen only
+        return
     state = state_of(ctx)
     if args.theme:
         cat, theme, variant = select(ctx, args.theme)
@@ -201,6 +214,8 @@ def cmd_apply(ctx, args) -> None:
     apply_resolved(ctx, cat, res, reload_all=getattr(args, "reload", False), verbose=getattr(args, "verbose", False))
     state["theme"], state["variant"] = theme.id, variant
     A.save(ctx.state_dir, state)
+    if want_greeter is not None:
+        greeter.cmd_sync(ctx, args)
 
 
 def reapply(ctx, state: dict, args=None) -> None:

@@ -5,7 +5,8 @@ import "components"
 import "design"
 
 // Loft's SDDM theme: a static loader. It shows the greeter pack's own
-// design (<packDir>/lock/Main.qml) when there is one, else the built-in
+// design (greeter.json `main`, else <packDir>/lock/Main.qml) when there is
+// one, else the built-in
 // MacLock — the very same design the Quickshell lock screen uses (shared
 // from src/lock/design by nix/lock.nix), colored by the pack's theme.json.
 // Switching the login screen's look never changes SDDM's configured theme.
@@ -18,6 +19,15 @@ Item {
     // A directory holding theme.json (+ optionally lock/Main.qml); normally
     // a symlink to a pack under /var/lib/loft/themes (PLAN §4.5).
     readonly property string packDir: config.packDir || "/var/lib/loft/greeter"
+
+    // <packDir>/greeter.json, written by `loft greeter sync` (cli/loft/greeter.py):
+    // {name, label, format, main: "lock/<entry>.qml" | "", wallpaper, …}.
+    // The design loads once it's been read (or found missing).
+    property var meta: null
+    property bool metaRead: false
+    readonly property string designFile: meta === null ? root.packDir + "/lock/Main.qml" : (meta.main ? root.packDir + "/" + meta.main : "")
+    // The image behind the built-in design (the user's desktop wallpaper), "" = the theme gradient.
+    readonly property string wallpaper: meta?.wallpaper ? "file://" + root.packDir + "/" + meta.wallpaper : ""
 
     // SDDM makes one view per screen; only the primary one takes input.
     readonly property bool primary: typeof primaryScreen === "undefined" || primaryScreen
@@ -76,6 +86,7 @@ Item {
         readonly property var screen: null
         readonly property bool isGreeter: true
         readonly property var theme: Theme
+        readonly property string wallpaper: root.wallpaper
 
         signal failed(string message)
 
@@ -101,7 +112,29 @@ Item {
 
     Component.onCompleted: {
         Theme.load([root.packDir + "/theme.json", Qt.resolvedUrl("default/theme.json")]);
+        readMeta();
         mergePackConfig();
+    }
+
+    function readMeta() {
+        const xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return;
+            try {
+                if (xhr.responseText)
+                    root.meta = JSON.parse(xhr.responseText);
+            } catch (e) {
+                console.warn(`Loft greeter: ${root.packDir}/greeter.json: ${e}`);
+            }
+            root.metaRead = true;
+        };
+        try {
+            xhr.open("GET", "file://" + root.packDir + "/greeter.json");
+            xhr.send();
+        } catch (e) {
+            root.metaRead = true;
+        }
     }
 
     // A pack design reads its own lock/theme.conf through `config`, as it
@@ -134,6 +167,7 @@ Item {
             userName: root.currentUser?.name ?? ""
             realName: root.currentUser?.realName ?? ""
             avatarSources: root.lock.avatarSources
+            wallpaper: root.wallpaper
             busy: root.busy
             info: root.info
             capsLock: keyboard.capsLock
@@ -238,13 +272,20 @@ Item {
     // The pack's design if it compiles, else the built-in one: a missing or
     // broken pack must never leave the login screen without a way in.
     readonly property Component pack: {
-        const c = Qt.createComponent("file://" + root.packDir + "/lock/Main.qml", Component.PreferSynchronous);
-        return c.status === Component.Ready ? c : null;
+        if (!root.metaRead || root.designFile === "")
+            return null;
+        const c = Qt.createComponent("file://" + root.designFile, Component.PreferSynchronous);
+        if (c.status === Component.Ready)
+            return c;
+        if (c.status === Component.Error)
+            console.warn(`Loft greeter: ${root.designFile}: ${c.errorString().trim()}; using the built-in design`);
+        return null;
     }
 
     Loader {
         id: design
         anchors.fill: parent
+        active: root.metaRead
         focus: true
         sourceComponent: root.pack ?? builtin
         onLoaded: item.forceActiveFocus()
