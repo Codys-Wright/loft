@@ -88,6 +88,15 @@ ColumnLayout {
                 onToggled: on => page.isl.hud = on
             }
         }
+
+        SettingsRow {
+            label: "Reduce motion"
+            hint: Motion.reduce ? "It changes size at once; the content cross-fades" : "It morphs with a slight spring, and the content follows the shape"
+            SettingsSwitch {
+                checked: Motion.reduce
+                onToggled: on => Settings.reduceMotion = on
+            }
+        }
     }
 
     // ── Pages ───────────────────────────────────────────────────────────
@@ -101,7 +110,7 @@ ColumnLayout {
         }
 
         Hint {
-            text: "Hover the island to expand it; scroll to switch pages. Collapsed, it shows (first wins): volume / brightness changes, alerts and banners, live activities, the next event when it's close, now playing, the time."
+            text: "Hover the island to expand it; scroll, swipe sideways, click the dots or the ‹ › at its edges (or Mod+Alt+← / →) to switch pages. Collapsed, it shows (first wins): volume / brightness changes, alerts and banners, live activities, the next event when it's close, now playing, the time."
         }
 
         Repeater {

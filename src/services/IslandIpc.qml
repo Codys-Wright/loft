@@ -11,7 +11,7 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    // cmd: toggle | flash | a page name (media, system, …)
+    // cmd: toggle | close | next | prev | flash | a page name (media, system, …)
     signal command(string cmd)
 
     IpcHandler {
@@ -19,6 +19,20 @@ Singleton {
 
         function toggle(): void {
             root.command("toggle");
+        }
+        function close(): void {
+            root.command("close");
+        }
+        // The next / previous page (opens the island first when it's closed).
+        function next(): void {
+            root.command("next");
+        }
+        function prev(): void {
+            root.command("prev");
+        }
+        // Open on a page by id (IslandPages: live, media, controls, …).
+        function page(id: string): void {
+            root.command(id);
         }
         function media(): void {
             root.command("media");

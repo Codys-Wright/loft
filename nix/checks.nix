@@ -55,6 +55,9 @@
 #                   fixture tests/test_wallsets.py checks cli/loft/wallsets.py with
 #   workspace-wallpapers  which per-workspace wallpaper surfaces exist (src/services/
 #                   wswallpapers.js): active ± 1, the overview's zoom, the grace period
+#   island-paging   the Dynamic Island's wheel / swipe paging (src/island/paging.js: one
+#                   page per notch or swipe) and that its WheelHandlers take every device
+#                   and both axes
 #   launcher-bangs  Spotlight's bangs provider in a real elephant; building loft-elephant for it
 #                   also runs the calculator + commands providers' Go tests (units, time
 #                   zones, scoring, script metadata/arguments)
@@ -177,6 +180,11 @@
 
         workspace-wallpapers = check "workspace-wallpapers" [ pkgs.nodejs-slim ] ''
           node ${../tests/wswallpapers.test.js} ${../src/services/wswallpapers.js}
+          touch $out
+        '';
+
+        island-paging = check "island-paging" [ pkgs.nodejs-slim ] ''
+          node ${../tests/island-paging.test.js} ${../src/island/paging.js} ${../src/island/Island.qml}
           touch $out
         '';
 

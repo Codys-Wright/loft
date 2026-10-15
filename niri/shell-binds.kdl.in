@@ -6,6 +6,9 @@ binds {
     Mod+Period hotkey-overlay-title="Emoji & Symbols" { spawn "loft-launcher" "emoji"; }
     Mod+A hotkey-overlay-title="Control Center" { spawn @IPC@ "controlcenter" "toggle"; }
     Mod+I hotkey-overlay-title="Island" { spawn @IPC@ "island" "toggle"; }
+    // Page through the Dynamic Island (opens it first when it's closed).
+    Mod+Alt+Left hotkey-overlay-title="Island: Previous Page" { spawn @IPC@ "island" "prev"; }
+    Mod+Alt+Right hotkey-overlay-title="Island: Next Page" { spawn @IPC@ "island" "next"; }
     Mod+Shift+T hotkey-overlay-title="Themes" { spawn @IPC@ "themes" "open"; }
     Mod+F10 hotkey-overlay-title="App Menu" { spawn @IPC@ "appmenu" "toggle"; }
     Mod+Comma hotkey-overlay-title="Settings" { spawn @IPC@ "settings" "toggle"; }

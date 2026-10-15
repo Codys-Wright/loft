@@ -8,6 +8,7 @@ import Quickshell.Services.Mpris
 import qs.capture
 import qs.components
 import qs.services
+import "paging.js" as Paging
 
 // Dynamic Island at the top center (design ported from javiiervm/dotfiles'
 // DynamicIsland). Settings → Dynamic Island → Style: attached (default)
@@ -33,8 +34,13 @@ import qs.services
 // are shown live in Settings → Dynamic Island) — live activity, camera,
 // notifications, calendar, media, timers, controls, system, screen time, AI
 // agents; scroll to switch.
-// IPC: island toggle|media|system|usage|notifications|live|calendar|timers|
-// controls|ai|scratchpad|flash.
+// IPC: island toggle|close|next|prev|page <id>|media|system|usage|
+// notifications|live|calendar|timers|controls|ai|scratchpad|flash.
+//
+// Paging, expanded: the wheel or a horizontal touchpad swipe (one page per
+// gesture), the ‹ › that appear at its edges, the page dots (click; hover
+// names the page), ← / → once it has the keyboard (click it; Esc closes),
+// and Mod+Alt+← / → (shell-binds).
 PanelWindow {
     id: root
 
@@ -45,8 +51,9 @@ PanelWindow {
     WlrLayershell.namespace: "loft:island"
     // Sit inside the bar's strip rather than below its exclusive zone.
     exclusionMode: ExclusionMode.Ignore
-    // The keyboard only for a page with a text field (Scratchpad), on click.
-    WlrLayershell.keyboardFocus: expanded && page === "scratchpad" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // Expanded, the keyboard on click: ← / → page, Esc closes, and the
+    // Scratchpad's text field.
+    WlrLayershell.keyboardFocus: expanded ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     anchors.top: true
     margins.top: attached ? 0 : 3
     implicitWidth: 560
@@ -106,7 +113,9 @@ PanelWindow {
     readonly property bool ringing: ringingCall !== null
     // Typing into a page (the Scratchpad's quick add) keeps it open.
     property bool typing: false
-    readonly property bool expanded: !ringing && (pinned || typing || (hover.hovered && banner === null))
+    // Esc closed it under the pointer: stays closed until the pointer leaves.
+    property bool dismissed: false
+    readonly property bool expanded: !ringing && (pinned || typing || (hover.hovered && banner === null && !dismissed))
     // A call (a "call" live activity) keeps the island to itself.
     readonly property bool calling: liveActivities.includes("call")
     // What just changed (Hud.qml), on the focused output's island: over
@@ -130,8 +139,17 @@ PanelWindow {
     readonly property bool spaceShowing: spaceFlash !== null && !expanded && !bannering && !hudShowing && !ringing
     readonly property bool hudMessage: Hud.kind === "message"
     readonly property real hudWidth: hudMessage ? Math.min(460, Math.max(200, hudMessageRow.implicitWidth + 44)) : 300
-    readonly property real targetWidth: ringing ? 460 : expanded ? 480 : hudShowing ? hudWidth : bannering ? 460 : spaceShowing ? Math.max(190, spaceRow.implicitWidth + 40) : live !== "" ? 250 : showEvent ? 300 : playing ? 300 : agentMark ? 190 : 150
-    readonly property real targetHeight: ringing ? 84 : expanded ? 210 : bannering ? 84 : attached ? barHeight : 24
+    // Each content layer is laid out at its own size, never the animating
+    // pill's (IslandLayer): the pill clips it while the shape morphs.
+    readonly property real spaceWidth: Math.max(190, spaceRow.implicitWidth + 40)
+    readonly property real compactWidth: live !== "" ? 250 : showEvent ? 300 : playing ? 300 : agentMark ? 190 : 150
+    readonly property real compactHeight: attached ? barHeight : 24
+    readonly property real expandedWidth: 480
+    readonly property real expandedHeight: 210
+    readonly property real bannerWidth: 460
+    readonly property real bannerHeight: 84
+    readonly property real targetWidth: ringing ? bannerWidth : expanded ? expandedWidth : hudShowing ? hudWidth : bannering ? bannerWidth : spaceShowing ? spaceWidth : compactWidth
+    readonly property real targetHeight: ringing || (bannering && !expanded) ? bannerHeight : expanded ? expandedHeight : compactHeight
 
     // ── Look (Settings → Dynamic Island) ────────────────────────────────
     readonly property bool attached: Settings.island.style !== "floating"
@@ -148,7 +166,49 @@ PanelWindow {
         page = pages[(pageIndex + delta + pages.length) % pages.length];
     }
 
+    // Close, even under the pointer (Esc): until the pointer leaves.
+    function dismiss() {
+        pinned = false;
+        if (hover.hovered)
+            dismissed = true;
+    }
+
+    // ── Paging gestures (paging.js) ─────────────────────────────────────
+    property var _wheel: Paging.fresh()
+    function wheelStep(event) {
+        const r = Paging.step(_wheel, {
+            ax: event.angleDelta.x,
+            ay: event.angleDelta.y,
+            px: event.pixelDelta.x,
+            py: event.pixelDelta.y
+        }, Date.now());
+        _wheel = r.st;
+        wheelIdle.restart();
+        return r.d;
+    }
+    Timer {
+        id: wheelIdle
+        interval: 200
+        onTriggered: root._wheel = Paging.idle()
+    }
+
+    // The wheel / swipe handler (two on the pill: vertical and horizontal).
+    component PageWheel: WheelHandler {
+        acceptedDevices: PointerDevice.AllDevices
+        onWheel: event => {
+            const d = root.wheelStep(event);
+            if (d === 0)
+                return;
+            if (root.expanded)
+                root.step(d);
+            else if (root.liveActivities.length > 1)
+                root.liveIndex = (root.liveIndex + 1) % root.liveActivities.length;
+        }
+    }
+
     onExpandedChanged: {
+        if (expanded)
+            keys.forceActiveFocus();
         // Open on the most relevant page.
         if (expanded && !pinned)
             page = [live !== "" ? "live" : "", unread ? "notifications" : "", soonEvent ? "calendar" : "", player ? "media" : "", "system"].find(p => p && pages.includes(p)) ?? pages[0];
@@ -225,43 +285,72 @@ PanelWindow {
             low: 0.25
         }
 
+        // The shape morph: a springy settle (a slight overshoot) growing
+        // into the expanded island or a banner, a quick ease back down.
+        // Reduce Motion: it jumps; only the content cross-fades.
+        readonly property bool springy: root.expanded || root.bannering || root.ringing
+        readonly property int morphMs: Motion.ms(springy ? 460 : 340)
+        readonly property int morphEasing: springy ? Easing.OutBack : Easing.OutQuint
+
         Behavior on width {
+            enabled: !Motion.reduce
             NumberAnimation {
-                duration: 320
-                easing.type: Easing.OutQuint
+                duration: pill.morphMs
+                easing.type: pill.morphEasing
+                easing.overshoot: 0.9
             }
         }
         Behavior on height {
+            enabled: !Motion.reduce
             NumberAnimation {
-                duration: 320
-                easing.type: Easing.OutQuint
+                duration: pill.morphMs
+                easing.type: pill.morphEasing
+                easing.overshoot: 0.9
             }
         }
         Behavior on radius {
+            enabled: !Motion.reduce
             NumberAnimation {
-                duration: 320
+                duration: pill.morphMs
                 easing.type: Easing.OutQuint
             }
         }
         Behavior on shoulder {
+            enabled: !Motion.reduce
             NumberAnimation {
-                duration: 320
+                duration: pill.morphMs
                 easing.type: Easing.OutQuint
             }
         }
 
         HoverHandler {
             id: hover
+            onHoveredChanged: if (!hovered)
+                root.dismissed = false
         }
 
-        WheelHandler {
-            onWheel: event => {
-                const d = event.angleDelta.y < 0 ? 1 : -1;
-                if (root.expanded)
-                    root.step(d);
-                else if (root.liveActivities.length > 1)
-                    root.liveIndex = (root.liveIndex + 1) % root.liveActivities.length;
-            }
+        // Expanded: a wheel notch or a swipe (either axis) pages; collapsed,
+        // it cycles live activities. Two handlers, as a WheelHandler takes
+        // one orientation (vertical by default). All devices: QtWayland
+        // delivers even a mouse wheel's events from a "touchpad" device
+        // (type TouchPad, with pixel deltas), and WheelHandler takes only
+        // PointerDevice.Mouse by default — so wheel paging never fired at
+        // all. Children that scroll (a long notification list) take the
+        // vertical wheel first; a horizontal swipe still pages over them.
+        PageWheel {
+            orientation: Qt.Vertical
+        }
+        PageWheel {
+            orientation: Qt.Horizontal
+        }
+
+        // Keys while expanded (focus on click): ← / → page, Esc closes.
+        Item {
+            id: keys
+            focus: root.expanded
+            Keys.onLeftPressed: root.step(-1)
+            Keys.onRightPressed: root.step(1)
+            Keys.onEscapePressed: root.dismiss()
         }
 
         // ── Fill ────────────────────────────────────────────────────────
@@ -295,7 +384,28 @@ PanelWindow {
             border.color: pill.edgeColor
         }
 
+        // The body's outline as a mask (the bottom corners; square top when
+        // attached), so content that reaches the corners — the media art,
+        // a page mid-slide — is cut to the shape, not to its bounding box.
+        Item {
+            id: shapeMask
+            anchors.fill: parent
+            visible: false
+            layer.enabled: body.clipToShape
+            Rectangle {
+                anchors.fill: parent
+                radius: pill.radius
+            }
+            Rectangle {
+                visible: root.attached
+                width: parent.width
+                height: Math.min(parent.height, pill.radius + 1)
+            }
+        }
+
         // ── Content ─────────────────────────────────────────────────────
+        // Layers (IslandLayer) cross over in step with the morph: the one
+        // leaving fades at once, the one arriving waits for the shape.
         Item {
             id: body
             anchors.fill: parent
@@ -303,26 +413,37 @@ PanelWindow {
 
             // On clear glass, a soft shadow under the content (as
             // GlassSurface gives its own children).
-            layer.enabled: !root.black && Theme.textShadowStrength > 0.02
+            readonly property bool shadowed: !root.black && Theme.textShadowStrength > 0.02
+            // Only while big content is up: the compact layers stay inside
+            // the corners, and an idle collapsed island stays one plain item.
+            readonly property bool clipToShape: expandedLayer.visible || bannerLayer.visible || callLayer.visible
+            layer.enabled: shadowed || clipToShape
             layer.effect: MultiEffect {
-                shadowEnabled: true
+                shadowEnabled: body.shadowed
                 shadowColor: Theme.textShadow
                 shadowBlur: 0.35
                 shadowVerticalOffset: 1
                 shadowHorizontalOffset: 0
+                maskEnabled: body.clipToShape
+                maskSource: shapeMask
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1
             }
 
             // ── Collapsed ───────────────────────────────────────────────
-            Item {
-                anchors.fill: parent
-                visible: opacity > 0
-                opacity: root.expanded || root.bannering || root.spaceShowing || root.hudShowing || root.ringing ? 0 : 1
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 150
-                    }
+            IslandLayer {
+                id: compactLayer
+                anchors {
+                    top: parent.top
+                    horizontalCenter: parent.horizontalCenter
                 }
+                // Stretches with the pill between compact sizes (time ↔
+                // now playing), never into the expanded island.
+                width: Math.min(pill.width, root.compactWidth)
+                height: root.compactHeight
+                shown: !(root.expanded || root.bannering || root.spaceShowing || root.hudShowing || root.ringing)
+                inDelay: 140
+                inDuration: 160
 
                 LiveCompact {
                     anchors.fill: parent
@@ -441,16 +562,16 @@ PanelWindow {
             }
 
             // ── Space switch ────────────────────────────────────────────
-            Item {
-                anchors.fill: parent
-                visible: opacity > 0
-                opacity: root.spaceShowing ? 1 : 0
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 150
-                    }
+            IslandLayer {
+                anchors {
+                    top: parent.top
+                    horizontalCenter: parent.horizontalCenter
                 }
+                width: Math.min(pill.width, root.spaceWidth)
+                height: root.compactHeight
+                shown: root.spaceShowing
+                inDelay: 60
+                inDuration: 150
 
                 Row {
                     id: spaceRow
@@ -481,16 +602,16 @@ PanelWindow {
             }
 
             // ── HUD: what just changed (Hud.qml) ────────────────────────
-            Item {
-                anchors.fill: parent
-                visible: opacity > 0
-                opacity: root.hudShowing ? 1 : 0
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 150
-                    }
+            IslandLayer {
+                anchors {
+                    top: parent.top
+                    horizontalCenter: parent.horizontalCenter
                 }
+                width: Math.min(pill.width, root.hudWidth)
+                height: root.compactHeight
+                shown: root.hudShowing
+                inDelay: 60
+                inDuration: 150
 
                 // Volume / brightness: icon, level bar, value.
                 RowLayout {
@@ -523,7 +644,7 @@ PanelWindow {
 
                             Behavior on width {
                                 NumberAnimation {
-                                    duration: 100
+                                    duration: Motion.ms(100)
                                 }
                             }
                         }
@@ -569,35 +690,45 @@ PanelWindow {
 
             // ── Notification banner ─────────────────────────────────────
             // ── Incoming call ──────────────────────────────────────────
-            CallBanner {
+            IslandLayer {
+                id: callLayer
                 anchors {
-                    fill: parent
-                    margins: 12
+                    top: parent.top
+                    horizontalCenter: parent.horizontalCenter
                 }
-                call: root.ringingCall
-                visible: opacity > 0
-                opacity: root.ringing ? 1 : 0
+                width: root.bannerWidth
+                height: root.bannerHeight
+                shown: root.ringing
+                inDelay: 150
+                fromScale: 0.96
 
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 180
+                CallBanner {
+                    anchors {
+                        fill: parent
+                        margins: 12
                     }
+                    call: root.ringingCall
                 }
             }
 
-            Banner {
+            IslandLayer {
+                id: bannerLayer
                 anchors {
-                    fill: parent
-                    margins: 12
+                    top: parent.top
+                    horizontalCenter: parent.horizontalCenter
                 }
-                notification: root.banner
-                visible: opacity > 0
-                opacity: root.bannering ? 1 : 0
+                width: root.bannerWidth
+                height: root.bannerHeight
+                shown: root.bannering
+                inDelay: 150
+                fromScale: 0.96
 
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 180
+                Banner {
+                    anchors {
+                        fill: parent
+                        margins: 12
                     }
+                    notification: root.banner
                 }
             }
 
@@ -608,95 +739,199 @@ PanelWindow {
             }
 
             // ── Expanded: page carousel ─────────────────────────────────
-            Item {
-                id: viewport
-                anchors.fill: parent
-                visible: opacity > 0
-                opacity: root.expanded ? 1 : 0
-                clip: true
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 220
-                    }
+            // At its final size from the first frame (nothing reflows while
+            // the shape opens); it comes in once the shape is mostly open
+            // and leaves at once when it closes.
+            IslandLayer {
+                id: expandedLayer
+                anchors {
+                    top: parent.top
+                    horizontalCenter: parent.horizontalCenter
                 }
+                width: root.expandedWidth
+                height: root.expandedHeight
+                shown: root.expanded
+                inDelay: 120
+                inDuration: 220
+                outDuration: 80
+                fromScale: 0.96
 
-                Repeater {
-                    model: root.pages
+                // The pages side by side on one track; paging slides the
+                // track, so the way between two pages is always continuous
+                // (a jump of several passes them by) and clipped. Snaps
+                // while the layer is coming in: opening on the most
+                // relevant page never slides.
+                Item {
+                    id: viewport
+                    anchors.fill: parent
+                    clip: true
 
-                    delegate: Item {
-                        id: slot
-                        required property string modelData
-                        required property int index
-
-                        width: viewport.width
-                        height: viewport.height
-                        x: (index - root.pageIndex) * width
-                        visible: Math.abs(index - root.pageIndex) <= 1
+                    Item {
+                        id: track
+                        height: parent.height
+                        x: -root.pageIndex * viewport.width
 
                         Behavior on x {
+                            enabled: expandedLayer.settled && !Motion.reduce
                             NumberAnimation {
-                                duration: 300
-                                easing.type: Easing.OutQuint
+                                duration: Motion.ms(380)
+                                easing.type: Easing.OutCubic
                             }
                         }
 
-                        Loader {
-                            anchors.fill: parent
-                            sourceComponent: {
-                                switch (slot.modelData) {
-                                case "live":
-                                    return livePage;
-                                case "camera":
-                                    return cameraPage;
-                                case "notifications":
-                                    return notificationsPage;
-                                case "media":
-                                    return mediaPage;
-                                case "system":
-                                    return systemPage;
-                                case "calendar":
-                                    return calendarPage;
-                                case "timers":
-                                    return timersPage;
-                                case "controls":
-                                    return controlsPage;
-                                case "ai":
-                                    return aiPage;
-                                case "scratchpad":
-                                    return scratchpadPage;
-                                default:
-                                    return usagePage;
+                        Repeater {
+                            model: root.pages
+
+                            delegate: Item {
+                                id: slot
+                                required property string modelData
+                                required property int index
+
+                                x: index * viewport.width
+                                width: viewport.width
+                                height: viewport.height
+                                // On screen (or sliding through it) only.
+                                visible: x + track.x > -width && x + track.x < width
+
+                                Loader {
+                                    anchors.fill: parent
+                                    sourceComponent: {
+                                        switch (slot.modelData) {
+                                        case "live":
+                                            return livePage;
+                                        case "camera":
+                                            return cameraPage;
+                                        case "notifications":
+                                            return notificationsPage;
+                                        case "media":
+                                            return mediaPage;
+                                        case "system":
+                                            return systemPage;
+                                        case "calendar":
+                                            return calendarPage;
+                                        case "timers":
+                                            return timersPage;
+                                        case "controls":
+                                            return controlsPage;
+                                        case "ai":
+                                            return aiPage;
+                                        case "scratchpad":
+                                            return scratchpadPage;
+                                        default:
+                                            return usagePage;
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // Page dots.
+                // ‹ › at the edges, shown while the pointer is on that edge.
+                Repeater {
+                    model: root.pages.length > 1 ? [-1, 1] : []
+
+                    delegate: MouseArea {
+                        id: edge
+                        required property int modelData
+                        anchors {
+                            top: parent.top
+                            bottom: parent.bottom
+                            topMargin: 24
+                            bottomMargin: 24
+                            left: modelData < 0 ? parent.left : undefined
+                            right: modelData > 0 ? parent.right : undefined
+                        }
+                        width: 28
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.step(modelData)
+
+                        Icon {
+                            anchors {
+                                verticalCenter: parent.verticalCenter
+                                horizontalCenter: parent.horizontalCenter
+                                horizontalCenterOffset: edge.modelData < 0 ? -3 : 3
+                            }
+                            text: edge.modelData < 0 ? "󰅁" : "󰅂"
+                            size: 20
+                            color: Theme.islandText
+                            opacity: edge.containsMouse ? (edge.pressed ? 0.6 : 0.95) : 0
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: Motion.ms(120)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Page dots: click one to go there; hovering names it.
                 Row {
+                    id: dots
                     anchors {
                         bottom: parent.bottom
                         horizontalCenter: parent.horizontalCenter
-                        bottomMargin: 8
+                        bottomMargin: 2
                     }
-                    spacing: 6
+                    property int hovered: -1
 
                     Repeater {
                         model: root.pages.length
-                        delegate: Rectangle {
+                        delegate: MouseArea {
+                            id: dot
                             required property int index
-                            width: index === root.pageIndex ? 14 : 6
-                            height: 6
-                            radius: 3
-                            color: Theme.islandText
-                            opacity: index === root.pageIndex ? 0.9 : 0.3
+                            readonly property bool current: index === root.pageIndex
+                            // A dot is 6 px; its target is 18 × 18.
+                            width: (current ? 14 : 6) + 12
+                            height: 18
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.page = root.pages[index]
+                            onContainsMouseChanged: {
+                                if (containsMouse)
+                                    dots.hovered = index;
+                                else if (dots.hovered === index)
+                                    dots.hovered = -1;
+                            }
 
                             Behavior on width {
                                 NumberAnimation {
-                                    duration: 200
+                                    duration: Motion.ms(200)
                                 }
                             }
+
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: parent.width - 12
+                                height: 6
+                                radius: 3
+                                color: Theme.islandText
+                                opacity: dot.current ? 0.9 : dot.containsMouse ? 0.6 : 0.3
+                            }
+                        }
+                    }
+                }
+
+                // The hovered dot's page name, beside the dots (the row
+                // under the pages is theirs; never over a page's content).
+                Text {
+                    anchors {
+                        verticalCenter: dots.verticalCenter
+                        left: dots.right
+                        leftMargin: 4
+                    }
+                    text: dots.hovered >= 0 ? (IslandPages.info(root.pages[dots.hovered])?.label ?? "") : ""
+                    color: Theme.islandSubtext
+                    font.family: Theme.fontUi
+                    font.pixelSize: 10
+                    font.weight: Font.DemiBold
+                    opacity: dots.hovered >= 0 ? 1 : 0
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Motion.ms(120)
                         }
                     }
                 }
@@ -719,14 +954,14 @@ PanelWindow {
                         target: flash
                         property: "opacity"
                         to: 0.9
-                        duration: 40
+                        duration: Motion.ms(40)
                         easing.type: Easing.OutExpo
                     }
                     NumberAnimation {
                         target: flash
                         property: "opacity"
                         to: 0
-                        duration: 320
+                        duration: Motion.ms(320)
                         easing.type: Easing.InExpo
                     }
                 }
@@ -769,9 +1004,8 @@ PanelWindow {
         id: mediaPage
         MediaPage {
             player: root.player
-            // The art backdrop follows the island's outline.
-            cornerRadius: pill.radius
-            squareTop: root.attached
+            // The island clips it to its outline (body's shape mask).
+            cornerRadius: 0
         }
     }
     Component {
@@ -816,7 +1050,14 @@ PanelWindow {
                 return;
             if (cmd === "toggle")
                 root.pinned = !root.pinned;
-            else if (cmd === "flash")
+            else if (cmd === "close")
+                root.dismiss();
+            else if (cmd === "next" || cmd === "prev") {
+                if (root.expanded)
+                    root.step(cmd === "next" ? 1 : -1);
+                else
+                    root.showPage(root.page);
+            } else if (cmd === "flash")
                 shutter.restart();
             else
                 root.showPage(cmd);
