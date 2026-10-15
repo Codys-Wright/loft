@@ -87,6 +87,21 @@ Singleton {
         return modules.find(m => m.id === id) ?? null;
     }
 
+    // Defaults from the consumer's Nix (programs.loft.features →
+    // $LOFT_FEATURE_DEFAULTS, "spaces,-island"): they replace a module's
+    // own default; a choice made in Settings → Features still wins.
+    readonly property var nixDefaults: {
+        const m = {};
+        for (const t of (Quickshell.env("LOFT_FEATURE_DEFAULTS") || "").split(",")) {
+            const id = t.trim();
+            if (id.startsWith("-"))
+                m[id.slice(1)] = false;
+            else if (id)
+                m[id] = true;
+        }
+        return m;
+    }
+
     function on(id) {
         const m = module(id);
         if (!m)
@@ -94,7 +109,9 @@ Singleton {
         if (m.core)
             return true;
         const v = Settings.features[id];
-        return v === undefined ? m.default !== false : v;
+        if (v !== undefined)
+            return v;
+        return nixDefaults[id] ?? m.default !== false;
     }
 
     function set(id, enabled) {

@@ -3,14 +3,29 @@ import QtQuick.Layouts
 import qs.components
 import qs.services
 
-// Settings → Spaces (docs/SPACES.md §6.4), read-only for now: every space
-// in Mod+N order, which workspace it puts on each display role and where
-// that workspace is right now, with Activate (and Open, which also starts
-// the space's apps, once loft-niri has it). Creating and editing spaces is
-// SPACES P6; until then they're JSON in the spaces library.
+// Settings → Spaces (docs/SPACES.md §6.4, P6): every space in Mod+N order,
+// which workspace it puts on each display role and where that workspace is
+// right now, with Activate and Open (which also starts the space's apps).
+//
+// Creating and editing: New Space (name + icon), New <template> (a Project:
+// its parameters), New Space from Current Desktop (what each display shows
+// now, `loft-niri space capture`), and per space the editor (SpaceEditor:
+// name, icon, displays, dock, menu bar, Focus, startup, delete / archive),
+// moving up / down (the ⌘N order). Writes go through Spaces → `loft-niri
+// space save|patch|delete|reorder`, validated against the whole library
+// before anything is written.
 ColumnLayout {
     id: page
     spacing: 12
+
+    // The space whose editor is open.
+    property string selected: ""
+    // "" | "new" | "capture" | a template id: the form open in the header.
+    property string form: ""
+    property string formName: ""
+    property string formIcon: ""
+    property var formParams: ({})
+    property string formError: ""
 
     onVisibleChanged: if (visible)
         Spaces.reload()
@@ -19,6 +34,90 @@ ColumnLayout {
     function where(output) {
         const s = Displays.screens.find(x => x.name === output);
         return s ? DockData.displayLabel(s) : output;
+    }
+
+    function slug(s) {
+        return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+    }
+
+    // An id no space (or workspace) has yet.
+    function freshId(name) {
+        const stem = slug(name) || "space";
+        const taken = id => Spaces.all.some(s => s.id === id || Object.values(s.displays ?? {}).includes(id));
+        if (!taken(stem))
+            return stem;
+        for (let n = 2;; n++)
+            if (!taken(`${stem}-${n}`))
+                return `${stem}-${n}`;
+    }
+
+    function openForm(kind) {
+        form = form === kind ? "" : kind;
+        formName = "";
+        formIcon = kind === "capture" ? "󰍹" : kind === "new" ? "󰕰" : (Spaces.templates.find(t => t.id === kind)?.icon ?? "");
+        formParams = {};
+        formError = "";
+    }
+
+    function finish(r) {
+        if (r.ok) {
+            form = "";
+            formError = "";
+            selected = r.id ?? "";
+        } else {
+            formError = r.error ?? "That didn't work";
+        }
+    }
+
+    function submit() {
+        const name = formName.trim();
+        if (form === "new") {
+            if (name === "") {
+                formError = "Give the space a name";
+                return;
+            }
+            Spaces.create({
+                kind: "space",
+                id: freshId(name),
+                name: name,
+                icon: formIcon,
+                displays: {
+                    main: {},
+                    "*": "keep"
+                }
+            }, finish);
+        } else if (form === "capture") {
+            if (name === "") {
+                formError = "Give the space a name";
+                return;
+            }
+            Spaces.capture(name, formIcon, finish);
+        } else if (form !== "") {
+            const t = Spaces.templates.find(t => t.id === form);
+            const params = {};
+            for (const [k, def] of Object.entries(t?.params ?? {})) {
+                const v = String(formParams[k] ?? "").trim();
+                if (v !== "")
+                    params[k] = v;
+                else if (def.required) {
+                    formError = `${def.label ?? k} is needed`;
+                    return;
+                }
+            }
+            Spaces.create({
+                kind: "space-instance",
+                template: form,
+                params: params
+            }, finish);
+        }
+    }
+
+    // A template's parameters the form asks for (the text-like ones).
+    readonly property var formFields: {
+        const t = Spaces.templates.find(t => t.id === form);
+        if (!t)
+            return [];
+        return Object.entries(t.params ?? {}).filter(([k, d]) => ["string", "dir", "url", "enum"].includes(d.type)).map(([k, d]) => Object.assign({ key: k }, d));
     }
 
     SettingsCard {
@@ -41,9 +140,138 @@ ColumnLayout {
             wrapMode: Text.Wrap
         }
 
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+            SettingsButton {
+                text: "New Space"
+                icon: "󰐕"
+                primary: page.form === "new"
+                onClicked: page.openForm("new")
+            }
+            Repeater {
+                model: Spaces.templates
+                delegate: SettingsButton {
+                    required property var modelData
+                    text: `New ${modelData.name ?? modelData.id}`
+                    icon: modelData.icon ?? ""
+                    primary: page.form === modelData.id
+                    onClicked: page.openForm(modelData.id)
+                }
+            }
+            SettingsButton {
+                text: "New Space from Current Desktop"
+                icon: "󰍹"
+                primary: page.form === "capture"
+                onClicked: page.openForm("capture")
+            }
+        }
+
+        // ── The open form ────────────────────────────────────────────────
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: page.form !== ""
+            spacing: 10
+
+            Text {
+                Layout.fillWidth: true
+                visible: page.form === "capture"
+                text: "Each display's current workspace becomes this space's workspace on that display, with its windows as the space's apps (in column order, with their widths). Displays showing nothing are kept. Activating the space gathers the windows; Open starts the ones that aren't running."
+                color: Theme.subtext
+                font.family: Theme.fontUi
+                font.pixelSize: 11
+                wrapMode: Text.Wrap
+            }
+
+            SettingsRow {
+                visible: page.formFields.length === 0
+                label: "Name"
+                SettingsTextField {
+                    implicitWidth: 240
+                    text: page.formName
+                    placeholder: page.form === "capture" ? "e.g. Writing" : "e.g. Design"
+                    onEdited: t => page.formName = t
+                    onCommitted: t => page.formName = t
+                }
+            }
+
+            Repeater {
+                model: page.formFields
+                delegate: SettingsRow {
+                    id: paramRow
+                    required property var modelData
+                    label: modelData.label ?? modelData.key
+                    hint: [modelData.hint ?? "", modelData.required ? "required" : ""].filter(s => s).join(" · ")
+                    SettingsSelect {
+                        visible: paramRow.modelData.type === "enum"
+                        options: (paramRow.modelData.values ?? []).map(v => ({ value: v, label: v }))
+                        current: page.formParams[paramRow.modelData.key] ?? paramRow.modelData.default ?? null
+                        onActivated: v => {
+                            const p = Object.assign({}, page.formParams);
+                            p[paramRow.modelData.key] = v;
+                            page.formParams = p;
+                        }
+                    }
+                    SettingsTextField {
+                        visible: paramRow.modelData.type !== "enum"
+                        implicitWidth: 260
+                        text: page.formParams[paramRow.modelData.key] ?? ""
+                        placeholder: paramRow.modelData.type === "dir" ? "~/Development/…" : paramRow.modelData.type === "url" ? "https://…" : ""
+                        onEdited: t => {
+                            const p = Object.assign({}, page.formParams);
+                            p[paramRow.modelData.key] = t;
+                            page.formParams = p;
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                visible: page.formFields.length === 0
+                spacing: 16
+                Text {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.topMargin: 6
+                    text: "Icon"
+                    color: Theme.text
+                    font.family: Theme.fontUi
+                    font.pixelSize: 13
+                }
+                SpaceIconPicker {
+                    Layout.fillWidth: true
+                    current: page.formIcon
+                    onPicked: icon => page.formIcon = icon
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Text {
+                    Layout.fillWidth: true
+                    text: page.formError
+                    color: Theme.warn
+                    font.family: Theme.fontUi
+                    font.pixelSize: 11
+                    wrapMode: Text.Wrap
+                }
+                SettingsButton {
+                    text: "Cancel"
+                    onClicked: page.form = ""
+                }
+                SettingsButton {
+                    text: page.form === "capture" ? "Capture" : "Create"
+                    primary: true
+                    enabled: !Spaces.writing
+                    onClicked: page.submit()
+                }
+            }
+        }
+
         Text {
             Layout.fillWidth: true
-            text: `Spaces are JSON files in ${Spaces.libraryDir}. Creating and editing them here comes later.`
+            text: `Spaces are JSON files in ${Spaces.libraryDir || "(no library: LOFT_LIBRARY is off)"}; the first change copies the built-in ones there.`
             color: Theme.subtext
             font.family: Theme.fontUi
             font.pixelSize: 11
@@ -51,7 +279,7 @@ ColumnLayout {
         }
 
         Repeater {
-            model: Spaces.problems
+            model: Spaces.problems.concat(Spaces.editError && page.form === "" ? [Spaces.editError] : []).concat(Spaces.lastError ? [Spaces.lastError] : [])
             delegate: Text {
                 required property var modelData
                 Layout.fillWidth: true
@@ -61,16 +289,6 @@ ColumnLayout {
                 font.pixelSize: 11
                 wrapMode: Text.Wrap
             }
-        }
-
-        Text {
-            Layout.fillWidth: true
-            visible: Spaces.lastError !== ""
-            text: Spaces.lastError
-            color: Theme.warn
-            font.family: Theme.fontUi
-            font.pixelSize: 11
-            wrapMode: Text.Wrap
         }
     }
 
@@ -90,7 +308,9 @@ ColumnLayout {
         delegate: SettingsCard {
             id: card
             required property var modelData
+            required property int index
             readonly property bool isActive: modelData.id === Spaces.activeId
+            readonly property bool editing: page.selected === modelData.id
             readonly property var roles: {
                 const d = modelData.displays ?? {};
                 const keys = Object.keys(d).filter(r => r !== "*");
@@ -102,6 +322,31 @@ ColumnLayout {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
+
+                // Move up / down in ⌘N order.
+                ColumnLayout {
+                    spacing: 0
+                    Repeater {
+                        model: [{ glyph: "󰅃", delta: -1 }, { glyph: "󰅀", delta: 1 }]
+                        delegate: Icon {
+                            id: arrowIcon
+                            required property var modelData
+                            readonly property bool can: modelData.delta < 0 ? card.index > 0 : card.index < Spaces.spaces.length - 1
+                            text: modelData.glyph
+                            size: 13
+                            color: can ? (arrow.containsMouse ? Theme.accent : Theme.subtext) : Theme.withAlpha(Theme.subtext, 0.3)
+                            MouseArea {
+                                id: arrow
+                                anchors.fill: parent
+                                anchors.margins: -3
+                                hoverEnabled: true
+                                enabled: arrowIcon.can && !Spaces.writing
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Spaces.move(card.modelData.id, arrowIcon.modelData.delta)
+                            }
+                        }
+                    }
+                }
 
                 IconBadge {
                     icon: card.modelData.icon || "󰕰"
@@ -151,6 +396,10 @@ ColumnLayout {
                 }
 
                 SettingsButton {
+                    text: card.editing ? "Done" : "Edit"
+                    onClicked: page.selected = card.editing ? "" : card.modelData.id
+                }
+                SettingsButton {
                     visible: Spaces.canOpen
                     text: "Open"
                     onClicked: Spaces.open(card.modelData.id)
@@ -170,7 +419,7 @@ ColumnLayout {
 
             // One line per display role: role → workspace → where it is now.
             Repeater {
-                model: card.roles
+                model: card.editing ? [] : card.roles
 
                 delegate: RowLayout {
                     id: line
@@ -207,6 +456,57 @@ ColumnLayout {
                         font.pixelSize: 11
                         elide: Text.ElideRight
                     }
+                }
+            }
+
+            Loader {
+                Layout.fillWidth: true
+                active: card.editing
+                visible: active
+                sourceComponent: SpaceEditor {
+                    spaceId: card.modelData.id
+                    onDeleted: page.selected = ""
+                }
+            }
+        }
+    }
+
+    // ── Archived instances ───────────────────────────────────────────────
+    SettingsCard {
+        id: archivedCard
+        readonly property var archived: Spaces.all.filter(s => s.archived)
+        visible: archived.length > 0
+        spacing: 6
+        PageHeader {
+            title: "Archived"
+        }
+        Repeater {
+            model: archivedCard.archived
+            delegate: RowLayout {
+                id: archivedRow
+                required property var modelData
+                Layout.fillWidth: true
+                spacing: 10
+                IconBadge {
+                    icon: archivedRow.modelData.icon || "󰕰"
+                    badge: "gray"
+                    size: 22
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: archivedRow.modelData.name
+                    color: Theme.text
+                    font.family: Theme.fontUi
+                    font.pixelSize: 13
+                    elide: Text.ElideRight
+                }
+                SettingsButton {
+                    text: "Restore"
+                    onClicked: Spaces.patch(archivedRow.modelData.id, { archived: null })
+                }
+                SettingsButton {
+                    text: "Delete"
+                    onClicked: Spaces.remove(archivedRow.modelData.id)
                 }
             }
         }

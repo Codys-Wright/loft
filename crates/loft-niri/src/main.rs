@@ -983,7 +983,9 @@ fn space_cmd(
             print(
                 j,
                 &json!({ "spaces": rows, "problems": cat.problems, "layout": layout,
-                         "templates": cat.templates.keys().collect::<Vec<_>>(),
+                         "templates": cat.templates.iter().map(|(id, t)| json!({
+                             "id": id, "name": t.get("name"), "icon": t.get("icon"),
+                             "params": t.get("params") })).collect::<Vec<_>>(),
                          "library": dir }),
                 || {
                     rows.iter()

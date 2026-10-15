@@ -421,7 +421,12 @@ pub fn capture(
         let mut on: Vec<&Win> = ws
             .map(|ws| {
                 wins.iter()
-                    .filter(|w| w.workspace_id == Some(ws.id) && w.app_id.is_some())
+                    .filter(|w| {
+                        w.workspace_id == Some(ws.id)
+                            && w.app_id
+                                .as_deref()
+                                .is_some_and(|a| !SHELL_APP_IDS.contains(&a))
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -467,7 +472,7 @@ pub fn capture(
                 if f >= 0.95 {
                     app.insert("open".into(), json!("maximized"));
                 } else if f > 0.05 {
-                    app.insert("width".into(), json!((f * 100.0).round() / 100.0));
+                    app.insert("width".into(), json!(snap_width(f)));
                 }
             }
             apps.push(Value::Object(app));
@@ -484,6 +489,20 @@ pub fn capture(
         "displays": displays,
         "startup": "first-activate",
     })
+}
+
+/// Loft's own windows (Settings, the shell's dialogs): never a space's app.
+const SHELL_APP_IDS: &[&str] = &["org.quickshell"];
+
+/// A column's share of the display, snapped to the usual proportions (a
+/// "half" column is a little under 0.5 because of the gaps).
+fn snap_width(f: f64) -> f64 {
+    for p in [0.25, 1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75] {
+        if (f - p).abs() < 0.03 {
+            return (p * 100.0_f64).round() / 100.0;
+        }
+    }
+    (f * 100.0).round() / 100.0
 }
 
 /// An unused id for a new space named `name`.
@@ -732,6 +751,8 @@ mod tests {
             win(12, "kitty", 2, 3, 1135, 102),
             win(13, "org.rncbc.qpwgraph", 3, 1, 2560, 103),
             win(14, "elsewhere", 4, 1, 100, 104),
+            win(15, "org.quickshell", 2, 4, 800, 105),
+            win(16, "half", 2, 5, 1700, 106),
         ];
         let cmds = |pid: i32| (pid != 101).then(|| vec![format!("cmd{pid}")]);
         let doc = capture(&st, &wins, &cmds, "now", "Now", "󰕰");
@@ -742,7 +763,7 @@ mod tests {
             .iter()
             .map(|a| a["id"].as_str().unwrap())
             .collect();
-        assert_eq!(ids, ["zed", "kitty", "kitty-2"]);
+        assert_eq!(ids, ["zed", "kitty", "kitty-2", "half"]);
         assert_eq!(
             d["main"]["apps"][0]["launch"],
             json!(false),
@@ -753,6 +774,9 @@ mod tests {
         assert_eq!(d["main"]["apps"][1]["match"]["appId"], json!("^kitty$"));
         assert_eq!(d["right"]["apps"][0]["open"], json!("maximized"));
         assert_eq!(d["left"], json!("keep"), "an empty display is kept");
+        let main = d["main"]["apps"].as_array().unwrap();
+        assert_eq!(main.len(), 4, "Loft's own windows aren't apps");
+        assert_eq!(main[3]["width"], json!(0.5), "snapped to a half");
         assert_eq!(d["*"], json!("keep"));
         // It's a valid space.
         let s = crate::spaces::model::instantiate(&doc, None, &env()).unwrap();
