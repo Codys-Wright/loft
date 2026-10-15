@@ -789,7 +789,7 @@ facet kinds it reads, and its cache key covers only those.
 | `wallpapers` | `wallpapers.json` (resolved collection, sets, arrangement) | wallpapers, colors | `qs ipc call vibes refresh` |
 | `niri` | `niri.kdl` (colors, blur, radius, gaps, ring/border/shadow, animations, cursor) | colors, material, shape, motion, icons | `niri msg action load-config-file` |
 | `gtk` | `gtk.css` | colors, shape | gsettings `color-scheme` (CSS for new windows) |
-| `qt` | `kde.colors`, `kvantum.kvconfig`, `kvantum.svg` (Dolphin: Kvantum theme + KDE color scheme `Loft`) | colors, material, shape | `qtapps.sync` (links, Kvantum `[Applications]`, dolphinrc keys); apps restart to pick it up |
+| `qt` | `kde.colors`, `kvantum.kvconfig`, `kvantum.svg`, `dolphin.qss` (Dolphin: Kvantum theme + KDE color scheme `Loft`) | colors, material, shape | `qtapps.sync` (links, Kvantum `[Applications]`, dolphinrc keys); apps restart to pick it up |
 | `gsettings` | no file: `color-scheme`, `icon-theme`, `cursor-*`, `font-name`, `monospace-font-name`, sound theme | colors, icons, typography, sounds | itself |
 | `kitty` | `kitty.conf` | colors, material, typography | SIGUSR1 |
 | `ghostty` | `ghostty.conf` | colors, material, typography | SIGUSR2 |

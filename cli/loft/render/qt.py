@@ -8,6 +8,8 @@
                      palette's accent; every element Kvantum draws for Dolphin
                      is generated here, so nothing falls back to Kvantum's
                      built-in (Enlightenment-grey) default theme
+  dolphin.qss        a Qt style sheet the dolphin launcher passes with
+                     -stylesheet: Places rows inset like Nautilus's sidebar
 
   colors    palette, polarity
   material  glass tint / opacity / blur → the window (sidebar) glass
@@ -112,6 +114,8 @@ def variables(i: dict) -> dict[str, str]:
     v.update({f"kde_{k}": _kde(x) for k, x in r.items() if k != "dark"})
     v["ctl"] = str(_ctl(i))
     v["srf"] = str(_srf(i))
+    # Places rows inset from the sidebar's edges, as gtk.css's Nautilus rows.
+    v["places_inset"] = "10"
     return v
 
 
@@ -360,16 +364,17 @@ def render(i: dict, template_dir: Path) -> dict:
         "kde.colors": template(template_dir, "kde.colors", v),
         "kvantum.kvconfig": template(template_dir, "kvantum.kvconfig", v),
         "kvantum.svg": svg(i),
+        "dolphin.qss": template(template_dir, "dolphin.qss", v),
     }
 
 
 UNIT = Unit(
     name="qt",
     reads=("colors", "material", "shape"),
-    files=("kde.colors", "kvantum.kvconfig", "kvantum.svg"),
+    files=("kde.colors", "kvantum.kvconfig", "kvantum.svg", "dolphin.qss"),
     inputs=inputs,
     render=render,
     hook="qt",
     module=__file__,
-    templates=("kde.colors", "kvantum.kvconfig"),
+    templates=("kde.colors", "kvantum.kvconfig", "dolphin.qss"),
 )
