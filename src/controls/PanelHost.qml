@@ -41,6 +41,7 @@ Item {
             inputSource: inputSource,
             caffeine: keepAwake,
             phone: phone,
+            eject: eject,
             overflow: overflow
         })
 
@@ -64,6 +65,14 @@ Item {
         }
     }
 
+    Component {
+        id: eject
+        EjectPanel {
+            details: host.details
+            shown: host.shown
+            inMenu: host.inMenu
+        }
+    }
     Component {
         id: wifi
         WifiPanel {
