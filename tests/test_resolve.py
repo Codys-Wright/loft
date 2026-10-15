@@ -89,7 +89,7 @@ def without_additions(d: Path, into: Path) -> Path:
     for p in [into, *into.rglob("*")]:  # the source may be read-only (the Nix store)
         p.chmod(0o755 if p.is_dir() else 0o644)
     (into / "wallpapers.json").unlink()
-    for f in ("kde.colors", "kvantum.kvconfig", "kvantum.svg"):  # unit `qt`
+    for f in ("kde.colors", "kvantum.kvconfig", "kvantum.svg", "dolphin.qss"):  # unit `qt`
         (into / f).unlink()
     t = json.loads((into / "theme.json").read_text())
     for k in ("motion", "type", "icons", "a11y", "windows"):

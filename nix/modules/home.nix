@@ -91,6 +91,19 @@
         exec ${lib.getExe sp.loft-niri} space startup
       '';
 
+      # programs.loft.qt.dolphinLauncher: Dolphin with the theme's style sheet
+      # (Places rows inset), when it has been rendered; hiPrio over a plain
+      # Dolphin in the same profile.
+      dolphinLauncher = lib.hiPrio (
+        pkgs.writeShellScriptBin "dolphin" ''
+          qss=${lib.escapeShellArg "${stateDir}/current/dolphin.qss"}
+          if [ -r "$qss" ]; then
+            exec ${lib.getExe cfg.qt.dolphinPackage} -stylesheet "$qss" "$@"
+          fi
+          exec ${lib.getExe cfg.qt.dolphinPackage} "$@"
+        ''
+      );
+
       # The consumer runs a niri that parses `place-within-workspace`.
       workspaceLayers = cfg.niriPackage.passthru.loftWorkspaceLayers or false;
 
@@ -297,6 +310,25 @@
               key is absent: anything set in Dolphin's own settings wins.
             '';
           };
+          dolphinLauncher = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = ''
+              Put a `dolphin` launcher first on PATH that starts
+              `dolphinPackage` with `-stylesheet <state>/current/dolphin.qss`
+              (the `qt` unit's style sheet: Places rows inset 10 px from the
+              sidebar's edges, like Nautilus's). The .desktop entry runs
+              `dolphin` from PATH, so the launcher, dock and terminal get it; a
+              Dolphin started by D-Bus activation (org.freedesktop.FileManager1,
+              "show in folder") runs the system binary and keeps edge-to-edge rows.
+            '';
+          };
+          dolphinPackage = lib.mkOption {
+            type = lib.types.package;
+            default = pkgs.kdePackages.dolphin;
+            defaultText = lib.literalExpression "pkgs.kdePackages.dolphin";
+            description = "The Dolphin the launcher starts (use the system's, so the version matches).";
+          };
           kvantumPackage = lib.mkOption {
             type = lib.types.package;
             default = pkgs.kdePackages.qtstyleplugin-kvantum;
@@ -389,7 +421,8 @@
           sp.loft-launcher
         ]
         ++ lib.optional cfg.phone.enable cfg.phone.package
-        ++ lib.optional cfg.qt.enable cfg.qt.kvantumPackage;
+        ++ lib.optional cfg.qt.enable cfg.qt.kvantumPackage
+        ++ lib.optional (cfg.qt.enable && cfg.qt.dolphinLauncher) dolphinLauncher;
 
         # `loft` in terminals sees the same library as the shell.
         home.sessionVariables.LOFT_LIBRARY = library;

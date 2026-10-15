@@ -103,6 +103,9 @@ values below are ours — tokens, so themes can tune them.
   layout), and there are no traffic lights: Qt apps draw no window buttons on
   niri. Assigned to Dolphin only (Kvantum `[Applications]`, dolphinrc keys),
   never as a global Qt style.
+  Places rows sit 10 px inside the sidebar with inset hover / selection pills,
+  through `dolphin.qss` (a style sheet the `dolphin` launcher passes; the
+  only lever that moves KIO's Places viewport).
 - **GTK 4 base theme (optional)** — `programs.loft.gtkBase.{dark,light}`: a full
   libadwaita stylesheet (MacTahoe's `-l` CSS: Tahoe toolbars, pill buttons, Finder
   path bar) imported under the theme's gtk.css. The `gtk` hook links
