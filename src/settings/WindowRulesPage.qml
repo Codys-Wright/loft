@@ -29,24 +29,76 @@ ColumnLayout {
     readonly property var themeG: WindowRules.themeGlass
     readonly property var userG: WindowRules.userGlass
 
-    // Settings → Window Rules opened for an app (dock / app menu).
+    // The Settings window's Flickable (SettingsApp), to scroll an app into view.
+    property Flickable flick: null
+
+    // Settings → Window Rules opened for an app (dock / app menu,
+    // `windowrules open APP`): that app expanded and scrolled into view.
+    property string revealApp: ""
     Connections {
         target: WindowRules
         function onFocusAppChanged() {
-            if (WindowRules.focusApp !== "") {
-                page.selected = WindowRules.focusApp;
-                page.query = "";
-                search.clear();
-            }
+            if (WindowRules.focusApp !== "")
+                page.reveal(WindowRules.focusApp);
         }
     }
     Component.onCompleted: {
         WindowRules.refresh();
         if (WindowRules.focusApp !== "")
-            selected = WindowRules.focusApp;
+            reveal(WindowRules.focusApp);
     }
-    onVisibleChanged: if (visible)
-        WindowRules.refresh()
+    onVisibleChanged: {
+        if (!visible)
+            return;
+        WindowRules.refresh();
+        if (revealApp !== "")
+            revealTimer.restart();
+    }
+
+    function reveal(app) {
+        selected = app;
+        query = "";
+        search.clear();
+        revealApp = app;
+        revealTimer.tries = 0;
+        revealTimer.restart();
+    }
+
+    // The page lays out after it becomes visible (and again when the list
+    // refreshes), so look for the row a few times until it has a place.
+    Timer {
+        id: revealTimer
+        property int tries: 0
+        interval: 120
+        onTriggered: {
+            if (!page.visible || page.revealApp === "" || !page.flick)
+                return;
+            let row = null;
+            for (let i = 0; i < appList.count; i++) {
+                const it = appList.itemAt(i);
+                if (it && it.app === page.revealApp)
+                    row = it;
+            }
+            if (row && row.height > 0 && page.height > 0) {
+                const f = page.flick;
+                const y = row.mapToItem(f.contentItem, 0, 0).y;
+                const view = f.height;
+                // Its header near the top, the editor below it in view.
+                const want = Math.max(0, Math.min(y - 12, f.contentHeight - view));
+                f.contentY = want;
+                if (++tries < 4) {
+                    restart(); // once more after the editor's height settles
+                    return;
+                }
+                page.revealApp = "";
+                return;
+            }
+            if (++tries < 25)
+                restart();
+            else
+                page.revealApp = "";
+        }
+    }
 
     function pct(v) {
         return Math.round(v * 100) + "%";
@@ -262,6 +314,7 @@ ColumnLayout {
         }
 
         Repeater {
+            id: appList
             model: page.apps
 
             delegate: ColumnLayout {

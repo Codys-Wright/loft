@@ -196,6 +196,7 @@ Scope {
 
             // Content
             Flickable {
+                id: content
                 anchors.fill: parent
                 anchors.leftMargin: 20
                 anchors.rightMargin: 20
@@ -455,6 +456,7 @@ Scope {
                     WindowRulesPage {
                         Layout.fillWidth: true
                         visible: root.section === "windowrules"
+                        flick: content
                     }
 
                     FeaturesPage {
