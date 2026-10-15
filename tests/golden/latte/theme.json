@@ -132,5 +132,13 @@
     "reduceMotion": false,
     "reduceTransparency": false,
     "increaseContrast": false
+  },
+  "windows": {
+    "translucent": true,
+    "opacity": {
+      "focused": 0.9,
+      "unfocused": 0.8
+    },
+    "blur": true
   }
 }

@@ -270,6 +270,8 @@ Singleton {
     }
 
     readonly property var wallpaperGradient: theme.wallpaper.gradient
+    // { translucent, opacity: { focused, unfocused }, blur } ({} before a render has it).
+    readonly property var windows: theme.windows
     // A theme pack's wallpaper image, relative to the pack (theme.json's dir).
     readonly property string wallpaperImage: theme.wallpaper.image ? (theme.wallpaper.image.startsWith("/") ? theme.wallpaper.image : file.replace(/[^/]*$/, "") + theme.wallpaper.image) : ""
 
@@ -377,6 +379,11 @@ Singleton {
                 property list<string> gradient: ["#16161e", "#2a3a6e", "#6b4fa3"]
                 property string image: ""
             }
+
+            // App windows' translucency (the material facet's `windows`):
+            // loft-niri reads it from this file; WindowRules re-renders the
+            // niri rules when it changes.
+            property var windows: ({})
         }
     }
 }

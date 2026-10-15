@@ -15,6 +15,7 @@ pub mod render;
 pub mod shortcuts;
 pub mod spaces;
 pub mod state;
+pub mod window_rules;
 
 use std::path::Path;
 
@@ -84,7 +85,9 @@ pub fn show(paths: &Paths, entry: Option<&Path>) -> Result<Value> {
 ///   "set":   { "layout.gaps": 8 },
 ///   "unset": [ "input.mouse" ],
 ///   "reset_outputs": [ "<identity>" ],
-///   "window_rules": { "<app-id>": { "open-on-workspace": "Desktop 2" } | null },
+///   "window_rules": { "<app-id>": { "open-on-workspace": "Desktop 2", "glass": "opaque" } | null },
+///   "window_glass": { "enabled": true, "focused": 0.9, "defaults-off": ["reaper"] },
+///   "reset_window_rules": true,
 ///   "bind_ops": [ { "op": "set", "id": "d:Mod+Shift+T", "combo": "Mod+Alt+T" } ],
 ///   "live": true, "record": true, "render": true }
 /// ```
@@ -149,11 +152,20 @@ pub fn apply(paths: &Paths, data: &Value, opts: ApplyOpts) -> Result<Value> {
                 ov.remove(k);
             }
         }
-        // The dock's Assign To: whole records replaced, null removes.
-        for (section, field) in [
-            ("window-rules", "window_rules"),
-            ("workspaces", "workspaces"),
-        ] {
+        // Settings → Window Rules, the dock's Assign To / Window Rules:
+        // fields merged per app (null drops one; null for an app drops all).
+        if let Some(m) = data.get("window_rules").and_then(Value::as_object) {
+            window_rules::apply_rules(&mut ov, m)?;
+        }
+        if let Some(m) = data.get("window_glass").and_then(Value::as_object) {
+            window_rules::apply_glass(&mut ov, m)?;
+        }
+        if data.get("reset_window_rules").and_then(Value::as_bool) == Some(true) {
+            ov.0.remove(window_rules::RULES);
+            ov.0.remove(window_rules::GLASS);
+        }
+        // Whole records replaced, null removes.
+        for (section, field) in [("workspaces", "workspaces")] {
             if let Some(m) = data.get(field).and_then(Value::as_object) {
                 for (k, v) in m {
                     match v {

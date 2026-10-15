@@ -35,6 +35,14 @@
       "opacity": null,
       "blur": true
     },
+    "windows": {
+      "translucent": true,
+      "opacity": {
+        "focused": 0.9,
+        "unfocused": 0.8
+      },
+      "blur": true
+    },
     "menuBar": {
       "background": false,
       "adaptiveText": true

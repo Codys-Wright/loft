@@ -37,7 +37,9 @@
       # Programs the shell and the base niri config call at runtime.
       runtimeDeps = with pkgs; [
         quickshell
-        niri
+        # niri-loft, not stock niri: the session runs it, and loft-niri's
+        # `niri validate` must accept its place-within-workspace rule.
+        self'.packages.niri-loft
         foot # the demo session's terminal (Mod+Return); consumers bind their own
         gammastep # Night Light
         wf-recorder # Screen recording
@@ -241,6 +243,7 @@
                 "@MESA_EGL_VENDOR@"
                 "@NIRI_HEADLESS@"
                 "@NIRI_LOFT@"
+                "@NIRI_STOCK@"
               ]
               [
                 (lib.getExe self'.packages.loft)
@@ -254,6 +257,7 @@
                 "${pkgs.mesa}/share/glvnd/egl_vendor.d/50_mesa.json"
                 (lib.getExe self'.packages.loft-niri-headless)
                 (lib.getExe self'.packages.niri-loft)
+                (lib.getExe pkgs.niri)
               ]
               (builtins.readFile ./dev/loft-dev.sh);
         };

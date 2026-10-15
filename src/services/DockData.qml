@@ -258,7 +258,8 @@ Singleton {
     function assign(appId, ws) {
         const batch = { window_rules: {} };
         if (!ws) {
-            batch.window_rules[appId] = null;
+            // Fields merge per app (crates/loft-niri window_rules): drop only this one.
+            batch.window_rules[appId] = { "open-on-workspace": null };
         } else {
             const name = wsName(ws);
             if (!ws.name)

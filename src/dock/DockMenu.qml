@@ -12,7 +12,9 @@ import qs.everyday
 //
 //   app      windows (focus) · recent files · New Window + .desktop actions ·
 //            Options ▸ (Keep in Dock, Open at Login, Show in Files, Assign
-//            To, Move to Desktop / Display) · Show All Windows · Hide ·
+//            To, Move to Desktop / Display) · Window Rules ▸ (Keep Opaque,
+//            Blur Behind Window, Always Open Floating, Translucent Windows,
+//            Window Rules…) · Show All Windows · Hide ·
 //            Hide Others · Quit (Alt: Force Quit)
 //   folder   Sort by ▸ · Display as ▸ · View content as ▸ · Open · Remove
 //   item     a stack item: Open · Show in Files · Quick Actions ▸ (Media Tools)
@@ -186,6 +188,9 @@ Singleton {
         items.push(sep("s-new"));
 
         items.push({ key: "options", label: "Options", enabled: true, submenu: true, children: optionItems(appId, section, screen) });
+        // Window Rules ▸: Keep Opaque, blur, floating, … (WindowRules.qml).
+        if (!own)
+            items.push({ key: "window-rules", label: "Window Rules", enabled: true, submenu: true, children: WindowRules.menuItems(appId) });
 
         if (running) {
             items.push(sep("s-show"));

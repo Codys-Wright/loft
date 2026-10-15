@@ -85,7 +85,7 @@ def without_additions(d: Path, into: Path) -> Path:
         p.chmod(0o755 if p.is_dir() else 0o644)
     (into / "wallpapers.json").unlink()
     t = json.loads((into / "theme.json").read_text())
-    for k in ("motion", "type", "icons", "a11y"):
+    for k in ("motion", "type", "icons", "a11y", "windows"):
         t.pop(k)
     t["shape"].pop("focus")
     (into / "theme.json").write_text(json.dumps(t, indent=2) + "\n")

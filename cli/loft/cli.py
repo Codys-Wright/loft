@@ -1089,6 +1089,19 @@ def run_dev(args: list[str]) -> int:
     return 1  # exec only returns by failing
 
 
+def cmd_windows(ctx: Ctx, args) -> None:
+    """`loft windows …` = `loft-niri windows …` (Settings → Window Rules):
+    translucent windows and per-app window rules. With --dev, the session's
+    state dir and niri config (load_dev_env set them)."""
+    exe = shutil.which("loft-niri")
+    if not exe:
+        raise Fail("loft-niri is not on PATH")
+    rest = list(args.rest or [])
+    if rest[:1] == ["--"]:
+        rest = rest[1:]
+    os.execv(exe, [exe, "--state-dir", str(ctx.state_dir), "windows", *(rest or ["list"])])
+
+
 def _migrate_args(s) -> None:
     s.add_argument("--apply", action="store_true", help="do it (default: a dry run that only reports)")
     s.add_argument("--json", action="store_true", help="the plan and summary as JSON")
@@ -1296,6 +1309,16 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_wall_focus)
 
+    s = top.add_parser(
+        "windows",
+        help="translucent windows and per-app window rules (= loft-niri windows …)",
+        description="glass [on|off|status|reset] [--focused F] [--unfocused F] [--blur on|off] · "
+        "opaque [list|add|remove] [APP-ID] · rule APP-ID [FIELD=VALUE…] · reset [APP-ID] · list. "
+        "Add --json before the subcommand for JSON (loft windows --json glass).",
+    )
+    s.add_argument("rest", nargs=argparse.REMAINDER, help="loft-niri windows arguments")
+    s.set_defaults(fn=cmd_windows)
+
     dock.add_parser(top, lambda ctx: ctx.state_dir)
     island.add_parser(top, lambda ctx: str(ctx.shell_path))
     # Utilities window (src/utilities): ports, flake updates, cleaner, media tools.
@@ -1318,6 +1341,17 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["dev"]:
         return run_dev(argv[1:])
+    # `loft [--dev] windows …`: everything after `windows` goes to loft-niri
+    # (argparse would claim its options, e.g. --json).
+    w = 1 if argv[:1] == ["--dev"] else 0
+    if argv[w : w + 1] == ["windows"] and not {"-h", "--help"} & set(argv[w + 1 : w + 2]):
+        try:
+            if w:
+                load_dev_env()
+            cmd_windows(Ctx(bool(w)), argparse.Namespace(rest=argv[w + 1 :]))
+        except Fail as e:
+            print(f"loft: {e}", file=sys.stderr)
+            return 1
     args = parser().parse_args(argv)
     try:
         if args.dev:

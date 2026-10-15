@@ -5,7 +5,8 @@ The flat v1 keys (name … radii) stay exactly as they were, for Theme.qml's
 current properties and the greeter, which reads theme.json with XHR. The
 grouped keys are new: `shape.focus` (shadow | ring | both, next to
 the v1 radii), `motion` (durations already divided by the
-speed, 0 when minimal), `type`, `icons` and `a11y`.
+speed, 0 when minimal), `type`, `icons`, `a11y` and `windows` (app
+windows' translucency, for loft-niri's window rules).
 
 Identity (theme id, variant, sources, customized kinds) is not in here: it is
 the composition's resolved.json, so two selections that look the same share
@@ -93,6 +94,7 @@ def document(i: dict) -> dict:
         "type": ty,
         "icons": {"theme": i["icons"]["icons"]["theme"], "fallback": i["icons"]["icons"]["fallback"], "cursor": i["icons"]["cursor"]},
         "a11y": i["a11y"],
+        "windows": look.windows(material),
     }
 
 

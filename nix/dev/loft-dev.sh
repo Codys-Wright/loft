@@ -304,7 +304,7 @@ extra_kdl=""
 host_pid=""
 # niri-loft: the place-within-workspace layer rule (per-workspace wallpapers).
 niri_bin=@NIRI_LOFT@
-[ "$ws_layers" = 1 ] || niri_bin=niri
+[ "$ws_layers" = 1 ] || niri_bin=@NIRI_STOCK@
 nested=1
 if [ -n "$output_sizes" ]; then
   # niri on virtual outputs (nix/dev/niri-headless-outputs.patch): no host
@@ -410,6 +410,10 @@ mkdir -p "$dir/bin"
 printf '#!/bin/sh\nexec %s -B "%s" "$@"\n' "@PYTHON@" "$root/cli/loft" > "$dir/bin/loft"
 chmod +x "$dir/bin/loft"
 export PATH="$dir/bin:$PATH"
+# The session's `niri` (msg, and the `niri validate` loft-niri runs before it
+# writes overrides) is the compositor it runs: stock niri rejects niri-loft's
+# place-within-workspace rule, so validating with it fails every change.
+case "$niri_bin" in /*) PATH="${niri_bin%/*}:$PATH" ;; esac
 if [ -d "$root/target/debug" ]; then
   export PATH="$root/target/debug:$PATH"
 fi
