@@ -238,6 +238,22 @@ class Views(unittest.TestCase):
         self.sort()
         self.assertIn("Wallpapers/Colors/Blue/Processed - Sea - Calm-bay-night-blue.png", self.links())
 
+    def test_superseded(self):
+        # A processed wallpaper's processed.json names the raw image it was
+        # made from: that one isn't auto-picked any more (Topics/ = Unprocessed/).
+        w = self.lib / "Wallpapers"
+        write(w / "Unprocessed" / "Sea" / "raw.png", make_png(8, 8, lambda x, y: PINK))
+        write(w / "Unprocessed" / "Sea" / "other.png", make_png(8, 8, lambda x, y: PINK))
+        write(w / "Processed" / "Sea" / "Calm-bay-night-blue.png", make_png(8, 4, lambda x, y: BLUE))
+        meta = {"version": 1, "wallpapers": {
+            "Calm-bay-night-blue": {"source": {"file": "Wallpapers/Topics/Sea/raw.png"}},
+            "Broken": {"source": {"file": "Wallpapers/Unprocessed/Sea/gone.png"}},
+            "No-source": {},
+        }}  # fmt: skip
+        write(w / "Processed" / "Sea" / "processed.json", json.dumps(meta).encode())
+        done = library.Library(self.lib).superseded()
+        self.assertEqual(done, {str((w / "Unprocessed" / "Sea" / "raw.png").resolve())})
+
     def test_theme_path_install_and_vibes(self):
         rc, out, _ = loft("theme", "list")
         self.assertEqual(out.split(), ["forest", "latte", "pinky", "tokyonight"])

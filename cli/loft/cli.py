@@ -767,6 +767,10 @@ def wallpaper_plan(ctx: Ctx, pack: Pack, layout: dict, choices: dict) -> dict:
             thumb=lambda p: library.thumb(ctx.state_dir, cache, Path(p)),
         )  # fmt: skip
         pool = wallsets.candidates(ranked, cache, frames)
+        # A screenshot with a finished (processed) version isn't picked itself.
+        done = lib.superseded() if lib is not None and lib.exists() else set()
+        if done:
+            pool = [c for c in pool if str(Path(c["path"]).resolve()) not in done]
         tone = wallsets.target_tone(ranked, cache)
         pack_sets = [
             {"name": s["name"], "origin": "pack", "displays": {r: str(p) for r, p in s["displays"].items()}, "workspaces": {k: str(p) for k, p in s["workspaces"].items()}}

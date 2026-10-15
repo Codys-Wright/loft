@@ -278,6 +278,35 @@ class Library:
             out.setdefault(topic, []).append(p)
         return out
 
+    def superseded(self) -> set[str]:
+        """Resolved paths of unprocessed images that a finished wallpaper was
+        made from: each Processed/ folder's processed.json names its sources
+        (wallpapers.<name>.source.file, relative to the library root; Topics/
+        and Unprocessed/ are the same stage)."""
+        out: set[str] = set()
+        if not self.processed_dir.is_dir():
+            return out
+        for f in sorted(self.processed_dir.rglob("processed.json")):
+            try:
+                data = json.loads(f.read_text())
+            except (OSError, ValueError):
+                continue
+            entries = data.get("wallpapers") if isinstance(data, dict) else None
+            for w in (entries or {}).values():
+                rel = ((w or {}).get("source") or {}).get("file") if isinstance(w, dict) else None
+                if not isinstance(rel, str):
+                    continue
+                for stage in (UNPROCESSED, TOPICS):
+                    for prefix in (f"{WALLPAPERS}/{UNPROCESSED}/", f"{WALLPAPERS}/{TOPICS}/"):
+                        if rel.startswith(prefix):
+                            cand = self.wallpapers / stage / rel[len(prefix):]
+                            if cand.is_file():
+                                out.add(str(cand.resolve()))
+                cand = self.root / rel
+                if cand.is_file():
+                    out.add(str(cand.resolve()))
+        return out
+
     def pack_dirs(self) -> list[Path]:
         """v1 packs (and v2 packs migrated in place, which keep their theme.json)."""
         if not self.packs.is_dir():
