@@ -120,6 +120,11 @@ enum Cmd {
         #[command(flatten)]
         flags: RenderFlags,
     },
+    /// Settings → Window Rules: translucent windows, apps kept opaque, per-app rules.
+    Windows {
+        #[command(subcommand)]
+        cmd: WindowsCmd,
+    },
     /// Spaces (docs/SPACES.md): list, activate, render spaces.kdl.
     Space {
         #[command(flatten)]
@@ -215,6 +220,119 @@ enum SpaceCmd {
         #[command(flatten)]
         flags: RenderFlags,
     },
+}
+
+#[derive(Subcommand)]
+enum WindowsCmd {
+    /// Everything the Window Rules page shows: the glass values (theme,
+    /// yours, effective), the built-in opaque list, your per-app rules and
+    /// every window-rule in the niri config (file:line).
+    List,
+    /// Translucent windows: `on`, `off`, `status` (default), or `reset` (back
+    /// to the theme's values). --focused / --unfocused / --blur set values.
+    Glass {
+        #[arg(value_parser = ["on", "off", "status", "reset"], default_value = "status")]
+        state: String,
+        /// Opacity of the focused window, 0.05–1.
+        #[arg(long)]
+        focused: Option<f64>,
+        /// Opacity of the other windows, 0.05–1.
+        #[arg(long)]
+        unfocused: Option<f64>,
+        /// Blur what is behind translucent windows: on or off.
+        #[arg(long, value_parser = ["on", "off"])]
+        blur: Option<String>,
+        #[command(flatten)]
+        flags: RenderFlags,
+    },
+    /// Apps kept opaque: `list` (default), `add APP-ID`, `remove APP-ID`.
+    Opaque {
+        #[arg(value_parser = ["list", "add", "remove"], default_value = "list")]
+        action: String,
+        /// niri app id (`niri msg windows`), e.g. org.gnome.Nautilus.
+        app_id: Option<String>,
+        #[command(flatten)]
+        flags: RenderFlags,
+    },
+    /// Show or change one app's rule: `rule APP [FIELD=VALUE…]`, e.g.
+    /// `rule code glass=custom opacity=0.97 blur=off open-floating=true`;
+    /// `FIELD=` drops a field. Fields: glass (opaque|custom|native),
+    /// opacity, opacity-unfocused, blur, open-floating, open-maximized,
+    /// open-fullscreen, default-column-width (0–1), square-corners,
+    /// block-out-from (screencast|screen-capture), open-on-workspace,
+    /// open-on-output.
+    Rule {
+        app_id: String,
+        fields: Vec<String>,
+        #[command(flatten)]
+        flags: RenderFlags,
+    },
+    /// Drop one app's rule, or (no app) every window rule and glass value.
+    Reset {
+        app_id: Option<String>,
+        #[command(flatten)]
+        flags: RenderFlags,
+    },
+}
+
+/// `FIELD=VALUE` from the command line: bools (on/off/true/false), numbers,
+/// else a string; empty = null (drop).
+fn rule_value(field: &str, v: &str) -> Value {
+    let v = v.trim();
+    if v.is_empty() || v == "null" {
+        return Value::Null;
+    }
+    match v {
+        "on" | "true" | "yes" => return Value::Bool(true),
+        "off" | "false" | "no" => return Value::Bool(false),
+        _ => {}
+    }
+    if !matches!(field, "open-on-workspace" | "open-on-output")
+        && let Ok(f) = v.parse::<f64>()
+    {
+        return json!(f);
+    }
+    Value::String(v.to_string())
+}
+
+fn describe_glass(l: &Value) -> String {
+    let e = &l["glass"]["effective"];
+    let user = l["glass"]["user"].as_object().map(|m| m.len()).unwrap_or(0);
+    let mut s = format!(
+        "translucent windows: {}\n  focused {}  unfocused {}  blur {}\n  {}",
+        if e["enabled"] == true { "on" } else { "off" },
+        e["focused"],
+        e["unfocused"],
+        if e["blur"] == true { "on" } else { "off" },
+        if user > 0 { "(your values over the theme's)" } else { "(the theme's values)" },
+    );
+    let opaque = describe_opaque(l);
+    if !opaque.is_empty() {
+        s.push_str("\nkept opaque:\n");
+        s.push_str(&opaque);
+    }
+    s
+}
+
+fn describe_opaque(l: &Value) -> String {
+    let mut lines = Vec::new();
+    for d in l["defaults"].as_array().into_iter().flatten() {
+        let ids: Vec<_> = d["app_ids"].as_array().into_iter().flatten().chain(d["titles"].as_array().into_iter().flatten()).filter_map(Value::as_str).collect();
+        lines.push(format!(
+            "  [{}] {:28} built-in  {}",
+            if d["on"] == true { "x" } else { " " },
+            d["label"].as_str().unwrap_or(""),
+            ids.join(" ")
+        ));
+    }
+    if let Some(r) = l["rules"].as_object() {
+        for (app, rec) in r {
+            if rec["glass"] == "opaque" {
+                lines.push(format!("  [x] {app:28} yours"));
+            }
+        }
+    }
+    lines.join("\n")
 }
 
 #[derive(Subcommand)]
@@ -466,7 +584,8 @@ fn run(cli: Cli) -> Result<()> {
             if dry_run {
                 let ov = Overrides::load(&paths.json)?;
                 let base = render::base_tree(entry, &paths);
-                print!("{}", render::render(&ov, base.as_ref(), live.as_ref()));
+                let glass = loft_niri::window_rules::GlassTheme::load(&paths.state);
+                print!("{}", render::render_with(&ov, base.as_ref(), live.as_ref(), Some(&glass)));
                 return Ok(());
             }
             let r = render::render_to_disk(
@@ -490,6 +609,97 @@ fn run(cli: Cli) -> Result<()> {
                     }
                 },
             );
+        }
+        Cmd::Windows { cmd } => {
+            use loft_niri::window_rules as wr;
+            let listing = || -> Result<Value> {
+                let ov = Overrides::load(&paths.json)?;
+                let base = render::base_tree(entry, &paths);
+                Ok(wr::list(&ov, base.as_ref(), &wr::GlassTheme::load(&paths.state)))
+            };
+            let apply = |batch: Value, flags: RenderFlags| -> Result<Value> {
+                loft_niri::apply(&paths, &batch, opts(flags))
+            };
+            match cmd {
+                WindowsCmd::List => {
+                    let l = listing()?;
+                    print(j, &l, || describe_glass(&l));
+                }
+                WindowsCmd::Glass { state, focused, unfocused, blur, flags } => {
+                    let mut g = serde_json::Map::new();
+                    match state.as_str() {
+                        "on" => drop(g.insert("enabled".into(), json!(true))),
+                        "off" => drop(g.insert("enabled".into(), json!(false))),
+                        "reset" => {
+                            for k in ["enabled", "focused", "unfocused", "blur"] {
+                                g.insert(k.into(), Value::Null);
+                            }
+                        }
+                        _ => {}
+                    }
+                    if let Some(f) = focused {
+                        g.insert("focused".into(), json!(f));
+                    }
+                    if let Some(f) = unfocused {
+                        g.insert("unfocused".into(), json!(f));
+                    }
+                    if let Some(b) = blur {
+                        g.insert("blur".into(), json!(b == "on"));
+                    }
+                    if !g.is_empty() {
+                        apply(json!({ "window_glass": g }), flags)?;
+                    }
+                    let l = listing()?;
+                    print(j, &l["glass"], || describe_glass(&l));
+                }
+                WindowsCmd::Opaque { action, app_id, flags } => {
+                    if action != "list" {
+                        let app = app_id.context("which app? (`opaque add APP-ID`; `niri msg windows` shows app ids)")?;
+                        let ov = Overrides::load(&paths.json)?;
+                        let batch = wr::opaque_batch(&ov, &app, action == "add");
+                        apply(batch, flags)?;
+                        let ov = Overrides::load(&paths.json)?;
+                        let (on, via) = wr::opaque_state(&ov, &app);
+                        let v = json!({ "ok": true, "app_id": app, "opaque": on, "builtin": via });
+                        print(j, &v, || format!("{app}: {}", if on { "kept opaque" } else { "translucent (follows the global look)" }));
+                    } else {
+                        let l = listing()?;
+                        print(j, &json!({ "defaults": l["defaults"], "rules": l["rules"] }), || describe_opaque(&l));
+                    }
+                }
+                WindowsCmd::Rule { app_id, fields, flags } => {
+                    if !fields.is_empty() {
+                        let mut rec = serde_json::Map::new();
+                        for f in &fields {
+                            let (k, v) = f.split_once('=').with_context(|| format!("`{f}`: expected FIELD=VALUE"))?;
+                            rec.insert(k.trim().to_string(), rule_value(k.trim(), v));
+                        }
+                        apply(json!({ "window_rules": { &app_id: rec } }), flags)?;
+                    }
+                    let ov = Overrides::load(&paths.json)?;
+                    let rec = ov.0.get(wr::RULES).and_then(|r| r.get(&app_id)).cloned().unwrap_or(json!({}));
+                    let (opaque, via) = wr::opaque_state(&ov, &app_id);
+                    let v = json!({ "app_id": app_id, "rule": rec, "opaque": opaque, "builtin": via });
+                    print(j, &v, || {
+                        let mut s = format!("{app_id}: {}", serde_json::to_string(&rec).unwrap_or_default());
+                        if let Some(b) = via {
+                            s.push_str(&format!("\n  built-in opaque entry `{b}`: {}", if opaque { "on" } else { "off" }));
+                        }
+                        s
+                    });
+                }
+                WindowsCmd::Reset { app_id, flags } => {
+                    let batch = match &app_id {
+                        Some(a) => json!({ "window_rules": { a: null } }),
+                        None => json!({ "reset_window_rules": true }),
+                    };
+                    let r = apply(batch, flags)?;
+                    print(j, &r, || match &app_id {
+                        Some(a) => format!("{a}: rule dropped"),
+                        None => "window rules and glass values back to the defaults".into(),
+                    });
+                }
+            }
         }
         Cmd::Binds { conflicts } => {
             let tree = loft_niri::load_tree(entry)?;

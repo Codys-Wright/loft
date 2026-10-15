@@ -29,6 +29,7 @@ Scope {
         { id: "input", icon: "󰌌", badge: "gray", label: "Keyboard & Mouse" },
         { id: "layout", icon: "󰕰", badge: "mint", label: "Layout & Motion" },
         { id: "keybinds", icon: "󰘳", badge: "graphite", label: "Keyboard Shortcuts" },
+        { id: "windowrules", icon: "󰖲", badge: "teal", label: "Window Rules" },
         { id: "system", icon: "󰍛", badge: "gray", label: "System" },
         { id: "sound", icon: "󰕾", badge: "pink", label: "Sound" },
         { id: "capture", icon: "󰹑", badge: "orange", label: "Capture", feature: "capture" },
@@ -65,6 +66,9 @@ Scope {
         }
         function keybinds(): void {
             root.show("keybinds");
+        }
+        function windowrules(): void {
+            root.show("windowrules");
         }
 
         function features(): void {
@@ -120,6 +124,8 @@ Scope {
             return;
         if (section === "keybinds")
             NiriSettings.refreshBinds();
+        else if (section === "windowrules")
+            WindowRules.refresh();
         else if (["displays", "input", "layout"].includes(section))
             NiriSettings.refresh();
     }
@@ -444,6 +450,11 @@ Scope {
                     KeybindsPage {
                         Layout.fillWidth: true
                         visible: root.section === "keybinds"
+                    }
+
+                    WindowRulesPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "windowrules"
                     }
 
                     FeaturesPage {

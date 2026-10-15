@@ -59,6 +59,18 @@ def terminal_opacity(material: dict) -> float:
     return float(t) if t is not None else (0.85 if material["blur"]["enabled"] else 1.0)
 
 
+def windows(material: dict) -> dict:
+    """theme.json `windows`: app windows' translucency, read by loft-niri
+    (crates/loft-niri/src/window_rules.rs), which writes the niri rules. No
+    translucent windows without blur (glassless themes, Reduce Transparency)."""
+    w, on = material["windows"], bool(material["blur"]["enabled"])
+    return {
+        "translucent": bool(w["translucent"]) and on,
+        "opacity": {"focused": float(w["opacity"]["focused"]), "unfocused": float(w["opacity"]["unfocused"])},
+        "blur": bool(w["blur"]) and on,
+    }
+
+
 def glass(material: dict, shape: dict) -> dict:
     """The v1 `glass` block of theme.json (key order kept)."""
     m, g = material, material["glass"]

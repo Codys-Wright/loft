@@ -217,6 +217,7 @@ Settings → Appearance.
       "specular": { "dark": 0.5, "light": 0.75 }
     },
     "terminals": { "opacity": null, "blur": true },
+    "windows": { "translucent": true, "opacity": { "focused": 0.9, "unfocused": 0.8 }, "blur": true },
     "menuBar": { "background": false, "adaptiveText": true }
   }
 }
@@ -227,6 +228,10 @@ customization patch `{"glass": {"opacity": 0.35}}`. `terminals.opacity: null` me
 "0.85 with blur, else 1", as today. **Reduce Transparency** is an accessibility switch
 (§4.4), not material data. It clamps the resolved material (flat fills, `blur.enabled =
 false`, menu bar background on), so every material behaves the same under it.
+
+`windows` is app windows' translucency: theme.json `windows` (off without blur, so a
+glassless theme and Reduce Transparency keep windows opaque), which loft-niri turns into
+niri window rules (Settings → Window Rules overrides it per user and per app).
 
 Rendered into: shell `Theme.glass*` tokens, `niri.kdl` `blur {}` + xray rules, kitty
 `background_opacity` / `background_blur`, Ghostty opacity, `walker.css` glass.

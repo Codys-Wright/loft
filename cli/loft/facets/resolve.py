@@ -142,6 +142,7 @@ def accessibility(kind: str, data: dict, a11y: dict, pal: dict | None) -> dict:
             data["blur"]["enabled"] = False
             data["glass"]["opacity"] = 1.0
             data["terminals"]["opacity"] = 1.0
+            data["windows"]["translucent"] = False
             data["menuBar"]["background"] = True
         if a11y.get("increaseContrast") and pal:
             data["glass"]["border"] = color.hex6(pal["overlay"])

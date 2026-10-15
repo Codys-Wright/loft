@@ -88,6 +88,35 @@
       },
       "additionalProperties": false
     },
+    "windows": {
+      "type": "object",
+      "description": "App windows (niri window rules, written by loft-niri): translucent with blur behind, focused and unfocused opacity. Off without blur.enabled; Settings \u2192 Window Rules overrides per user and per app.",
+      "properties": {
+        "translucent": {
+          "type": "boolean"
+        },
+        "opacity": {
+          "type": "object",
+          "properties": {
+            "focused": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 1
+            },
+            "unfocused": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "blur": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "menuBar": {
       "type": "object",
       "properties": {

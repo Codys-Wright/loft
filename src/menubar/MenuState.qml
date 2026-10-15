@@ -573,6 +573,8 @@ Singleton {
             items.push({ key: "center", label: "Center", enabled: true, shortcut: niriShortcut("center-column"), run: () => Niri.action("CenterWindow", { id: w.id }) });
             if (Features.on("arrange"))
                 items.push({ key: "arrange", label: "Arrange", enabled: true, submenu: true, children: Arrange.items(w) });
+            if (!own)
+                items.push({ key: "window-rules", label: "Window Rules", enabled: true, submenu: true, children: WindowRules.menuItems(w.app_id) });
         }
 
         if (AppMenu.pref("hideCommands")) {
