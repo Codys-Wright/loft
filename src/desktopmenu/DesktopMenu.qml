@@ -599,6 +599,13 @@ Singleton {
                     } }
             ].concat(preset === "custom" ? [sep("s-custom"), { key: "custom", label: `Custom (${Math.round(Theme.glass * 100)} %)`, enabled: false }] : [])
         });
+        // The master Transparency dial's stops (the slider: Display panel, Settings).
+        const lv = Transparency.levelSet ? Transparency.level : -1;
+        const stop = (key, label, v) => ({ key: key, label: label, enabled: true, toggle: "radio", checked: v === null ? lv < 0 : Math.abs(lv - v) < 0.01, run: () => Transparency.set("transparency", v) });
+        items.push({ key: "transparency", label: "Transparency", enabled: !Theme.reduceTransparency, submenu: true, children: [
+                stop("solid", "Solid", 0), stop("less", "Less", 0.25), stop("theme", "Theme", null), stop("more", "More", 0.75), stop("clear", "Clear", 1)
+            ].concat(lv >= 0 && ![0, 0.25, 0.75, 1].some(v => Math.abs(lv - v) < 0.01) ? [sep("s-tcustom"), { key: "tcustom", label: `Custom (${Math.round(lv * 100)} %)`, enabled: false }] : [])
+        });
         items.push({ key: "reduce", label: "Reduce Transparency", enabled: true, toggle: "check", checked: Theme.reduceTransparency, run: () => {
                 Settings.appearance.reduceTransparency = !Theme.reduceTransparency;
             } });

@@ -4,8 +4,9 @@ import qs.audio
 import qs.components
 import qs.services
 
-// Display: brightness (all displays, then each one), Night Light, and
-// Dark / Light appearance when the active theme has a counterpart of the
+// Display: brightness (all displays, then each one), Night Light, the
+// Transparency dial (Solid … Clear: windows, terminals, Files and the
+// shell's glass together; Transparency.qml), and Dark / Light appearance when the active theme has a counterpart of the
 // other polarity installed (same family name: "foo" ↔ "foo-day",
 // "x-light" ↔ "x-dark", "catppuccin-latte" ↔ "catppuccin-mocha" …).
 ColumnLayout {
@@ -109,6 +110,35 @@ ColumnLayout {
         glyph: "󰖔"
         glyphActive: NightLight.enabled
         onClicked: NightLight.enabled = !NightLight.enabled
+    }
+
+    PanelSection {
+        text: "Transparency"
+        trailing: Transparency.reduced ? "Reduced" : Transparency.level <= 0.01 ? "Solid" : Transparency.level >= 0.99 ? "Clear" : Math.abs(Transparency.level - 0.5) < 0.006 ? "Theme" : `${Math.round(Transparency.level * 100)}%`
+    }
+    RowLayout {
+        Layout.fillWidth: true
+        Layout.leftMargin: 10
+        Layout.rightMargin: 10
+        Layout.bottomMargin: 6
+        spacing: 8
+        enabled: !Transparency.reduced
+        opacity: enabled ? 1 : 0.4
+        Icon {
+            text: "󰝤"
+            size: 14
+            color: Theme.subtext
+        }
+        VolumeSlider {
+            Layout.fillWidth: true
+            value: Transparency.level
+            onMoved: v => Transparency.setLevel(v)
+        }
+        Icon {
+            text: "󰝣"
+            size: 14
+            color: Theme.subtext
+        }
     }
 
     PanelSection {

@@ -115,6 +115,61 @@
         }
       },
       "additionalProperties": false
+    },
+    "transparency": {
+      "type": "object",
+      "description": "The Transparency and Blur dials (Settings \u2192 Appearance; cli/loft/transparency.py). level: 0 Solid \u2026 0.5 the theme's own values \u2026 1 Clear. blur: 0 no blur \u2026 1 most frosted (null: the theme's material blur). terminals / gtk: absolute overrides (terminal background opacity, GTK glass alpha). null or absent = follow.",
+      "properties": {
+        "level": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "blur": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "terminals": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gtk": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,

@@ -140,5 +140,28 @@
       "unfocused": 0.8
     },
     "blur": true
+  },
+  "transparency": {
+    "level": null,
+    "blur": null,
+    "terminals": null,
+    "gtk": null,
+    "reduced": false,
+    "effective": {
+      "level": 0.5,
+      "blur": 0.5,
+      "blurOn": true,
+      "terminals": 0.85,
+      "gtk": 0.63
+    },
+    "theme": {
+      "blur": 0.5,
+      "terminals": 0.85,
+      "gtk": 0.63,
+      "windows": {
+        "focused": 0.9,
+        "unfocused": 0.8
+      }
+    }
   }
 }

@@ -64,18 +64,22 @@ ${niri_xray_rules}${niri_focus_rules}${niri_animations}
 // app ids): Nautilus, which also draws the portal file chooser GTK apps get
 // (.nautilus-file-chooser, same app id). Add an app here only together with
 // its CSS: a blur rule alone does nothing, a transparent window alone shows
-// the desktop unblurred.
+// the desktop unblurred. niri paints the focus ring / border as a solid
+// rectangle behind the window by default; with a transparent window that
+// shows through as a colored slab when it's focused, so not behind glass.
 //
 // Dolphin: Loft's Kvantum theme (qt unit, programs.loft.qt) draws its window
 // as the same glass (toolbar, Places, status bar; the file view opaque).
 window-rule {
     match app-id="^org\\.gnome\\.Nautilus$$"
+    draw-border-with-background false
     background-effect {
         blur true
     }
 }
 window-rule {
     match app-id="^org\\.kde\\.dolphin$$"
+    draw-border-with-background false
     background-effect {
         blur true
     }

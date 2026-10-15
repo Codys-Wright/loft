@@ -2,7 +2,8 @@
 typography facet applies to terminals) font.
 
   colors      foreground/background, selection, cursor, tabs, 16 ANSI colors
-  material    background opacity (terminals.opacity, else 0.85 with blur) and blur
+  material    background opacity (terminals.opacity, else 0.85 with blur) and blur,
+              both through the Transparency / Blur dials (render/look.py)
   typography  mono family and size, only with applyTo.terminals
 
 Hooks: SIGUSR1 (kitty), SIGUSR2 (ghostty).
@@ -22,7 +23,7 @@ def inputs(src: Source) -> dict:
     return {
         "name": src.res.name,
         "colors": {k: src.facet("colors")[k] for k in ("polarity", "palette", "ansi")},
-        "terminal": {"opacity": look.terminal_opacity(m), "blur": bool(m["blur"]["enabled"])},
+        "terminal": {"opacity": look.terminal_opacity(m, src.res.transparency), "blur": look.blur(m, src.res.transparency)["on"]},
         "font": look.terminal_font(ty),
     }
 

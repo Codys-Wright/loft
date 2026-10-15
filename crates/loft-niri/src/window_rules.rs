@@ -321,6 +321,14 @@ fn app_match(app: &str) -> Node {
     Node::new("match").prop("app-id", Val::Str(format!("^{}$", regex_literal(app))))
 }
 
+/// niri draws the focus ring / border as a solid rectangle behind a window
+/// by default (`draw-border-with-background`), which a translucent window
+/// shows instead of the blurred desktop as soon as it's focused. Every rule
+/// that makes windows see-through turns it off.
+fn no_border_background() -> Node {
+    Node::new("draw-border-with-background").arg(Val::Bool(false))
+}
+
 fn blur_node(on: bool) -> Node {
     Node::new("background-effect").child(Node::new("blur").arg(Val::Bool(on)))
 }
@@ -378,6 +386,7 @@ pub fn render(ov: &Overrides, base: Option<&ConfigTree>, theme: Option<&GlassThe
         let mut all = Node::new("window-rule");
         all.children.extend(excludes.iter().cloned());
         all = all.child(Node::new("opacity").arg(Val::Float(g.focused)));
+        all = all.child(no_border_background());
         if g.blur {
             all = all.child(blur_node(true));
         }
@@ -427,6 +436,7 @@ pub fn render_app(app: &str, rec: &Map<String, Value>, g: &GlassTheme) -> Vec<No
         }
         Some("native") => {
             n = n.child(Node::new("opacity").arg(Val::Float(1.0)));
+            n = n.child(no_border_background());
             n = n.child(blur_node(blur.unwrap_or(true)));
         }
         Some("custom") => {
@@ -441,6 +451,7 @@ pub fn render_app(app: &str, rec: &Map<String, Value>, g: &GlassTheme) -> Vec<No
                 .map(clamp)
                 .unwrap_or_else(|| clamp(f - (g.focused - g.unfocused).max(0.0)));
             n = n.child(Node::new("opacity").arg(Val::Float(f)));
+            n = n.child(no_border_background());
             n = n.child(blur_node(blur.unwrap_or(true)));
             unfocused = Some(u);
         }
@@ -763,7 +774,7 @@ mod tests {
             }
         }));
         let out = write_doc(&render(&o, None, Some(&GlassTheme::default())));
-        assert!(out.starts_with("window-rule {\n    exclude app-id=\"^org\\\\.quickshell$\"\n    opacity 0.85\n    background-effect {\n        blur true\n    }\n}\n"), "{out}");
+        assert!(out.starts_with("window-rule {\n    exclude app-id=\"^org\\\\.quickshell$\"\n    opacity 0.85\n    draw-border-with-background false\n    background-effect {\n        blur true\n    }\n}\n"), "{out}");
         assert!(
             out.contains("window-rule {\n    match is-focused=false\n    exclude app-id=\"^org\\\\.quickshell$\"\n    opacity 0.8\n}\n"),
             "{out}"
@@ -777,7 +788,7 @@ mod tests {
             out.contains("    match title=\"^Picture-in-Picture$\"\n"),
             "{out}"
         );
-        assert!(out.contains("window-rule {\n    match app-id=\"^code$\"\n    opacity 0.8\n    background-effect {\n        blur true\n    }\n    open-floating true\n    geometry-corner-radius 0\n}\n"), "{out}");
+        assert!(out.contains("window-rule {\n    match app-id=\"^code$\"\n    opacity 0.8\n    draw-border-with-background false\n    background-effect {\n        blur true\n    }\n    open-floating true\n    geometry-corner-radius 0\n}\n"), "{out}");
         // Unfocused follows the focused value down by the global step (0.85 → 0.8).
         assert!(
             out.contains(
@@ -785,7 +796,7 @@ mod tests {
             ),
             "{out}"
         );
-        assert!(out.contains("window-rule {\n    match app-id=\"^kitty$\"\n    opacity 1.0\n    background-effect {\n        blur true\n    }\n}\n"), "{out}");
+        assert!(out.contains("window-rule {\n    match app-id=\"^kitty$\"\n    opacity 1.0\n    draw-border-with-background false\n    background-effect {\n        blur true\n    }\n}\n"), "{out}");
         // Per-app rules come after the built-in list.
         let defaults_at = out.find("^vlc$").unwrap();
         assert!(
@@ -803,7 +814,7 @@ mod tests {
         let out = write_doc(&render(&o, None, Some(&GlassTheme::default())));
         assert_eq!(
             out,
-            "window-rule {\n    match app-id=\"^foot$\"\n    opacity 0.9\n    background-effect {\n        blur true\n    }\n}\n\nwindow-rule {\n    match app-id=\"^foot$\" is-focused=false\n    opacity 0.85\n}\n"
+            "window-rule {\n    match app-id=\"^foot$\"\n    opacity 0.9\n    draw-border-with-background false\n    background-effect {\n        blur true\n    }\n}\n\nwindow-rule {\n    match app-id=\"^foot$\" is-focused=false\n    opacity 0.85\n}\n"
         );
         let themed_off = GlassTheme {
             enabled: false,

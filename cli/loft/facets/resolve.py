@@ -24,6 +24,23 @@ from .model import KINDS, Catalog, Facet, FacetError, Theme, defaults, fill, mer
 
 ORDER = ("colors",) + tuple(k for k in KINDS if k != "colors")
 A11Y = ("reduceMotion", "reduceTransparency", "increaseContrast")
+# The Transparency / Blur dials (appearance.json `transparency`). Unlike the
+# accessibility switches they don't change the resolved facets: the units
+# apply them when they render (render/look.py), so the theme's own material
+# stays what the Theme pages show and what the dials scale from.
+DIALS = ("level", "blur", "terminals", "gtk")
+
+
+def dials(raw) -> dict:
+    """appearance.json `transparency`, cleaned: numbers in 0..1 only."""
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for k in DIALS:
+        v = raw.get(k)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            out[k] = round(min(1.0, max(0.0, float(v))), 3)
+    return out
 CUSTOM = "custom"
 
 
@@ -45,6 +62,8 @@ class Resolved:
     kept: dict = field(default_factory=dict)  # kind → [Layer] that survived
     errors: list = field(default_factory=list)
     accessibility: dict = field(default_factory=dict)
+    # The dials in effect: {} under Reduce Transparency (it wins over them).
+    transparency: dict = field(default_factory=dict)
 
     @property
     def polarity(self) -> str:
@@ -79,6 +98,7 @@ class Resolved:
             "customized": self.customized,
             "pinned": self.pinned,
             "accessibility": self.accessibility,
+            "transparency": self.transparency,
             "errors": self.errors,
         }
 
@@ -197,7 +217,7 @@ def resolve(catalog: Catalog, theme: Theme, variant: str | None, state: dict | N
     state = state or {}
     acc = state.get("accessibility") if isinstance(state.get("accessibility"), dict) else {}
     a11y = {k: bool(acc.get(k)) for k in A11Y}
-    out = Resolved(theme, variant, accessibility=a11y)
+    out = Resolved(theme, variant, accessibility=a11y, transparency={} if a11y["reduceTransparency"] else dials(state.get("transparency")))
     pins = state.get("pins") if isinstance(state.get("pins"), dict) else {}
     polarity = pal = None
     for kind in ORDER:

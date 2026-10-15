@@ -144,6 +144,11 @@ ColumnLayout {
                 label: e.name
             })).sort((a, b) => a.label.localeCompare(b.label))
 
+    // ── Transparency (the master dials, as on the Appearance page) ───────
+    TransparencyCard {
+        showAdvanced: false
+    }
+
     // ── Translucent windows ──────────────────────────────────────────────
     SettingsCard {
         PageHeader {
@@ -192,10 +197,10 @@ ColumnLayout {
 
         SettingsRow {
             label: "Focused window"
-            hint: page.userG.focused !== undefined ? `Theme: ${page.pct(page.themeG.focused ?? 0.9)}` : "Following the theme"
+            hint: page.userG.focused !== undefined ? `Yours · Transparency gives ${page.pct(page.themeG.focused ?? 0.9)}` : "Following Transparency"
             enabled: WindowRules.enabled
             SettingsSlider {
-                from: 0.6
+                from: 0.3
                 to: 1
                 step: 0.01
                 value: page.g.focused ?? 0.9
@@ -206,10 +211,10 @@ ColumnLayout {
 
         SettingsRow {
             label: "Other windows"
-            hint: page.userG.unfocused !== undefined ? `Theme: ${page.pct(page.themeG.unfocused ?? 0.8)}` : "Following the theme"
+            hint: page.userG.unfocused !== undefined ? `Yours · Transparency gives ${page.pct(page.themeG.unfocused ?? 0.8)}` : "Following Transparency"
             enabled: WindowRules.enabled
             SettingsSlider {
-                from: 0.5
+                from: 0.3
                 to: 1
                 step: 0.01
                 value: page.g.unfocused ?? 0.8
