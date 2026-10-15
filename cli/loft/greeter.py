@@ -275,6 +275,12 @@ def _helper_argv(cfg: dict | None, interactive: bool) -> list[str]:
     return [pkexec, *([] if interactive else ["--disable-internal-agent"]), helper]
 
 
+def _helper_env() -> dict:
+    # pkexec refuses to run when $SHELL isn't listed in /etc/shells (nushell,
+    # a home-manager zsh, …): the helper never uses it, so hand it /bin/sh.
+    return {**os.environ, "SHELL": "/bin/sh"}
+
+
 def install(ctx, p: Plan, interactive: bool = True) -> str:
     cfg = config()
     argv = _helper_argv(cfg, interactive)
@@ -284,7 +290,7 @@ def install(ctx, p: Plan, interactive: bool = True) -> str:
     with tempfile.TemporaryFile() as tmp:
         p.write_tar(tmp)
         tmp.seek(0)
-        r = subprocess.run([*argv, "install", p.name], stdin=tmp, capture_output=True, text=True)
+        r = subprocess.run([*argv, "install", p.name], stdin=tmp, capture_output=True, text=True, env=_helper_env())
     if r.returncode != 0:
         msg = (r.stderr or r.stdout).strip() or f"exit {r.returncode}"
         raise GreeterError(f"installing the greeter pack failed: {msg}")
@@ -292,7 +298,7 @@ def install(ctx, p: Plan, interactive: bool = True) -> str:
 
 
 def reset(interactive: bool = True) -> str:
-    r = subprocess.run([*_helper_argv(config(), interactive), "reset"], capture_output=True, text=True)
+    r = subprocess.run([*_helper_argv(config(), interactive), "reset"], capture_output=True, text=True, env=_helper_env())
     if r.returncode != 0:
         raise GreeterError(f"resetting the greeter failed: {(r.stderr or r.stdout).strip()}")
     return r.stdout.strip()
