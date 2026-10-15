@@ -216,22 +216,13 @@ PanelWindow {
         // The outline: alerts pulse, unread notifications turn it white;
         // otherwise a glass hairline, or none on black (like the notch).
         property real edgeWidth: root.alerting || (root.unread && !root.expanded) ? 2 : root.black ? 0 : 1
-        property color edgeColor: root.alerting ? root.alertColor : root.unread && !root.expanded ? Theme.islandText : root.black ? "transparent" : Theme.glassBorder
+        property color edgeColor: root.alerting ? Theme.withAlpha(root.alertColor, alertPulse.value) : root.unread && !root.expanded ? Theme.islandText : root.black ? "transparent" : Theme.glassBorder
 
-        // Alerts breathe instead of sitting there.
-        SequentialAnimation on edgeColor {
+        // Alerts breathe instead of sitting there (stepped: SlowPulse).
+        SlowPulse {
+            id: alertPulse
             running: root.alerting && !root.expanded
-            loops: Animation.Infinite
-            ColorAnimation {
-                to: Theme.withAlpha(root.alertColor, 0.25)
-                duration: 900
-                easing.type: Easing.InOutSine
-            }
-            ColorAnimation {
-                to: root.alertColor
-                duration: 900
-                easing.type: Easing.InOutSine
-            }
+            low: 0.25
         }
 
         Behavior on width {
@@ -428,19 +419,13 @@ PanelWindow {
                             size: 12
                             color: AiUsage.busy > 0 ? Theme.accent2 : Theme.islandSubtext
 
-                            SequentialAnimation on opacity {
+                            // Breathes while one works (stepped: SlowPulse).
+                            opacity: agentPulse.value
+                            SlowPulse {
+                                id: agentPulse
                                 running: root.agentMark && AiUsage.busy > 0 && !root.expanded
-                                loops: Animation.Infinite
-                                NumberAnimation {
-                                    to: 0.4
-                                    duration: 900
-                                    easing.type: Easing.InOutSine
-                                }
-                                NumberAnimation {
-                                    to: 1
-                                    duration: 900
-                                    easing.type: Easing.InOutSine
-                                }
+                                low: 0.4
+                                period: 1800
                             }
                         }
                         Text {
@@ -821,56 +806,20 @@ PanelWindow {
         }
     }
 
-    IpcHandler {
-        target: "island"
-
-        function toggle(): void {
-            root.pinned = !root.pinned;
-        }
-
-        function media(): void {
-            root.showPage("media");
-        }
-
-        function system(): void {
-            root.showPage("system");
-        }
-
-        function usage(): void {
-            root.showPage("usage");
-        }
-
-        function notifications(): void {
-            root.showPage("notifications");
-        }
-
-        function live(): void {
-            root.showPage("live");
-        }
-
-        function calendar(): void {
-            root.showPage("calendar");
-        }
-
-        function timers(): void {
-            root.showPage("timers");
-        }
-
-        function controls(): void {
-            root.showPage("controls");
-        }
-
-        function ai(): void {
-            root.showPage("ai");
-        }
-
-        function scratchpad(): void {
-            root.showPage("scratchpad");
-        }
-
-        // Exercise the shutter flash without taking a screenshot.
-        function flash(): void {
-            shutter.restart();
+    // IPC (IslandIpc, one handler for all screens): the island on the
+    // focused output answers (the first screen's when niri isn't known).
+    readonly property bool ipcHere: (Niri.focusedWorkspace?.output ?? Quickshell.screens[0]?.name ?? modelData.name) === modelData.name
+    Connections {
+        target: IslandIpc
+        function onCommand(cmd) {
+            if (!root.ipcHere)
+                return;
+            if (cmd === "toggle")
+                root.pinned = !root.pinned;
+            else if (cmd === "flash")
+                shutter.restart();
+            else
+                root.showPage(cmd);
         }
     }
 }
