@@ -31,6 +31,11 @@ ColumnLayout {
 
     // The Settings window's Flickable (SettingsApp), to scroll an app into view.
     property Flickable flick: null
+    // The Settings window is open (SettingsApp). Every page is built when
+    // the shell starts, so the app list (a row and an AppIcon per app, with
+    // every app id your niri config names) is only built while it shows.
+    property bool shown: true
+    readonly property bool active: visible && shown
 
     // Settings → Window Rules opened for an app (dock / app menu,
     // `windowrules open APP`): that app expanded and scrolled into view.
@@ -106,17 +111,26 @@ ColumnLayout {
 
     // The app list: the selected app, then apps with rules, then running
     // apps and apps your config names; filtered by the search.
-    readonly property var apps: {
+    // Joined into a string first: niri's window events (focus, titles,
+    // layout) re-run this, and a string only notifies when the list really
+    // changes, so the Repeater doesn't rebuild every row on each event.
+    readonly property string appsKey: {
+        if (!active)
+            return "";
         const ids = WindowRules.knownApps();
         if (selected !== "" && !ids.includes(selected))
             ids.push(selected);
         const q = query.toLowerCase();
         const has = a => Object.keys(WindowRules.rule(a)).length > 0;
-        return ids.filter(a => q === "" || a.toLowerCase().includes(q) || Apps.name(a).toLowerCase().includes(q)).sort((a, b) => {
+        const names = {};
+        for (const a of ids)
+            names[a] = Apps.name(a);
+        return ids.filter(a => q === "" || a.toLowerCase().includes(q) || names[a].toLowerCase().includes(q)).sort((a, b) => {
             const ra = has(a) ? 0 : 1, rb = has(b) ? 0 : 1;
-            return ra - rb || Apps.name(a).localeCompare(Apps.name(b));
-        });
+            return ra - rb || names[a].localeCompare(names[b]);
+        }).join("\n");
     }
+    readonly property var apps: appsKey === "" ? [] : appsKey.split("\n")
 
     // Rules in the config that name no single app (global, title matches).
     readonly property var otherRules: WindowRules.configRules.filter(r => (r.app_ids ?? []).length === 0 || (r.app_ids ?? []).every(a => WindowRules.literal(a) === null))
@@ -139,7 +153,7 @@ ColumnLayout {
     }
 
     // Installed apps: { value: niri app id (StartupWMClass, else the entry id), label }.
-    readonly property var installed: DesktopEntries.applications.values.filter(e => !e.noDisplay).map(e => ({
+    readonly property var installed: !active ? [] : Apps.entries.filter(e => !e.noDisplay).map(e => ({
                 value: e.startupClass || e.id,
                 label: e.name
             })).sort((a, b) => a.label.localeCompare(b.label))

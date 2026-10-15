@@ -1,54 +1,61 @@
 // Shell keybinds — generated from shell-binds.kdl.in (IPC command substituted).
 // Included by loft-session / loft-dev after base.kdl.
+//
+// Every IPC call has a timeout: `quickshell ipc call` waits for the shell's
+// GUI thread, so a busy or hung shell would leave one stuck process per key
+// press (and ⌘Q would do nothing).
 binds {
-    Mod+Shift+R hotkey-overlay-title="Reload shell" { spawn @IPC@ "shell" "reload"; }
+    Mod+Shift+R hotkey-overlay-title="Reload shell" { spawn "timeout" "-k" "1" "5" @IPC@ "shell" "reload"; }
     Mod+Space hotkey-overlay-title="Spotlight" { spawn "loft-launcher" "open"; }
     Mod+Period hotkey-overlay-title="Emoji & Symbols" { spawn "loft-launcher" "emoji"; }
-    Mod+A hotkey-overlay-title="Control Center" { spawn @IPC@ "controlcenter" "toggle"; }
-    Mod+I hotkey-overlay-title="Island" { spawn @IPC@ "island" "toggle"; }
+    Mod+A hotkey-overlay-title="Control Center" { spawn "timeout" "-k" "1" "5" @IPC@ "controlcenter" "toggle"; }
+    Mod+I hotkey-overlay-title="Island" { spawn "timeout" "-k" "1" "5" @IPC@ "island" "toggle"; }
     // Page through the Dynamic Island (opens it first when it's closed).
-    Mod+Alt+Left hotkey-overlay-title="Island: Previous Page" { spawn @IPC@ "island" "prev"; }
-    Mod+Alt+Right hotkey-overlay-title="Island: Next Page" { spawn @IPC@ "island" "next"; }
-    Mod+Shift+T hotkey-overlay-title="Themes" { spawn @IPC@ "themes" "open"; }
-    Mod+F10 hotkey-overlay-title="App Menu" { spawn @IPC@ "appmenu" "toggle"; }
-    Mod+Comma hotkey-overlay-title="Settings" { spawn @IPC@ "settings" "toggle"; }
-    Mod+Shift+W hotkey-overlay-title="Wallpapers" { spawn @IPC@ "wallpaper" "toggle"; }
-    Ctrl+Shift+Escape hotkey-overlay-title="System Monitor" { spawn @IPC@ "monitor" "toggle"; }
+    Mod+Alt+Left hotkey-overlay-title="Island: Previous Page" { spawn "timeout" "-k" "1" "5" @IPC@ "island" "prev"; }
+    Mod+Alt+Right hotkey-overlay-title="Island: Next Page" { spawn "timeout" "-k" "1" "5" @IPC@ "island" "next"; }
+    Mod+Shift+T hotkey-overlay-title="Themes" { spawn "timeout" "-k" "1" "5" @IPC@ "themes" "open"; }
+    Mod+F10 hotkey-overlay-title="App Menu" { spawn "timeout" "-k" "1" "5" @IPC@ "appmenu" "toggle"; }
+    Mod+Comma hotkey-overlay-title="Settings" { spawn "timeout" "-k" "1" "5" @IPC@ "settings" "toggle"; }
+    Mod+Shift+W hotkey-overlay-title="Wallpapers" { spawn "timeout" "-k" "1" "5" @IPC@ "wallpaper" "toggle"; }
+    Ctrl+Shift+Escape hotkey-overlay-title="System Monitor" { spawn "timeout" "-k" "1" "5" @IPC@ "monitor" "toggle"; }
     // macOS ⌘⇧5 / ⌘⇧4 / ⌘⇧3 on Cmd (physical Super), not the WM Mod — so
     // Mod+Shift+3–5 keep moving windows to workspaces.
-    Super+Shift+5 hotkey-overlay-title="Capture" { spawn @IPC@ "capture" "toggle"; }
-    Super+Shift+4 hotkey-overlay-title="Capture Area" { spawn @IPC@ "capture" "area"; }
-    Super+Shift+3 hotkey-overlay-title="Capture Screen" { spawn @IPC@ "capture" "screen"; }
+    Super+Shift+5 hotkey-overlay-title="Capture" { spawn "timeout" "-k" "1" "5" @IPC@ "capture" "toggle"; }
+    Super+Shift+4 hotkey-overlay-title="Capture Area" { spawn "timeout" "-k" "1" "5" @IPC@ "capture" "area"; }
+    Super+Shift+3 hotkey-overlay-title="Capture Screen" { spawn "timeout" "-k" "1" "5" @IPC@ "capture" "screen"; }
     // macOS Ctrl+Cmd+Q.
-    Mod+Ctrl+Q hotkey-overlay-title="Lock Screen" { spawn @IPC@ "lock" "lock"; }
-    Mod+Shift+V hotkey-overlay-title="Clipboard History" { spawn @IPC@ "clipboard" "toggle"; }
-    Mod+Shift+Alt+V hotkey-overlay-title="Paste as Plain Text" { spawn @IPC@ "clipboard" "pastePlain"; }
-    Mod+Shift+Period hotkey-overlay-title="Snippets" { spawn @IPC@ "snippets" "toggle"; }
-    Mod+Shift+N hotkey-overlay-title="Scratchpad" { spawn @IPC@ "scratchpad" "toggle"; }
+    Mod+Ctrl+Q hotkey-overlay-title="Lock Screen" { spawn "timeout" "-k" "1" "5" @IPC@ "lock" "lock"; }
+    Mod+Shift+V hotkey-overlay-title="Clipboard History" { spawn "timeout" "-k" "1" "5" @IPC@ "clipboard" "toggle"; }
+    Mod+Shift+Alt+V hotkey-overlay-title="Paste as Plain Text" { spawn "timeout" "-k" "1" "5" @IPC@ "clipboard" "pastePlain"; }
+    Mod+Shift+Period hotkey-overlay-title="Snippets" { spawn "timeout" "-k" "1" "5" @IPC@ "snippets" "toggle"; }
+    Mod+Shift+N hotkey-overlay-title="Scratchpad" { spawn "timeout" "-k" "1" "5" @IPC@ "scratchpad" "toggle"; }
     // macOS ⌃⌘V / hold ⌃⌘Space. Physical ⌘ is Mod (lv3:lwin_switch), and
     // xremap only rewrites ⌘+key without Ctrl, so these reach niri. The
     // wheel takes the keyboard: releasing ⌃ or ⌘ picks the slice under
     // the pointer (a tap leaves it open to click).
-    Mod+Ctrl+V hotkey-overlay-title="Quick Panel" { spawn @IPC@ "quickpanel" "toggle"; }
-    Mod+Ctrl+Space repeat=false hotkey-overlay-title="Radial Menu" { spawn @IPC@ "radial" "hold"; }
-    Mod+Shift+O hotkey-overlay-title="Next Audio Output" { spawn @IPC@ "audio" "nextOutput"; }
-    Mod+Shift+M hotkey-overlay-title="Mute Microphones" { spawn @IPC@ "mic" "toggleMute"; }
+    Mod+Ctrl+V hotkey-overlay-title="Quick Panel" { spawn "timeout" "-k" "1" "5" @IPC@ "quickpanel" "toggle"; }
+    Mod+Ctrl+Space repeat=false hotkey-overlay-title="Radial Menu" { spawn "timeout" "-k" "1" "5" @IPC@ "radial" "hold"; }
+    Mod+Shift+O hotkey-overlay-title="Next Audio Output" { spawn "timeout" "-k" "1" "5" @IPC@ "audio" "nextOutput"; }
+    Mod+Shift+M hotkey-overlay-title="Mute Microphones" { spawn "timeout" "-k" "1" "5" @IPC@ "mic" "toggleMute"; }
     // ⌘Q through the shell (src/everyday/QuitGuard.qml): apps with quit
     // protection need it held; the rest close the focused window as before.
     // Alt+F4 is what xremap's macOS layout sends for ⌘Q. Without a shell to
-    // answer, plain close-window. cooldown-ms throttles the held key's repeats.
-    Mod+Q cooldown-ms=100 hotkey-overlay-title="Close Window (hold to quit protected apps)" { spawn "sh" "-c" "\"$@\" quit key || niri msg action close-window" "loft-quit" @IPC@; }
-    Alt+F4 cooldown-ms=100 hotkey-overlay-title=null { spawn "sh" "-c" "\"$@\" quit key || niri msg action close-window" "loft-quit" @IPC@; }
-    Mod+Ctrl+A hotkey-overlay-title="Arrange Window" { spawn @IPC@ "arrange" "open"; }
+    // answer — or with one that doesn't answer within 0.6 s (hung) — plain
+    // close-window; the shell ignores a `keyAt` that arrives later than
+    // that (Everyday.qml), so a late answer can't close a second window.
+    // cooldown-ms throttles the held key's repeats.
+    Mod+Q cooldown-ms=100 hotkey-overlay-title="Close Window (hold to quit protected apps)" { spawn "sh" "-c" "timeout -k 0.2 0.6 \"$@\" quit keyAt \"$(date +%s%3N)\" || niri msg action close-window" "loft-quit" @IPC@; }
+    Alt+F4 cooldown-ms=100 hotkey-overlay-title=null { spawn "sh" "-c" "timeout -k 0.2 0.6 \"$@\" quit keyAt \"$(date +%s%3N)\" || niri msg action close-window" "loft-quit" @IPC@; }
+    Mod+Ctrl+A hotkey-overlay-title="Arrange Window" { spawn "timeout" "-k" "1" "5" @IPC@ "arrange" "open"; }
     // Spaces (docs/SPACES.md §6.2): the switcher, and previous / next space
     // (macOS Ctrl+←/→). next / prev go straight to loft-niri (one pipelined
     // IPC connection, ~5 ms); the shell sees the switch in niri's events and
     // shows the island banner. The generated spaces.kdl (included later)
     // binds Mod+1…9, Mod+Shift+1…9 and these two again, identically.
     // Through the shell, so they do nothing while Settings → Features → Spaces is off.
-    Mod+Ctrl+S hotkey-overlay-title="Space Switcher" { spawn @IPC@ "spaces" "switcher"; }
-    Mod+Ctrl+Left hotkey-overlay-title="Previous Space" { spawn @IPC@ "spaces" "prev"; }
-    Mod+Ctrl+Right hotkey-overlay-title="Next Space" { spawn @IPC@ "spaces" "next"; }
+    Mod+Ctrl+S hotkey-overlay-title="Space Switcher" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "switcher"; }
+    Mod+Ctrl+Left hotkey-overlay-title="Previous Space" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "prev"; }
+    Mod+Ctrl+Right hotkey-overlay-title="Next Space" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "next"; }
 }
 
 // ⌘Tab: niri's recent-windows switcher (live previews). xremap sends a

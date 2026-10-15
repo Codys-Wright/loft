@@ -58,6 +58,8 @@
 #   island-paging   the Dynamic Island's wheel / swipe paging (src/island/paging.js: one
 #                   page per notch or swipe) and that its WheelHandlers take every device
 #                   and both axes
+#   app-icons       app icon candidates (src/services/appicons.js): names deduplicated,
+#                   each themed lookup once (misses too), order-independent entry signature
 #   launcher-bangs  Spotlight's bangs provider in a real elephant; building loft-elephant for it
 #                   also runs the calculator + commands providers' Go tests (units, time
 #                   zones, scoring, script metadata/arguments)
@@ -183,6 +185,11 @@
 
         wallpaper-sets = check "wallpaper-sets" [ pkgs.nodejs-slim ] ''
           node ${../tests/wallsets.test.js} ${../src/services/wallsets.js} ${../tests/fixtures/wallsets/layouts.json}
+          touch $out
+        '';
+
+        app-icons = check "app-icons" [ pkgs.nodejs-slim ] ''
+          node ${../tests/appicons.test.js} ${../src/services/appicons.js}
           touch $out
         '';
 

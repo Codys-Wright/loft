@@ -8,7 +8,7 @@ import qs.services
 // Quit protection: hold ⌘Q to quit (Chrome's "Hold ⌘Q to quit").
 //
 // niri runs the bind, not the app: Mod+Q / Super+Q (and Alt+F4, which
-// xremap's macOS layout sends for ⌘Q) call `quit key` (niri/shell-binds).
+// xremap's macOS layout sends for ⌘Q) call `quit keyAt <ms>` (niri/shell-binds).
 // niri has no key-release events for binds, but it repeats a held bind
 // (repeat-delay, then repeat-rate, throttled by the bind's cooldown-ms), and
 // xremap re-sends a held ⌘Q as fresh Alt+F4 presses — so a hold is a burst

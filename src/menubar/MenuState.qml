@@ -520,12 +520,12 @@ Singleton {
     }
 
     // Close Window's chord: niri's close-window bind, else the shell's ⌘Q
-    // bind (`quit key`, everyday/QuitGuard.qml), which closes it too.
+    // bind (`quit keyAt`, everyday/QuitGuard.qml), which closes it too.
     function closeShortcut() {
         const own = niriShortcut("close-window");
         if (own.length > 0)
             return own;
-        const b = (NiriSettings.bindsData.binds ?? []).find(x => x.action === "spawn" && !x.shadowed && (x.args ?? []).some(a => / quit key\b/.test(String(a))) && (x.modifiers ?? []).length > 0 && x.trigger.length === 1);
+        const b = (NiriSettings.bindsData.binds ?? []).find(x => x.action === "spawn" && !x.shadowed && (x.args ?? []).some(a => / quit key(At)?\b/.test(String(a))) && (x.modifiers ?? []).length > 0 && x.trigger.length === 1);
         if (!b)
             return [];
         const names = { Mod: "Super", Super: "Super", Ctrl: "Control", Control: "Control", Alt: "Alt", Shift: "Shift" };

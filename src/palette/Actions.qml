@@ -87,7 +87,7 @@ Singleton {
     readonly property var catalog: controlEntries.concat(tools)
 
     // Every app with a desktop entry, by name (for pickers).
-    readonly property var apps: DesktopEntries.applications.values.filter(e => !e.noDisplay).map(e => ({
+    readonly property var apps: Apps.entries.filter(e => !e.noDisplay).map(e => ({
                 id: "app:" + e.id,
                 label: e.name,
                 icon: "",
