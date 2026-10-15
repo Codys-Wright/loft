@@ -56,8 +56,8 @@
     "extras": [
       "clock",
       "sound",
-      "cpu",
-      "cpuTemp"
+      "readout.cpu",
+      "readout.cpuTemp"
     ]
   },
   "theme": null,

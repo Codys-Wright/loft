@@ -28,6 +28,12 @@ import Quickshell.Io
 // use, i.e. `overrides/spaces.kdl` exists: until then nothing is rendered
 // behind the user's back.
 //
+// Editing (Settings → Spaces, P6): create / patch / delete / reorder /
+// capture go through `loft-niri space save|patch|delete|reorder|capture`,
+// which validate the change against the whole library before writing it.
+// Afterwards spaces.kdl is re-rendered (once spaces are in use) and the
+// index reloaded.
+//
 // IPC: spaces focus <id|n> | next | prev | list | active | switcher | reload.
 Singleton {
     id: root
@@ -54,6 +60,11 @@ Singleton {
     readonly property var spaces: all.filter(s => !s.archived)
     property var problems: []
     property bool loaded: false
+    // The live displays with their roles, most specific first:
+    // [{ name, identity, roles }] (empty when niri isn't reachable).
+    property var layout: []
+    // Template ids (`project`, …) for New Space ▸ from a template.
+    property var templates: []
 
     // workspace name → space id.
     readonly property var owners: {
@@ -322,6 +333,101 @@ Singleton {
         }
     }
 
+    // ── Editing (P6) ────────────────────────────────────────────────────
+    // The last write's error ("" when it went through).
+    property string editError: ""
+    property bool writing: false
+    property var writeQueue: []
+
+    // `loft-niri --json space <args>`; done(result) with { ok, id, error }.
+    function write(args, done) {
+        writeQueue = writeQueue.concat([{ args: args, done: done ?? null }]);
+        if (!writer.running)
+            nextWrite();
+    }
+
+    function nextWrite() {
+        if (writeQueue.length === 0) {
+            writing = false;
+            afterWrite();
+            return;
+        }
+        const w = writeQueue[0];
+        writeQueue = writeQueue.slice(1);
+        writing = true;
+        writer.done = w.done;
+        writer.command = ["loft-niri", "--json", "space"].concat(w.args);
+        writer.running = true;
+    }
+
+    Process {
+        id: writer
+        property var done: null
+        stdout: StdioCollector {
+            id: writeOut
+        }
+        stderr: StdioCollector {
+            id: writeErr
+        }
+        onExited: code => {
+            let r = null;
+            try {
+                r = JSON.parse(writeOut.text);
+            } catch (e) {
+                r = { ok: false, error: writeErr.text.trim().split("\n").pop() || `loft-niri exited with ${code}` };
+            }
+            if (code !== 0 && r.ok !== false)
+                r = { ok: false, error: r.error ?? `loft-niri exited with ${code}` };
+            root.editError = r.ok === false ? (r.error ?? "") : "";
+            if (r.ok === false)
+                console.warn(`Spaces: ${writer.command.slice(3).join(" ")}: ${r.error}`);
+            if (writer.done)
+                writer.done(r);
+            root.nextWrite();
+        }
+    }
+
+    // spaces.kdl follows the documents (binds by id, workspaces, rules),
+    // once spaces are in use; then the index.
+    function afterWrite() {
+        if (!enabled || renderer.running) {
+            reload();
+            return;
+        }
+        renderer.command = ["sh", "-c", '[ -f "$1" ] || exit 0; loft-niri space render', "loft-spaces", root.spacesKdl];
+        renderer.running = true;
+    }
+
+    function create(doc, done) {
+        write(["save", JSON.stringify(doc)], done);
+    }
+
+    // A JSON merge patch: { dock: { visible: "hidden" } }; null removes.
+    function patch(id, p, done) {
+        write(["patch", id, JSON.stringify(p)], done);
+    }
+
+    function remove(id, done) {
+        write(["delete", id], done);
+    }
+
+    // Move a space up (-1) or down (+1) in Mod+N order.
+    function move(id, delta) {
+        const ids = spaces.map(s => s.id);
+        const i = ids.indexOf(id);
+        const j = i + delta;
+        if (i < 0 || j < 0 || j >= ids.length)
+            return;
+        ids.splice(i, 1);
+        ids.splice(j, 0, id);
+        write(["reorder"].concat(ids));
+    }
+
+    // "New Space from Current Desktop": what each display shows now.
+    function capture(name, icon, done) {
+        write(["capture", "--save", "--name", name, "--icon", icon || ""], done);
+    }
+
     // ── The index ───────────────────────────────────────────────────────
     function reload() {
         lister.running = true;
@@ -329,13 +435,15 @@ Singleton {
 
     Process {
         id: lister
-        command: ["loft-niri", "space", "list", "--json"]
+        command: ["loft-niri", "space", "list", "--json", "--archived"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
                     const v = JSON.parse(text);
                     root.all = v.spaces ?? [];
                     root.problems = v.problems ?? [];
+                    root.layout = v.layout ?? [];
+                    root.templates = v.templates ?? [];
                     root.loaded = true;
                     quiet.restart();
                 } catch (e) {

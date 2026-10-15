@@ -243,7 +243,8 @@ Singleton {
     // the enabled items. The Control Center button always stays.
     function spaceAllows(id) {
         const keep = Spaces.menubarExtras;
-        return keep === null || id === "controlcenter" || keep.includes(id);
+        // A readout may be named either way ("readout.cpu" or "cpu").
+        return keep === null || id === "controlcenter" || keep.includes(id) || (id.startsWith("readout.") && keep.includes(id.slice(8)));
     }
 
     // Move `id` to sit before `beforeId` ("" = the end).

@@ -206,6 +206,38 @@ enum SpaceCmd {
     /// Move the focused window to the space's workspace on the same role
     /// as its display (else main's), without following it.
     MoveWindow { space: String },
+    /// Copy the built-in spaces into the library (once: only while it has
+    /// no spaces of its own). Writes that touch a built-in do this first.
+    Seed,
+    /// Create a space from a JSON document (`-`: stdin): a singleton
+    /// (`"kind": "space"`) or an instance of a template. Validated first.
+    Save {
+        doc: String,
+        /// Overwrite an existing space with that id.
+        #[arg(long)]
+        replace: bool,
+    },
+    /// Change a space with a JSON merge patch (`{"dock": {"visible":
+    /// "hidden"}}`; null removes a key). An instance's patch goes into its
+    /// `overrides` (`order`, `archived`, `params` are its own).
+    Patch { space: String, patch: String },
+    /// Delete a space's document (its windows stay where they are).
+    Delete { space: String },
+    /// Put these spaces first, in this order (the rest follow).
+    Reorder { spaces: Vec<String> },
+    /// A new space from what the displays show now: each display's active
+    /// workspace and its windows (printed; `--save` writes it).
+    Capture {
+        #[arg(long)]
+        name: String,
+        #[arg(long, default_value = "")]
+        icon: String,
+        /// Default: from the name.
+        #[arg(long)]
+        id: Option<String>,
+        #[arg(long)]
+        save: bool,
+    },
     /// spaces → <state>/overrides/spaces.kdl (validated, swapped, reloaded).
     Render {
         /// Print instead of writing.
@@ -880,7 +912,7 @@ fn space_cmd(
     cmd: SpaceCmd,
 ) -> Result<()> {
     use loft_niri::spaces::model::{Binding, Catalog, Env, library_dir};
-    use loft_niri::spaces::{launch, live, plan, render as srender, roles};
+    use loft_niri::spaces::{edit, launch, live, plan, render as srender, roles};
 
     let dir = opts.spaces_dir.or_else(library_dir);
     let cat = Catalog::load(dir.as_deref(), &Env::from_process(&paths.state));
@@ -935,9 +967,26 @@ fn space_cmd(
                     })
                 })
                 .collect();
+            // The live layout: each display's roles (Settings → Spaces).
+            let layout: Vec<Value> = loft_niri::live_outputs()
+                .map(|o| {
+                    let ds = roles::displays_from_niri(&o);
+                    let rs = roles::roles(&ds, main.as_deref());
+                    ds.iter()
+                        .map(|d| {
+                            json!({ "name": d.name, "identity": d.identity,
+                                    "roles": rs.get(&d.name).cloned().unwrap_or_default() })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
             print(
                 j,
-                &json!({ "spaces": rows, "problems": cat.problems }),
+                &json!({ "spaces": rows, "problems": cat.problems, "layout": layout,
+                         "templates": cat.templates.iter().map(|(id, t)| json!({
+                             "id": id, "name": t.get("name"), "icon": t.get("icon"),
+                             "params": t.get("params") })).collect::<Vec<_>>(),
+                         "library": dir }),
                 || {
                     rows.iter()
                         .map(|r| {
@@ -1040,6 +1089,66 @@ fn space_cmd(
             // The plan is JSON either way: the actions as niri's IPC takes them.
             println!("{}", serde_json::to_string_pretty(&p)?);
         }
+        SpaceCmd::Seed | SpaceCmd::Save { .. } | SpaceCmd::Patch { .. } | SpaceCmd::Delete { .. }
+        | SpaceCmd::Reorder { .. } | SpaceCmd::Capture { save: true, .. } => {
+            let dir = dir.context(
+                "spaces have no library (LOFT_LIBRARY=none): set $LOFT_SPACES_DIR or --spaces-dir",
+            )?;
+            let env = Env::from_process(&paths.state);
+            let parse = |text: &str| -> Result<Value> {
+                let text = if text == "-" {
+                    std::io::read_to_string(std::io::stdin())?
+                } else {
+                    text.to_string()
+                };
+                serde_json::from_str(&text).context("parsing the JSON argument")
+            };
+            let w = match cmd {
+                SpaceCmd::Seed => {
+                    let o = edit::seed_overlay(&dir);
+                    let mut w = edit::Written { ok: true, id: None, written: Vec::new(), removed: Vec::new() };
+                    for (p, v) in o {
+                        let text = serde_json::to_string_pretty(&v)? + "\n";
+                        loft_niri::state::write_atomic(&p, &text)?;
+                        w.written.push(p);
+                    }
+                    w
+                }
+                SpaceCmd::Save { doc, replace } => edit::save(&dir, &env, parse(&doc)?, replace)?,
+                SpaceCmd::Patch { space, patch } => {
+                    let id = find(&space)?.id.clone();
+                    edit::patch(&dir, &env, &id, &parse(&patch)?)?
+                }
+                SpaceCmd::Delete { space } => {
+                    let id = find(&space)?.id.clone();
+                    edit::delete(&dir, &env, &id)?
+                }
+                SpaceCmd::Reorder { spaces } => {
+                    let ids = spaces
+                        .iter()
+                        .map(|k| find(k).map(|s| s.id.clone()))
+                        .collect::<Result<Vec<_>>>()?;
+                    edit::reorder(&dir, &env, &ids)?
+                }
+                SpaceCmd::Capture { name, icon, id, .. } => {
+                    let doc = capture_doc(&cat, paths, main.clone(), &name, &icon, id)?;
+                    edit::save(&dir, &env, doc, false)?
+                }
+                _ => unreachable!(),
+            };
+            print(j, &serde_json::to_value(&w)?, || {
+                w.written
+                    .iter()
+                    .map(|p| format!("wrote {}", p.display()))
+                    .chain(w.removed.iter().map(|p| format!("removed {}", p.display())))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            });
+        }
+        SpaceCmd::Capture { name, icon, id, save: false } => {
+            let doc = capture_doc(&cat, paths, main.clone(), &name, &icon, id)?;
+            println!("{}", serde_json::to_string_pretty(&doc)?);
+        }
         SpaceCmd::Render {
             dry_run,
             no_binds,
@@ -1072,8 +1181,30 @@ fn space_cmd(
                 !flags.no_reload,
             )?;
             let path = live::spaces_kdl(&paths.state);
-            // Workspaces a reload declares land in reverse order; fix it.
+            // Workspaces a reload declares land in reverse order; fix it,
+            // once niri has applied the reload (LoadConfigFile returns
+            // before the new workspaces exist).
             if written && !flags.no_reload && loft_niri::ipc::available() {
+                let declared: Vec<String> = text
+                    .lines()
+                    .filter_map(|l| l.strip_prefix("workspace \""))
+                    .filter_map(|l| l.split('"').next())
+                    .map(str::to_lowercase)
+                    .collect();
+                for _ in 0..40 {
+                    let have: Vec<String> = live::read_state(main.clone())
+                        .map(|st| {
+                            st.workspaces
+                                .iter()
+                                .filter_map(|w| w.name.as_deref().map(str::to_lowercase))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if declared.iter().all(|d| have.contains(d)) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
                 let order = cat.active();
                 live::run(main.clone(), |st| plan::order_all(st, &order))?;
             }
@@ -1091,4 +1222,28 @@ fn space_cmd(
         }
     }
     Ok(())
+}
+
+/// `space capture`: the live state → a new space document.
+fn capture_doc(
+    cat: &loft_niri::spaces::model::Catalog,
+    paths: &Paths,
+    main: Option<String>,
+    name: &str,
+    icon: &str,
+    id: Option<String>,
+) -> Result<Value> {
+    use loft_niri::spaces::{edit, launch, live};
+    let name = name.trim();
+    if name.is_empty() {
+        anyhow::bail!("the new space needs a name");
+    }
+    let id = id.unwrap_or_else(|| edit::fresh_id(cat, name));
+    edit::validate_id(&id)?;
+    let opts = launch::Opts::from_env(&paths.state, main.clone());
+    let st = live::read_state(main)?;
+    let wins = launch::windows(&opts, false)?;
+    let proc_root = opts.proc_root.clone();
+    let cmds = move |pid: i32| edit::command_of(&proc_root, pid);
+    Ok(edit::capture(&st, &wins, &cmds, &id, name, icon))
 }

@@ -120,6 +120,9 @@ pub struct Space {
     /// The whole resolved document (dock, bar, menubar, focus, theme,
     /// facets, wallpapers … for the shell).
     pub doc: Value,
+    /// The library file it came from (None: a built-in).
+    #[serde(skip)]
+    pub source: Option<PathBuf>,
 }
 
 impl Space {
@@ -403,6 +406,7 @@ fn parse_space(doc: Value, base: &str) -> Result<Space> {
         startup,
         id,
         doc,
+        source: None,
     })
 }
 
@@ -439,32 +443,51 @@ pub struct Catalog {
     pub problems: Vec<String>,
 }
 
-fn read_docs(dir: &Path) -> Vec<(PathBuf, Result<Value>)> {
-    let Ok(rd) = std::fs::read_dir(dir) else {
-        return Vec::new();
-    };
-    let mut paths: Vec<PathBuf> = rd
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|e| e == "json") && p.is_file())
-        .collect();
+/// Documents to see in place of what's on disk (path → document, or None:
+/// as if deleted), so an edit is validated before it's written.
+pub type Overlay = BTreeMap<PathBuf, Option<Value>>;
+
+fn read_docs(dir: &Path, overlay: &Overlay) -> Vec<(PathBuf, Result<Value>)> {
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.extension().is_some_and(|e| e == "json") && p.is_file())
+                .collect()
+        })
+        .unwrap_or_default();
+    for p in overlay.keys() {
+        if p.parent() == Some(dir) && !paths.contains(p) {
+            paths.push(p.clone());
+        }
+    }
     paths.sort();
     paths
         .into_iter()
-        .map(|p| {
-            let v = std::fs::read_to_string(&p)
-                .with_context(|| format!("reading {}", p.display()))
-                .and_then(|t| {
-                    serde_json::from_str(&t).with_context(|| format!("parsing {}", p.display()))
-                });
-            (p, v)
+        .filter_map(|p| {
+            let v = match overlay.get(&p) {
+                Some(None) => return None,
+                Some(Some(v)) => Ok(v.clone()),
+                None => std::fs::read_to_string(&p)
+                    .with_context(|| format!("reading {}", p.display()))
+                    .and_then(|t| {
+                        serde_json::from_str(&t)
+                            .with_context(|| format!("parsing {}", p.display()))
+                    }),
+            };
+            Some((p, v))
         })
         .collect()
 }
 
 impl Catalog {
     pub fn load(dir: Option<&Path>, env: &Env) -> Catalog {
+        Self::load_overlay(dir, env, &Overlay::new())
+    }
+
+    /// [`Catalog::load`], seeing `overlay` in place of the files it names.
+    pub fn load_overlay(dir: Option<&Path>, env: &Env, overlay: &Overlay) -> Catalog {
         let mut cat = Catalog::default();
-        let mut singletons: BTreeMap<String, Value> = BTreeMap::new();
+        let mut singletons: BTreeMap<String, (Option<PathBuf>, Value)> = BTreeMap::new();
         for (name, text) in BUILTIN {
             let v: Value =
                 serde_json::from_str(text).expect("built-in space documents are valid JSON");
@@ -473,18 +496,18 @@ impl Catalog {
                     cat.templates.insert(name.to_string(), v);
                 }
                 _ => {
-                    singletons.insert(name.to_string(), v);
+                    singletons.insert(name.to_string(), (None, v));
                 }
             }
         }
         let mut instances = Vec::new();
         if let Some(dir) = dir {
-            let mut own: BTreeMap<String, Value> = BTreeMap::new();
-            for (p, doc) in read_docs(dir) {
+            let mut own: BTreeMap<String, (Option<PathBuf>, Value)> = BTreeMap::new();
+            for (p, doc) in read_docs(dir, overlay) {
                 match doc {
                     Ok(v) if kind(&v) == "space" => {
                         let id = str_field(&v, "id").unwrap_or_default().to_string();
-                        own.insert(id, v);
+                        own.insert(id, (Some(p), v));
                     }
                     Ok(v) => cat.problems.push(format!(
                         "{}: kind `{}` belongs in templates/ or instances/",
@@ -497,7 +520,7 @@ impl Catalog {
             if !own.is_empty() {
                 singletons = own;
             }
-            for (p, doc) in read_docs(&dir.join("templates")) {
+            for (p, doc) in read_docs(&dir.join("templates"), overlay) {
                 match doc {
                     Ok(v) if kind(&v) == "space-template" => {
                         let id = str_field(&v, "id").unwrap_or_default().to_string();
@@ -509,7 +532,7 @@ impl Catalog {
                     Err(e) => cat.problems.push(format!("{e:#}")),
                 }
             }
-            for (p, doc) in read_docs(&dir.join("instances")) {
+            for (p, doc) in read_docs(&dir.join("instances"), overlay) {
                 match doc {
                     Ok(v) if kind(&v) == "space-instance" => instances.push((p, v)),
                     Ok(_) => cat
@@ -519,9 +542,12 @@ impl Catalog {
                 }
             }
         }
-        for (id, doc) in &singletons {
+        for (id, (path, doc)) in &singletons {
             match instantiate(doc, None, env) {
-                Ok(s) => cat.spaces.push(s),
+                Ok(mut s) => {
+                    s.source = path.clone();
+                    cat.spaces.push(s)
+                }
                 Err(e) => cat.problems.push(format!("space `{id}`: {e:#}")),
             }
         }
@@ -532,7 +558,10 @@ impl Catalog {
                 None => Err(anyhow::anyhow!("no template `{tid}`")),
             };
             match res {
-                Ok(s) => cat.spaces.push(s),
+                Ok(mut s) => {
+                    s.source = Some(p.clone());
+                    cat.spaces.push(s)
+                }
                 Err(e) => cat.problems.push(format!("{}: {e:#}", p.display())),
             }
         }
