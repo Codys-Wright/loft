@@ -2,6 +2,7 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
+import "appicons.js" as AppIcons
 
 // App identity: maps niri app-ids to desktop entries (name, icon, launch).
 Singleton {
@@ -15,14 +16,42 @@ Singleton {
     // niri app_id → DesktopEntry (or null). Cached; lookups are heuristic.
     property var cache: ({})
 
-    // Entries are scanned asynchronously (and rescanned on install): drop
-    // misses cached before they were there.
+    // Entries are scanned asynchronously and rescanned whenever anything
+    // changes in (or above) an applications dir — $HOME, /nix/store … — with
+    // a valuesChanged per moved row, often with nothing actually changed.
+    // At most every 400 ms, drop the cached lookups (one notification each)
+    // only when the entries' ids / names / icons / WM classes differ
+    // (appicons.js signature).
+    property string signature: ""
+    // DesktopEntries.applications.values as of the last real change: bind
+    // app lists (pickers) to this, not to the raw model and its bursts.
+    property var entries: []
     Connections {
         target: DesktopEntries.applications
+        // Not restart(): rescans can come back to back for as long as a
+        // build churns /nix/store, and a debounce would never fire.
         function onValuesChanged() {
-            root.cache = {};
-            root.iconCache = {};
+            if (!settle.running)
+                settle.start();
         }
+    }
+    Timer {
+        id: settle
+        interval: 400
+        onTriggered: root.sync()
+    }
+    // A reloaded shell finds the entries already scanned (no signal).
+    Component.onCompleted: sync()
+
+    function sync() {
+        const sig = AppIcons.signature(DesktopEntries.applications.values);
+        if (sig === signature)
+            return;
+        signature = sig;
+        entries = DesktopEntries.applications.values.slice();
+        themedCache = {};
+        cache = {};
+        iconCache = {};
     }
 
     function entry(appId) {
@@ -47,56 +76,32 @@ Singleton {
     // Generic application icons, tried in order (themes name it differently).
     readonly property var genericIcons: ["application-x-executable", "applications-other", "application-default-icon", "exec", "system-run"]
     property var iconCache: ({})
+    // Themed name → path, "" for a miss: each name is looked up once.
+    property var themedCache: ({})
+
+    function themed(n) {
+        let p = themedCache[n];
+        if (p === undefined) {
+            p = Quickshell.iconPath(n, true) || "";
+            themedCache[n] = p;
+        }
+        return p;
+    }
 
     // Where an app's icon may be, best first — for AppIcon, which steps to
-    // the next on a load error and never shows Qt's missing-image pattern.
-    // Themed names are checked (iconPath(…, true)); files can't be, so they
-    // come as candidates: an absolute Icon=, then pixmaps dirs.
-    // Order: desktop Icon= → app_id → lowercase / reverse-DNS variants →
-    // StartupWMClass → desktop id → a generic app icon. "" = draw a glyph.
+    // the next on a load error and never shows Qt's missing-image pattern
+    // (appicons.js sources). "" = draw a glyph.
     function iconSources(appId) {
         const key = appId ?? "";
-        if (iconCache[key] !== undefined)
-            return iconCache[key];
-        const out = [];
-        const themed = n => {
-            if (!n)
-                return;
-            const p = Quickshell.iconPath(n, true);
-            if (p && !out.includes(p))
-                out.push(p);
-        };
-        if (own[key]) {
-            themed(own[key].icon);
-        } else {
-            const e = entry(key);
-            const declared = e?.icon ?? "";
-            const names = [];
-            if (declared.startsWith("/"))
-                out.push("file://" + declared);
-            else if (declared)
-                names.push(declared, declared.replace(/\.(png|svg|xpm)$/, ""));
-            if (key) {
-                const last = key.split(".").pop();
-                names.push(key, key.toLowerCase(), last, last.toLowerCase(), key.replace(/\./g, "-").toLowerCase(), key.split(".").reverse().join(".").toLowerCase());
-            }
-            if (e?.startupClass)
-                names.push(e.startupClass, e.startupClass.toLowerCase());
-            if (e?.id)
-                names.push(e.id, e.id.toLowerCase());
-            for (const n of names)
-                themed(n);
-            // Unthemed icons in pixmaps dirs (not checkable from QML).
-            if (declared && !declared.startsWith("/")) {
-                const base = declared.replace(/\.(png|svg|xpm)$/, "");
-                for (const d of pixmapDirs)
-                    for (const ext of [".png", ".svg"])
-                        out.push(`file://${d}/${base}${ext}`);
-            }
-        }
-        for (const g of genericIcons)
-            themed(g);
-        out.push("");
+        const hit = iconCache[key];
+        if (hit !== undefined)
+            return hit;
+        const out = AppIcons.sources(key, own[key] ? null : entry(key), {
+            themed: n => root.themed(n),
+            ownIcon: own[key]?.icon ?? "",
+            pixmapDirs: pixmapDirs,
+            genericIcons: genericIcons
+        });
         // Like `cache`: filled in place, so lookups don't re-notify bindings.
         iconCache[key] = out;
         return out;

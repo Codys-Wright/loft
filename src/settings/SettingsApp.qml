@@ -456,6 +456,7 @@ Scope {
                     WindowRulesPage {
                         Layout.fillWidth: true
                         visible: root.section === "windowrules"
+                        shown: root.open
                         flick: content
                     }
 

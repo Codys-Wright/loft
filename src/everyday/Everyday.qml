@@ -79,6 +79,16 @@ Scope {
             if (!Shortcuts.skip("⌘Q"))
                 QuitGuard.key();
         }
+        // The bind's form: `sent` = when the key was pressed (epoch ms). The
+        // bind gives up after 0.6 s and closes the window itself, so a press
+        // the shell only gets to later (it was busy) is dropped: acting on it
+        // would close whatever is focused by then.
+        function keyAt(sent: string): void {
+            const age = Date.now() - Number(sent);
+            if (!(age < 550))
+                return;
+            key();
+        }
         function status(): string {
             return QuitGuard.phase || "idle";
         }

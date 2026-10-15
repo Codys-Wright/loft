@@ -397,7 +397,7 @@ pub fn detail(action: &str, args: &[Value], action_text: &str) -> String {
                 .trim()
                 .to_string();
         }
-        // The ⌘Q bind: `sh -c '"$@" quit key || …' loft-quit <ipc…>`.
+        // The ⌘Q bind: `sh -c 'timeout … "$@" quit keyAt … || …' loft-quit <ipc…>`.
         if a.iter().any(|x| x == "loft-quit") {
             return "shell IPC: quit key (close, or hold to quit)".into();
         }
@@ -749,7 +749,7 @@ mod tests {
         std::fs::write(
             d.join("loft-shell-binds.kdl"),
             r#"binds {
-    Mod+Shift+T hotkey-overlay-title="Themes" { spawn "/qs" "ipc" "--path" "/src" "call" "themes" "open"; }
+    Mod+Shift+T hotkey-overlay-title="Themes" { spawn "timeout" "-k" "1" "5" "/qs" "ipc" "--path" "/src" "call" "themes" "open"; }
     Super+Shift+4 hotkey-overlay-title="Capture Area" { spawn "/qs" "ipc" "call" "capture" "area"; }
     Mod+Q cooldown-ms=100 hotkey-overlay-title="Close Window" { spawn "sh" "-c" "x" "loft-quit"; }
 }
