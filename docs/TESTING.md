@@ -336,6 +336,23 @@ FFmpeg 9.0.1), 2026-10:
 | `qtmultimedia-loft`, display copies (5120x1440 + 2 × 2560x1440, 8-bit) | 5.4 % | 9.0 % | 1.0 GB |
 | 6 players loaded, never played / played then paused | 0.0 % | 0.0–0.8 % | — |
 
+With VRAM (`nvidia-smi -q -x`, per process), 3 videos playing, after the shared VAAPI device:
+
+| Decode path | 5K 10-bit originals: GUI / VRAM | display copies: GUI / VRAM |
+|---|---|---|
+| stock Qt, `vulkan,vaapi` (Vulkan picked; frames downloaded) | 83.7 % / 4.0 GB | 20.6 % / 1.3 GB |
+| `qtmultimedia-loft`, `vulkan,vaapi` | 83.9 % / 2.3 GB | 18.5 % / 1.0 GB |
+| stock Qt, `vaapi` | hung (0 frames) / 7.6 GB | 36.5 % / 2.3 GB |
+| `qtmultimedia-loft`, `vaapi` (the default) | 7.6 % / 5.4 GB | 5.6 % / 1.4 GB |
+
+One decoder, `vaapi`, own device: 2560x1440 copy 540 MB, 5120x1440 copy 798 MB, 5K 10-bit
+1.93 GB, of which the device (a CUDA context in nvidia-vaapi-driver) is ~264 MB; Vulkan: 317 /
+376 / 768 MB but 2.7 / 9.5 / 37 % of the GUI thread. A paused decoder keeps all of it, `stop()`
+too; a never-played player holds ~1 MB; unloading frees it. First frame after `play()`: never
+played 100–290 ms, paused or stopped 1–33 ms, unloaded and reloaded 85–130 ms. Hence
+WallpaperView: neighbours open but never decoding, a played video paused for 10 s and then
+reopened (decoder dropped).
+
 Zero-copy with FFmpeg's frame threads hung the GUI thread in 4 of 16 starts
 (`waitSurfaceResolved` in nvidia-vaapi-driver); with one decoder thread: 0 of 25.
 `ffmpeg -i X -f null -` on one 12 s 5K clip, CPU per second of video: software 1.6 cores,

@@ -13,16 +13,26 @@ import qs.services
 // plays muted and looping over its still, with the still's crop: the video
 // must have the still's aspect. It plays only while `playVideo` (the surface
 // is what the screen shows) and VideoWallpapers lets it (it can be seen:
-// not locked, idle, covered by an opaque window, …); otherwise it holds its
-// frame (paused: no decoding), and the still shows until the first frame is
-// up. Once the still is laid out, the layer plays a display-sized copy of
-// just the part it shows (VideoWallpapers.variant), when there is one.
+// not locked, idle, covered by an opaque window, …). Otherwise it is "ready
+// in the background": the file is open (demuxed, no decoder: ~1 MB of VRAM)
+// and the still shows; play() puts the first frame up in 0.1–0.3 s and it
+// fades in over the still (a frame of the same video: ~0.4 % RMSE apart),
+// so there is no flash. A video that played and then stops being wanted pauses on its
+// frame (a quick switch back resumes in ~30 ms) and, after `releaseMs`,
+// lets go of its decoder: a paused decoder keeps its whole frame pool in
+// VRAM (measured on an RTX 4080: 276 MB for a 2560x1440 copy, 534 MB for
+// 5120x1440, 1.7 GB for a 5K 10-bit original), and too many of those made
+// nvidia-vaapi-driver segfault (nvGetImage) under VRAM pressure.
+// Once the still is laid out, the layer plays a display-sized copy of just
+// the part it shows (VideoWallpapers.variant), when there is one.
 //
 // `decodeScale` < 1 decodes the image smaller (sourceSize × scale) and draws
 // it scaled back up: the overview shows workspaces at its zoom, so a
 // workspace seen only there needs no full-size copy (WorkspaceWallpapers).
 // Such a surface never loads its video.
 Item {
+    // How long a video that stopped being wanted keeps its decoder (paused).
+    property int releaseMs: 10000
     id: root
 
     // Absolute path, "~/…" or "" (the gradient).
@@ -211,15 +221,26 @@ Item {
 
         // The video over the still (same aspect, so the same crop). No
         // audio output: muted.
+        // Reopened (set to "" and back) to drop a held decoder: the file stays
+        // open, no decoder until play().
+        property bool reopening: false
         MediaPlayer {
             id: player
-            source: layer.playSource
+            source: layer.reopening ? "" : layer.playSource
             loops: MediaPlayer.Infinite
             videoOutput: out
             readonly property bool wanted: layer.video !== "" && layer.current && root.playVideo && root.holdReason === ""
             onWantedChanged: wanted ? play() : pause()
             onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && wanted)
                 play()
+        }
+        Timer {
+            interval: root.releaseMs
+            running: !player.wanted && player.playbackState === MediaPlayer.PausedState
+            onTriggered: {
+                layer.reopening = true;
+                Qt.callLater(() => layer.reopening = false);
+            }
         }
         VideoOutput {
             id: out

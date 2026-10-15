@@ -13,6 +13,69 @@
      applyExperimentalCodecOptions(*decoder, opts);
  
      ret = avcodec_open2(context.get(), decoder->get(), opts);
+--- a/src/plugins/multimedia/ffmpeg/qffmpeghwaccel.cpp
++++ b/src/plugins/multimedia/ffmpeg/qffmpeghwaccel.cpp
+@@ -3,6 +3,11 @@
+ 
+ #include "qffmpeghwaccel_p.h"
+ 
++#include <mutex>
++
++#include <QtCore/QCoreApplication>
++#include <QtCore/QTimer>
++
+ #ifdef Q_OS_WINDOWS
+ #  include "qffmpeghwaccel_d3d11_p.h"
+ #  include <QtCore/private/qsystemlibrary_p.h>
+@@ -307,10 +312,47 @@
+     return format;
+ }
+ 
+-HWAccel::~HWAccel() = default;
++// VAAPI decoders share one device (VADisplay) while any of them is alive.
++// nvidia-vaapi-driver backs each device with its own CUDA context, a few
++// hundred MB of VRAM apiece: with a device per player, every video
++// wallpaper paid that again.
++static std::mutex sharedVaapiMutex;
++static AVBufferRef *sharedVaapiDevice = nullptr;
++
++static void releaseSharedVaapiIfUnused()
++{
++    std::lock_guard lock(sharedVaapiMutex);
++    if (sharedVaapiDevice && av_buffer_get_ref_count(sharedVaapiDevice) == 1)
++        av_buffer_unref(&sharedVaapiDevice);
++}
++
++HWAccel::~HWAccel()
++{
++    const bool vaapi = m_hwDeviceContext && hwDeviceContext()->type == AV_HWDEVICE_TYPE_VAAPI;
++    m_hwFramesContext.reset();
++    m_hwDeviceContext.reset();
++    if (vaapi) {
++        releaseSharedVaapiIfUnused();
++        // The codec context and frames still in flight hold the device a
++        // little longer; look again once they are gone.
++        if (auto *app = QCoreApplication::instance())
++            QTimer::singleShot(3000, app, &releaseSharedVaapiIfUnused);
++    }
++}
+ 
+ HWAccelUPtr HWAccel::create(AVHWDeviceType deviceType)
+ {
++    if (deviceType == AV_HWDEVICE_TYPE_VAAPI) {
++        std::lock_guard lock(sharedVaapiMutex);
++        if (!sharedVaapiDevice) {
++            auto ctx = loadHWContext(deviceType);
++            if (!ctx)
++                return {};
++            sharedVaapiDevice = av_buffer_ref(ctx.get());
++            return HWAccelUPtr(new HWAccel(std::move(ctx)));
++        }
++        return HWAccelUPtr(new HWAccel(AVBufferUPtr(av_buffer_ref(sharedVaapiDevice))));
++    }
+     if (auto ctx = loadHWContext(deviceType))
+         return HWAccelUPtr(new HWAccel(std::move(ctx)));
+     else
 --- a/src/plugins/multimedia/ffmpeg/qffmpeghwaccel_vaapi.cpp
 +++ b/src/plugins/multimedia/ffmpeg/qffmpeghwaccel_vaapi.cpp
 @@ -16,6 +16,7 @@

@@ -12,7 +12,8 @@ import qs.services
 //
 // When a video plays (WallpaperView asks mayPlay(screen)): only the surface
 // the screen shows (playVideo), and only while it can be seen. It holds its
-// frame (paused: no decoding) while
+// frame (paused: no decoding; after 10 s the decoder is dropped, see
+// WallpaperView) while
 //   - Settings → Wallpaper → Video wallpapers is "Still frame",
 //   - the session is locked, or nobody has touched the machine for
 //     `pauseWhenIdleMinutes` (the screens blank around then),
