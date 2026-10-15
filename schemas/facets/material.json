@@ -31,6 +31,18 @@
         "saturation": {
           "type": "number",
           "minimum": 0
+        },
+        "passes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31,
+          "description": "niri blur passes (niri clamps to 1..31): more = a wider, softer blur, and more GPU work"
+        },
+        "offset": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "niri blur sample offset (niri: 0..100): with passes, how far the blur reaches"
         }
       },
       "additionalProperties": false

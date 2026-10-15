@@ -45,7 +45,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import capture, cleaner, dock, doctor, greeter, hooks, importers, index, island, keys, library, media, ports, render, spotify, themecmds, updates, utilities, vibes, wallsets, wallvideo
+from . import capture, cleaner, dock, doctor, greeter, hooks, importers, index, island, keys, library, media, ports, render, spotify, themecmds, transparency, updates, utilities, vibes, wallsets, wallvideo
 from .facets import FacetError
 from .pack import IGNORED, Pack, PackError, is_any_pack, is_pack, is_pack_v2, pack_id, validate_v2
 
@@ -1341,6 +1341,8 @@ def parser() -> argparse.ArgumentParser:
     q = qsub.add_parser("sync", help="link the Kvantum theme + color scheme and write the apps' rc keys (the `qt` hook)")
     q.set_defaults(fn=cmd_qt_sync)
 
+    # The Transparency / Blur dials (Settings → Appearance).
+    transparency.add_parser(top)
     dock.add_parser(top, lambda ctx: ctx.state_dir)
     island.add_parser(top, lambda ctx: str(ctx.shell_path))
     # Utilities window (src/utilities): ports, flake updates, cleaner, media tools.

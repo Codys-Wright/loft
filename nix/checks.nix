@@ -138,7 +138,15 @@
           ${loft} theme render loft@light custom-minimal
           grep -q 'slowdown 0.666667' custom/niri.kdl
           grep -q '^    off$' custom-minimal/niri.kdl
-          for t in ${builtin}/tokyonight ${builtin}/latte $PWD/glassless $PWD/custom $PWD/custom-minimal; do
+          # The Transparency / Blur dials: the most frosted blur, then none.
+          ${loft} theme apply loft >/dev/null
+          ${loft} appearance set transparency=1 blur=1 >/dev/null
+          ${loft} theme render loft frosted
+          ${loft} appearance blur 0 >/dev/null
+          ${loft} theme render loft clear
+          grep -q '^    passes 4$' frosted/niri.kdl
+          grep -A1 '^blur {' clear/niri.kdl | grep -q '^    off$'
+          for t in ${builtin}/tokyonight ${builtin}/latte $PWD/glassless $PWD/custom $PWD/custom-minimal $PWD/frosted $PWD/clear; do
             printf 'include "%s"\ninclude "%s"\n' ${../niri}/base.kdl "$t/niri.kdl" > config.kdl
             echo "niri validate: base.kdl + $t/niri.kdl"
             niri validate -c config.kdl

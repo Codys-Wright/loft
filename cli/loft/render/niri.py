@@ -1,7 +1,9 @@
 """Unit `niri`: niri.kdl, included right after Loft's base.kdl.
 
   colors    focus ring / border / urgent colors, overview backdrop, ⌘Tab highlight
-  material  blur on/off, noise, saturation, xray
+  material  blur on/off, passes/offset (only when not base.kdl's 3/4), noise,
+            saturation, xray; through the Blur dial (render/look.py: Clear =
+            `off`, windows stay translucent)
   shape     window radius, shadow colors (inactive = shadow.inactive × the
             focused one's alpha), gaps (when set), the focus style (`shadow`:
             no ring; `ring`: ring, small focused shadow; `both`), border
@@ -29,7 +31,7 @@ def inputs(src: Source) -> dict:
     return {
         "name": src.res.name,
         "palette": look.palette(src.facet("colors")),
-        "blur": src.facet("material")["blur"],
+        "blur": look.blur(src.facet("material"), src.res.transparency),
         "shape": src.facet("shape"),
         "motion": {k: src.facet("motion")[k] for k in ("speed", "minimal", "niri")},
     }
@@ -99,6 +101,17 @@ def focus(shape: dict) -> tuple[str, str]:
     return ring, rules
 
 
+def blur_quality(b: dict) -> str:
+    """passes / offset lines, only where they differ from base.kdl's (so the
+    product default renders as before)."""
+    out = ""
+    if int(b["passes"]) != 3:
+        out += f"\n{IND}passes {int(b['passes'])}"
+    if float(b["offset"]) != 4.0:
+        out += f"\n{IND}offset {kdl_value(float(b['offset']))}"
+    return out
+
+
 def variables(i: dict) -> dict[str, str]:
     p, b, sh = i["palette"], i["blur"], i["shape"]
     ring, rules = focus(sh)
@@ -116,7 +129,7 @@ def variables(i: dict) -> dict[str, str]:
         # the focused window stand out).
         "shadow_inactive": look.shadow_inactive(sh),
         "window_radius": c.num(sh["radius"]["window"]),
-        "niri_blur": "on" if b["enabled"] else "off",
+        "niri_blur": ("on" if b["on"] else "off") + blur_quality(b),
         "glass_noise": c.num(float(b["noise"])),
         "glass_saturation": c.num(float(b["saturation"])),
         "niri_xray_rules": (

@@ -209,28 +209,14 @@ Scope {
                     width: parent.width
                     spacing: 12
 
-                    // Appearance
+                    // Appearance: Transparency + Blur first (the shell's own
+                    // Liquid Glass slider is under its Advanced).
+                    TransparencyCard {
+                        visible: root.section === "appearance"
+                    }
+
                     Card {
                         visible: root.section === "appearance"
-
-                        Row_ {
-                            label: "Liquid Glass"
-                            hint: Settings.appearance.glass < 0 ? "Clear … Tinted · following the theme" : "Clear … Tinted"
-                            enabled: !Theme.reduceTransparency
-                            Slider_ {
-                                from: 0
-                                to: 1
-                                step: 0.01
-                                value: Theme.glass
-                                format: v => v < 0.08 ? "Clear" : v > 0.92 ? "Tinted" : Math.round(v * 100) + "%"
-                                // Live preview while dragging; saved on release.
-                                onMoved: v => Theme.glassPreview = v
-                                onCommitted: v => {
-                                    Settings.appearance.glass = v;
-                                    Theme.glassPreview = -1;
-                                }
-                            }
-                        }
 
                         Row_ {
                             label: "Reduce transparency"
@@ -242,8 +228,8 @@ Scope {
                         }
 
                         Row_ {
-                            label: "Background blur"
-                            hint: Theme.reduceTransparency ? "Off with Reduce transparency" : Settings.appearance.blur < 0 ? "Following the theme" : "Overridden"
+                            label: "Shell blur"
+                            hint: Theme.reduceTransparency ? "Off with Reduce transparency" : (Settings.appearance.blur < 0 ? "Following the theme" : "Overridden") + " · menus, panels and the dock blur what's behind them"
                             enabled: !Theme.reduceTransparency
                             Switch_ {
                                 checked: Theme.blur
@@ -273,7 +259,7 @@ Scope {
                         }
 
                         Text {
-                            visible: Settings.appearance.blur >= 0 || Settings.appearance.glass >= 0 || Settings.appearance.barBackground >= 0 || Settings.appearance.barAdaptiveText >= 0
+                            visible: Settings.appearance.blur >= 0 || Settings.appearance.barBackground >= 0 || Settings.appearance.barAdaptiveText >= 0
                             text: "Reset to theme"
                             color: Theme.accent
                             font.family: Theme.fontUi
@@ -283,7 +269,6 @@ Scope {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     Settings.appearance.blur = -1;
-                                    Settings.appearance.glass = -1;
                                     Settings.appearance.barBackground = -1;
                                     Settings.appearance.barAdaptiveText = -1;
                                 }

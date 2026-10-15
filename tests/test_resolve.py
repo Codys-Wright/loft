@@ -75,11 +75,25 @@ NIRI_ADDED = (
     ),
     "        on\n        width 2\n",  # shape.focus "both" (the default): base.kdl's ring, explicit
     "    border {\n        off\n",  # shape.border off (the default, as base.kdl)
+    # No focus-ring slab behind Nautilus' glass (the Transparency work).
+    (
+        " niri paints the focus ring / border as a solid\n"
+        "// rectangle behind the window by default; with a transparent window that\n"
+        "// shows through as a colored slab when it's focused, so not behind glass."
+    ),
+    "    draw-border-with-background false\n",
     (  # Dolphin's glass (unit `qt`)
         "//\n// Dolphin: Loft's Kvantum theme (qt unit, programs.loft.qt) draws its window\n"
         "// as the same glass (toolbar, Places, status bar; the file view opaque).\n"
     ),
     'window-rule {\n    match app-id="^org\\\\.kde\\\\.dolphin$"\n    background-effect {\n        blur true\n    }\n}\n',
+)
+
+
+GHOSTTY_ADDED = (
+    "# Loft reloads this file (SIGUSR2) on every theme or Transparency change:\n"
+    '# no "Reloaded the configuration" toast for those (copy toasts stay).\n'
+    "app-notifications = clipboard-copy,no-config-reload\n"
 )
 
 
@@ -92,7 +106,7 @@ def without_additions(d: Path, into: Path) -> Path:
     for f in ("kde.colors", "kvantum.kvconfig", "kvantum.svg", "dolphin.qss"):  # unit `qt`
         (into / f).unlink()
     t = json.loads((into / "theme.json").read_text())
-    for k in ("motion", "type", "icons", "a11y", "windows"):
+    for k in ("motion", "type", "icons", "a11y", "windows", "transparency"):
         t.pop(k)
     t["shape"].pop("focus")
     (into / "theme.json").write_text(json.dumps(t, indent=2) + "\n")
@@ -101,6 +115,9 @@ def without_additions(d: Path, into: Path) -> Path:
         kdl = kdl.replace(chunk, "    border {\n" if chunk.startswith("    border") else "")
     kdl = kdl.replace("    // shape.border: drawn or not, and how wide.\n", "    // Colors only: whether the border is drawn stays the base/consumer's call.\n")
     (into / "niri.kdl").write_text(kdl)
+    for term in ("ghostty.conf",):
+        f = into / term
+        f.write_text(f.read_text().replace(GHOSTTY_ADDED, ""))
     return into
 
 

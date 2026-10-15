@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from loft import qtapps
-from loft.render import qt
+from loft.render import look, qt
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLDEN = ROOT / "tests" / "golden" / "tokyonight"
@@ -91,9 +91,16 @@ class Render(unittest.TestCase):
             self.assertIn(el, ids)
 
     def test_glass_alpha(self):
-        self.assertAlmostEqual(qt.glass_alpha(0.45, True), 0.63)
-        self.assertEqual(qt.glass_alpha(0.1, False), 0.72)
-        self.assertEqual(qt.glass_alpha(0.9, True), 0.88)
+        # gtk.css's sidebar rule (render/look.py), shared with Nautilus, and
+        # the Transparency dial with it.
+        def a(opacity, dark, tr=None):
+            return look.gtk_glass_alpha({"glass": {"opacity": opacity}}, dark, tr)
+
+        self.assertAlmostEqual(a(0.45, True), 0.63)
+        self.assertEqual(a(0.1, False), 0.72)
+        self.assertEqual(a(0.9, True), 0.88)
+        self.assertEqual(a(0.45, True, {"level": 1.0}), 0.3)
+        self.assertEqual(a(0.45, True, {"level": 1.0, "gtk": 0.5}), 0.5)
         self.assertEqual(qt._kde("#102030"), "16,32,48")
         self.assertEqual(qt._kde("#10203080"), "16,32,48,128")
 

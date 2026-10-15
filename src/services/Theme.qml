@@ -52,7 +52,23 @@ Singleton {
     // while the slider is dragged, without writing the settings file.
     property real glassPreview: -1
     readonly property real glassDefault: theme.glass.opacity
-    readonly property real glass: clamp(glassPreview >= 0 ? glassPreview : Settings.appearance.glass >= 0 ? Settings.appearance.glass : glassDefault, 0, 1)
+
+    // The master Transparency dial (Settings → Appearance; Transparency.qml):
+    // 0 Solid … 0.5 the theme's own look … 1 Clear, stored by `loft
+    // appearance` in appearance.json and rendered into theme.json
+    // `transparency` (cli/loft/render/look.py scales windows, terminals and
+    // GTK with it). The shell's glass follows it here, unless the Liquid
+    // Glass slider (Settings.appearance.glass, Advanced) pins its own value:
+    // linear toward opaque below 0.5 and toward clear above it. Clear glass
+    // stays legible through legibleAlpha and the text shadows below.
+    // `transparencyPreview` (≥ 0) shows a dragged value before it is applied.
+    property real transparencyPreview: -1
+    readonly property var transparency: theme.transparency ?? {}
+    readonly property real transparencyLevel: clamp(transparencyPreview >= 0 ? transparencyPreview : (transparency.level ?? 0.5), 0, 1)
+    function dialGlass(g, level) {
+        return level <= 0.5 ? g + (1 - g) * (0.5 - level) / 0.5 : g * (1 - (level - 0.5) / 0.5);
+    }
+    readonly property real glass: clamp(glassPreview >= 0 ? glassPreview : Settings.appearance.glass >= 0 ? Settings.appearance.glass : dialGlass(glassDefault, transparencyLevel), 0, 1)
 
     readonly property bool blur: !reduceTransparency && (Settings.appearance.blur >= 0 ? Settings.appearance.blur === 1 : theme.glass.blur)
     // Fill opacity of a strength-1 surface. The slider maps 1:1 (so a theme's
@@ -116,8 +132,12 @@ Singleton {
 
     // Fill of a glass surface of the given strength (1 = as the theme says;
     // panels and windows use more).
+    // Without blur (the Blur dial at Clear, or Shell blur off) nothing
+    // softens what's behind an outer surface — window text, a busy
+    // wallpaper — so panels and menus keep at least `unblurredFloor`.
+    readonly property real unblurredFloor: 0.72
     function glassAlpha(strength) {
-        return reduceTransparency ? 1 : Math.min(0.97, Math.max(glassOpacity * strength, strength >= 1 ? legibleAlpha : 0));
+        return reduceTransparency ? 1 : Math.min(0.97, Math.max(glassOpacity * strength, strength >= 1 ? Math.max(legibleAlpha, blur ? 0 : unblurredFloor) : 0));
     }
     function fillFor(strength) {
         return reduceTransparency ? flatFill(strength) : withAlpha(glassTint, glassAlpha(strength));
@@ -384,6 +404,10 @@ Singleton {
             // loft-niri reads it from this file; WindowRules re-renders the
             // niri rules when it changes.
             property var windows: ({})
+            // The Transparency / Blur dials and what they produced (`loft
+            // appearance status`): { level, blur, terminals, gtk (null =
+            // following), reduced, effective: {…}, theme: {…} }.
+            property var transparency: ({})
         }
     }
 }

@@ -5,8 +5,9 @@ The flat v1 keys (name … radii) stay exactly as they were, for Theme.qml's
 current properties and the greeter, which reads theme.json with XHR. The
 grouped keys are new: `shape.focus` (shadow | ring | both, next to
 the v1 radii), `motion` (durations already divided by the
-speed, 0 when minimal), `type`, `icons`, `a11y` and `windows` (app
-windows' translucency, for loft-niri's window rules).
+speed, 0 when minimal), `type`, `icons`, `a11y`, `windows` (app
+windows' translucency, for loft-niri's window rules) and `transparency`
+(the Transparency / Blur dials and what they produced: render/look.py).
 
 Identity (theme id, variant, sources, customized kinds) is not in here: it is
 the composition's resolved.json, so two selections that look the same share
@@ -45,6 +46,7 @@ def inputs(src: Source) -> dict:
         "motion": src.facet("motion"),
         "icons": src.facet("icons"),
         "a11y": dict(src.res.accessibility),
+        "transparency": dict(src.res.transparency),
         "wallpaper": _default_wallpaper(src),
     }
 
@@ -77,13 +79,17 @@ def document(i: dict) -> dict:
     wp = i["wallpaper"]
     radii = {"windowRadius": shape["radius"]["window"], "panelRadius": shape["radius"]["panel"], "controlRadius": shape["radius"]["control"]}
     ty = i["typography"]
+    tr = i.get("transparency") or {}
+    gl = look.glass(material, shape, tr)
+    # The Blur dial at Clear: the shell stops asking niri for blur, too.
+    gl["blur"] = gl["blur"] and look.blur(material, tr)["on"]
     return {
         # v1 keys, unchanged
         "name": i["name"],
         "polarity": colors.get("polarity", "dark"),
         "palette": look.palette(colors),
         "ansi": look.ansi(colors),
-        "glass": look.glass(material, shape),
+        "glass": gl,
         "wallpaper": {"gradient": look.gradient(colors), "image": _asset_name(wp) or (wp["path"] if wp else "")},
         "fonts": look.fonts(ty),
         "shape": {**radii, "focus": shape["focus"]},
@@ -94,7 +100,8 @@ def document(i: dict) -> dict:
         "type": ty,
         "icons": {"theme": i["icons"]["icons"]["theme"], "fallback": i["icons"]["icons"]["fallback"], "cursor": i["icons"]["cursor"]},
         "a11y": i["a11y"],
-        "windows": look.windows(material),
+        "windows": look.windows(material, tr),
+        "transparency": look.transparency(material, tr, i["a11y"], look.dark(colors)),
     }
 
 

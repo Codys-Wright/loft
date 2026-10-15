@@ -21,9 +21,12 @@ ALL = ("shell", "niri", "wallpapers", "kitty", "ghostty", "gtk", "qt", "spotify"
 # Not a unit's reload hook: apply_resolved re-syncs the login screen when what
 # it shows changed (greeter.follow), if the machine opted in. Selected like one.
 EXTRA = ("greeter",)
-# `--dev` targets the nested session; terminals and GTK settings belong to
-# the host desktop, so leave them alone unless asked.
-DEV = ("shell", "niri", "wallpapers")
+# `--dev` targets the nested session (and a test session's own shell runs
+# loft with LOFT_DEV=1): GTK settings belong to the host desktop, so leave
+# them alone unless asked. Terminals are signalled only within the Wayland
+# session loft runs in (_same_session), so the session's own are reloaded
+# and the host's never are.
+DEV = ("shell", "niri", "wallpapers", "kitty", "ghostty")
 
 
 def _run(argv: list[str]) -> bool:
@@ -35,10 +38,38 @@ def _run(argv: list[str]) -> bool:
         return False
 
 
+def _wayland_socket(env: dict) -> str:
+    wd = env.get("WAYLAND_DISPLAY") or ""
+    if not wd:
+        return ""
+    return wd if wd.startswith("/") else str(Path(env.get("XDG_RUNTIME_DIR") or "") / wd)
+
+
+def _environ(pid_dir: Path) -> dict:
+    try:
+        raw = (pid_dir / "environ").read_bytes()
+    except OSError:
+        return {}
+    out = {}
+    for item in raw.split(b"\0"):
+        k, sep, v = item.partition(b"=")
+        if sep:
+            out[k.decode(errors="replace")] = v.decode(errors="replace")
+    return out
+
+
+def _same_session(pid_dir: Path, mine: str) -> bool:
+    """Whether the process talks to the Wayland compositor we do (`mine`, the
+    socket path; "" = no session to scope to: any process, as before). A
+    test session's terminals are not the desktop's, and the other way round."""
+    return not mine or _wayland_socket(_environ(pid_dir)) == mine
+
+
 def _signal_procs(names: tuple[str, ...], sig: int) -> int:
     """Signal this user's processes whose comm matches (nix wrappers rename
-    the real binary to .<name>-wrapped)."""
+    the real binary to .<name>-wrapped), in this Wayland session only."""
     uid = os.getuid()
+    mine = _wayland_socket(dict(os.environ))
     sent = 0
     for d in Path("/proc").iterdir():
         if not d.name.isdigit():
@@ -49,7 +80,7 @@ def _signal_procs(names: tuple[str, ...], sig: int) -> int:
             comm = (d / "comm").read_text().strip()
         except OSError:
             continue
-        if comm.lstrip(".").split("-wrap")[0] in names:
+        if comm.lstrip(".").split("-wrap")[0] in names and _same_session(d, mine):
             try:
                 os.kill(int(d.name), sig)
                 sent += 1
@@ -79,6 +110,12 @@ def preview(ctx, composition: Path | None) -> None:
 
 
 def niri(ctx) -> None:
+    # The window rules (translucent windows) come from theme.json `windows`
+    # through loft-niri: re-render them now so the windows change with the
+    # rest (the shell would also do it on the theme change, a beat later;
+    # unchanged rules are a no-op). It validates and reloads niri itself.
+    if shutil.which("loft-niri") and (ctx.state_dir / "overrides").is_dir():
+        _run(["loft-niri", "--state-dir", str(ctx.state_dir), "render"])
     # niri polls included files by canonical path, so the new symlink target
     # is picked up within ~500ms anyway; this just makes it immediate.
     if os.environ.get("NIRI_SOCKET"):
@@ -96,7 +133,9 @@ def ghostty(ctx) -> None:
 
 def gtk(ctx) -> None:
     light = ctx.theme.get("polarity") == "light"
-    _run(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", "prefer-light" if light else "prefer-dark"])
+    # gsettings is the host desktop's (dconf), never a test session's.
+    if os.environ.get("LOFT_DEV") != "1":
+        _run(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", "prefer-light" if light else "prefer-dark"])
     link_gtk_base(ctx.state_dir, "light" if light else "dark")
 
 
@@ -145,7 +184,7 @@ def link_gtk_base(state_dir: Path, polarity: str) -> None:
 
 def selected(spec: str | None, dev: bool) -> list[str]:
     if spec is None:
-        return list(DEV if dev else ALL + EXTRA)
+        return list(DEV if dev or os.environ.get("LOFT_DEV") == "1" else ALL + EXTRA)
     if spec in ("", "none"):
         return []
     if spec == "all":

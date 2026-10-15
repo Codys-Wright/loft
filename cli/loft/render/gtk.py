@@ -1,7 +1,8 @@
 """Unit `gtk`: gtk.css, imported by ~/.config/gtk-{3,4}.0/gtk.css.
 
   colors    libadwaita named colors, Loft's palette, color-scheme
-  material  glass sidebars (tint over niri's blur, opaque without blur), specular
+  material  glass sidebars (tint over niri's blur, opaque without blur; its alpha
+            through the Transparency dial, render/look.py), specular
   shape     the window radius
 
 Hook: gsettings color-scheme and the polarity's GTK base stylesheet (the
@@ -23,6 +24,8 @@ def inputs(src: Source) -> dict:
         "name": src.res.name,
         "colors": {k: src.facet("colors")[k] for k in ("polarity", "palette")},
         "glass": {"blur": m["blur"]["enabled"], "tint": m["glass"]["tint"], "opacity": m["glass"]["opacity"], "specular": m["glass"]["specular"]},
+        # Only what the dial changes here (cache key): the sidebar alpha.
+        "transparency": {k: v for k, v in src.res.transparency.items() if k in ("level", "gtk")},
         "windowRadius": src.facet("shape")["radius"]["window"],
     }
 
@@ -32,7 +35,8 @@ def variables(i: dict) -> dict[str, str]:
     p = look.palette(i["colors"])
     dark = look.dark(i["colors"])
     g = i["glass"]
-    tint, opacity, blur = c.hex6(g["tint"]), float(g["opacity"]), bool(g["blur"])
+    tint, blur = c.hex6(g["tint"]), bool(g["blur"])
+    alpha = look.gtk_glass_alpha({"glass": {"opacity": g["opacity"]}}, dark, i.get("transparency"))
     v.update(
         {
             "window_radius": c.num(i["windowRadius"]),
@@ -45,12 +49,10 @@ def variables(i: dict) -> dict[str, str]:
             "traffic_glyph": "rgba(0, 0, 0, 0.55)",
             "specular": c.rgba("#ffffff", min(1.0, float(g["specular"]) * (0.35 if dark else 0.7))),
             # Glass sidebars in GTK apps (Nautilus): the theme's glass tint over
-            # the blur niri draws behind the window; opaque without blur. Dense
-            # enough that sidebar text stays readable over any wallpaper (a
-            # light theme over a dark wallpaper needs the most).
-            "gtk_sidebar_glass": (
-                c.rgba(c.mix(tint, p["surface"], 0.5), min(max(opacity * 1.4, 0.62 if dark else 0.72), 0.88)) if blur else p["surface"]
-            ),
+            # the blur niri draws behind the window; opaque without blur. The
+            # alpha (look.gtk_glass_alpha) is dense enough that sidebar text
+            # reads over any wallpaper at the theme's level, then the dial's.
+            "gtk_sidebar_glass": (c.rgba(c.mix(tint, p["surface"], 0.5), alpha) if blur else p["surface"]),
             "gtk_sidebar_hover": c.rgba(p["text"], 0.07),
             "gtk_sidebar_selected": c.rgba(p["text"], 0.13 if dark else 0.1),
             "gtk_hairline": c.rgba(p["text"], 0.1 if dark else 0.14),

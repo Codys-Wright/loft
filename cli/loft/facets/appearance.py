@@ -3,7 +3,12 @@
     {"version": 1, "theme": "cozytile", "variant": "sakura", "mode": "dark",
      "pins": {kind: selection},
      "customizations": {theme: {"*" | variant: {kind: selection}}},
-     "accessibility": {"reduceMotion", "reduceTransparency", "increaseContrast"}}
+     "accessibility": {"reduceMotion", "reduceTransparency", "increaseContrast"},
+     "transparency": {"level", "blur", "terminals", "gtk"}}
+
+`transparency` holds the Transparency / Blur dials (render/look.py: how
+they scale the theme's material; cli/loft/transparency.py: the commands):
+numbers 0..1, a missing key follows the theme.
 
 `loft` is its only writer. Customizations are stored per the storage rule
 (resolve.customization_slot). Saving turns them into a variant (only the
@@ -38,6 +43,7 @@ def empty() -> dict:
         "pins": {},
         "customizations": {},
         "accessibility": {k: False for k in R.A11Y},
+        "transparency": {},
     }
 
 
@@ -66,6 +72,7 @@ def load(state_dir: Path) -> dict:
         }
     if isinstance(data.get("accessibility"), dict):
         out["accessibility"].update({k: bool(data["accessibility"].get(k)) for k in R.A11Y if k in data["accessibility"]})
+    out["transparency"] = R.dials(data.get("transparency"))
     return out
 
 
@@ -78,6 +85,11 @@ def save(state_dir: Path, state: dict) -> None:
         if slots:
             cust[t] = slots
     state["customizations"] = cust
+    dials = R.dials(state.get("transparency"))
+    if dials:
+        state["transparency"] = dials
+    else:
+        state.pop("transparency", None)
     write_json(path(state_dir), state)
 
 

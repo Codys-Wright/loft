@@ -42,20 +42,14 @@ def inputs(src: Source) -> dict:
         "glass": {
             "blur": bool(m["blur"]["enabled"]),
             "tint": c.hex6(g["tint"]),
-            # The sidebar glass alpha. Same rule as gtk.css's glass sidebar
-            # (Nautilus), so both file managers read alike. When the
-            # Transparency dial lands (branch `transparency`), take its value
-            # here: look.gtk_glass_alpha(m, dark, src.res.transparency).
-            "alpha": glass_alpha(float(g["opacity"]), look.dark(colors)),
+            # The sidebar glass alpha: gtk.css's glass sidebar rule (Nautilus)
+            # through the Transparency dial and its GTK override, so both file
+            # managers read alike and follow the same slider (Dolphin reads
+            # its Kvantum theme at start, like GTK apps their CSS).
+            "alpha": look.gtk_glass_alpha(m, look.dark(colors), src.res.transparency),
         },
         "radius": {"control": sh["radius"]["control"], "surface": sh["radius"]["surface"]},
     }
-
-
-def glass_alpha(opacity: float, dark: bool) -> float:
-    """Dense enough that sidebar text stays readable over any wallpaper (a
-    light theme over a dark wallpaper needs the most): gtk_sidebar_glass's rule."""
-    return min(max(opacity * 1.4, 0.62 if dark else 0.72), 0.88)
 
 
 # ── colors ──────────────────────────────────────────────────────────────────
