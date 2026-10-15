@@ -29,6 +29,25 @@ ColumnLayout {
         }
 
         SettingsRow {
+            label: "System menu"
+            hint: "Click the NixOS logo: About This Computer, Settings, Sleep, Restart, Shut Down, Lock, Log Out. Off, or middle-click it: the overview"
+            SettingsSwitch {
+                checked: Features.on("systemMenu")
+                onToggled: on => Features.set("systemMenu", on)
+            }
+        }
+
+        SettingsRow {
+            visible: Features.on("systemMenu")
+            label: "Restart / Shut Down countdown"
+            hint: "The confirmation goes ahead by itself after 60 seconds, like macOS"
+            SettingsSwitch {
+                checked: AppMenu.pref("powerCountdown")
+                onToggled: on => AppMenu.setPref("powerCountdown", on)
+            }
+        }
+
+        SettingsRow {
             label: "Global menu"
             hint: "File, Edit, View … of Qt/KDE apps (opened after turning it on), GTK and X11 Electron apps"
             SettingsSwitch {

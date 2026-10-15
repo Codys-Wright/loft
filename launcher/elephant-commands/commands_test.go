@@ -165,3 +165,22 @@ func TestHelpCoversPrefixes(t *testing.T) {
 		t.Errorf("help should filter")
 	}
 }
+
+// The shell's system menu runs power / session commands with the "now"
+// action (it confirmed already): straight to execute, logged in dry-run mode.
+func TestActivateNowRunsWithoutConfirm(t *testing.T) {
+	testConfig(t)
+	log := filepath.Join(t.TempDir(), "dry.log")
+	config.DryRun = log
+	Activate(false, "cmd:shutdown", ActionNow, "", "", 0, nil)
+	b, err := os.ReadFile(log)
+	if err != nil || !strings.Contains(string(b), "command shutdown: systemctl poweroff") {
+		t.Fatalf("dry-run log = %q, %v", b, err)
+	}
+	pendMu.Lock()
+	p := pending
+	pendMu.Unlock()
+	if p != nil {
+		t.Fatalf("now must not ask for confirmation")
+	}
+}

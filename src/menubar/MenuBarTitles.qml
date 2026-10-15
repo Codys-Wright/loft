@@ -4,7 +4,8 @@ import Quickshell
 import qs.components
 import qs.services
 
-// The left of the bar, macOS style: the Loft mark (overview), the
+// The left of the bar, macOS style: the NixOS mark (the system menu, like
+// the Apple menu; middle-click, or with the menu off a click: overview), the
 // focused app's name in bold (its app menu), then its global menus
 // (File Edit View …). Owns this screen's MenuOverlay.
 RowLayout {
@@ -39,7 +40,7 @@ RowLayout {
 
     // x of title `index` in window (= screen) coordinates, for the dropdown.
     function titleX(index) {
-        const item = index === 0 ? appTitle : MenuState.isOverflow(screenName, index) ? more : globals.itemAt(index - 1);
+        const item = index === MenuState.systemTitle ? mark : index === 0 ? appTitle : MenuState.isOverflow(screenName, index) ? more : globals.itemAt(index - 1);
         return item ? item.mapToItem(null, 0, 0).x : 0;
     }
 
@@ -66,18 +67,48 @@ RowLayout {
     onMaxWidthChanged: Qt.callLater(measure)
 
     // The OS mark, like the Apple menu: the NixOS logo (nf-linux-nixos).
-    Icon {
+    Item {
         id: mark
-        Layout.rightMargin: 8
-        text: "\uf313"
-        size: 16
-        color: root.fg
+        readonly property bool lit: MenuState.open && MenuState.mode === "menu" && MenuState.screen === root.screenName && MenuState.current === MenuState.systemTitle
+
+        Layout.rightMargin: 2
+        implicitWidth: logo.implicitWidth + 16
+        implicitHeight: 22
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 6
+            color: mark.lit ? Theme.withAlpha(root.fg, 0.18) : markHover.containsMouse && MenuState.systemMenuOn ? Theme.withAlpha(root.fg, 0.1) : "transparent"
+            Behavior on color {
+                ColorAnimation {
+                    duration: 120
+                }
+            }
+        }
+
+        Icon {
+            id: logo
+            anchors.centerIn: parent
+            text: "\uf313"
+            size: 16
+            color: root.fg
+        }
 
         MouseArea {
+            id: markHover
             anchors.fill: parent
-            anchors.margins: -6
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
             cursorShape: Qt.PointingHandCursor
-            onClicked: Niri.toggleOverview()
+            onClicked: mouse => {
+                if (mouse.button === Qt.MiddleButton || !MenuState.systemMenuOn) {
+                    MenuState.close();
+                    Niri.toggleOverview();
+                } else
+                    MenuState.toggleTitle(root.screenName, MenuState.systemTitle);
+            }
+            onContainsMouseChanged: if (containsMouse && MenuState.systemMenuOn)
+                MenuState.hoverTitle(root.screenName, MenuState.systemTitle)
         }
     }
 

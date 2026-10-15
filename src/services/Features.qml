@@ -61,6 +61,7 @@ Singleton {
         { id: "flakeUpdates", label: "Flake updates", icon: "󰚰", group: "Apps", description: "What `nix flake update` would change: inputs, commits, package versions — you run the switch" },
         { id: "cleaner", label: "Cleaner", icon: "󰃢", group: "Apps", description: "Reclaimable space: caches, Trash, Nix garbage and generations; messaging-download limits; scheduled cleanup" },
         { id: "mediaTools", label: "Media tools", icon: "󰕧", group: "Apps", description: "Compress video, convert images, make GIFs, add watermarks, extract audio (ffmpeg, ImageMagick)" },
+        { id: "systemMenu", label: "System menu", icon: "\uf313", group: "Desktop", page: "MenuBarPage.qml", description: "Click the NixOS logo: About This Computer, System Settings, Recent Items, Force Quit, Sleep, Restart, Shut Down, Lock Screen, Log Out (middle-click: the overview)" },
         { id: "appMenu", label: "App menu", icon: "󰀻", group: "Desktop", page: "MenuBarPage.qml", description: "Click the app name (or Mod+F10): About, New Window, desktop actions, window commands, Hide, Quit" },
         // Controls: each lives in the Control Center, the menu bar, or both
         // (Controls.qml; arranged in Settings → Menu Bar and CC Edit Controls).

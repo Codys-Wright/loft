@@ -63,6 +63,10 @@ const (
 	ActionEdit    = "edit"
 	ActionReveal  = "reveal"
 	ActionNew     = "new"
+	// The caller already asked (the shell's system menu: Restart… → its own
+	// confirm dialog): run a built-in command without Spotlight's confirm
+	// step. Same command line and dry-run logging as Spotlight's.
+	ActionNow = "now"
 
 	scoreTop = 100_000_000 // a confirmation or a script with its arguments
 )
@@ -453,6 +457,11 @@ func Activate(single bool, identifier, action string, query string, args string,
 			return
 		}
 		switch {
+		case action == ActionNow:
+			if c.query == "" {
+				execute(c)
+			}
+			return // not a Spotlight pick: no history
 		case c.query != "":
 			setQuery(c.query)
 		case action == ActionConfirm || c.confirm:

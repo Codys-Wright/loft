@@ -23,7 +23,9 @@ PanelWindow {
     readonly property bool shown: MenuState.open && MenuState.screen === screenName
     readonly property bool menuMode: MenuState.mode === "menu"
     readonly property bool extraMode: MenuState.mode === "extra"
-    readonly property bool cardMode: MenuState.mode === "about" || MenuState.mode === "confirm"
+    readonly property bool cardMode: MenuState.mode === "about" || MenuState.mode === "confirm" || sysAbout
+    // About This Computer (the system menu).
+    readonly property bool sysAbout: MenuState.mode === "sysabout"
 
     visible: shown
     WlrLayershell.layer: WlrLayer.Overlay
@@ -205,14 +207,15 @@ PanelWindow {
     // ── About / Quit cards ───────────────────────────────────────────────
     readonly property var w: MenuState.target
     readonly property var entry: w && Apps.own[w.app_id] === undefined ? Apps.entry(w.app_id) : null
-    readonly property var details: root.w ? [["Application ID", root.w.app_id ?? ""], ["Desktop entry", root.entry?.id ?? "none"], ["Process", String(root.w.pid ?? "?")], ["Command", root.entry?.execString ?? ""], ["Window", root.w.title ?? ""]].filter(r => r[1] !== "") : []
+    readonly property var sysDetails: [["Host", SystemInfo.host], ["OS", SystemInfo.os], ["Version", SystemInfo.osVersion], ["Kernel", SystemInfo.kernel], ["Processor", SystemInfo.cpu + (SystemInfo.cores > 0 ? ` (${SystemInfo.cores} threads)` : "")], ["Graphics", SystemInfo.gpu], ["Memory", SystemInfo.memoryGiB > 0 ? `${Math.round(SystemInfo.memoryGiB)} GB` : ""], ["Uptime", SystemInfo.uptime > 0 ? SystemInfo.formatUptime(SystemInfo.uptime) : ""], ["User", SystemInfo.user]].filter(r => r[1] !== "")
+    readonly property var details: root.sysAbout ? root.sysDetails : root.w ? [["Application ID", root.w.app_id ?? ""], ["Desktop entry", root.entry?.id ?? "none"], ["Process", String(root.w.pid ?? "?")], ["Command", root.entry?.execString ?? ""], ["Window", root.w.title ?? ""]].filter(r => r[1] !== "") : []
 
     GlassSurface {
         id: card
         visible: root.shown && root.cardMode
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.max(20, (root.height - height) / 3)
-        width: 340
+        width: root.sysAbout ? 400 : 340
         height: cardCol.implicitHeight + 40
         radius: 22
         strength: 2
@@ -240,8 +243,8 @@ PanelWindow {
             Icon {
                 visible: root.w === null
                 Layout.alignment: Qt.AlignHCenter
-                text: MenuState.pendingAsk?.icon ?? "󰽰"
-                size: 56
+                text: root.sysAbout ? "\uf313" : MenuState.pendingAsk?.icon ?? "󰽰"
+                size: root.sysAbout ? 72 : 56
                 color: Theme.accent
             }
 
@@ -249,6 +252,8 @@ PanelWindow {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 text: {
+                    if (root.sysAbout)
+                        return SystemInfo.host || "This Computer";
                     if (MenuState.pendingAsk)
                         return MenuState.pendingAsk.title;
                     if (MenuState.mode === "confirm")
@@ -257,8 +262,10 @@ PanelWindow {
                 }
                 color: Theme.text
                 font.family: Theme.fontUi
-                font.pixelSize: 17
+                font.pixelSize: MenuState.pendingAsk?.later ? 15 : 17
                 font.weight: Font.DemiBold
+                wrapMode: Text.WordWrap
+                maximumLineCount: 3
                 elide: Text.ElideRight
             }
 
@@ -267,8 +274,13 @@ PanelWindow {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
                 text: {
-                    if (MenuState.pendingAsk)
-                        return MenuState.pendingAsk.text ?? "";
+                    if (root.sysAbout)
+                        return SystemInfo.os;
+                    if (MenuState.pendingAsk) {
+                        const a = MenuState.pendingAsk;
+                        const later = a.later && MenuState.askLeft > 0 ? `If you do nothing, ${a.later} automatically in ${MenuState.askLeft} second${MenuState.askLeft === 1 ? "" : "s"}.` : "";
+                        return [a.text ?? "", later].filter(t => t !== "").join("\n\n");
+                    }
                     if (MenuState.mode === "confirm")
                         return `${MenuState.pendingQuit?.count ?? 0} windows are open. Unsaved work in them may be lost.`;
                     if (!root.w)
@@ -283,7 +295,7 @@ PanelWindow {
 
             // About details.
             GridLayout {
-                visible: MenuState.mode === "about" && root.w !== null
+                visible: (MenuState.mode === "about" && root.w !== null) || root.sysAbout
                 Layout.fillWidth: true
                 Layout.topMargin: 4
                 columns: 2
@@ -332,6 +344,15 @@ PanelWindow {
                     visible: MenuState.mode === "confirm"
                     text: "Cancel"
                     onClicked: MenuState.close()
+                }
+                SettingsButton {
+                    visible: root.sysAbout && Features.on("systemMonitor")
+                    text: "More Info…"
+                    onClicked: {
+                        MenuState.close();
+                        SystemStats.monitorSection = "overview";
+                        SystemStats.monitorOpen = true;
+                    }
                 }
                 SettingsButton {
                     primary: true
