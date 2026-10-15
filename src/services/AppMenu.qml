@@ -52,7 +52,9 @@ Singleton {
             confirmQuit: true, // ask before quitting an app with several windows
             forceQuitDelay: 3, // seconds before SIGTERM if the app outlives its windows; 0 = never
             symbols: true, // ⌃⇧S instead of Ctrl+Shift+S
-            powerCountdown: true // system menu: Restart / Shut Down / Log Out go ahead after 60 s
+            powerCountdown: true, // system menu: Restart / Shut Down / Log Out go ahead after 60 s
+            hideInFullscreen: true, // the bar slides away over a fullscreen window (FullscreenChrome)
+            revealAtTop: true // … and comes back when the pointer rests at the top edge
         })
 
     function pref(key) {

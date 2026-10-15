@@ -41,12 +41,24 @@ import "paging.js" as Paging
 // gesture), the ‹ › that appear at its edges, the page dots (click; hover
 // names the page), ← / → once it has the keyboard (click it; Esc closes),
 // and Mod+Alt+← / → (shell-binds).
+//
+// Full screen (FullscreenChrome; Settings → Dynamic Island → Hide in full
+// screen): while this display shows a fullscreen window the island slides up
+// out of sight and takes no input, and comes back down with the menu bar when
+// the pointer reaches the top edge. An incoming call, a notification banner
+// or a page opened on purpose (IPC, Mod+Alt+←/→) still drop down; volume /
+// brightness show in the bottom pill (Osd.qml) instead.
 PanelWindow {
     id: root
 
     required property ShellScreen modelData
     screen: modelData
 
+    // Away in full screen (once it has slid off): unmapped, so the
+    // fullscreen app keeps every pixel's input (not an empty mask: see
+    // `mask`). Mapping again also puts it back above the bar, which moves to
+    // Overlay in full screen.
+    visible: !concealed || (pill.opacity > 0 && slide.y > -(pill.height + 6))
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "loft:island"
     // Sit inside the bar's strip rather than below its exclusive zone.
@@ -121,8 +133,17 @@ PanelWindow {
     // What just changed (Hud.qml), on the focused output's island: over
     // everything collapsed, but not over an expanded island, a call, or a
     // banner the pointer is on.
-    readonly property bool hudShowing: Hud.inIsland && Hud.onScreen(modelData.name) && !expanded && !calling && !(banner !== null && hover.hovered)
+    readonly property bool hudShowing: Hud.inIsland && Hud.onScreen(modelData.name) && !expanded && !calling && !(banner !== null && hover.hovered) && !awayInFullscreen
     readonly property bool bannering: banner !== null && !expanded && !hudShowing && !ringing
+
+    // Full screen: away (no input) unless something asks to be seen. The
+    // bar's reveal brings it back (FullscreenChrome.islandConcealedOn).
+    readonly property bool awayInFullscreen: FullscreenChrome.islandConcealedOn(modelData.name)
+    readonly property bool concealed: awayInFullscreen && !ringing && !pinned && !typing && !(banner !== null)
+    // Hovered or open: keeps a revealed bar down while the pointer is here.
+    readonly property bool busy: !concealed && (hover.hovered || expanded)
+    onBusyChanged: FullscreenChrome.setIslandBusy(modelData.name, busy)
+    Component.onDestruction: FullscreenChrome.setIslandBusy(modelData.name, false)
 
     // Unread = notifications arrived since the notifications page was last seen.
     property int seenCount: 0
@@ -241,8 +262,12 @@ PanelWindow {
     // Input and blur cover the body only: an attached island's square top
     // and rounded bottom, never its shoulders, so the transparent corners
     // beside them leave the bar's clicks alone.
+    // The pill's resting place (hitBox), not the pill: a Region maps its
+    // item with transforms, so the pill mid-slide (Translate, below) would
+    // give an empty mask, which Quickshell makes WindowTransparentForInput
+    // for good (QtWayland never drops it when the mask fills again).
     mask: Region {
-        item: pill
+        item: hitBox
         topLeftRadius: root.attached ? 0 : pill.radius
         topRightRadius: root.attached ? 0 : pill.radius
         bottomLeftRadius: pill.radius
@@ -252,11 +277,21 @@ PanelWindow {
     BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: Theme.blur && !root.black ? pill : null
+        item: Theme.blur && !root.black && !root.concealed ? hitBox : null
         topLeftRadius: root.attached ? 0 : pill.radius
         topRightRadius: root.attached ? 0 : pill.radius
         bottomLeftRadius: pill.radius
         bottomRightRadius: pill.radius
+    }
+
+    Item {
+        id: hitBox
+        anchors {
+            top: parent.top
+            horizontalCenter: parent.horizontalCenter
+        }
+        width: pill.width
+        height: pill.height
     }
 
     Item {
@@ -267,6 +302,26 @@ PanelWindow {
         }
         width: root.targetWidth
         height: root.targetHeight
+
+        // Full screen: slid up past the top edge (Reduce Motion: faded).
+        transform: Translate {
+            id: slide
+            y: root.concealed && !Motion.reduce ? -(pill.height + 6) : 0
+            Behavior on y {
+                enabled: !Motion.reduce
+                NumberAnimation {
+                    duration: Motion.ms(240)
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+        opacity: root.concealed && Motion.reduce ? 0 : 1
+        Behavior on opacity {
+            enabled: Motion.reduce
+            NumberAnimation {
+                duration: Motion.ms(160)
+            }
+        }
 
         // Attached: the bottom corners and the concave top shoulders, one
         // shape morphing with the size. Floating: every corner.
@@ -323,10 +378,26 @@ PanelWindow {
             }
         }
 
-        HoverHandler {
+        // A fresh HoverHandler each time the window maps: an unmapped
+        // window gets no leave event, so one kept across going away in full
+        // screen with the pointer on it would stay hovered for good (and
+        // hold every later banner on screen).
+        QtObject {
             id: hover
+            readonly property bool hovered: hoverLoader.item?.hovered ?? false
             onHoveredChanged: if (!hovered)
                 root.dismissed = false
+        }
+        Loader {
+            id: hoverLoader
+            anchors.fill: parent
+            active: root.visible
+            sourceComponent: Item {
+                readonly property alias hovered: handler.hovered
+                HoverHandler {
+                    id: handler
+                }
+            }
         }
 
         // Expanded: a wheel notch or a swipe (either axis) pages; collapsed,

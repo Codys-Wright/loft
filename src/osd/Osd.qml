@@ -23,8 +23,10 @@ PanelWindow {
     readonly property string message: Hud.kind === "message" ? Hud.text : ""
     readonly property string messageIcon: Hud.icon
 
-    // Only the focused output shows it (Hud.output).
-    readonly property bool shown: !Hud.inIsland && Hud.kind !== "brightness" && Hud.onScreen(modelData.name)
+    // Only the focused output shows it (Hud.output). With the island on, only
+    // while that display's island is away in full screen (FullscreenChrome);
+    // brightness then shows here too (the island's job otherwise).
+    readonly property bool shown: Hud.onScreen(modelData.name) && (Hud.inIsland ? FullscreenChrome.islandConcealedOn(modelData.name) : Hud.kind !== "brightness")
 
     visible: shown || fade.running
     WlrLayershell.layer: WlrLayer.Overlay
@@ -68,7 +70,7 @@ PanelWindow {
 
             Icon {
                 size: 20
-                text: root.message ? root.messageIcon : root.muted || root.volume <= 0 ? "󰝟" : root.volume >= 0.66 ? "󰕾" : root.volume >= 0.33 ? "󰖀" : "󰕿"
+                text: root.message ? root.messageIcon : Hud.levelIcon
             }
 
             Text {

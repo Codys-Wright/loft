@@ -49,18 +49,29 @@ Singleton {
         return right[0] ?? left[0] ?? others[0] ?? null;
     }
 
-    // A tiled window on the display's active workspace that covers the whole
-    // display (niri has no fullscreen flag in its IPC; fullscreen windows are
-    // exactly output-sized, maximized ones leave room for the bar).
+    // The display's active workspace shows a fullscreen window: a tiled
+    // window in the workspace's active column whose tile covers the whole
+    // display. niri 26.04 has no fullscreen flag in its IPC; a fullscreen
+    // tile is exactly output-sized (a fixed-size window sits centred on a
+    // black backdrop the tile includes), while maximized and
+    // maximized-to-edges windows keep out of the bar's exclusive zone. This
+    // is when niri draws the Top layer (the bar) under the window
+    // (render_above_top_layer: the active column is fullscreen). With a
+    // floating window focused the active column is unknown: any fullscreen
+    // tile counts.
     function fullscreenOn(screen) {
         if (!screen)
             return false;
         const ws = Niri.workspaces.find(w => w.output === screen.name && w.is_active);
         if (!ws)
             return false;
+        const active = Niri.windowMap[ws.active_window_id] ?? null;
+        const column = active && !active.is_floating ? active.layout?.pos_in_scrolling_layout?.[0] : undefined;
         return Niri.windows.some(w => {
-            const size = w.layout?.window_size;
-            return w.workspace_id === ws.id && !w.is_floating && size && size[0] >= screen.width && size[1] >= screen.height;
+            const size = w.layout?.tile_size;
+            if (w.workspace_id !== ws.id || w.is_floating || !size || size[0] < screen.width - 1 || size[1] < screen.height - 1)
+                return false;
+            return column === undefined || w.layout?.pos_in_scrolling_layout?.[0] === column;
         });
     }
 

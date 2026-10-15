@@ -205,8 +205,16 @@ Singleton {
     // Reduce transparency always gives the bar its (then flat) background.
     readonly property bool barBackground: reduceTransparency || (Settings.appearance.barBackground >= 0 ? Settings.appearance.barBackground === 1 : theme.bar.background)
     readonly property bool barAdaptiveText: Settings.appearance.barAdaptiveText >= 0 ? Settings.appearance.barAdaptiveText === 1 : theme.bar.adaptiveText
+    // Over a fullscreen app (FullscreenChrome: revealed, or kept with "Hide
+    // in full screen" off) the bar sits on a solid strip of the theme's
+    // background, as macOS's menu bar does there: no wallpaper to adapt to.
+    function barOverAppFor(screen) {
+        return FullscreenChrome.fullscreenOn(screen ?? "");
+    }
     // Whether the bar on `screen` uses dark text.
     function barDarkTextFor(screen) {
+        if (barOverAppFor(screen))
+            return luminance(bg) > 0.4;
         if (barBackground)
             return luminance(onGlassFor(0.8, screen, true)) < 0.4;
         if (!barAdaptiveText)
@@ -216,6 +224,8 @@ Singleton {
         return l < 0 ? !dark : l > 0.3;
     }
     function barTextFor(screen) {
+        if (barOverAppFor(screen))
+            return paletteText;
         if (barBackground)
             return onGlassFor(0.8, screen, true);
         if (!barAdaptiveText)
@@ -230,7 +240,7 @@ Singleton {
         return barDarkTextFor(screen) ? Qt.color("#ffffff") : Qt.color("#1d1d1f");
     }
     function barShadowFor(screen) {
-        if (barBackground)
+        if (barBackground || barOverAppFor(screen))
             return "transparent";
         return barDarkTextFor(screen) ? withAlpha("#ffffff", 0.35) : withAlpha("#000000", 0.5);
     }
