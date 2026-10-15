@@ -379,6 +379,7 @@
               --suffix PATH : ${
                 lib.makeBinPath [
                   pkgs.quickshell
+                  self'.packages.loft-niri # `loft windows …`, panorama
                   pkgs.niri
                   pkgs.git
                   pkgs.ffmpeg-headless
