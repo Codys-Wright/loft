@@ -248,6 +248,14 @@ ColumnLayout {
                 onMoved: v => page.cfg.batteryThreshold = Math.round(v)
             }
         }
+        SettingsRow {
+            label: "Desktop shell running slow"
+            hint: Perf.troubled ? `Now: ${Perf.culprit}` : "Once per session, when the shell lags or uses over 60% CPU for 30 s · details: loft doctor perf"
+            SettingsSwitch {
+                checked: page.cfg.perfHint
+                onToggled: on => page.cfg.perfHint = on
+            }
+        }
     }
 
     Text {

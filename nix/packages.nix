@@ -103,21 +103,33 @@
           ${../niri/shell-binds.kdl.in} > $out
       '';
 
+      # QtMultimedia for the shell (video wallpapers, camera mirror): stock,
+      # plus fixes so VAAPI frames reach the GPU textures without a copy on
+      # NVIDIA, without hangs (qtmultimedia-loft below).
+      qtMultimedia = self'.packages.qtmultimedia-loft;
+
       # QML modules imported lock designs (qylock / SDDM themes) expect, so they
       # load without a desktop session providing them.
       lockQmlPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/qml") [
         pkgs.kdePackages.qt5compat
-        pkgs.kdePackages.qtmultimedia
+        qtMultimedia
         pkgs.kdePackages.sddm.unwrapped
       ];
 
-      # QtMultimedia's plugins for the camera mirror (its QML is in lockQmlPath).
-      # Video wallpapers decode through Vulkan first: on NVIDIA, VA-API
-      # (nvidia-vaapi-driver) can't export surfaces, so Qt copies every frame
-      # back through vaGetImage, which segfaults under VRAM pressure.
+      # QtMultimedia's plugins for video wallpapers and the camera mirror (its
+      # QML is in lockQmlPath). Video decodes on the GPU through VA-API (Mesa,
+      # or nvidia-vaapi-driver on NVIDIA) and reaches the scene graph without
+      # a copy (qtmultimedia-loft). Stock Qt can't export nvidia-vaapi-driver's
+      # surfaces, so it copied every frame back through vaGetImage on the GUI
+      # thread, which also segfaulted (nvGetImage) under VRAM pressure. Vulkan
+      # decoding (lighter on VRAM) has no zero-copy path in Qt 6.11: its frames
+      # are downloaded too (5K: ~37 % of the GUI thread per video), and CUDA
+      # likewise. No VA-API driver: Qt decodes in software, off the GUI
+      # thread. An explicit QT_FFMPEG_DECODING_HW_DEVICE_TYPES wins.
       qtMultimediaEnv = ''
-        export QT_PLUGIN_PATH="${pkgs.kdePackages.qtmultimedia}/lib/qt-6/plugins''${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
-        export QT_FFMPEG_DECODING_HW_DEVICE_TYPES="''${QT_FFMPEG_DECODING_HW_DEVICE_TYPES:-vulkan,vaapi}"
+        export QT_PLUGIN_PATH="${qtMultimedia}/lib/qt-6/plugins''${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+        export QT_FFMPEG_DECODING_HW_DEVICE_TYPES="''${QT_FFMPEG_DECODING_HW_DEVICE_TYPES:-vaapi}"
+        export LOFT_QT_VAAPI_ZERO_COPY=1
       '';
 
       python = pkgs.python3.withPackages (ps: [ ps.jsonschema ]);
@@ -202,6 +214,21 @@
         # carries "workspace-layers" (how the shell detects it at runtime), and
         # `passthru.loftWorkspaceLayers` tells sessions / programs.loft to include
         # the rule. niri's own test suite (with the patch's tests) runs in the build.
+        # QtMultimedia with nix/qt/qtmultimedia-nvidia-vaapi.patch, for video
+        # wallpapers on NVIDIA (nvidia-vaapi-driver):
+        #  - Qt exports decoded VAAPI surfaces as one composed layer, which the
+        #    driver refuses ("vaExportSurfaceHandle failed"); Qt then copies
+        #    every frame back to the CPU (vaGetImage) on the GUI thread, ~40 ms
+        #    per 5K frame. The patch falls back to one layer per plane, so
+        #    NVDEC frames are imported as EGL images (zero copy).
+        #  - hardware decoders get one thread instead of frame threads, with
+        #    which the driver now and then loses a surface and the GUI thread
+        #    waits forever (waitSurfaceResolved).
+        qtmultimedia-loft = pkgs.kdePackages.qtmultimedia.overrideAttrs (old: {
+          pname = "qtmultimedia-loft";
+          patches = (old.patches or [ ]) ++ [ ./qt/qtmultimedia-nvidia-vaapi.patch ];
+        });
+
         niri-loft = pkgs.niri.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [ ./niri/workspace-layers.patch ];
           env = (old.env or { }) // {
@@ -255,7 +282,7 @@
                 uiFont
                 iconFont
                 lockQmlPath
-                "${pkgs.kdePackages.qtmultimedia}/lib/qt-6/plugins"
+                "${qtMultimedia}/lib/qt-6/plugins"
                 "${./dev/kwin-place.js}"
                 (lib.getExe' pkgs.sway-unwrapped "sway")
                 "${pkgs.mesa}/share/glvnd/egl_vendor.d/50_mesa.json"

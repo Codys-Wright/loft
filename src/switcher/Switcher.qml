@@ -72,23 +72,18 @@ PanelWindow {
         open = false;
     }
 
-    IpcHandler {
-        target: "switcher"
-
-        function next(): void {
-            root.step(1);
-        }
-
-        function prev(): void {
-            root.step(-1);
-        }
-
-        function commit(): void {
-            root.commit();
-        }
-
-        function cancel(): void {
-            root.open = false;
+    // IPC (SwitcherIpc, one handler for all screens).
+    Connections {
+        target: SwitcherIpc
+        function onCommand(cmd) {
+            if (cmd === "next")
+                root.step(1);
+            else if (cmd === "prev")
+                root.step(-1);
+            else if (cmd === "commit")
+                root.commit();
+            else if (cmd === "cancel")
+                root.open = false;
         }
     }
 

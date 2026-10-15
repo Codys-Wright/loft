@@ -419,6 +419,11 @@
         systemd.user.services.loft-shell =
           lib.recursiveUpdate (service "Loft shell (Quickshell)" (lib.getExe sp.loft-shell))
             {
+              # A crash ends the process and the unit restarts it with a clean
+              # cgroup. Quickshell's own crash restart re-executes in place, and
+              # the crashed image's helpers (nmcli / udisksctl monitors,
+              # watchers) live on next to the new ones, then as zombies.
+              Service.Environment = env ++ [ "QS_DISABLE_CRASH_HANDLER=1" ];
               # First start: apply the configured theme if none is active yet.
               Service.ExecStartPre = "${pkgs.writeShellScript "loft-first-theme" ''
                 [ -e "${stateDir}/current/theme.json" ] && exit 0

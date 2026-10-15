@@ -298,6 +298,73 @@ so every `niri msg` / `grim` / `loft-pointer` call reaches the session and nothi
   into the session's own `bin`: `ln -sf $PWD/target/debug/loft-pointer
   $XDG_RUNTIME_DIR/loft-dev-NAME/bin/`.
 
+## Performance: the shell's own cost, video wallpapers
+
+**Is it keeping up?** `loft doctor perf` (or `quickshell ipc … call perf status` for the JSON)
+asks the running shell (`src/services/Perf.qml`) for its CPU %, RSS, main-thread lag p50 / p99 /
+max over the last 30 s (a 100 ms timer measuring how late it fires), video wallpapers loaded /
+playing / held and how they decode, wallpaper surfaces, child processes and reloads, then adds
+the shell's children by name (duplicate long-running helpers, zombies) and the journal's
+`vaExportSurfaceHandle failed` count. Exit 1 on trouble. In a session: `LOFT_SESSION=NAME loft
+--dev doctor perf --pid <the session shell's pid>` (`ls $XDG_RUNTIME_DIR/loft-dev-NAME/run/quickshell/by-pid/`).
+`quickshell ipc … call videowallpapers stats` lists every player (screen, display copy or
+original, size, playing, why it is held).
+
+**Measuring video on the real GPU**: named sessions render in software (llvmpipe; the shell then
+decodes video in software too, `QT_FFMPEG_DECODING_HW_DEVICE_TYPES=,`), so for GPU paths use
+`loft-dev --session NAME --gpu --size 2560x1440 CHECKOUT`: the same offscreen, isolated session
+with the host sway rendering through gles2 on the first GPU render node (`LOFT_DEV_RENDER_NODE`
+picks another) and niri + the shell on its EGL, decoding with VAAPI as the packaged shell does.
+One output only (`--outputs` is software). Give it a live wallpaper by writing a same-stem
+`.png` + `.mp4` pair from a scratch dir into `<state>/overrides/shell.json`
+(`perTheme.<theme>.wallpaper`, or `.displays["niri headless N"]` with `--outputs`); the shell
+picks it up. Copies go to `<state>/cache/wallpaper-video` (`LOFT_VIDEO_CACHE`). Sample the
+shell's main thread (`/proc/PID/task/PID/stat` utime+stime) and the process
+(`/proc/PID/stat`) over 20–30 s; `QT_LOGGING_RULES=qt.scenegraph.time.renderloop=true` in
+loft-dev's environment logs every frame per window (how the island's every-frame breathing was
+found).
+
+Measured on THEBATTLESHIP (RTX 4080, NVIDIA 615.71, nvidia-vaapi-driver 0.0.18, Qt 6.11.2,
+FFmpeg 9.0.1), 2026-10:
+
+| 3 videos playing, 5120x2560 HEVC, minimal Quickshell scene on a headless gles2 sway | GUI thread | process | RSS |
+|---|---|---|---|
+| stock QtMultimedia, VAAPI (what ran live: export refused → vaGetImage copy-back) | 95–96 % | 101 % | 2.8 GB |
+| stock, `QT_FFMPEG_DECODING_HW_DEVICE_TYPES=cuda` (copy-back too) | 66 % | 71 % | 2.8 GB |
+| software decode (10-bit) | 44 % | 318 % | 4.4 GB |
+| `qtmultimedia-loft`, VAAPI zero-copy, 10-bit | 6.2 % | 8.8 % | 1.5 GB |
+| `qtmultimedia-loft`, display copies (5120x1440 + 2 × 2560x1440, 8-bit) | 5.4 % | 9.0 % | 1.0 GB |
+| 6 players loaded, never played / played then paused | 0.0 % | 0.0–0.8 % | — |
+
+With VRAM (`nvidia-smi -q -x`, per process), 3 videos playing, after the shared VAAPI device:
+
+| Decode path | 5K 10-bit originals: GUI / VRAM | display copies: GUI / VRAM |
+|---|---|---|
+| stock Qt, `vulkan,vaapi` (Vulkan picked; frames downloaded) | 83.7 % / 4.0 GB | 20.6 % / 1.3 GB |
+| `qtmultimedia-loft`, `vulkan,vaapi` | 83.9 % / 2.3 GB | 18.5 % / 1.0 GB |
+| stock Qt, `vaapi` | hung (0 frames) / 7.6 GB | 36.5 % / 2.3 GB |
+| `qtmultimedia-loft`, `vaapi` (the default) | 7.6 % / 5.4 GB | 5.6 % / 1.4 GB |
+
+One decoder, `vaapi`, own device: 2560x1440 copy 540 MB, 5120x1440 copy 798 MB, 5K 10-bit
+1.93 GB, of which the device (a CUDA context in nvidia-vaapi-driver) is ~264 MB; Vulkan: 317 /
+376 / 768 MB but 2.7 / 9.5 / 37 % of the GUI thread. A paused decoder keeps all of it, `stop()`
+too; a never-played player holds ~1 MB; unloading frees it. First frame after `play()`: never
+played 100–290 ms, paused or stopped 1–33 ms, unloaded and reloaded 85–130 ms. Hence
+WallpaperView: neighbours open but never decoding, a played video paused for 10 s and then
+reopened (decoder dropped).
+
+Zero-copy with FFmpeg's frame threads hung the GUI thread in 4 of 16 starts
+(`waitSurfaceResolved` in nvidia-vaapi-driver); with one decoder thread: 0 of 25.
+`ffmpeg -i X -f null -` on one 12 s 5K clip, CPU per second of video: software 1.6 cores,
+`-hwaccel cuda -hwaccel_output_format cuda` 0.05, VAAPI zero-copy 0.08, VAAPI copy-back 0.77
+(and only ~26 fps: vaGetImage is the bottleneck), CUDA copy-back 0.5.
+
+The whole Loft shell in a `--gpu` session (2560x1440, one video): no video 0.3 % GUI thread;
+still frame held 0.6 %; the display copy playing 3.0 % (RSS 775 MB); the 5K 10-bit original
+4.2 % (968 MB). Before the island's pulse was stepped (`components/SlowPulse.qml`), the island
+alone redrew every frame while an AI agent was busy: 60 frames/s here (~3 % of the GUI thread),
+the refresh rate of each display live (240 + 180 + 180 Hz).
+
 ## How it works (for maintainers)
 
 - `crates/loft-input`: the `loft-input` and `loft-shot` binaries, plus `loft-pointer` (the

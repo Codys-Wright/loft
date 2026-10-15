@@ -28,7 +28,7 @@ import qs.phone
 ShellRoot {
     // Background services are lazy singletons; touch them so they run from
     // startup (screen time, Bluetooth banners).
-    readonly property var services: [AppUsage, DeviceEvents, Shortcuts, Spaces, Hud, Phone]
+    readonly property var services: [AppUsage, DeviceEvents, Shortcuts, Spaces, Hud, Phone, Perf]
     Variants {
         model: Quickshell.screens
         Wallpaper {}

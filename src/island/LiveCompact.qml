@@ -66,17 +66,12 @@ Item {
             radius: 5
             color: Theme.urgent
 
-            SequentialAnimation on opacity {
+            opacity: livePulse1.value
+            SlowPulse {
+                id: livePulse1
                 running: root.activity === "recording" && !Recorder.paused
-                loops: Animation.Infinite
-                NumberAnimation {
-                    to: 0.3
-                    duration: 700
-                }
-                NumberAnimation {
-                    to: 1
-                    duration: 700
-                }
+                low: 0.3
+                period: 1400
             }
         }
 
@@ -110,17 +105,12 @@ Item {
                 size: 14
                 color: root.activity === "timer" ? root.timerColor : Theme.accent
 
-                SequentialAnimation on opacity {
+                opacity: livePulse2.value
+                SlowPulse {
+                    id: livePulse2
                     running: root.activity === "download"
-                    loops: Animation.Infinite
-                    NumberAnimation {
-                        to: 0.35
-                        duration: 600
-                    }
-                    NumberAnimation {
-                        to: 1
-                        duration: 600
-                    }
+                    low: 0.35
+                    period: 1200
                 }
             }
         }

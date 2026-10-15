@@ -43,7 +43,8 @@ PanelWindow {
         decodeScale: root.entry?.scale ?? 1
         screenName: root.screenName
         // Only the workspace the screen shows plays; its neighbors (kept
-        // full-size to slide in) show the still.
+        // full-size to slide in) show the still with their video open but
+        // not decoding (WallpaperView).
         playVideo: root.ws?.is_active ?? false
         onReadyChanged: WorkspaceWallpapers.setReady(root.modelData, ready)
         onDecodedBytesChanged: WorkspaceWallpapers.report(root.modelData, decodedBytes)
