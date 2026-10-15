@@ -112,8 +112,12 @@
       ];
 
       # QtMultimedia's plugins for the camera mirror (its QML is in lockQmlPath).
+      # Video wallpapers decode through Vulkan first: on NVIDIA, VA-API
+      # (nvidia-vaapi-driver) can't export surfaces, so Qt copies every frame
+      # back through vaGetImage, which segfaults under VRAM pressure.
       qtMultimediaEnv = ''
         export QT_PLUGIN_PATH="${pkgs.kdePackages.qtmultimedia}/lib/qt-6/plugins''${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+        export QT_FFMPEG_DECODING_HW_DEVICE_TYPES="''${QT_FFMPEG_DECODING_HW_DEVICE_TYPES:-vulkan,vaapi}"
       '';
 
       python = pkgs.python3.withPackages (ps: [ ps.jsonschema ]);

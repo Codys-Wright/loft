@@ -11,8 +11,8 @@ import qs.services
 // A live wallpaper (Vibes.videoFor: a same-stem video next to the still)
 // plays muted and looping over its still, with the still's crop: the video
 // must have the still's aspect. It plays only while `playVideo` (the surface
-// is what the screen shows); otherwise it holds its frame, and the still
-// shows until the first frame is up.
+// is what the screen shows); otherwise it unloads and the still shows, as
+// it does until the first frame is up.
 //
 // `decodeScale` < 1 decodes the image smaller (sourceSize × scale) and draws
 // it scaled back up: the overview shows workspaces at its zoom, so a
@@ -183,10 +183,12 @@ Item {
         }
 
         // The video in the still's rectangle (same aspect, so the same crop).
-        // No audio output: muted.
+        // No audio output: muted. Loaded only while it may play: a paused
+        // decoder holds its frame pool in VRAM (hundreds of MB for a large
+        // video), and the still beneath stands in for it.
         MediaPlayer {
             id: player
-            source: layer.video
+            source: root.playVideo ? layer.video : ""
             loops: MediaPlayer.Infinite
             videoOutput: out
             readonly property bool wanted: layer.video !== "" && layer.current && root.playVideo
