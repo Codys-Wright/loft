@@ -21,7 +21,7 @@
 
 usage() {
   cat >&2 <<'EOF'
-usage: loft-dev [--session NAME] [--size WxH | --outputs WxH[+X+Y],…] [--headless | --on-host]
+usage: loft-dev [--session NAME] [--size WxH | --outputs WxH[+X+Y],…] [--headless | --gpu | --on-host]
                 [--output NAME | --windowed]
                 [--isolated | --shared | --private-bus | --private-runtime]
                 [--share-audio] [--stock-wallpapers] [CHECKOUT]
@@ -40,6 +40,11 @@ usage: loft-dev [--session NAME] [--size WxH | --outputs WxH[+X+Y],…] [--headl
   --headless         run on an offscreen output (a headless wlroots host,
                      software rendering): exact size, never on screen, works
                      while the desktop is locked — the default for named sessions
+  --gpu              headless, but rendered on the GPU (the host sway on
+                     the first GPU render node, gles2; niri and the shell on
+                     its EGL): for measuring GPU paths such as video
+                     wallpapers (VAAPI zero-copy). Still offscreen and
+                     isolated. LOFT_DEV_RENDER_NODE picks the node.
   --on-host          a window on this desktop instead (on niri: floating at
                      --size; the dev session: fullscreen on --output or the
                      rightmost monitor) — the default for `dev`
@@ -71,6 +76,7 @@ root=""
 bus=""
 runtime=""
 headless=""
+gpu=0
 audio=0
 ws_layers=1
 action=run
@@ -84,6 +90,7 @@ while [ $# -gt 0 ]; do
     --output) [ $# -ge 2 ] || usage; output="$2"; shift 2 ;;
     --windowed) windowed=1; shift ;;
     --headless) headless=1; shift ;;
+    --gpu) headless=1; gpu=1; shift ;;
     --on-host) headless=0; shift ;;
     --isolated) bus=1; runtime=1; shift ;;
     --shared) bus=0; runtime=0; shift ;;
@@ -182,6 +189,9 @@ fi
 # per entry; the sway host can't help here, niri nested has one output.
 output_sizes=""
 output_kdl=""
+if [ -n "$outputs" ] && [ "$gpu" = 1 ]; then
+  echo "loft-dev: --gpu runs one output (--size), not --outputs" >&2; exit 2
+fi
 if [ -n "$outputs" ]; then
   if [ -n "$size" ]; then echo "loft-dev: --size and --outputs don't mix" >&2; exit 2; fi
   if [ "$headless" = 0 ]; then echo "loft-dev: --outputs is headless only" >&2; exit 2; fi
@@ -330,9 +340,18 @@ default_border none
 default_floating_border none
 for_window [app_id="niri"] fullscreen enable
 EOF
-  env -u DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$hrt" WLR_BACKENDS=headless WLR_RENDERER=pixman \
-    WLR_LIBINPUT_NO_DEVICES=1 WLR_HEADLESS_OUTPUTS=1 \
-    @SWAY@ -c "$dir/host-sway.conf" > "$dir/host.log" 2>&1 &
+  if [ "$gpu" = 1 ]; then
+    # --gpu: the host renders with gles2 on a GPU render node (sway needs
+    # --unsupported-gpu for NVIDIA's); niri and the shell use its EGL.
+    node="${LOFT_DEV_RENDER_NODE:-$(for n in /dev/dri/renderD*; do [ -e "$n" ] && echo "$n" && break; done)}"
+    env -u DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$hrt" WLR_BACKENDS=headless WLR_RENDERER=gles2 \
+      WLR_RENDER_DRM_DEVICE="$node" WLR_LIBINPUT_NO_DEVICES=1 WLR_HEADLESS_OUTPUTS=1 \
+      @SWAY@ --unsupported-gpu -c "$dir/host-sway.conf" > "$dir/host.log" 2>&1 &
+  else
+    env -u DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$hrt" WLR_BACKENDS=headless WLR_RENDERER=pixman \
+      WLR_LIBINPUT_NO_DEVICES=1 WLR_HEADLESS_OUTPUTS=1 \
+      @SWAY@ -c "$dir/host-sway.conf" > "$dir/host.log" 2>&1 &
+  fi
   host_pid=$!
   hsock=""
   for _ in $(seq 1 50); do
@@ -348,7 +367,7 @@ EOF
     exit 1
   fi
   export WAYLAND_DISPLAY="$hsock"
-  export __EGL_VENDOR_LIBRARY_FILENAMES=@MESA_EGL_VENDOR@ LIBGL_ALWAYS_SOFTWARE=1
+  [ "$gpu" = 1 ] || export __EGL_VENDOR_LIBRARY_FILENAMES=@MESA_EGL_VENDOR@ LIBGL_ALWAYS_SOFTWARE=1
   unset NIRI_SOCKET
 elif [ "$named" = 1 ]; then
   # A test window on the host usually sits on a workspace nobody looks at;
@@ -375,8 +394,21 @@ launcher_env=""
 shell_env=""
 if [ "$named" = 1 ]; then
   launcher_env="\"XDG_CACHE_HOME=$dir/cache\" \"LOFT_SCRIPTS_DIR=$dir/scripts\" \"LOFT_LAUNCHER_DRYRUN=$dir/launcher-dryrun.log\" "
-  shell_env="\"LOFT_EJECT_DRYRUN=$dir/eject-dryrun.log\" "
+  shell_env="\"LOFT_EJECT_DRYRUN=$dir/eject-dryrun.log\" \"LOFT_VIDEO_CACHE=$dir/cache/wallpaper-video\" "
 fi
+# Video wallpapers: how Qt decodes (VideoWallpapers.qml). On the GPU (a
+# window on the host), VAAPI with Loft's zero-copy QtMultimedia, as the
+# packaged shell does; with software rendering (headless, --outputs) the
+# GPU's frames can't be imported into llvmpipe, so decode in software.
+# QT_FFMPEG_DECODING_HW_DEVICE_TYPES in loft-dev's environment wins.
+if [ -n "${QT_FFMPEG_DECODING_HW_DEVICE_TYPES+x}" ]; then
+  video_env="\"QT_FFMPEG_DECODING_HW_DEVICE_TYPES=$QT_FFMPEG_DECODING_HW_DEVICE_TYPES\" \"LOFT_QT_VAAPI_ZERO_COPY=1\" "
+elif [ "$gpu" != 1 ] && { [ "$headless" = 1 ] || [ -n "$output_sizes" ]; }; then
+  video_env='"QT_FFMPEG_DECODING_HW_DEVICE_TYPES=," '
+else
+  video_env='"QT_FFMPEG_DECODING_HW_DEVICE_TYPES=vaapi" "LOFT_QT_VAAPI_ZERO_COPY=1" '
+fi
+shell_env="$shell_env$video_env"
 
 # The theme fragment comes after base.kdl so it wins, then dev-local, then
 # the spaces (`loft-niri space render`; included once: a workspace declared
@@ -403,7 +435,7 @@ include optional=true "$dir/overrides/niri.kdl"
 $ws_kdl
 $extra_kdl
 spawn-at-startup "env" $launcher_env"LOFT_STATE_DIR=$dir" "LOFT_LAUNCHER_DIR=$root/launcher" "LOFT_SHELL_SRC=$root/src" "loft-launcher" "service"
-spawn-at-startup "env" $ws_env$shell_env"LOFT_DEV=1" "LOFT_STATE_DIR=$dir" "LOFT_DATA_DIR=$root" "LOFT_THEME_PATH=${XDG_DATA_HOME:-$HOME/.local/share}/loft/themes:$root/themes" "LOFT_SHELL_PATH=$root/src" "LOFT_NIRI_CONFIG=$dir/config.kdl" "LOFT_THEME_FILE=$dir/current/theme.json" "LOFT_UI_FONT=@UI_FONT@" "LOFT_ICON_FONT=@ICON_FONT@" "QML_IMPORT_PATH=@LOCK_QML_PATH@" "QT_PLUGIN_PATH=@QT_MM_PLUGINS@" "QT_FFMPEG_DECODING_HW_DEVICE_TYPES=vulkan,vaapi" "quickshell" "--path" "$root/src"
+spawn-at-startup "env" $ws_env$shell_env"LOFT_DEV=1" "LOFT_STATE_DIR=$dir" "LOFT_DATA_DIR=$root" "LOFT_THEME_PATH=${XDG_DATA_HOME:-$HOME/.local/share}/loft/themes:$root/themes" "LOFT_SHELL_PATH=$root/src" "LOFT_NIRI_CONFIG=$dir/config.kdl" "LOFT_THEME_FILE=$dir/current/theme.json" "LOFT_UI_FONT=@UI_FONT@" "LOFT_ICON_FONT=@ICON_FONT@" "QML_IMPORT_PATH=@LOCK_QML_PATH@" "QT_PLUGIN_PATH=@QT_MM_PLUGINS@" "quickshell" "--path" "$root/src"
 EOF
 
 # Live everything, not just QML: `loft` runs the checkout's CLI,
@@ -425,6 +457,7 @@ export LOFT_SESSION="$session"
 
 mode=on-host
 [ "$headless" = 1 ] && mode=headless
+[ "$gpu" = 1 ] && mode="headless-gpu"
 [ -n "$output_sizes" ] && mode="headless-outputs"
 echo "loft-dev: session $session ($mode), niri config $dir/config.kdl, shell from $root/src"
 "$niri_bin" --config "$dir/config.kdl" &

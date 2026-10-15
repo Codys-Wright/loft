@@ -1,0 +1,111 @@
+--- a/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegcodeccontext.cpp
++++ b/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegcodeccontext.cpp
+@@ -122,7 +122,11 @@
+         av_dict_set(opts, "flags", "low_delay", 0);
+ 
+     av_dict_set(opts, "refcounted_frames", "1", 0);
+-    av_dict_set(opts, "threads", "auto", 0);
++    // Hardware decoding gains nothing from frame threads, and with them
++    // nvidia-vaapi-driver can lose track of a surface: the GUI thread then
++    // waits forever in vaExportSurfaceHandle (waitSurfaceResolved). One
++    // thread, as mpv does for hwdec.
++    av_dict_set(opts, "threads", hwAccel ? "1" : "auto", 0);
+     applyExperimentalCodecOptions(*decoder, opts);
+ 
+     ret = avcodec_open2(context.get(), decoder->get(), opts);
+--- a/src/plugins/multimedia/ffmpeg/qffmpeghwaccel_vaapi.cpp
++++ b/src/plugins/multimedia/ffmpeg/qffmpeghwaccel_vaapi.cpp
+@@ -16,6 +16,7 @@
+ #include <rhi/qrhi.h>
+ 
+ #include <qguiapplication.h>
++#include <atomic>
+ #include <qpa/qplatformnativeinterface.h>
+ 
+ #include <qopenglfunctions.h>
+@@ -232,20 +233,32 @@
+ 
+     VASurfaceID vaSurface = (uintptr_t)frame->data[3];
+ 
++    // Drivers export either one composed layer with a plane per component
++    // (Mesa) or one layer per plane (nvidia-vaapi-driver supports only
++    // VA_EXPORT_SURFACE_SEPARATE_LAYERS). Try composed first, then separate,
++    // and remember what worked.
+     VADRMPRIMESurfaceDescriptor prime = {};
+-    if (vaExportSurfaceHandle(vaDisplay, vaSurface,
+-                              VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2,
+-                              VA_EXPORT_SURFACE_READ_ONLY |
+-#ifdef VA_EXPORT_USE_LAYERS
+-                                  VA_EXPORT_SURFACE_SEPARATE_LAYERS,
+-#else
+-                                  VA_EXPORT_SURFACE_COMPOSED_LAYERS,
+-#endif
+-                              &prime) != VA_STATUS_SUCCESS)
+-    {
++    static std::atomic<int> exportMode{ 0 }; // 0 unknown, 1 composed, 2 separate
++    bool separateLayers = exportMode.load() == 2;
++    auto exportSurface = [&](bool separate) {
++        prime = {};
++        return vaExportSurfaceHandle(vaDisplay, vaSurface, VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2,
++                                     VA_EXPORT_SURFACE_READ_ONLY
++                                             | (separate ? VA_EXPORT_SURFACE_SEPARATE_LAYERS
++                                                         : VA_EXPORT_SURFACE_COMPOSED_LAYERS),
++                                     &prime)
++                == VA_STATUS_SUCCESS;
++    };
++    bool exported = exportSurface(separateLayers);
++    if (!exported && exportMode.load() == 0) {
++        separateLayers = !separateLayers;
++        exported = exportSurface(separateLayers);
++    }
++    if (!exported) {
+         qWarning() << "vaExportSurfaceHandle failed";
+         return nullptr;
+     }
++    exportMode.store(separateLayers ? 2 : 1);
+ 
+     // Make sure all fd's in 'prime' are closed when we return from this function
+     QScopeGuard closeObjectsGuard([&prime]() {
+@@ -280,28 +293,29 @@
+     nPlanes = desc->nplanes;
+ //        qCDebug(qLHWAccelVAAPI) << "VAAPIAccel: nPlanes" << nPlanes;
+ 
++    if (separateLayers) {
++        for (int i = 0; i < nPlanes; ++i) {
++            // Import each layer with the format the driver reports
++            // (nvidia-vaapi-driver says RG88/RG1616 for the chroma plane).
++            if (uint32_t(i) >= prime.num_layers || prime.layers[i].num_planes != 1) {
++                qWarning() << "VAAPI separate layers: unexpected layout for plane" << i;
++                return nullptr;
++            }
++        }
++    }
++
+     rhi->makeThreadLocalNativeContextCurrent();
+ 
+     EGLImage images[4];
+     GLuint glTextures[4] = {};
+     functions.glGenTextures(nPlanes, glTextures);
+     for (int i = 0;  i < nPlanes;  ++i) {
+-#ifdef VA_EXPORT_USE_LAYERS
+-#define LAYER i
+-#define PLANE 0
+-        if (prime.layers[i].drm_format != drm_formats[i]) {
+-            qWarning() << "expected DRM format check failed expected"
+-                       << Qt::hex << drm_formats[i] << "got" << prime.layers[i].drm_format;
+-        }
+-#else
+-#define LAYER 0
+-#define PLANE i
+-#endif
+-
++        const uint32_t LAYER = separateLayers ? i : 0;
++        const uint32_t PLANE = separateLayers ? 0 : i;
+         QSize planeSize = desc->rhiPlaneSize(QSize(frame->width, frame->height), i, rhi);
+         constexpr uint32_t maxAttrCount = 18;
+         EGLAttrib img_attr[maxAttrCount] = {
+-            EGL_LINUX_DRM_FOURCC_EXT,      (EGLint)drm_formats[i],
++            EGL_LINUX_DRM_FOURCC_EXT,      (EGLint)(separateLayers ? prime.layers[i].drm_format : drm_formats[i]),
+             EGL_WIDTH,                     planeSize.width(),
+             EGL_HEIGHT,                    planeSize.height(),
+             EGL_DMA_BUF_PLANE0_FD_EXT,     prime.objects[prime.layers[LAYER].object_index[PLANE]].fd,
