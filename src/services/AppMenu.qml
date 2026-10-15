@@ -51,7 +51,8 @@ Singleton {
             hideCommands: true, // Hide, Hide Others, Show All
             confirmQuit: true, // ask before quitting an app with several windows
             forceQuitDelay: 3, // seconds before SIGTERM if the app outlives its windows; 0 = never
-            symbols: true // ⌃⇧S instead of Ctrl+Shift+S
+            symbols: true, // ⌃⇧S instead of Ctrl+Shift+S
+            powerCountdown: true // system menu: Restart / Shut Down / Log Out go ahead after 60 s
         })
 
     function pref(key) {

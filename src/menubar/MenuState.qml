@@ -8,8 +8,9 @@ import qs.services
 // Which bar menu is open, the app menu's contents, and the window commands
 // behind it.
 //
-// Titles are numbered: 0 = the app menu (bold app name), 1… = the focused
-// app's global menus (AppMenu.titles). The open menu cascades: `path[i]` is
+// Titles are numbered: -3 = the system menu (the NixOS logo, like the Apple
+// menu), 0 = the app menu (bold app name), 1… = the focused app's global
+// menus (AppMenu.titles). The open menu cascades: `path[i]` is
 // the highlighted item key in panel i, and `depth` panels are shown.
 //
 // Items share one shape for both sources: { key, label, enabled, separator,
@@ -55,6 +56,11 @@ Singleton {
 
     readonly property bool appMenuOn: Features.on("appMenu")
     readonly property int firstTitle: appMenuOn ? 0 : 1
+    // The system menu's title index (before the app menu in the cycle).
+    readonly property int systemTitle: -3
+    readonly property bool systemMenuOn: Features.on("systemMenu")
+    // Seconds left on a confirmation that goes ahead by itself (Restart…).
+    property int askLeft: 0
     // Global titles that fit in each screen's bar (MenuBarTitles reports
     // them); the rest go under a "»" title right after.
     property var fits: ({})
@@ -86,7 +92,7 @@ Singleton {
 
     // ── Opening and closing ──────────────────────────────────────────────
     function openTitle(screenName, index) {
-        if (index < firstTitle || index >= titleCountOn(screenName))
+        if (index === systemTitle ? !systemMenuOn : index < firstTitle || index >= titleCountOn(screenName))
             return;
         context = null;
         if (!open)
@@ -171,7 +177,7 @@ Singleton {
         const l = (extraItems[screen] ?? []).filter(e => e.item && e.item.visible);
         const i = l.findIndex(e => e.id === extra);
         const j = i + delta;
-        if (j < 0 && titleCountOn(screen) > firstTitle) {
+        if (j < 0 && titleOrder(screen).length > 0) {
             // Left past the first status item: the last menu title.
             openTitle(screen, titleCountOn(screen) - 1);
             return;
@@ -211,20 +217,30 @@ Singleton {
         }
     }
 
+    // Title indices left to right: the system menu, then the app menu's.
+    function titleOrder(screenName) {
+        const l = systemMenuOn ? [systemTitle] : [];
+        for (let i = firstTitle; i < titleCountOn(screenName); i++)
+            l.push(i);
+        return l;
+    }
+
     function step(delta) {
         if (context)
             return;
-        const n = titleCountOn(screen) - firstTitle;
+        const order = titleOrder(screen);
+        const n = order.length;
+        const at = order.indexOf(current);
         // Right past the last title (or left past the first): status items.
         const extras = (extraItems[screen] ?? []).filter(e => e.item && e.item.visible);
-        if (extras.length > 0 && ((delta > 0 && current === titleCountOn(screen) - 1) || (delta < 0 && current === firstTitle))) {
+        if (extras.length > 0 && ((delta > 0 && at === n - 1) || (delta < 0 && at === 0))) {
             const e = delta > 0 ? extras[0] : extras[extras.length - 1];
             openExtra(screen, e.id, e.item, false);
             return;
         }
         if (n <= 1)
             return;
-        const next = firstTitle + ((current - firstTitle + delta) % n + n) % n;
+        const next = order[((at + delta) % n + n) % n];
         openTitle(screen, next);
         // Keyboard: highlight the first item.
         const items = itemsAt(0);
@@ -248,6 +264,7 @@ Singleton {
         Nav.item = null;
         pendingQuit = null;
         pendingAsk = null;
+        askLeft = 0;
         context = null;
         contextItems = [];
         altHeld = false;
@@ -283,10 +300,23 @@ Singleton {
             close();
         target = null;
         pendingAsk = spec;
+        askLeft = spec.countdown ?? 0;
         screen = screenName;
         mode = "confirm";
         depth = 0;
         open = true;
+    }
+
+    // A countdown confirmation (Restart…) goes ahead at zero, like macOS.
+    Timer {
+        interval: 1000
+        repeat: true
+        running: root.open && root.mode === "confirm" && root.askLeft > 0
+        onTriggered: {
+            root.askLeft -= 1;
+            if (root.askLeft <= 0)
+                root.confirmQuit();
+        }
     }
 
     function notifyOpened(index) {
@@ -309,6 +339,8 @@ Singleton {
     function topItems() {
         if (context)
             return contextItems;
+        if (current === systemTitle)
+            return systemItems();
         if (current === 0)
             return appItems(target);
         if (isOverflow(screen, current))
@@ -392,7 +424,7 @@ Singleton {
                 close();
             else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && mode === "confirm")
                 confirmQuit();
-            else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && mode === "about")
+            else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (mode === "about" || mode === "sysabout"))
                 close();
             return;
         }
@@ -566,6 +598,119 @@ Singleton {
             sep("s2"),
             { key: "show-all", label: "Show All", enabled: hidden.length > 0, run: () => root.showAll() }
         ];
+    }
+
+    // ── The system menu (the NixOS logo) ──────────────────────────────────
+    // Power and session commands go through Spotlight's own (the launcher's
+    // `commands` provider, launcher/elephant-commands): the same command
+    // lines, and in test sessions (loft-dev --session) only logged to
+    // <state>/launcher-dryrun.log. The menu asks first itself, so it uses
+    // the provider's "now" action (no Spotlight confirm step).
+    function systemCommand(id) {
+        Quickshell.execDetached(["elephant", "activate", `commands;cmd:${id};now;;`]);
+    }
+
+    function systemItems() {
+        const items = [];
+        items.push({ key: "sys-about", label: "About This Computer", enabled: true, run: () => root.showSystemAbout() });
+        items.push(sep("sys-s1"));
+        items.push({ key: "sys-settings", label: "System Settings…", enabled: true, shortcut: [["Super", ","]], run: () => Panels.settingsOpen = true });
+        if (Features.on("flakeUpdates"))
+            items.push({ key: "sys-updates", label: "Flake Updates…", enabled: true, run: () => Utilities.show("updates") });
+        const recent = AppUsage.recentApps(10, []).filter(a => Apps.own[a] === undefined && Apps.entry(a));
+        if (recent.length > 0) {
+            items.push(sep("sys-s2"));
+            items.push({
+                key: "sys-recent",
+                label: "Recent Items",
+                enabled: true,
+                submenu: true,
+                children: [{ key: "sys-recent-h", label: "Applications", header: true, enabled: false }].concat(recent.map(a => ({
+                                key: `sys-recent-${a}`,
+                                label: Apps.name(a),
+                                enabled: true,
+                                run: () => Apps.launch(a)
+                            })))
+            });
+        }
+        if (Features.on("systemMonitor")) {
+            items.push(sep("sys-s3"));
+            items.push({ key: "sys-forcequit", label: "Force Quit…", enabled: true, run: () => {
+                    SystemStats.monitorSection = "processes";
+                    SystemStats.monitorOpen = true;
+                } });
+        }
+        items.push(sep("sys-s4"));
+        items.push({ key: "sys-sleep", label: "Sleep", enabled: true, run: () => root.askSleep() });
+        items.push({ key: "sys-restart", label: "Restart…", enabled: true, run: () => root.askPower("restart") });
+        items.push({ key: "sys-shutdown", label: "Shut Down…", enabled: true, run: () => root.askPower("shutdown") });
+        items.push(sep("sys-s5"));
+        items.push({ key: "sys-lock", label: "Lock Screen", enabled: true, run: () => LockState.requestLock() });
+        items.push({ key: "sys-logout", label: SystemInfo.displayName ? `Log Out ${SystemInfo.displayName}…` : "Log Out…", enabled: true, run: () => root.askPower("logout") });
+        return items;
+    }
+
+    // The output the system menu / its dialogs belong on.
+    function systemScreen() {
+        return open && screen !== "" ? screen : (Niri.focusedWorkspace?.output ?? "");
+    }
+
+    // Restart / Shut Down / Log Out: the macOS dialog (countdown optional).
+    function askPower(id) {
+        const what = {
+            restart: { title: "Are you sure you want to restart your computer now?", button: "Restart", icon: "󰜉", later: "the computer will restart" },
+            shutdown: { title: "Are you sure you want to shut down your computer now?", button: "Shut Down", icon: "󰐥", later: "the computer will shut down" },
+            logout: { title: "Are you sure you want to quit all applications and log out now?", button: "Log Out", icon: "󰍃", later: "you will be logged out" }
+        }[id];
+        if (!what)
+            return;
+        const countdown = AppMenu.pref("powerCountdown") ? 60 : 0;
+        ask(systemScreen(), {
+            title: what.title,
+            text: "",
+            later: what.later,
+            button: what.button,
+            icon: what.icon,
+            countdown: countdown,
+            run: () => id === "logout" ? root.logOut() : root.systemCommand(id)
+        });
+    }
+
+    // Sleep doesn't ask on macOS; here only where it may not wake (NVIDIA).
+    function askSleep() {
+        if (!SystemInfo.nvidia) {
+            systemCommand("sleep");
+            return;
+        }
+        ask(systemScreen(), {
+            title: "Sleep now?",
+            text: "This computer has an NVIDIA GPU and may not wake from sleep.",
+            button: "Sleep",
+            icon: "󰒲",
+            run: () => root.systemCommand("sleep")
+        });
+    }
+
+    // Log Out: let the shell write what it has pending first (Scratchpad's
+    // debounced save; Settings write at once), then quit niri.
+    function logOut() {
+        Scratchpad.flush();
+        logOutLater.restart();
+    }
+
+    Timer {
+        id: logOutLater
+        interval: 400
+        onTriggered: root.systemCommand("logout")
+    }
+
+    function showSystemAbout() {
+        SystemInfo.refresh();
+        target = null;
+        screen = systemScreen();
+        mode = "sysabout";
+        depth = 0;
+        open = true;
     }
 
     function wsLabel(ws) {
@@ -819,6 +964,61 @@ Singleton {
         }
         function right(): void {
             root.key({ key: Qt.Key_Right, text: "" });
+        }
+        function enter(): void {
+            root.key({ key: Qt.Key_Return, text: "" });
+        }
+        function esc(): void {
+            root.key({ key: Qt.Key_Escape, text: "" });
+        }
+    }
+
+    // The system menu (the NixOS logo) on the focused output; its power
+    // dialogs straight away (a power key, tests).
+    IpcHandler {
+        target: "systemmenu"
+
+        function open(): void {
+            const out = Niri.focusedWorkspace?.output ?? "";
+            root.openTitle(out, root.systemTitle);
+        }
+        function close(): void {
+            root.close();
+        }
+        function toggle(): void {
+            if (root.open && root.current === root.systemTitle)
+                root.close();
+            else
+                open();
+        }
+        function about(): void {
+            root.showSystemAbout();
+        }
+        function restart(): void {
+            root.askPower("restart");
+        }
+        function shutdown(): void {
+            root.askPower("shutdown");
+        }
+        function logout(): void {
+            root.askPower("logout");
+        }
+        // The open confirmation: what Enter / the default button does.
+        function confirm(): void {
+            if (root.open && root.mode === "confirm")
+                root.confirmQuit();
+        }
+        function down(): void {
+            root.key({ key: Qt.Key_Down, text: "" });
+        }
+        function up(): void {
+            root.key({ key: Qt.Key_Up, text: "" });
+        }
+        function right(): void {
+            root.key({ key: Qt.Key_Right, text: "" });
+        }
+        function left(): void {
+            root.key({ key: Qt.Key_Left, text: "" });
         }
         function enter(): void {
             root.key({ key: Qt.Key_Return, text: "" });
