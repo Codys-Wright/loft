@@ -130,6 +130,9 @@
         export QT_PLUGIN_PATH="${qtMultimedia}/lib/qt-6/plugins''${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
         export QT_FFMPEG_DECODING_HW_DEVICE_TYPES="''${QT_FFMPEG_DECODING_HW_DEVICE_TYPES:-vaapi}"
         export LOFT_QT_VAAPI_ZERO_COPY=1
+        # nvidia-vaapi-driver-loft ahead of the system's drivers (libva takes
+        # the first match per name, so Mesa's still come from the system).
+        export LIBVA_DRIVERS_PATH="${self'.packages.nvidia-vaapi-driver-loft}/lib/dri:''${LIBVA_DRIVERS_PATH:-/run/opengl-driver/lib/dri}"
       '';
 
       python = pkgs.python3.withPackages (ps: [ ps.jsonschema ]);
@@ -227,6 +230,17 @@
         qtmultimedia-loft = pkgs.kdePackages.qtmultimedia.overrideAttrs (old: {
           pname = "qtmultimedia-loft";
           patches = (old.patches or [ ]) ++ [ ./qt/qtmultimedia-nvidia-vaapi.patch ];
+        });
+
+        # nvidia-vaapi-driver + nix/qt/nvidia-vaapi-driver-no-hang.patch, for
+        # the shell only (qtMultimediaEnv): a decoder torn down with frames
+        # still queued (a wallpaper player stopping) left them "resolving"
+        # forever, and exporting one on the GUI thread (vaExportSurfaceHandle
+        # → waitSurfaceResolved) froze the whole shell. The resolve thread now
+        # releases its queue on exit, and the wait gives up after 1 s.
+        nvidia-vaapi-driver-loft = pkgs.nvidia-vaapi-driver.overrideAttrs (old: {
+          pname = "nvidia-vaapi-driver-loft";
+          patches = (old.patches or [ ]) ++ [ ./qt/nvidia-vaapi-driver-no-hang.patch ];
         });
 
         niri-loft = pkgs.niri.overrideAttrs (old: {
