@@ -50,9 +50,19 @@ PanelWindow {
     readonly property bool hides: FullscreenChrome.barHidesOn(screenName)
     readonly property bool revealed: FullscreenChrome.revealedOn(screenName)
     readonly property bool concealed: FullscreenChrome.barConcealedOn(screenName)
-    // A bar menu (or a status item's panel) or the Control Center open here.
-    readonly property bool menuHere: (MenuState.open && MenuState.screen === screenName) || (Panels.controlCenterOpen && Panels.controlCenterScreen === screenName)
-    onMenuHereChanged: FullscreenChrome.setMenuOpen(screenName, menuHere)
+    // A bar menu (or a status item's panel), the Control Center or the Sound
+    // mixer open here.
+    readonly property bool menuHere: (MenuState.open && MenuState.screen === screenName) || (Panels.controlCenterOpen && Panels.controlCenterScreen === screenName) || (Sound.mixerOpen && Sound.mixerScreen === screenName)
+    onMenuHereChanged: {
+        FullscreenChrome.setMenuOpen(screenName, menuHere);
+        // A panel covered the bar (the Control Center and the menus take
+        // the whole screen for click-outside), so the bar lost the pointer;
+        // Qt only sees it again once it moves. Give it longer to move
+        // before the bar goes (closing by clicking the bar's own button
+        // leaves the pointer here, still).
+        if (!menuHere)
+            grace.afterMenu = true;
+    }
     Component.onCompleted: FullscreenChrome.setMenuOpen(screenName, menuHere)
     Component.onDestruction: {
         FullscreenChrome.setMenuOpen(screenName, false);
@@ -94,9 +104,13 @@ PanelWindow {
     // A short grace after leaving, so a dip below the bar doesn't drop it.
     Timer {
         id: grace
-        interval: 600
-        onTriggered: if (!root.keepRevealed)
-            FullscreenChrome.setRevealed(root.screenName, false)
+        property bool afterMenu: false
+        interval: afterMenu ? 1500 : 600
+        onTriggered: {
+            afterMenu = false;
+            if (!root.keepRevealed)
+                FullscreenChrome.setRevealed(root.screenName, false);
+        }
     }
 
     // Input: the whole bar, or while it's away only a 1 px strip at the top
@@ -115,9 +129,16 @@ PanelWindow {
             right: parent.right
         }
         height: root.concealed ? 1 : root.barHeight
+        // Above the bar's items: a hover-enabled MouseArea (the status
+        // items, the titles) takes hover from what's under it, and the bar
+        // would think the pointer left. A HoverHandler doesn't block, so
+        // they still get theirs.
+        z: 1
 
         HoverHandler {
             id: pointer
+            onHoveredChanged: if (hovered)
+                grace.afterMenu = false
         }
     }
 
@@ -155,6 +176,10 @@ PanelWindow {
         y: root.concealed && !Motion.reduce ? -root.barHeight : 0
         opacity: root.concealed && Motion.reduce ? 0 : 1
         visible: opacity > 0 && y > -root.barHeight
+        // The status items register what's visible for hover-switching
+        // between their panels (MenuState.extraItems): re-measure once shown.
+        onVisibleChanged: if (visible && statusRow.visible)
+            statusRow.measure()
 
         Behavior on y {
             enabled: !Motion.reduce
@@ -244,8 +269,14 @@ PanelWindow {
         StatusItems {
             id: statusRow
             // The bar is on every display; its status area only on the active one
-            // (main display, or the fallback while the main one is fullscreen).
-            visible: Displays.isActive(root.modelData)
+            // (main display, or the fallback while the main one is fullscreen),
+            // and on a display showing a fullscreen window, so the bar revealed
+            // there over the app (FullscreenChrome) is the whole menu bar. Its
+            // panels open from this copy, on this display (everything in it
+            // is keyed by screenName: overflow, extras, Control Center, mixer).
+            visible: Displays.isActive(root.modelData) || root.overApp
+            onVisibleChanged: if (visible)
+                measure()
             anchors {
                 right: parent.right
                 rightMargin: 10
