@@ -207,7 +207,7 @@ PanelWindow {
     // ── About / Quit cards ───────────────────────────────────────────────
     readonly property var w: MenuState.target
     readonly property var entry: w && Apps.own[w.app_id] === undefined ? Apps.entry(w.app_id) : null
-    readonly property var sysDetails: [["Host", SystemInfo.host], ["OS", SystemInfo.os], ["Version", SystemInfo.osVersion], ["Kernel", SystemInfo.kernel], ["Processor", SystemInfo.cpu + (SystemInfo.cores > 0 ? ` (${SystemInfo.cores} threads)` : "")], ["Graphics", SystemInfo.gpu], ["Memory", SystemInfo.memoryGiB > 0 ? `${Math.round(SystemInfo.memoryGiB)} GB` : ""], ["Uptime", SystemInfo.uptime > 0 ? SystemInfo.formatUptime(SystemInfo.uptime) : ""], ["User", SystemInfo.user]].filter(r => r[1] !== "")
+    readonly property var sysDetails: SystemInfo.details
     readonly property var details: root.sysAbout ? root.sysDetails : root.w ? [["Application ID", root.w.app_id ?? ""], ["Desktop entry", root.entry?.id ?? "none"], ["Process", String(root.w.pid ?? "?")], ["Command", root.entry?.execString ?? ""], ["Window", root.w.title ?? ""]].filter(r => r[1] !== "") : []
 
     GlassSurface {

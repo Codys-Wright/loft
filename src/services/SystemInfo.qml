@@ -27,6 +27,10 @@ Singleton {
 
     readonly property string displayName: fullName || user
 
+    // [[label, value]] for About This Computer and Settings → About
+    // (empty values left out).
+    readonly property var details: [["Host", host], ["OS", os], ["Version", osVersion], ["Kernel", kernel], ["Processor", cpu + (cores > 0 ? ` (${cores} threads)` : "")], ["Graphics", gpu], ["Memory", memoryGiB > 0 ? `${Math.round(memoryGiB)} GB` : ""], ["Uptime", uptime > 0 ? formatUptime(uptime) : ""], ["User", fullName && fullName !== user ? `${fullName} (${user})` : user]].filter(r => r[1] !== "")
+
     function refresh() {
         probe.running = true;
     }
