@@ -65,8 +65,17 @@ ${niri_xray_rules}${niri_focus_rules}${niri_animations}
 // (.nautilus-file-chooser, same app id). Add an app here only together with
 // its CSS: a blur rule alone does nothing, a transparent window alone shows
 // the desktop unblurred.
+//
+// Dolphin: Loft's Kvantum theme (qt unit, programs.loft.qt) draws its window
+// as the same glass (toolbar, Places, status bar; the file view opaque).
 window-rule {
     match app-id="^org\\.gnome\\.Nautilus$$"
+    background-effect {
+        blur true
+    }
+}
+window-rule {
+    match app-id="^org\\.kde\\.dolphin$$"
     background-effect {
         blur true
     }

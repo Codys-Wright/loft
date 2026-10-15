@@ -13,6 +13,7 @@ the same name.
     wallpapers  wallpapers.json        wallpapers colors                         wallpapers
     niri        niri.kdl               colors material shape motion              niri
     gtk         gtk.css                colors material shape                     gtk
+    qt          kde.colors kvantum.kvconfig kvantum.svg  colors material shape     qt
     kitty       kitty.conf             colors material typography                kitty
     ghostty     ghostty.conf           colors material typography                ghostty
     walker      walker.css             colors material launcher                  —
@@ -32,7 +33,7 @@ from pathlib import Path
 
 from ..facets.model import Catalog
 from ..facets.resolve import Resolved
-from . import compose, gtk, manifest, niri, noctalia, shell, spotify, terminal, walker, wallpapers
+from . import compose, gtk, manifest, niri, noctalia, qt, shell, spotify, terminal, walker, wallpapers
 from .spotify import spicetify_scheme  # noqa: F401  (tests, spotify tooling)
 from .unit import Source, Unit
 
@@ -42,6 +43,7 @@ UNITS: list[Unit] = [
     wallpapers.UNIT,
     niri.UNIT,
     gtk.UNIT,
+    qt.UNIT,
     terminal.KITTY,
     terminal.GHOSTTY,
     walker.UNIT,

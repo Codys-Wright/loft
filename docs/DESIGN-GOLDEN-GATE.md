@@ -95,6 +95,14 @@ values below are ours — tokens, so themes can tune them.
   gives windows no per-app class, so a generic transparent window would show
   the desktop unblurred in every app niri doesn't blur. A new glass app needs
   its window class in gtk.css and its app id in niri.kdl, together.
+- **Dolphin (Qt) glass** — `programs.loft.qt`: the `qt` unit renders a Kvantum
+  theme and a KDE color scheme from the palette; Kvantum paints the window as
+  the same glass tint (toolbar, Places panel and status bar sit on it), the
+  file view stays opaque, selections are accent-tint pills. niri.kdl blurs
+  `org.kde.dolphin`. Unlike Nautilus the toolbar spans the window (Dolphin's
+  layout), and there are no traffic lights: Qt apps draw no window buttons on
+  niri. Assigned to Dolphin only (Kvantum `[Applications]`, dolphinrc keys),
+  never as a global Qt style.
 - **GTK 4 base theme (optional)** — `programs.loft.gtkBase.{dark,light}`: a full
   libadwaita stylesheet (MacTahoe's `-l` CSS: Tahoe toolbars, pill buttons, Finder
   path bar) imported under the theme's gtk.css. The `gtk` hook links

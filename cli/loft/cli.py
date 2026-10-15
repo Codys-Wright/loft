@@ -1106,6 +1106,18 @@ def cmd_windows(ctx: Ctx, args) -> None:
     os.execv(exe, [exe, "--state-dir", str(ctx.state_dir), "windows", *(rest or ["list"])])
 
 
+def cmd_qt_sync(ctx: Ctx, args) -> None:
+    """`loft qt sync`: what the `qt` hook does (qtapps.py), on demand — the
+    home-manager activation runs it so Dolphin is themed before the first apply."""
+    from . import qtapps
+
+    if qtapps.settings() is None:
+        print(f"loft qt: off (no {qtapps.config_home() / 'loft' / 'qt.json'}; programs.loft.qt.enable)")
+        return
+    for note in qtapps.sync(ctx.state_dir):
+        print(note)
+
+
 def _migrate_args(s) -> None:
     s.add_argument("--apply", action="store_true", help="do it (default: a dry run that only reports)")
     s.add_argument("--json", action="store_true", help="the plan and summary as JSON")
@@ -1323,6 +1335,11 @@ def parser() -> argparse.ArgumentParser:
     )
     s.add_argument("rest", nargs=argparse.REMAINDER, help="loft-niri windows arguments")
     s.set_defaults(fn=cmd_windows)
+
+    s = top.add_parser("qt", help="Qt / KDE apps (Dolphin) in the Loft look (programs.loft.qt)")
+    qsub = s.add_subparsers(dest="cmd", required=True)
+    q = qsub.add_parser("sync", help="link the Kvantum theme + color scheme and write the apps' rc keys (the `qt` hook)")
+    q.set_defaults(fn=cmd_qt_sync)
 
     dock.add_parser(top, lambda ctx: ctx.state_dir)
     island.add_parser(top, lambda ctx: str(ctx.shell_path))
