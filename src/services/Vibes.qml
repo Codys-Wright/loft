@@ -376,9 +376,12 @@ Singleton {
     function focusFor(path, screenName) {
         const over = Settings.wallpaperFraming?.[path];
         if (over) {
+            // JsonAdapter hands JSON arrays over as sequences, not JS arrays
+            // (Array.isArray is false): check the shape, copy the numbers.
             for (const r of [...(roles[screenName] ?? []), "*"]) {
-                if (Array.isArray(over[r]) && over[r].length === 2)
-                    return over[r];
+                const f = over[r];
+                if (f && typeof f !== "string" && f.length === 2)
+                    return [Number(f[0]), Number(f[1])];
             }
         }
         return plan?.framing?.[path]?.focus ?? [0.5, 0.5];

@@ -1209,7 +1209,7 @@ def parser() -> argparse.ArgumentParser:
     lib = top.add_parser(
         "library",
         help="the theme + wallpaper library ($LOFT_LIBRARY, default ~/Documents/Loft)",
-        description="Packs/ and Wallpapers/Topics/<Topic>/ hold the files; sort generates symlink views "
+        description="Packs/, Wallpapers/Processed/<Topic>/ and Wallpapers/Unprocessed/<Topic>/ hold the files; sort generates symlink views "
         "in Wallpapers/Colors, Wallpapers/Tones and Wallpapers/Themes (and README.md).",
     )
     sub = lib.add_subparsers(dest="cmd", required=True)

@@ -148,9 +148,17 @@ class Framing(unittest.TestCase):
         self.assertEqual(wallsets.focus_for_roles(over, ["left", "portrait", "display-1"], auto), [0.4, 1.0])
         self.assertEqual(wallsets.focus_for_roles(over, ["main", "ultrawide"], auto), [0.5, 0.52])  # "*"
         self.assertEqual(wallsets.focus_for_roles({}, ["main"], auto), auto)
+        shell = wallsets.set_fit(shell, "/w/a.jpg", "native")
+        self.assertEqual(wallsets.focus_overrides(shell, "/w/a.jpg")["fit"], "native")
+        # "fit" is not a focus: a role named like it falls through to "*".
+        self.assertEqual(wallsets.focus_for_roles(wallsets.focus_overrides(shell, "/w/a.jpg"), ["fit"], auto), [0.5, 0.52])
         shell = wallsets.set_focus_override(shell, "/w/a.jpg", "portrait", None)
         shell = wallsets.set_focus_override(shell, "/w/a.jpg", "*", None)
-        self.assertEqual(shell["wallpaperFraming"], {})  # an image with none left drops out
+        self.assertEqual(shell["wallpaperFraming"], {"/w/a.jpg": {"fit": "native"}})
+        shell = wallsets.set_fit(shell, "/w/a.jpg", "cover")  # the default: no key
+        self.assertEqual(shell["wallpaperFraming"], {})  # an image with nothing left drops out
+        with self.assertRaises(ValueError):
+            wallsets.set_fit(shell, "/w/a.jpg", "stretch")
 
 
 class Plan(unittest.TestCase):

@@ -88,12 +88,12 @@ Item {
             return;
         flip = !flip;
         const layer = flip ? a : b;
-        layer.crop = Vibes.focusFor(path, screenName);
+        fitLayer(layer);
         layer.video = videoUrl(path);
         layer.source = source;
     }
     Component.onCompleted: {
-        a.crop = Vibes.focusFor(path, screenName);
+        fitLayer(a);
         a.video = videoUrl(path);
         a.source = source;
     }
@@ -118,7 +118,7 @@ Item {
     // new decode scale re-fits what is showing.
     function refit() {
         const cur = flip ? a : b;
-        cur.crop = Vibes.focusFor(path, screenName);
+        fitLayer(cur);
         const v = videoUrl(path);
         if (cur.video !== v)
             cur.video = v;
@@ -148,6 +148,10 @@ Item {
         readonly property real bytes: img.status === Image.Ready ? img.implicitWidth * img.implicitHeight * 4 : 0
         // The image point (0..1) to keep near the screen's center.
         property var crop: [0.5, 0.5]
+        // fit "native": the image's [w, h], drawn 1:1 (scaled up only to
+        // cover the screen); null = scaled to cover.
+        property var natural: null
+        readonly property real nativeScale: natural ? Math.max(1, root.width / natural[0], root.height / natural[1]) : 0
 
         anchors.fill: parent
         clip: true
@@ -160,18 +164,19 @@ Item {
         }
 
         // Decoded to cover the screen × decodeScale (PreserveAspectCrop
-        // scales to cover sourceSize, keeping the aspect) and drawn at screen
-        // size, shifted so the focus sits as close to the center as the
-        // image's edges allow.
+        // scales to cover sourceSize, keeping the aspect), or for fit
+        // "native" at its own size (× decodeScale), and drawn at that size,
+        // shifted so the focus sits as close to the center as the image's
+        // edges allow.
         Image {
             id: img
             readonly property real s: Math.max(0.05, root.decodeScale)
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             retainWhileLoading: true
-            sourceSize: Qt.size(Math.ceil(root.width * s), Math.ceil(root.height * s))
-            width: Math.max(implicitWidth / s, root.width)
-            height: Math.max(implicitHeight / s, root.height)
+            sourceSize: layer.natural ? Qt.size(Math.ceil(layer.natural[0] * layer.nativeScale * s), Math.ceil(layer.natural[1] * layer.nativeScale * s)) : Qt.size(Math.ceil(root.width * s), Math.ceil(root.height * s))
+            width: layer.natural ? layer.natural[0] * layer.nativeScale : Math.max(implicitWidth / s, root.width)
+            height: layer.natural ? layer.natural[1] * layer.nativeScale : Math.max(implicitHeight / s, root.height)
             smooth: true
             x: Math.min(0, Math.max(root.width - width, root.width / 2 - layer.crop[0] * width))
             y: Math.min(0, Math.max(root.height - height, root.height / 2 - layer.crop[1] * height))

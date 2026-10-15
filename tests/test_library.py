@@ -217,6 +217,27 @@ class Views(unittest.TestCase):
         rc, _, err = loft("library", "add", str(b), "--topic", "../escape")
         self.assertEqual(rc, 1)
 
+    def test_processed_and_unprocessed(self):
+        # The reorganized layout: Processed/ (finished) and Unprocessed/ (raw;
+        # Topics/ is its old name and is still read).
+        w = self.lib / "Wallpapers"
+        write(w / "Processed" / "Sea" / "Calm-bay-night-blue.png", make_png(8, 4, lambda x, y: BLUE))
+        write(w / "Processed" / "Sea" / "Calm-bay-night-blue.mp4", b"\x00")  # its video: not an image
+        write(w / "Unprocessed" / "Sea" / "raw.png", make_png(8, 8, lambda x, y: PINK))
+        lib = library.Library(self.lib)
+        self.assertEqual(lib.topics_dir, w / "Unprocessed")  # where `add` puts new images
+        items = {Path(i["path"]).name: i for i in lib.items()}
+        self.assertEqual(items["Calm-bay-night-blue.png"]["stage"], "processed")
+        self.assertEqual(items["Calm-bay-night-blue.png"]["label"], "Processed - Sea")
+        self.assertEqual(items["raw.png"]["stage"], "unprocessed")
+        self.assertEqual(items["raw.png"]["label"], "Sea")
+        self.assertNotIn("Calm-bay-night-blue.mp4", items)
+        self.assertIn("blue.png", items)  # legacy Topics/ still read
+        topics = lib.topics()
+        self.assertEqual(topics["Sea"][0].name, "Calm-bay-night-blue.png")  # processed first
+        self.sort()
+        self.assertIn("Wallpapers/Colors/Blue/Processed - Sea - Calm-bay-night-blue.png", self.links())
+
     def test_theme_path_install_and_vibes(self):
         rc, out, _ = loft("theme", "list")
         self.assertEqual(out.split(), ["forest", "latte", "pinky", "tokyonight"])
