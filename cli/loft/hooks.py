@@ -17,7 +17,7 @@ import signal
 import subprocess
 from pathlib import Path
 
-ALL = ("shell", "niri", "wallpapers", "kitty", "ghostty", "gtk", "spotify")
+ALL = ("shell", "niri", "wallpapers", "kitty", "ghostty", "gtk", "qt", "spotify")
 # Not a unit's reload hook: apply_resolved re-syncs the login screen when what
 # it shows changed (greeter.follow), if the machine opted in. Selected like one.
 EXTRA = ("greeter",)
@@ -98,6 +98,18 @@ def gtk(ctx) -> None:
     light = ctx.theme.get("polarity") == "light"
     _run(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", "prefer-light" if light else "prefer-dark"])
     link_gtk_base(ctx.state_dir, "light" if light else "dark")
+
+
+def qt(ctx) -> None:
+    # Loft's Kvantum theme + KDE color scheme for the apps programs.loft.qt
+    # lists (qtapps.py): links and targeted rc keys, a no-op without
+    # ~/.config/loft/qt.json. Running Qt apps pick it up when restarted.
+    from . import qtapps
+
+    try:
+        qtapps.sync(ctx.state_dir)
+    except OSError:
+        pass
 
 
 def spotify(ctx) -> None:

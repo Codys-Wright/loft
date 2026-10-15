@@ -188,7 +188,7 @@ class Apply(Env):
     def test_cache_and_hook_diffing(self):
         r = self.apply("theme", "apply", "tokyonight")
         self.assertEqual(r["rendered"], len(render.UNITS))
-        self.assertEqual(r["hooks"], ["shell", "niri", "wallpapers", "kitty", "ghostty", "gtk", "spotify"])
+        self.assertEqual(r["hooks"], ["shell", "niri", "wallpapers", "kitty", "ghostty", "gtk", "qt", "spotify"])
         cur = (self.state / "current").resolve()
         self.assertEqual(cur.parent, compose.compositions_root(self.state).resolve())
         self.assertTrue((self.state / "current" / "theme.json").is_symlink())
@@ -218,14 +218,14 @@ class Apply(Env):
         self.assertEqual((r["changed"], r["hooks"]), (["niri"], ["niri"]))
         self.assertIn("    gaps 8\n", (self.state / "current" / "niri.kdl").read_text())
 
-        # The glass slider: shell, GTK sidebars, walker — not niri, not the terminals.
+        # The glass slider: shell, GTK + Qt sidebars, walker — not niri, not the terminals.
         r = self.apply("material", "set", "glass.opacity", "0.3")
-        self.assertEqual(r["changed"], ["gtk", "shell", "walker"])
-        self.assertEqual(r["hooks"], ["shell", "gtk"])
+        self.assertEqual(r["changed"], ["gtk", "qt", "shell", "walker"])
+        self.assertEqual(r["hooks"], ["shell", "gtk", "qt"])
 
         # Blur off: terminals too (their opacity follows blur), and niri.
         r = self.apply("material", "set", "blur.enabled", "false")
-        self.assertEqual(r["changed"], ["ghostty", "gtk", "kitty", "niri", "shell"])
+        self.assertEqual(r["changed"], ["ghostty", "gtk", "kitty", "niri", "qt", "shell"])
 
         # A wallpaper arrangement: wallpapers.json alone — no terminal signal, no niri reload.
         r = self.apply("wallpapers", "set", "arrangement.auto", "true")

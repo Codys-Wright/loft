@@ -72,7 +72,9 @@
       # may bind wallpapers to workspaces (WorkspaceWallpapers.qml).
       ++ lib.optional workspaceLayers "LOFT_NIRI_WORKSPACE_LAYERS=1"
       # Feature defaults (Features.qml); Settings → Features still wins.
-      ++ lib.optional (featureDefaults != [ ]) "LOFT_FEATURE_DEFAULTS=${lib.concatStringsSep "," featureDefaults}";
+      ++ lib.optional (
+        featureDefaults != [ ]
+      ) "LOFT_FEATURE_DEFAULTS=${lib.concatStringsSep "," featureDefaults}";
 
       featureDefaults = cfg.features ++ lib.optional cfg.spaces.enable "spaces";
 
@@ -269,6 +271,40 @@
           '';
         };
 
+        qt = {
+          enable = lib.mkEnableOption ''
+            Qt / KDE apps (Dolphin) in the active theme's Golden Gate look:
+            the `qt` render unit's Kvantum theme "Loft" (glass window that niri
+            blurs, opaque file view, rounded selection pills) and KDE color
+            scheme "Loft". Scoped to the apps in `apps`: Kvantum gets them in
+            ~/.config/Kvantum/kvantum.kvconfig [Applications] (the global
+            `theme=` is untouched) and each app's own rc file gets
+            `[KDE] widgetStyle=kvantum` + `[UiSettings] ColorScheme=Loft`,
+            which KDE apps read only without a KDE platform theme, so Plasma
+            sessions and other Qt apps keep their look (cli/loft/qtapps.py).
+            Apps pick a theme change up when restarted'';
+          apps = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ "dolphin" ];
+            description = "KDE apps (binary names; their rc file is ~/.config/<name>rc) that get the Loft Kvantum theme and color scheme.";
+          };
+          dolphinDefaults = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = ''
+              Finder-like Dolphin defaults (16 px Places icons, icon-only
+              toolbar, locked panels), written into dolphinrc only where the
+              key is absent: anything set in Dolphin's own settings wins.
+            '';
+          };
+          kvantumPackage = lib.mkOption {
+            type = lib.types.package;
+            default = pkgs.kdePackages.qtstyleplugin-kvantum;
+            defaultText = lib.literalExpression "pkgs.kdePackages.qtstyleplugin-kvantum";
+            description = "The Qt 6 Kvantum style plugin, installed into the user profile (its lib/qt-6/plugins must be on QT_PLUGIN_PATH, as on NixOS).";
+          };
+        };
+
         gtkBase = {
           dark = lib.mkOption {
             type = lib.types.nullOr lib.types.path;
@@ -316,7 +352,7 @@
           documents = lib.mkOption {
             type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
             default = { };
-            example = lib.literalExpression ''{ music = lib.importJSON ./spaces/music.json; }'';
+            example = lib.literalExpression "{ music = lib.importJSON ./spaces/music.json; }";
             description = ''
               Space documents seeded into the library (`<library>/Spaces`)
               when they aren't there yet, never overwritten: edits made in
@@ -352,7 +388,8 @@
           sp.loft
           sp.loft-launcher
         ]
-        ++ lib.optional cfg.phone.enable cfg.phone.package;
+        ++ lib.optional cfg.phone.enable cfg.phone.package
+        ++ lib.optional cfg.qt.enable cfg.qt.kvantumPackage;
 
         # `loft` in terminals sees the same library as the shell.
         home.sessionVariables.LOFT_LIBRARY = library;
@@ -384,6 +421,23 @@
         xdg.configFile."loft/gtk-base-light.css" = lib.mkIf (cfg.gtk && cfg.gtkBase.light != null) {
           text = ''@import url("file://${cfg.gtkBase.light}");'';
         };
+        # Qt / KDE apps (programs.loft.qt): what the `qt` hook reads, and a
+        # first sync so the app is themed before the next `loft theme apply`.
+        xdg.configFile."loft/qt.json" = lib.mkIf cfg.qt.enable {
+          text = builtins.toJSON {
+            inherit (cfg.qt) apps dolphinDefaults;
+            iconTheme = cfg.iconTheme;
+          };
+        };
+        home.activation.loftQt = lib.mkIf cfg.qt.enable (
+          lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+            run env LOFT_STATE_DIR=${lib.escapeShellArg stateDir} \
+              XDG_CONFIG_HOME=${lib.escapeShellArg config.xdg.configHome} \
+              XDG_DATA_HOME=${lib.escapeShellArg config.xdg.dataHome} \
+              ${lib.getExe sp.loft} qt sync || true
+          ''
+        );
+
         # libadwaita reads the button layout from the settings portal (GNOME's
         # key) before settings.ini.
         dconf.settings = lib.mkIf cfg.gtk {

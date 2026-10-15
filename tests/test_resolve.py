@@ -75,6 +75,11 @@ NIRI_ADDED = (
     ),
     "        on\n        width 2\n",  # shape.focus "both" (the default): base.kdl's ring, explicit
     "    border {\n        off\n",  # shape.border off (the default, as base.kdl)
+    (  # Dolphin's glass (unit `qt`)
+        "//\n// Dolphin: Loft's Kvantum theme (qt unit, programs.loft.qt) draws its window\n"
+        "// as the same glass (toolbar, Places, status bar; the file view opaque).\n"
+    ),
+    'window-rule {\n    match app-id="^org\\\\.kde\\\\.dolphin$"\n    background-effect {\n        blur true\n    }\n}\n',
 )
 
 
@@ -84,6 +89,8 @@ def without_additions(d: Path, into: Path) -> Path:
     for p in [into, *into.rglob("*")]:  # the source may be read-only (the Nix store)
         p.chmod(0o755 if p.is_dir() else 0o644)
     (into / "wallpapers.json").unlink()
+    for f in ("kde.colors", "kvantum.kvconfig", "kvantum.svg"):  # unit `qt`
+        (into / f).unlink()
     t = json.loads((into / "theme.json").read_text())
     for k in ("motion", "type", "icons", "a11y", "windows"):
         t.pop(k)
