@@ -17,6 +17,7 @@ Singleton {
         { id: "calendar", label: "Calendar", icon: "󰃭", hint: "Today and tomorrow, with join buttons" },
         { id: "media", label: "Now Playing", icon: "󰎆", hint: "Art, transport and lyrics" },
         { id: "timers", label: "Timers", icon: "󰔛", hint: "Countdowns and stopwatches" },
+        { id: "scratchpad", label: "Scratchpad", icon: "\u{F09EE}", hint: "The current note: glance, add a line, open the window" },
         { id: "controls", label: "Controls", icon: "󰒓", hint: "Do Not Disturb, Keep Awake, microphones, recording" },
         { id: "system", label: "System", icon: "󰍛", hint: "Clock, CPU, GPU and memory" },
         { id: "usage", label: "Screen Time", icon: "󰄉", hint: "Today's top apps" },

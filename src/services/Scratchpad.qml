@@ -8,7 +8,8 @@ import Quickshell.Io
 // ({ notes: [{ id, title, text, updated }], current }). The window is
 // clipboard/ScratchpadWindow.qml; export writes <exportDir>/<title>.md.
 //
-// IPC: scratchpad toggle | open | close | newNote | exportNote
+// IPC: scratchpad toggle | open | close | newNote | exportNote | addLine TEXT |
+// text (the current note)
 Singleton {
     id: root
 
@@ -78,6 +79,15 @@ Singleton {
             }) : n), current);
     }
 
+    // The island's quick add: one line at the end of the current note.
+    function addLine(line) {
+        const t = (line ?? "").trim();
+        if (t === "" || !note)
+            return;
+        const cur = note.text ?? "";
+        setText(cur === "" || cur.endsWith("\n") ? cur + t : cur + "\n" + t);
+    }
+
     function select(i) {
         if (i >= 0 && i < notes.length)
             commit(notes, i);
@@ -142,6 +152,12 @@ Singleton {
         }
         function exportNote(): void {
             root.exportNote(null);
+        }
+        function addLine(text: string): void {
+            root.addLine(text);
+        }
+        function text(): string {
+            return root.note?.text ?? "";
         }
     }
 }
