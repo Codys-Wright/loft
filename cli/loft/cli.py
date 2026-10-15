@@ -45,7 +45,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import capture, cleaner, dock, hooks, importers, index, island, keys, library, media, ports, render, spotify, themecmds, updates, utilities, vibes, wallsets
+from . import capture, cleaner, dock, greeter, hooks, importers, index, island, keys, library, media, ports, render, spotify, themecmds, updates, utilities, vibes, wallsets
 from .facets import FacetError
 from .pack import IGNORED, Pack, PackError, is_any_pack, is_pack, is_pack_v2, pack_id, validate_v2
 
@@ -1135,6 +1135,14 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--mode", choices=["light", "dark", "auto"], help="pick the theme's variant for this appearance")
     s.add_argument("--reload", action="store_true", help="run every reload hook, changed or not")
     s.add_argument("-v", "--verbose", action="store_true", help="say what was rendered, what changed and which hooks ran")
+    s.add_argument(
+        "--greeter",
+        nargs="?",
+        const="",
+        metavar="REF",
+        help="also show the lock design on the login screen now (REF: same, builtin or a lock: ref; "
+        "default: the lock facet's `greeter`); without a theme, only that",
+    )
     s.set_defaults(fn=cmd_apply)
 
     s = sub.add_parser(
@@ -1300,6 +1308,8 @@ def parser() -> argparse.ArgumentParser:
     keys.add_parser(top, lambda ctx: ctx.state_dir)
     # Theme facets: loft colors|wallpapers|material|motion|… list/show/apply/set/reset/save-as.
     themecmds.add_kind_parsers(top)
+    # The login screen (SDDM) following the lock screen (PLAN §4.5).
+    greeter.add_parser(top)
     spotify.add_parser(top, _fail)
     return p
 
@@ -1316,7 +1326,7 @@ def main(argv: list[str] | None = None) -> int:
     except Fail as e:
         print(f"loft: {e}", file=sys.stderr)
         return 1
-    except (PackError, FacetError) as e:
+    except (PackError, FacetError, greeter.GreeterError) as e:
         print(f"loft: {e}", file=sys.stderr)
         return 1
     return 0

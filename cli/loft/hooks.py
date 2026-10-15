@@ -18,6 +18,9 @@ import subprocess
 from pathlib import Path
 
 ALL = ("shell", "niri", "wallpapers", "kitty", "ghostty", "gtk", "spotify")
+# Not a unit's reload hook: apply_resolved re-syncs the login screen when what
+# it shows changed (greeter.follow), if the machine opted in. Selected like one.
+EXTRA = ("greeter",)
 # `--dev` targets the nested session; terminals and GTK settings belong to
 # the host desktop, so leave them alone unless asked.
 DEV = ("shell", "niri", "wallpapers")
@@ -130,18 +133,19 @@ def link_gtk_base(state_dir: Path, polarity: str) -> None:
 
 def selected(spec: str | None, dev: bool) -> list[str]:
     if spec is None:
-        return list(DEV if dev else ALL)
+        return list(DEV if dev else ALL + EXTRA)
     if spec in ("", "none"):
         return []
     if spec == "all":
-        return list(ALL)
+        return list(ALL + EXTRA)
     names = [s.strip() for s in spec.split(",") if s.strip()]
-    unknown = [n for n in names if n not in ALL]
+    unknown = [n for n in names if n not in ALL + EXTRA]
     if unknown:
-        raise ValueError(f"unknown hook(s) {', '.join(unknown)} (known: {', '.join(ALL)})")
+        raise ValueError(f"unknown hook(s) {', '.join(unknown)} (known: {', '.join(ALL + EXTRA)})")
     return names
 
 
 def run(names: list[str], ctx) -> None:
     for n in names:
-        globals()[n](ctx)
+        if n not in EXTRA:  # run by apply_resolved, which has the resolved theme
+            globals()[n](ctx)

@@ -52,7 +52,7 @@ unchanged, and a design written against `lock` works in both hosts.
 | `screen` | object | Lock: the Quickshell screen (`name`, `width`, …). Greeter: `null`. |
 | `isGreeter` | bool | `true` under SDDM. |
 | `theme` | object | The active palette and glass tokens, the same names as the shell's `Theme` (`bg`, `text`, `accent`, `glassFill`, `radius`, `wallpaperGradient`, `fontUi`, `withAlpha()`, …). |
-| `wallpaper` | URL | Lock: what the desktop shows on this screen (the theme's chosen / rotated / per-workspace wallpaper). Greeter: `""`. |
+| `wallpaper` | URL | Lock: what the desktop shows on this screen (the theme's chosen / rotated / per-workspace wallpaper). Greeter: the synced `wallpaper.*` (the desktop wallpaper, for the built-in design), else `""`. |
 
 On success the host tears the screen down (lock) or starts the session
 (greeter); there is no "unlocked" animation hook yet.
@@ -120,5 +120,8 @@ Rectangle {
   it the greeter still works, with the built-in palette.
 - **Trust:** a design is QML running in the shell (lock) or greeter process.
   Install packs you trust. The greeter only reads packs from a root-owned
-  directory, which `loft theme apply --greeter` writes through its polkit
-  helper.
+  directory, which `loft greeter sync` (= `loft theme apply --greeter`) writes
+  through its polkit helper (`programs.loft.greeter`, nixosModules.default).
+  The greeter pack is `theme.json` + `greeter.json` (`main`: the design's
+  entry under `lock/`, `wallpaper`) + `lock/` + `wallpaper.*`; the greeter
+  gives `lock.wallpaper` that image.

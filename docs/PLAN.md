@@ -624,9 +624,23 @@ changes both the lock screen and the login screen with no rebuild.
 - **Pack contract:** SDDM's API subset (so qylock-style designs load) plus a
   loft-native `lock` object (`tryUnlock`, `failed`, `busy`, `showInput`,
   `theme`, …), so one design file works under both hosts.
-- **Not done yet:** swayidle wiring (documented in the README only), replacing
-  MacTahoe-Dark in the fleet's `sddm.nix`, `apply --greeter` + polkit helper,
-  and the greeter's `QML_XHR_ALLOW_FILE_READ=1` environment (fleet module).
+- **Greeter sync (2026-10-14, branch `greeter-sync`):** `nixosModules.default`
+  → `programs.loft.greeter.enable` sets SDDM's theme to `loft` (mkOverride
+  800, so it wins over a desktop module's mkOverride 900), the greeter
+  environment, qt5compat/qtmultimedia/qtsvg, `/var/lib/loft`, the
+  `loft-greeter-install` helper and a polkit rule (pkexec, active local
+  `wheel` users, no password; the pkexec setuid wrapper is enabled with
+  mkDefault). `loft greeter sync` / `loft theme apply --greeter [REF]` stage
+  the greeter pack as the user and stream it to the helper as a tar on stdin,
+  so root never reads the user's files; the helper only accepts regular
+  files/dirs named theme.json, greeter.json, wallpaper.*, lock/… under a size
+  cap. `greeter.json` names the design's entry (`main`), so qylock designs
+  (`lock/qylock/`) load as `lock/Main.qml`; verified rendering in
+  `greeter-preview` (qylock-wuwa with its video background, and the built-in
+  design over the desktop wallpaper). `followLock`: `loft theme apply`
+  re-syncs in the background when the greeter's key changes.
+- **Not done yet:** swayidle wiring (documented in the README only) and
+  enabling `programs.loft.greeter` in the fleet (dropping MacTahoe-Dark).
 
 **Known issues:**
 - Quickshell 0.3.2 can't hot-reload while locked. `WlSessionLock`'s reload
