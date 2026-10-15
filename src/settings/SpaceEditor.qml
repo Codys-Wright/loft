@@ -275,7 +275,15 @@ ColumnLayout {
         }
     }
     readonly property var extras: Array.isArray(doc.menubar?.extras) ? doc.menubar.extras : null
-    readonly property var barItems: Controls.controls.filter(c => c.bar && c.id !== "controlcenter" && Controls.available(c.id) && Controls.onBar(c.id))
+    // What's on the menu bar now: the readouts, then the status items.
+    readonly property var barItems: Array.from(Settings.system.readouts).map(k => ({
+                id: `readout.${k}`,
+                label: Controls.readoutLabels[k] ?? k
+            })).concat(Controls.controls.filter(c => c.bar && c.id !== "controlcenter" && Controls.available(c.id) && Controls.onBar(c.id)))
+    function extraOn(id) {
+        const l = extras ?? [];
+        return l.includes(id) || (id.startsWith("readout.") && l.includes(id.slice(8)));
+    }
     SettingsRow {
         label: "Only some status items"
         hint: ed.extras === null ? "Every status item you have on the menu bar" : "The ones picked below (Control Center always stays)"
@@ -294,9 +302,10 @@ ColumnLayout {
             delegate: Chip {
                 required property var modelData
                 text: modelData.label
-                selected: (ed.extras ?? []).includes(modelData.id)
+                selected: ed.extraOn(modelData.id)
                 onClicked: {
-                    const l = (ed.extras ?? []).filter(x => x !== modelData.id);
+                    const short = modelData.id.startsWith("readout.") ? modelData.id.slice(8) : "";
+                    const l = (ed.extras ?? []).filter(x => x !== modelData.id && x !== short);
                     if (!selected)
                         l.push(modelData.id);
                     ed.patch({ menubar: { extras: l } });

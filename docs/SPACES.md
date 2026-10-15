@@ -1,8 +1,10 @@
 # Spaces: functional desktops across every display
 
-Status: **P0–P4 implemented** (test infra, spikes, model, roles, `spaces.kdl` render,
-activation, spin-up / restore in `loft-niri space …`, and the shell); P5–P8 are spec.
-See §10 for the status and §3.4 for what the spikes measured. It is designed together with
+Status: **P0–P4 and P6 implemented** (test infra, spikes, model, roles, `spaces.kdl`
+render, activation, spin-up / restore in `loft-niri space …`, the shell, and creating /
+editing spaces in Settings → Spaces); P5, P7 are spec, and P8 (the fleet switch-over) is
+ready on Loft's side (`programs.loft.spaces.enable`, §8.1). See §10 for the status and
+§3.4 for what the spikes measured. It is designed together with
 [THEME-ARCHITECTURE.md](THEME-ARCHITECTURE.md), which defines how a space can carry a
 theme or its own wallpapers, and it reuses the display-role model of the `wallsets`
 branch. Names are the Loft names (`loft`, `loft-niri`, `~/.local/state/loft`).
@@ -54,7 +56,7 @@ and Gaming.
   },
   "dock": { "pinned": ["REAPER", "org.rncbc.qpwgraph", "kitty"], "mode": "replace" },
   "focus": { "dnd": true, "allow": ["Slack"] },
-  "menubar": { "extras": ["clock", "sound", "cpu", "cpuTemp"] },
+  "menubar": { "extras": ["clock", "sound", "readout.cpu", "readout.cpuTemp"] },
   "theme": null,
   "facets": { "motion": "motion:minimal" },
   "wallpapers": { "main": "~/Documents/Loft/Wallpapers/Topics/Studio/console.jpg" },
@@ -386,7 +388,7 @@ explicit `open`.
 |---|---|---|
 | `dock` | `{pinned: [...], mode: "replace" \| "prepend" \| "append", visible: "show" \| "autohide" \| "hidden", displays: {role: …}}` | `Dock.qml` reads `Spaces.active.dock` over `Settings.dock` (per-display behavior arrives with the per-display dock work in FEATURES.md) |
 | `bar` | `{hidden: false}` | `Bar.qml` hides on the space's displays (replaces the fleet's `niri-workspace-wallpaper` hiding the bar on `gaming`) |
-| `menubar` | `{extras: [ids]}`, a subset of the enabled extras | `MenuBar` filters its status items |
+| `menubar` | `{extras: [ids]}`, a subset of the enabled extras (status item ids, readouts as `readout.<key>`; a bare `cpu` also matches `readout.cpu`) | `MenuBar` filters its status items |
 | `focus` | `{dnd: bool, allow: [app names]}` | `Notifications.qml` DND with an allow list, restored on leave |
 | `theme` | `null` (inherit the global theme) or `{theme: "loft@light", scope: "desktop" \| "all"}` | `appearance.json` `space` (THEME-ARCHITECTURE §3.4: the space selects the theme, customizations of that theme still apply) |
 | `facets` | facet selections per kind (`{"motion": "motion:minimal"}`) | the space layer in THEME-ARCHITECTURE §3.4 |
@@ -484,6 +486,24 @@ binding: workspace / keep / apps), apps per display (app picker + match + width)
 Menu Bar, Focus, Theme (Inherit · a theme or variant · scope), Wallpapers per display.
 Templates have a Parameters tab. "Duplicate as Template…" turns a space into a
 template.
+
+**Implemented (P6):** the page lists the spaces in ⌘N order with ↑ / ↓ to reorder (not
+drag), **New Space** (name + an icon picker: Nerd Font glyphs, emoji, or anything
+typed), **New Project** (one button per template, with its string / folder / URL / enum
+parameters), and **New Space from Current Desktop** (`loft-niri space capture`: each
+display's active workspace and its windows, in column order with their widths snapped
+to ⅓ / ½ / ⅔, `exec` from the process's command line with Nix store paths made
+portable; empty displays are `keep`, Loft's own windows are left out). **Edit** opens
+the editor (`src/settings/SpaceEditor.qml`): name, icon, per display role Keep /
+Workspace (with an optional custom name) and "Add a display role…", Dock (Dock's /
+Space's / Before / After + the pinned apps, visibility), Menu Bar (hide it, a subset of
+the status items and readouts), Focus (Do Not Disturb + the apps allowed through),
+"Start its apps" (first switch / at login / only on Open), Archive (instances; restored
+from the Archived card) and Delete with a confirmation. Every change is a JSON merge
+patch through `loft-niri space patch`, validated against the whole library first (an
+instance's patch goes into its `overrides`), then `spaces.kdl` is re-rendered. Not in
+the page yet: apps per display (picker + match + width; edit the JSON), Theme and
+Wallpapers (P5), a live display diagram, "Duplicate as Template…".
 
 ## 7. Storage
 
@@ -589,6 +609,79 @@ The migration is a manual, reviewed change in `~/.flake` (`loft space import-nir
 <config.kdl>` prints proposed space JSON plus a diff of the fleet files; it never
 edits them).
 
+### 8.1 Switching Cody's fleet over (P8)
+
+What Loft provides (`nix/modules/home.nix`):
+
+- `programs.loft.spaces.enable = true` turns the `spaces` feature on by default
+  (`$LOFT_FEATURE_DEFAULTS`; a choice in Settings → Features still wins), includes
+  `<state>/overrides/spaces.kdl` in `~/.config/loft/niri.kdl` (after the theme, before
+  the runtime overrides, exactly once), and adds a `spawn-at-startup` there that runs
+  `loft-niri space render` (writes / refreshes `spaces.kdl`, validated against the whole
+  niri config, then reloads niri) and `loft-niri space startup` (opens the `startup:
+  "login"` spaces, without switching to them).
+- `programs.loft.spaces.documents.<name> = lib.importJSON ./music.json;` optionally
+  seeds library documents (never overwritten). Without it, the first edit in Settings →
+  Spaces copies the built-ins into `~/Documents/Loft/Spaces`.
+- `programs.loft.features = [ "spaces" "-island" ]` sets any feature default.
+
+niri accepts a workspace declared twice (it makes **two** workspaces) and lets the later
+of two identical binds win, so nothing errors if a step is missed — it just behaves
+wrong. Do all three in one change:
+
+1. `hosts/THEBATTLESHIP/cody-desktop.nix`, inside `programs.loft = { … };`:
+
+   ```nix
+   spaces.enable = true;
+   ```
+
+2. `modules/desktop/environment/niri/_config/binds.kdl`: delete the workspace number
+   binds, lines 65–74 and 76–85 (the generated binds are Mod+1…9 / Mod+Shift+1…9 by
+   space position — Main, Music, Video, Communication, Gaming, Task, then projects — plus
+   Mod+Ctrl+← / →, Mod+Page_Up / Page_Down and Mod+Alt+Page_Up / Page_Down; Mod+0 has no
+   space and becomes free):
+
+   ```kdl
+       Mod+1 { focus-workspace "main"; }
+       Mod+2 { focus-workspace "code"; }
+       Mod+3 { focus-workspace "music"; }
+       Mod+4 { focus-workspace "gaming"; }
+       Mod+5 { focus-workspace "comms"; }
+       Mod+6 { focus-workspace "media"; }
+       Mod+7 { focus-workspace "notes"; }
+       Mod+8 { focus-workspace "research"; }
+       Mod+9 { focus-workspace "recording"; }
+       Mod+0 { focus-workspace "setup"; }
+
+       Mod+Shift+1 { move-column-to-workspace "main"; }
+       Mod+Shift+2 { move-column-to-workspace "code"; }
+       Mod+Shift+3 { move-column-to-workspace "music"; }
+       Mod+Shift+4 { move-column-to-workspace "gaming"; }
+       Mod+Shift+5 { move-column-to-workspace "comms"; }
+       Mod+Shift+6 { move-column-to-workspace "media"; }
+       Mod+Shift+7 { move-column-to-workspace "notes"; }
+       Mod+Shift+8 { move-column-to-workspace "research"; }
+       Mod+Shift+9 { move-column-to-workspace "recording"; }
+       Mod+Shift+0 { move-column-to-workspace "setup"; }
+   ```
+
+   Keep `Mod+N` / `Mod+P` (focus-workspace-down / up), `Mod+Ctrl+WheelScroll*` and the
+   `Mod+Alt+H/J/K/L` monitor moves: nothing generated uses them.
+
+3. `modules/desktop/environment/niri/_config/workspaces.kdl`: delete the `workspace`
+   blocks the spaces now declare in `spaces.kdl` (on the display their role resolves
+   to): **`main`, `music`, `gaming`** (Gaming's `layout { struts top 0, focus-ring off,
+   border off }` is in its space), **`stream`, `recording`, `setup`, `comms`, `media`,
+   `notes`, `research`**. Keep **`code`** and **`lab`** (utility workspaces no space owns,
+   Q-S2). The spaces add `video`, `task`, `comms/main` and `music/right`.
+
+Nothing else in the fleet changes: `rules.kdl` targets the same workspace names,
+`startup.kdl` stays, and `niri-workspace-wallpaper` only runs under Noctalia. After the
+switch: Mod+2 is Music (was `code`), `code` is reached from the bar's unowned dots or
+Mod+N / Mod+P, and the shell's bar shows the space indicator. To back out, set
+`spaces.enable = false` and restore the two files (`spaces.kdl` is then no longer
+included).
+
 ## 9. CLI
 
 ```sh
@@ -607,7 +700,19 @@ loft-niri space next | prev | order | list [--archived] | render [--dry-run] [--
 loft-niri space plan <id|n> [--move-window] [--from-file STATE.json]   # the action list, not sent
 loft-niri space open <id> [--no-focus] [--timeout S] | close | gather | apps <id>   # §4 (P3)
 loft-niri space startup                                # open the `startup: "login"` spaces
+loft-niri space seed                                   # copy the built-ins into the library (once)
+loft-niri space save <JSON|-> [--replace]             # create a space / an instance (validated)
+loft-niri space patch <id> <JSON merge patch>          # edit (instances: into `overrides`)
+loft-niri space delete <id> | reorder <id>…            # the library keeps ≥ 1 singleton
+loft-niri space capture --name N [--icon I] [--id ID] [--save]   # New Space from Current Desktop
 ```
+
+The `loft space …` Python commands above (and the Spotlight provider) are not written
+yet; Settings → Spaces and the shell use `loft-niri` directly. Writes refuse any change
+that adds a problem to the library (unknown role, a workspace another space owns, a
+missing template parameter, a bad id) and write nothing then; the first write that
+touches a built-in singleton copies the built-in set into the library (§7: the
+library's singletons replace the built-ins as a set).
 
 ## 10. Implementation plan
 
@@ -692,6 +797,26 @@ loft-niri space startup                                # open the `startup: "log
   would need roles in `space list`); the fold "+1" badge (§3.3); after a replug,
   `ensure` puts workspaces back but the returning display shows its first workspace,
   not the active space's (re-activating would warp the pointer; left to the user).
+- **P6 done** (branch `spaces-p6`): `spaces/edit.rs` (`save` / `patch` / `delete` /
+  `reorder` / `seed`, each validated by loading the library with the change overlaid,
+  `Catalog::load_overlay`; `capture` for New Space from Current Desktop), the `loft-niri
+  space save|patch|delete|reorder|seed|capture` commands, `space list --json` with the
+  live layout's roles and the templates' parameters, and Settings → Spaces as in §6.4.
+  Tested headless (3 outputs): create, New Project, icon, reorder (seeds the built-ins),
+  dock / bar / menu bar / Focus edits on an instance (into `overrides`), activation
+  applying them (bar hidden, dock auto-hidden), capture of foot windows.
+- **Not done in P6:** the Python `loft space …` CLI and the Spotlight provider (§6.3),
+  the bar pill's New / Edit / Close menu (§6.1), editing apps per display in the page,
+  drag to reorder, "Duplicate as Template…".
+- **P5 not done.** The resolver has the `space` layer (`facets/resolve.py` `layers(…,
+  space)`), but nothing feeds it: `active()` / `theme apply` / `appearance.json` have no
+  `space` selection, the renderer has no notion of a consumer scope (`desktop` vs `all`:
+  terminals and GTK must not follow by default, §5.1), and there's no pre-render on save.
+  Calling `loft theme apply` on activation instead would change the *global* selection
+  and recolor every terminal, which §5.1 and §12.7 rule out. `Spaces.applyTheme()` stays
+  the hook.
+- **P8 ready on Loft's side:** `programs.loft.spaces.enable` (§8.1); the fleet edit is
+  Cody's to review.
 - **Decisions taken while implementing** (each noted where it applies): `target` vs
   `focus`, `layout` on the binding, binds by id, `space order` after render, Comms' id
   is `comms` (file `comms.json`, name "Communication").

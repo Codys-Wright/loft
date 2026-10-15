@@ -1181,8 +1181,30 @@ fn space_cmd(
                 !flags.no_reload,
             )?;
             let path = live::spaces_kdl(&paths.state);
-            // Workspaces a reload declares land in reverse order; fix it.
+            // Workspaces a reload declares land in reverse order; fix it,
+            // once niri has applied the reload (LoadConfigFile returns
+            // before the new workspaces exist).
             if written && !flags.no_reload && loft_niri::ipc::available() {
+                let declared: Vec<String> = text
+                    .lines()
+                    .filter_map(|l| l.strip_prefix("workspace \""))
+                    .filter_map(|l| l.split('"').next())
+                    .map(str::to_lowercase)
+                    .collect();
+                for _ in 0..40 {
+                    let have: Vec<String> = live::read_state(main.clone())
+                        .map(|st| {
+                            st.workspaces
+                                .iter()
+                                .filter_map(|w| w.name.as_deref().map(str::to_lowercase))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    if declared.iter().all(|d| have.contains(d)) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
                 let order = cat.active();
                 live::run(main.clone(), |st| plan::order_all(st, &order))?;
             }
