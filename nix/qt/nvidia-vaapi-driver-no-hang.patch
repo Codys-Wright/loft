@@ -1,0 +1,66 @@
+--- a/src/vabackend.c
++++ b/src/vabackend.c
+@@ -5,6 +5,8 @@
+ #include "kernels.h"
+ 
+ #include <assert.h>
++#include <errno.h>
++#include <time.h>
+ #include <stdio.h>
+ #include <stdint.h>
+ #include <stdlib.h>
+@@ -658,6 +660,17 @@
+         CHECK_CUDA_RESULT(cv->cuvidUnmapVideoFrame(ctx->decoder, deviceMemory));
+     }
+ out:
++    // Surfaces still queued will never be resolved now: release their waiters.
++    pthread_mutex_lock(&ctx->resolveMutex);
++    while (ctx->surfaceQueueReadIdx != ctx->surfaceQueueWriteIdx) {
++        NVSurface *pending = ctx->surfaceQueue[ctx->surfaceQueueReadIdx++];
++        if (ctx->surfaceQueueReadIdx >= SURFACE_QUEUE_SIZE) {
++            ctx->surfaceQueueReadIdx = 0;
++        }
++        setSurfaceResolving(pending, false);
++    }
++    pthread_mutex_unlock(&ctx->resolveMutex);
++
+     //release the decoder here to prevent multiple threads attempting it
+     if (ctx->decoder != NULL) {
+         CUresult result = cv->cuvidDestroyDecoder(ctx->decoder);
+@@ -1515,9 +1528,22 @@
+         return;
+     }
+ 
++    // Bounded: a surface whose resolve never comes (its context's resolve
++    // thread exited with it still queued, or BeginPicture without EndPicture)
++    // would otherwise block the caller forever — a GUI thread exporting a
++    // frame hangs the whole app. After the deadline the stale flag is cleared
++    // and the caller gets whatever the surface holds.
++    struct timespec deadline;
++    clock_gettime(CLOCK_REALTIME, &deadline);
++    deadline.tv_sec += 1;
++
+     pthread_mutex_lock(&surface->mutex);
+     while (surface->resolving) {
+-        pthread_cond_wait(&surface->cond, &surface->mutex);
++        if (pthread_cond_timedwait(&surface->cond, &surface->mutex, &deadline) == ETIMEDOUT) {
++            LOG("Surface %p never resolved, giving up", surface);
++            surface->resolving = 0;
++            break;
++        }
+     }
+     pthread_mutex_unlock(&surface->mutex);
+ 
+@@ -1528,7 +1554,11 @@
+ 
+     pthread_mutex_lock(&img->mutex);
+     while (img->resolving) {
+-        pthread_cond_wait(&img->cond, &img->mutex);
++        if (pthread_cond_timedwait(&img->cond, &img->mutex, &deadline) == ETIMEDOUT) {
++            LOG("Backing image %p never resolved, giving up", img);
++            img->resolving = false;
++            break;
++        }
+     }
+     pthread_mutex_unlock(&img->mutex);
+ }
