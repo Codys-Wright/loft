@@ -1093,17 +1093,27 @@ def run_dev(args: list[str]) -> int:
     return 1  # exec only returns by failing
 
 
-def cmd_windows(ctx: Ctx, args) -> None:
-    """`loft windows …` = `loft-niri windows …` (Settings → Window Rules):
-    translucent windows and per-app window rules. With --dev, the session's
-    state dir and niri config (load_dev_env set them)."""
+def _exec_loft_niri(ctx: Ctx, args, prefix: list[str], default: list[str]) -> None:
     exe = shutil.which("loft-niri")
     if not exe:
         raise Fail("loft-niri is not on PATH")
     rest = list(args.rest or [])
     if rest[:1] == ["--"]:
         rest = rest[1:]
-    os.execv(exe, [exe, "--state-dir", str(ctx.state_dir), "windows", *(rest or ["list"])])
+    os.execv(exe, [exe, "--state-dir", str(ctx.state_dir), *prefix, *(rest or default)])
+
+
+def cmd_windows(ctx: Ctx, args) -> None:
+    """`loft windows …` = `loft-niri windows …` (Settings → Window Rules):
+    translucent windows and per-app window rules. With --dev, the session's
+    state dir and niri config (load_dev_env set them)."""
+    _exec_loft_niri(ctx, args, ["windows"], ["list"])
+
+
+def cmd_niri(ctx: Ctx, args) -> None:
+    """`loft niri …` = `loft-niri …`: the niri settings Loft manages
+    (keys, show, set, unset, binds, outputs, render, reset, space …)."""
+    _exec_loft_niri(ctx, args, [], ["--help"])
 
 
 def cmd_qt_sync(ctx: Ctx, args) -> None:
@@ -1336,6 +1346,15 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("rest", nargs=argparse.REMAINDER, help="loft-niri windows arguments")
     s.set_defaults(fn=cmd_windows)
 
+    s = top.add_parser(
+        "niri",
+        help="the niri settings Loft manages (= loft-niri …): keys, show, set, unset, binds, outputs",
+        description="Everything after `niri` goes to loft-niri (`loft niri --help`).",
+        add_help=False,
+    )
+    s.add_argument("rest", nargs=argparse.REMAINDER, help="loft-niri arguments")
+    s.set_defaults(fn=cmd_niri)
+
     s = top.add_parser("qt", help="Qt / KDE apps (Dolphin) in the Loft look (programs.loft.qt)")
     qsub = s.add_subparsers(dest="cmd", required=True)
     q = qsub.add_parser("sync", help="link the Kvantum theme + color scheme and write the apps' rc keys (the `qt` hook)")
@@ -1366,14 +1385,15 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["dev"]:
         return run_dev(argv[1:])
-    # `loft [--dev] windows …`: everything after `windows` goes to loft-niri
+    # `loft [--dev] windows|niri …`: everything after it goes to loft-niri
     # (argparse would claim its options, e.g. --json).
     w = 1 if argv[:1] == ["--dev"] else 0
-    if argv[w : w + 1] == ["windows"] and not {"-h", "--help"} & set(argv[w + 1 : w + 2]):
+    forward = {"windows": cmd_windows, "niri": cmd_niri}.get(argv[w] if len(argv) > w else "")
+    if forward and (forward is cmd_niri or not {"-h", "--help"} & set(argv[w + 1 : w + 2])):
         try:
             if w:
                 load_dev_env()
-            cmd_windows(Ctx(bool(w)), argparse.Namespace(rest=argv[w + 1 :]))
+            forward(Ctx(bool(w)), argparse.Namespace(rest=argv[w + 1 :]))
         except Fail as e:
             print(f"loft: {e}", file=sys.stderr)
             return 1
