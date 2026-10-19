@@ -41,6 +41,18 @@ Singleton {
         return String(name ?? "").trim().toLowerCase();
     }
 
+    // Where the bar puts the workspace switcher: "left" (after the app
+    // menu, which moves it as the menus change), "island" (just right of the
+    // Dynamic Island, a fixed spot; default) or "right" (before the status
+    // items).
+    readonly property string position: ["left", "island", "right"].includes(Settings.menubar.workspacesPosition) ? Settings.menubar.workspacesPosition : "island"
+
+    function setPosition(p) {
+        const m = Object.assign({}, Settings.menubar);
+        m.workspacesPosition = p;
+        Settings.menubar = m;
+    }
+
     function setEnabled(on) {
         const m = Object.assign({}, Settings.menubar);
         m.workspaceIcons = on;

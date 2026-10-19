@@ -236,7 +236,14 @@ PanelWindow {
             }
         }
 
-        // ── Left: OS mark, app, workspaces ──────────────────────────────────
+        // Half the island's slot (≤ 300 px compact + 7 px shoulders each side
+        // when attached), or a small gap without the island.
+        readonly property int islandHalf: Features.on("island") ? 160 : 12
+        readonly property string wsPosition: WorkspaceIcons.position
+        // Room the switcher takes from the half it sits in.
+        readonly property int wsRoom: workspaces.visible ? workspaces.implicitWidth + 16 : 0
+
+        // ── Left: OS mark, app ──────────────────────────────────────────────
         RowLayout {
             id: left
             anchors {
@@ -252,17 +259,27 @@ PanelWindow {
                 window: root
                 screenName: root.modelData.name
                 barHeight: root.barHeight
-                // Up to the island (centred, ≤ 300 px compact + 7 px shoulders each
-                // side when attached), past the workspaces.
-                maxWidth: root.width / 2 - (Features.on("island") ? 160 : 12) - 14 - left.spacing - workspaces.implicitWidth
+                // Up to the island, past the workspaces when they follow it.
+                maxWidth: root.width / 2 - face.islandHalf - 14 - (face.wsPosition === "left" ? left.spacing + workspaces.implicitWidth : 0)
             }
+        }
 
-            // The space indicator (spaces on) or the workspace dots.
-            Workspaces {
-                id: workspaces
-                visible: workspaces.implicitWidth > 0
-                output: root.modelData.name
-                window: root
+        // The space indicator (spaces on) or the workspaces: after the app
+        // menu, right of the island, or before the status items
+        // (Settings → Menu Bar → Workspace Icons).
+        Workspaces {
+            id: workspaces
+            visible: workspaces.implicitWidth > 0
+            output: root.modelData.name
+            window: root
+            width: implicitWidth
+            anchors.verticalCenter: parent.verticalCenter
+            x: {
+                if (face.wsPosition === "left")
+                    return left.x + left.width + left.spacing;
+                if (face.wsPosition === "right")
+                    return (statusRow.visible ? statusRow.x - 16 : parent.width - 10) - width;
+                return parent.width / 2 + face.islandHalf + 14;
             }
         }
 
@@ -285,9 +302,8 @@ PanelWindow {
             }
             window: root
             screenName: root.modelData.name
-            // Up to the island (centred, ≤ 300 px compact + 7 px shoulders each
-            // side when attached).
-            maxWidth: root.width / 2 - (Features.on("island") ? 160 : 12) - 10
+            // Up to the island, or to the workspaces when they're on this side.
+            maxWidth: root.width / 2 - face.islandHalf - 10 - (face.wsPosition === "left" ? 0 : face.wsRoom)
         }
     }
 
