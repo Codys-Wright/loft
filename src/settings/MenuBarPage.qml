@@ -86,6 +86,20 @@ ColumnLayout {
             }
         }
 
+        SettingsRow {
+            label: "Position"
+            hint: WorkspaceIcons.position === "left" ? "After the app's menus: moves when they change" : WorkspaceIcons.position === "right" ? "Before the status icons" : "Just right of the Dynamic Island: always in the same spot"
+            SettingsSegmented {
+                options: [
+                    { value: "left", label: "After menus" },
+                    { value: "island", label: "Beside island" },
+                    { value: "right", label: "Right" }
+                ]
+                current: WorkspaceIcons.position
+                onActivated: v => WorkspaceIcons.setPosition(v)
+            }
+        }
+
         Text {
             visible: WorkspaceIcons.enabled && wsCard.rows.length === 0
             Layout.fillWidth: true
