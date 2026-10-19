@@ -193,6 +193,11 @@
           touch $out
         '';
 
+        workspace-icons = check "workspace-icons" [ pkgs.nodejs-slim ] ''
+          node ${../tests/wsicons.test.js} ${../src/services/wsicons.js}
+          touch $out
+        '';
+
         workspace-wallpapers = check "workspace-wallpapers" [ pkgs.nodejs-slim ] ''
           node ${../tests/wswallpapers.test.js} ${../src/services/wswallpapers.js}
           touch $out

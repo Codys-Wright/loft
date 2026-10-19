@@ -69,6 +69,7 @@ programs.loft = {
   niriPackage = inputs.loft.packages.${system}.niri-loft;  # per-workspace wallpapers
   theme = "default";                    # first theme; the user's choice later wins
   features = [ "spaces" "-island" ];    # defaults for Settings → Features
+  workspaceIcons = { music = "󰝚"; scratch = ""; };  # bar icons per workspace name ("" = a dot)
   idle.lockAfter = 300; idle.screenOffAfter = 600;   # null = never
   qt.enable = true;                     # Dolphin etc. in the Loft look
   phone.enable = true;                  # iPhone via tether
@@ -78,6 +79,15 @@ programs.loft = {
 
 Read the module for the full list and descriptions. Runtime choices (Settings,
 CLI) override Nix defaults where both exist.
+
+**Workspace icons** (the bar's per-workspace cells, Spaces off): a named niri
+workspace shows an icon guessed from its name (`src/services/wsicons.js`:
+music, code, notes, comms, gaming …). To set one: Settings → Menu Bar →
+Workspace Icons → Change (Nerd Font glyph or emoji; Reset returns to the
+default), or by default for every machine with `programs.loft.workspaceIcons`.
+Settings choices live in `$LOFT_STATE_DIR/overrides/shell.json` →
+`menubar.workspaceIconMap` (lowercase name → icon) and win over Nix;
+`menubar.workspaceIcons: false` turns them off (plain dots).
 
 ## Window rules
 

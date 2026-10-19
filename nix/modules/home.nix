@@ -74,7 +74,13 @@
       # Feature defaults (Features.qml); Settings → Features still wins.
       ++ lib.optional (
         featureDefaults != [ ]
-      ) "LOFT_FEATURE_DEFAULTS=${lib.concatStringsSep "," featureDefaults}";
+      ) "LOFT_FEATURE_DEFAULTS=${lib.concatStringsSep "," featureDefaults}"
+      # Workspace icon defaults (WorkspaceIcons.qml); Settings → Menu Bar wins.
+      ++ lib.optional (cfg.workspaceIcons != { }) "LOFT_WORKSPACE_ICONS=${workspaceIconsFile}";
+
+      workspaceIconsFile = pkgs.writeText "loft-workspace-icons.json" (
+        builtins.toJSON cfg.workspaceIcons
+      );
 
       featureDefaults = cfg.features ++ lib.optional cfg.spaces.enable "spaces";
 
@@ -380,6 +386,23 @@
             Defaults for the shell's optional modules (Settings → Features,
             ids in src/services/Features.qml): an id turns it on, `-id` off.
             A choice made in Settings → Features still wins.
+          '';
+        };
+
+        workspaceIcons = lib.mkOption {
+          type = lib.types.attrsOf lib.types.str;
+          default = { };
+          example = {
+            music = "󰝚";
+            comms = "💬";
+            scratch = "";
+          };
+          description = ''
+            Icons for named niri workspaces in the menu bar (without Spaces),
+            by workspace name (case-insensitive): a Nerd Font glyph or an
+            emoji; "" = no icon (a dot). They replace the built-in guesses
+            (src/services/wsicons.js); a choice made in Settings → Menu Bar →
+            Workspace Icons still wins.
           '';
         };
 

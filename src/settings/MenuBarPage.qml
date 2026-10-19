@@ -1,10 +1,12 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.components
 import qs.services
 
 // Settings → Menu Bar: the status items (MenuBarArrange), the app menu
 // (click the app name / Mod+F10) and the global menu (the focused app's
-// File / Edit / View … in the bar).
+// File / Edit / View … in the bar), and the workspace icons
+// (WorkspaceIcons).
 ColumnLayout {
     id: page
     spacing: 12
@@ -35,6 +37,133 @@ ColumnLayout {
             SettingsSwitch {
                 checked: AppMenu.pref("revealAtTop")
                 onToggled: on => AppMenu.setPref("revealAtTop", on)
+            }
+        }
+    }
+
+    // ── Workspace icons ─────────────────────────────────────────────────
+    SettingsCard {
+        id: wsCard
+
+        // The named workspaces: live ones (one row per name, with the
+        // displays they're on), then names with a choice that aren't open.
+        readonly property var rows: {
+            const out = [];
+            const byKey = {};
+            for (const w of Niri.workspaces) {
+                if (!w.name || w.name.startsWith("hidden-"))
+                    continue;
+                const k = WorkspaceIcons.key(w.name);
+                if (!byKey[k]) {
+                    byKey[k] = { name: w.name, outputs: [], live: true };
+                    out.push(byKey[k]);
+                }
+                if (w.output && !byKey[k].outputs.includes(w.output))
+                    byKey[k].outputs.push(w.output);
+            }
+            for (const k of Object.keys(WorkspaceIcons.user))
+                if (!byKey[k])
+                    out.push({ name: k, outputs: [], live: false });
+            return out;
+        }
+        property string editing: ""
+
+        function where(output) {
+            const s = Displays.screens.find(x => x.name === output);
+            return s ? DockData.displayLabel(s) : output;
+        }
+
+        PageHeader {
+            title: "Workspace Icons"
+        }
+
+        SettingsRow {
+            label: "Show workspace icons"
+            hint: Features.on("spaces") ? "Spaces is on: the bar shows your spaces and their icons instead" : WorkspaceIcons.enabled ? "Named workspaces show an icon instead of a dot; the one each display is on is named next to them" : "Every workspace is a dot"
+            SettingsSwitch {
+                checked: WorkspaceIcons.enabled
+                onToggled: on => WorkspaceIcons.setEnabled(on)
+            }
+        }
+
+        Text {
+            visible: WorkspaceIcons.enabled && wsCard.rows.length === 0
+            Layout.fillWidth: true
+            text: "No named workspaces. Name them in your niri config (workspace \"music\" { … }) and they show up here."
+            color: Theme.subtext
+            font.family: Theme.fontUi
+            font.pixelSize: 11
+            wrapMode: Text.Wrap
+        }
+
+        Repeater {
+            model: WorkspaceIcons.enabled ? wsCard.rows : []
+
+            delegate: ColumnLayout {
+                id: wsRow
+                required property var modelData
+                readonly property string name: modelData.name
+                readonly property string icon: WorkspaceIcons.iconFor(name)
+                readonly property bool custom: WorkspaceIcons.isCustom(name)
+                readonly property bool open: wsCard.editing === WorkspaceIcons.key(name)
+                Layout.fillWidth: true
+                spacing: 8
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    Rectangle {
+                        implicitWidth: 30
+                        implicitHeight: 30
+                        radius: 7
+                        color: Theme.withAlpha(Theme.text, 0.07)
+                        Icon {
+                            anchors.centerIn: parent
+                            text: wsRow.icon || "󰧞"
+                            size: wsRow.icon ? 16 : 10
+                            color: wsRow.icon ? Theme.text : Theme.subtext
+                        }
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+                        Text {
+                            text: wsRow.name
+                            color: Theme.text
+                            font.family: Theme.fontUi
+                            font.pixelSize: 13
+                            font.weight: Font.Medium
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: [wsRow.modelData.live ? wsRow.modelData.outputs.map(o => wsCard.where(o)).join(", ") : "not open now", wsRow.custom ? (wsRow.icon ? "your choice" : "no icon (a dot)") : wsRow.icon ? "default" : "no default icon"].filter(t => t).join("  ·  ")
+                            color: Theme.subtext
+                            font.family: Theme.fontUi
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
+                        }
+                    }
+                    SettingsButton {
+                        visible: wsRow.custom
+                        text: "Reset"
+                        icon: "󰑓"
+                        onClicked: WorkspaceIcons.reset(wsRow.name)
+                    }
+                    SettingsButton {
+                        text: wsRow.open ? "Done" : "Change"
+                        primary: wsRow.open
+                        onClicked: wsCard.editing = wsRow.open ? "" : WorkspaceIcons.key(wsRow.name)
+                    }
+                }
+
+                SpaceIconPicker {
+                    visible: wsRow.open
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 40
+                    current: wsRow.icon
+                    onPicked: icon => WorkspaceIcons.set(wsRow.name, icon)
+                }
             }
         }
     }

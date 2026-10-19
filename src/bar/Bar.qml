@@ -129,17 +129,18 @@ PanelWindow {
             right: parent.right
         }
         height: root.concealed ? 1 : root.barHeight
-        // Above the bar's items: a hover-enabled MouseArea (the status
-        // items, the titles) takes hover from what's under it, and the bar
-        // would think the pointer left. A HoverHandler doesn't block, so
-        // they still get theirs.
-        z: 1
+    }
 
-        HoverHandler {
-            id: pointer
-            onHoveredChanged: if (hovered)
-                grace.afterMenu = false
-        }
+    // Is the pointer on the bar (inside the input mask)? On the window's
+    // content item, the ancestor of every bar item: it stays hovered over
+    // the status items, titles and workspace cells, and they still get
+    // their own hover. (On an item stacked above them, it took the hover
+    // from every MouseArea under it: no hover highlights, no space or
+    // workspace names on hover.)
+    HoverHandler {
+        id: pointer
+        onHoveredChanged: if (hovered)
+            grace.afterMenu = false
     }
 
     // This output's bar colors (per-output components use the same calls).
