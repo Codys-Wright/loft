@@ -14,8 +14,18 @@ import qs.services
 // windows, a ghost when empty, faint when the space doesn't use this
 // display. The sliding "pacman" sits on what this display shows. Hover a
 // dot to see its name in the pill; click it to activate the space.
-// Without spaces (feature off, none defined) it is today's per-workspace
-// dots. Design from javiiervm/dotfiles; data from niri.
+// Without spaces (feature off, none defined) it is one cell per workspace:
+//
+//   [ 󰝚 music ]  󰋜 󰅩 (󰝚) 󰊗   ·  ·
+//     ▲ this display's workspace   ▲ unnamed workspaces keep their dots
+//
+// A named workspace shows its icon (WorkspaceIcons: Settings → Menu Bar →
+// Workspace Icons, the Nix default, or a guess from the name), dim when
+// empty, with an urgent badge; the pacman wears the active one's icon, and
+// the pill names it on every display, as wide as this display's longest
+// name so the cells never move (hover a cell to see its name; click the
+// pill for the overview). Icons off: plain dots, no pill. Design from
+// javiiervm/dotfiles; data from niri.
 Item {
     id: root
 
@@ -30,6 +40,15 @@ Item {
     readonly property bool isMain: Displays.mainScreen?.name === output
     readonly property var workspaces: Niri.workspacesOn(output)
     readonly property var activeWs: workspaces.find(w => w.is_active) ?? null
+
+    // Workspace icons (spaces off): a named workspace's glyph, "" = a dot.
+    readonly property bool iconsOn: !spacesOn && WorkspaceIcons.enabled
+    function wsIcon(w) {
+        return iconsOn && w ? WorkspaceIcons.iconFor(w.name) : "";
+    }
+    // The pill only appears once this display has a named workspace.
+    readonly property bool wsPill: iconsOn && workspaces.some(w => !!w.name)
+    readonly property bool pillOn: spacesOn || wsPill
 
     // The cells, in order: { kind: "space" | "ws" | "divider", space, ws }.
     readonly property var cells: {
@@ -73,24 +92,43 @@ Item {
         return x;
     }
 
-    // Hovering a dot previews its space in the pill.
+    // Hovering a dot previews its space (or workspace) in the pill.
     property string hoverId: ""
     readonly property var shown: Spaces.find(hoverId) ?? Spaces.active
+    property int hoverWsId: -1
+    readonly property var shownWs: workspaces.find(w => w.id === hoverWsId) ?? activeWs
+    readonly property bool hovering: hoverId !== "" || hoverWsId >= 0
 
-    implicitWidth: (spacesOn ? pill.width + 10 : 0) + dots.implicitWidth
+    // What the pill shows: the space, or this display's workspace (its
+    // name, or its number when it has none).
+    readonly property string pillIcon: spacesOn ? (shown?.icon || "󰕰") : wsIcon(shownWs)
+    readonly property string pillText: spacesOn ? (shown?.name ?? "Spaces") : shownWs ? (shownWs.name || `${shownWs.idx}`) : ""
+
+    // The widest workspace label on this display.
+    readonly property real wsLabelWidth: wsPill ? Math.max(...workspaces.map(w => labelMetrics.advanceWidth(w.name || `${w.idx}`)), 0) : 0
+    FontMetrics {
+        id: labelMetrics
+        font.family: Theme.fontUi
+        font.pixelSize: 13
+        font.weight: Font.DemiBold
+    }
+
+    implicitWidth: (pillOn ? pill.width + 10 : 0) + dots.implicitWidth
     implicitHeight: cell
 
     // ── The active space ────────────────────────────────────────────────
     Rectangle {
         id: pill
-        visible: root.spacesOn
+        visible: root.pillOn
         anchors.verticalCenter: parent.verticalCenter
         height: root.cell
-        width: label.implicitWidth + 18
+        // Workspaces: fixed for this display's names (no shifting cells
+        // while switching or hovering); spaces: the label's width.
+        width: root.spacesOn ? label.implicitWidth + 18 : 18 + 16 + 6 + root.wsLabelWidth
         radius: height / 2
-        color: pillMouse.pressed ? Theme.withAlpha(root.fg, 0.22) : pillMouse.containsMouse || Spaces.switcherOutput === root.output ? Theme.withAlpha(root.fg, 0.14) : "transparent"
+        color: pillMouse.pressed ? Theme.withAlpha(root.fg, 0.22) : pillMouse.containsMouse || (root.spacesOn && Spaces.switcherOutput === root.output) ? Theme.withAlpha(root.fg, 0.14) : "transparent"
         border.width: 1
-        border.color: Theme.withAlpha(root.fg, root.hoverId ? 0.35 : 0.22)
+        border.color: Theme.withAlpha(root.fg, root.hovering ? 0.35 : 0.22)
 
         Behavior on width {
             NumberAnimation {
@@ -110,16 +148,19 @@ Item {
             spacing: 6
 
             Icon {
+                visible: text !== ""
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.shown?.icon || "󰕰"
+                text: root.pillIcon
                 size: 14
                 color: root.fg
             }
             Text {
-                visible: root.isMain || root.hoverId !== ""
+                // Workspaces: always named; spaces: the main display, or
+                // while hovering.
+                visible: !root.spacesOn || root.isMain || root.hovering
                 anchors.verticalCenter: parent.verticalCenter
                 // No space yet (an unowned workspace since login): "Spaces".
-                text: root.shown?.name ?? "Spaces"
+                text: root.pillText
                 color: root.fg
                 font.family: Theme.fontUi
                 font.pixelSize: 13
@@ -132,7 +173,7 @@ Item {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: Spaces.toggleSwitcher(root.output)
+            onClicked: root.spacesOn ? Spaces.toggleSwitcher(root.output) : Niri.toggleOverview()
         }
     }
 
@@ -140,8 +181,8 @@ Item {
     Item {
         id: dots
         anchors {
-            left: root.spacesOn ? pill.right : parent.left
-            leftMargin: root.spacesOn ? 10 : 0
+            left: root.pillOn ? pill.right : parent.left
+            leftMargin: root.pillOn ? 10 : 0
             verticalCenter: parent.verticalCenter
         }
         implicitWidth: row.implicitWidth
@@ -168,6 +209,8 @@ Item {
                     readonly property bool occupied: mine.some(w => Niri.windowsOn(w.id).length > 0)
                     readonly property bool urgent: mine.some(w => w.is_urgent)
                     readonly property bool here: mine.length > 0
+                    // A named workspace's icon ("" = the dot glyphs).
+                    readonly property string glyph: !isSpace && modelData.ws ? root.wsIcon(modelData.ws) : ""
 
                     width: root.cellWidth(modelData)
                     height: root.cell
@@ -206,9 +249,32 @@ Item {
                     Icon {
                         visible: !dot.isDivider
                         anchors.centerIn: parent
-                        text: dot.urgent ? "󰀦" : dot.occupied ? "󰧞" : "󰊠"
+                        text: dot.glyph || (dot.urgent ? "󰀦" : dot.occupied ? "󰧞" : "󰊠")
                         color: dot.urgent ? Theme.urgent : root.sub
-                        size: 15
+                        // An icon is dim while its workspace is empty.
+                        opacity: dot.glyph && !dot.occupied && !dot.urgent ? 0.45 : 1
+                        size: dot.glyph ? 14 : 15
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 200
+                            }
+                        }
+                    }
+
+                    // Urgent badge on an icon.
+                    Rectangle {
+                        visible: dot.glyph !== "" && dot.urgent
+                        anchors {
+                            top: parent.top
+                            right: parent.right
+                            topMargin: 2
+                            rightMargin: 2
+                        }
+                        width: 6
+                        height: 6
+                        radius: 3
+                        color: Theme.urgent
                     }
 
                     MouseArea {
@@ -218,8 +284,15 @@ Item {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onContainsMouseChanged: {
-                            if (!dot.isSpace)
+                            if (!dot.isSpace) {
+                                if (!root.wsPill || !dot.modelData.ws)
+                                    return;
+                                if (containsMouse)
+                                    root.hoverWsId = dot.modelData.ws.id;
+                                else if (root.hoverWsId === dot.modelData.ws.id)
+                                    root.hoverWsId = -1;
                                 return;
+                            }
                             if (containsMouse)
                                 root.hoverId = dot.modelData.space.id;
                             else if (root.hoverId === dot.modelData.space.id)
@@ -254,7 +327,8 @@ Item {
 
             Icon {
                 anchors.centerIn: parent
-                text: "󰮯"
+                // The active workspace's icon, or the pacman.
+                text: root.wsIcon(root.activeWs) || "󰮯"
                 color: Theme.barOnTextFor(root.output)
                 size: 15
             }
