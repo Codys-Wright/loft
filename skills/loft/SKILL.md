@@ -185,6 +185,44 @@ niri msg action move-window-to-workspace --window-id ID --focus false code
 niri msg action move-window-to-monitor --id ID DP-4
 ```
 
+## `loft mcp` — the desktop as MCP tools for an agent
+
+`loft mcp` is a Model Context Protocol server on stdin/stdout (JSON-RPC 2.0,
+one message per line, protocol `2025-06-18`). An agent that runs elsewhere
+(Hermes) reaches it over SSH: a forced-command launcher on the desktop machine
+exports the user's session environment (`systemctl --user show-environment`:
+`WAYLAND_DISPLAY`, `DISPLAY`, `NIRI_SOCKET`, `XDG_RUNTIME_DIR`,
+`DBUS_SESSION_BUS_ADDRESS`) and execs `loft mcp`. Without `NIRI_SOCKET` /
+`WAYLAND_DISPLAY` every desktop tool answers `isError` with the reason. Logs
+(one line per call) go to stderr. `loft mcp --list-tools` prints the list.
+
+| Tool | Does |
+|---|---|
+| `list_windows` (`app_id`?) · `focused_window` | id, app_id, title, workspace, output, focused, floating, size, column/row, `rect` (floating only: niri has no position for tiled windows) |
+| `list_workspaces` · `list_outputs` | workspaces per output (idx, name, active, window count); displays (connector, identity, mode, logical rect, scale) |
+| `focus_window` · `close_window` · `center_window` | by window id (close = the app's close request, not a kill) |
+| `move_window_to_workspace` (`workspace` index or name, `focus`?) · `move_window_to_monitor` | |
+| `set_window_floating` (bool) · `fullscreen_window` · `maximize_window` · `maximize_column` | the last three toggle |
+| `set_column_width` (`proportion` 0.1–1) | focuses the window, then sets its column |
+| `focus_workspace` · `focus_output` · `toggle_overview` (`state` toggle/open/close) | |
+| `launch` (`command` argv) · `spotlight_open` | `niri msg action spawn --` in the session |
+| `screenshot_output` (`output`?, `max_width`) · `screenshot_window` (`id`, `max_width`) | PNG image content (default ≤ 1920 px wide) + JSON with the logical region; a tiled or hidden window is rendered by niri (window-local image; clipboard text is put back) |
+| `loft_windows_list` · `loft_windows_rule` (`app_id`, `fields`) | `loft windows …` (fields as in the table above; `null` drops one) |
+| `loft_theme_list` · `loft_theme_apply` (`name`, `mode`?) | `loft theme …` |
+| `loft_appearance_get` · `loft_appearance_set` (transparency, blur, terminals, gtk) | `loft appearance …` |
+| `loft_niri_show` · `loft_niri_keys` · `loft_niri_set` (`key`, `value`) | `loft niri …` (set renders + reloads) |
+| `shell_ipc_list` · `shell_ipc_call` (`target`, `function`, `args`) | the shell's Quickshell IPC (island, controlcenter, settings, mixer, monitor, wallpaper, timers …), only what `SHELL_ALLOW` in `cli/loft/mcptools.py` lists; arguments are checked against `quickshell ipc show` |
+
+Not exposed on purpose: power, log out, lock, killing processes, the phone,
+the clipboard, capture / recording / camera, live audio routing, and `enter`
+in the bar menus. To add a shell function, add it to `SHELL_ALLOW` (the unit
+test checks it exists in `src/`).
+
+Testing: `tests/test_mcp.py` runs in `nix flake check` (framing, validation,
+fake niri). Against a test session, never the live desktop:
+`python3 tests/mcp_session.py NAME -- $(nix build --no-link --print-out-paths .#loft)/bin/loft`
+runs `LOFT_SESSION=NAME loft --dev mcp` and exercises the tools.
+
 ## Trying it in a test session
 
 ```sh
