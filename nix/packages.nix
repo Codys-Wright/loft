@@ -428,7 +428,9 @@
                   pkgs.niri
                   pkgs.git
                   pkgs.ffmpeg-headless
-                  pkgs.imagemagick # loft media convert / watermark
+                  pkgs.imagemagick # loft media convert / watermark; `loft mcp` downscales screenshots
+                  pkgs.grim # `loft mcp`: screenshot_output / screenshot_window
+                  pkgs.wl-clipboard # `loft mcp`: keeps the clipboard text across niri's window render
                 ]
               }
           '';
