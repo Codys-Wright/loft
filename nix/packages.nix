@@ -307,27 +307,27 @@
               (builtins.readFile ./dev/loft-dev.sh);
         };
 
-        # The keyboard layer (keyboard/keys.nix): Esc / Caps tap = Escape,
-        # hold = the window-manager key; Super = Cmd for apps. Needs read
-        # access to /dev/input and /dev/uinput (the input + uinput groups).
-        loft-keys =
-          let
-            keys = import ../keyboard/keys.nix { inherit lib; };
-            config = name: cfg: pkgs.writeText name (builtins.toJSON cfg);
-          in
-          pkgs.writeShellApplication {
-            name = "loft-keys";
-            text = ''
-              if [ "''${1:-}" = "--dual-role-only" ]; then
-                exec ${pkgs.xremap}/bin/xremap --watch=device --mouse ${
-                  config "keys-dual.json" (keys {
-                    appKeys = false;
-                  })
-                }
-              fi
-              exec ${pkgs.xremap.niri}/bin/xremap --watch=device --mouse ${config "keys.json" (keys { })}
-            '';
-          };
+        # The keyboard layer by hand (programs.loft.keyboard runs it as a
+        # service): `loft keys xremap` renders Loft's keymap (cli/loft/keys.py)
+        # and xremap follows it. `--dual-role-only`: just Esc / Caps tap =
+        # Escape, hold = the window-manager key — what a nested dev session
+        # wants, since inside another desktop xremap can't tell which app is
+        # focused. Needs read access to /dev/input and /dev/uinput (the input
+        # + uinput groups).
+        loft-keys = pkgs.writeShellApplication {
+          name = "loft-keys";
+          text = ''
+            loft=${lib.getExe self'.packages.loft}
+            if [ "''${1:-}" = "--dual-role-only" ]; then
+              cfg="''${XDG_RUNTIME_DIR:-/tmp}/loft-keys-dual.json"
+              "$loft" keys render --group dual-role --out "$cfg"
+              exec ${pkgs.xremap}/bin/xremap --watch=device --mouse "$cfg"
+            fi
+            "$loft" keys xremap
+            cfg="''${LOFT_STATE_DIR:-''${XDG_STATE_HOME:-$HOME/.local/state}/loft}/xremap/config.json"
+            exec ${pkgs.xremap.niri}/bin/xremap --watch=config,device --mouse "$cfg"
+          '';
+        };
 
         # DuckDuckGo-style !bangs for Spotlight: unduck's bang list
         # (github.com/T3-Content/unduck) → bangs.json, the data of the `bangs`

@@ -34,7 +34,8 @@ INSTRUCTIONS = (
     "workspace ids come from list_windows / list_workspaces; ids are stable while a window lives. "
     "Prefer these structured tools over pixel coordinates. Screenshots are PNGs scaled to "
     "max_width; the accompanying JSON gives the logical region they cover. Toggle actions "
-    "(fullscreen_window, maximize_*) flip state: read list_windows first."
+    "(fullscreen_window, maximize_*) flip state: read list_windows first. When an app's keyboard "
+    "shortcuts misbehave, loft_keys_app with its app_id explains which remaps reach it, then fixes that app only."
 )
 
 # Quickshell IPC the agent may call: target → functions. Left out on purpose:
@@ -96,6 +97,8 @@ SHELL_ALLOW: dict[str, frozenset[str]] = {
 
 IDENT = r"^[A-Za-z][A-Za-z0-9_]{0,63}$"
 APP_ID = r"^[A-Za-z0-9][A-Za-z0-9._+:-]{0,199}$"
+# An xremap key combination: Mod-Mod-key (keys.py checks the names).
+KEY_COMBO = r"^[A-Za-z0-9_]{1,24}(-[A-Za-z0-9_]{1,24}){0,5}$"
 OUTPUT = r"^[A-Za-z0-9][A-Za-z0-9 ._+:-]{0,127}$"
 
 
@@ -603,6 +606,31 @@ def loft_tools(loft: LoftCli) -> list[Tool]:
             raise ToolError("value: one line only")
         return {"key": a["key"], "value": a["value"], "output": loft("niri", "set", "--render", a["key"], a["value"])}
 
+    def keys_show(a):
+        return loft.json("keys", "show", "--json")
+
+    def keys_app(a):
+        args = ["keys", "app", a["app_id"], "--json"]
+        for field, flag in (("like", "--like"), ("unlike", "--unlike"), ("off", "--off"), ("on", "--on")):
+            for v in a.get(field) or []:
+                args += [flag, v]
+        for k, v in (a.get("remap") or {}).items():
+            if not re.match(KEY_COMBO, k):
+                raise ToolError(f"remap.{k}: not a key combination (e.g. Super_L-k)")
+            if v is None or v == "":
+                args += ["--unmap", k]
+            else:
+                args += ["--remap", f"{k}={','.join(v) if isinstance(v, list) else v}"]
+        if "leave_alone" in a:
+            args.append("--leave-alone" if a["leave_alone"] else "--no-leave-alone")
+        if a.get("reset"):
+            args.append("--reset")
+        return loft.json(*args)
+
+    def keys_group(a):
+        loft("keys", "group", a["id"], a["state"])
+        return loft.json("keys", "group", a["id"])
+
     level = {"type": ["number", "string"], "minimum": 0, "maximum": 1, "pattern": r"^(theme|(0(\.\d+)?|1(\.0+)?)|\d{1,3}%)$"}
     return [
         Tool("loft_windows_list", "Loft's window settings: glass (translucency) on/off, apps kept opaque, and every per-app window rule.", _obj({}), windows_list, read_only=True),
@@ -634,6 +662,43 @@ def loft_tools(loft: LoftCli) -> list[Tool]:
             "Set Loft's appearance dials: transparency (0 solid … 0.5 theme … 1 clear), blur, terminals, gtk — each 0-1, a percentage, or \"theme\".",
             _obj({k: level for k in APPEARANCE_KEYS}),
             appearance_set,
+        ),
+        Tool(
+            "loft_keys_show",
+            "Loft's keyboard layer (macOS-style remaps run by xremap): every remap group (on/off, where set), the app classes "
+            "(terminals, browsers, fileManagers, codeEditors, jetbrains …), per-app rules, apps left alone, and whether xremap reads the config.",
+            _obj({}),
+            keys_show,
+            read_only=True,
+        ),
+        Tool(
+            "loft_keys_app",
+            "Fix how the keyboard behaves in one app (exact niri app id). With no other fields: show which remap groups reach it and why. "
+            "like/unlike: join or leave app classes (e.g. a terminal Loft doesn't know → like [\"terminals\"]); off/on: turn groups off "
+            "or back on in this app only; remap: the app's own remaps {\"Super_L-k\": \"Ctrl-k\"} (xremap key names; a list = a sequence; "
+            "null drops one), which win over every group; leave_alone: no Loft remaps or window shortcuts at all in it; reset: drop its "
+            "runtime rule first. Each change is checked before xremap reloads.",
+            _obj(
+                {
+                    "app_id": {"type": "string", "pattern": APP_ID},
+                    **{f: {"type": "array", "items": {"type": "string", "pattern": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"}, "maxItems": 20} for f in ("like", "unlike", "off", "on")},
+                    "remap": {
+                        "type": "object",
+                        "maxProperties": 50,
+                        "additionalProperties": {"type": ["string", "array", "null"], "items": {"type": "string", "pattern": KEY_COMBO}, "pattern": KEY_COMBO},
+                    },
+                    "leave_alone": {"type": "boolean"},
+                    "reset": {"type": "boolean"},
+                },
+                ["app_id"],
+            ),
+            keys_app,
+        ),
+        Tool(
+            "loft_keys_group",
+            "Turn one of Loft's remap groups on or off everywhere (ids from loft_keys_show, e.g. symbols, text-editing); default = back to the configured default.",
+            _obj({"id": {"type": "string", "pattern": r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"}, "state": {"enum": ["on", "off", "default"]}}, ["id", "state"]),
+            keys_group,
         ),
         Tool("loft_niri_show", "Every niri setting Loft manages (layout, input, animations …): effective value and where it comes from.", _obj({}), niri_show, read_only=True),
         Tool("loft_niri_keys", "The niri setting keys loft_niri_set accepts, with their types.", _obj({}), niri_keys, read_only=True),

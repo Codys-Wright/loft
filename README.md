@@ -401,9 +401,22 @@ like macOS: click to record, replace on conflict, turn off, add custom shortcuts
 action, a command or a niri action), restore one or all. A changed bind is written to
 the same fragment, which niri lets override a key bound in an earlier file; a shortcut
 turned off is rebound to a no-op (niri can't unbind). Its **Apps to Leave Alone** tab
-pauses Loft's window shortcuts in games / VMs / remote desktops, and
-`loft keys xremap --base <xremap config as JSON>` writes an xremap config with every
-remap off in those apps (point xremap at `<state>/xremap/config.json`, `--watch=config`).
+pauses Loft's window shortcuts in games / VMs / remote desktops, and turns the keyboard
+layer off in them.
+
+**Keyboard layer** (`programs.loft.keyboard.enable`): the macOS-style remaps — Super = ⌘,
+Esc / Caps Lock hold = the window-manager key, ⌥ word navigation, per-app extras for
+terminals, browsers, file managers and editors — are Loft's (`cli/loft/keymap/mac.json`),
+run by xremap (`loft-keys.service`). Nix seeds them; `loft keys` changes them at runtime,
+and xremap reloads:
+
+```sh
+loft keys show                                   # groups, app classes, per-app rules
+loft keys app dev.cody.term --like terminals     # an app Loft doesn't know is a terminal
+loft keys app REAPER --off cmd --remap Super_L-s=Ctrl-s   # fix one app, keep the rest
+loft keys app steam --leave-alone                # no remaps at all in it
+loft keys group symbols on                       # a whole group, every app
+```
 
 ```sh
 loft-niri outputs                         # live outputs, modes, identities

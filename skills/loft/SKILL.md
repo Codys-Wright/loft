@@ -1,6 +1,6 @@
 ---
 name: loft
-description: Configure the Loft desktop (niri + Quickshell) and write window rules — pin an app to a workspace or display, open it floating / maximized / at a width, keep it opaque or translucent. Use when asked to change Loft settings, its theme or niri settings, or how an app's windows open, including apps being developed that should always land somewhere specific.
+description: Configure the Loft desktop (niri + Quickshell) and write window rules — pin an app to a workspace or display, open it floating / maximized / at a width, keep it opaque or translucent — and fix keyboard remaps per app (macOS-style keys via xremap). Use when asked to change Loft settings, its theme or niri settings, how an app's windows open, or when an app's keyboard shortcuts misbehave, including apps being developed that should always land somewhere specific.
 ---
 
 # Configuring Loft and writing window rules
@@ -52,7 +52,7 @@ loft niri keys | show                               # niri settings Loft manages
 loft niri set layout.gaps 8 · loft niri unset layout.gaps
 loft niri binds                                     # every keybind, its source, what it shadows
 loft niri outputs · loft niri output …              # displays (live + remembered by identity)
-loft keys …                                         # apps xremap leaves alone
+loft keys show | app APP … | group ID on|off          # the keyboard layer (macOS remaps via xremap), per-app fixes
 loft wallpaper … · loft dock … · loft doctor perf
 ```
 
@@ -73,6 +73,7 @@ programs.loft = {
   idle.lockAfter = 300; idle.screenOffAfter = 600;   # null = never
   qt.enable = true;                     # Dolphin etc. in the Loft look
   phone.enable = true;                  # iPhone via tether
+  keyboard.enable = true;               # macOS-style remaps (xremap); seed: keyboard.{groups,apps,classes,remap}
   library = "~/Documents/Loft";
 };
 ```
@@ -185,6 +186,47 @@ niri msg action move-window-to-workspace --window-id ID --focus false code
 niri msg action move-window-to-monitor --id ID DP-4
 ```
 
+## Keyboard: when an app's keys misbehave
+
+Loft's keyboard layer remaps keys macOS-style before apps see them: Super = ⌘
+(⌘C → Ctrl+C, in terminals ⌘C → Ctrl+Shift+C), Esc / Caps Lock hold = the
+window-manager key, ⌥/⌘ + arrows for word / line navigation, extras for
+browsers, file managers and editors. Loft owns the keymap
+(`cli/loft/keymap/mac.json`), xremap runs it (`loft-keys.service`, on with
+`programs.loft.keyboard.enable`). Remaps are per **app id** (niri's), so a
+misbehaving app is nearly always "Loft guesses the wrong kind of app" or "one
+group fights the app's own shortcuts".
+
+```sh
+loft keys app APP-ID            # which groups reach the app (✓) and why not (·) — start here
+loft keys show                  # every group (on/off), the app classes, per-app rules
+```
+
+Fix the one app, not the whole layer:
+
+| Symptom | Fix |
+|---|---|
+| a terminal Loft doesn't know: ⌘C sends Ctrl+C (kills the job), ⌘V doesn't paste | `loft keys app APP --like terminals` (same for `browsers`, `fileManagers`, `codeEditors`, `jetbrains`) |
+| one group clashes with the app (e.g. ⌥← / ⌘← navigation in a DAW or game) | `loft keys app APP --off text-editing` (`--on` undoes) |
+| the app needs one key sent differently | `loft keys app APP --remap Super_L-k=Ctrl-k` (`--unmap Super_L-k` drops it); a per-app remap wins over every group |
+| the app should get raw keys (game, VM, remote desktop) | `loft keys app APP --leave-alone` (also pauses Loft's window shortcuts there; `--no-leave-alone` undoes) |
+| a group should change everywhere | `loft keys group ID on\|off\|default` |
+
+Key names are xremap's: evdev names without `KEY_` (`a`, `Esc`, `CapsLock`,
+`LeftBrace`, `F13`, `BTN_LEFT`), modifiers `Shift`, `Ctrl`/`C`, `Alt`/`M`,
+`Super`/`Win`, optionally `_L`/`_R`, joined with `-` (`Super_L-Shift-t`). A
+comma-separated TO is a sequence. Every change is checked before it's saved
+(an unknown key or class is refused with the reason) and xremap reloads by
+itself; the change is live, no restart. It applies to the focused app as soon
+as xremap sees the focus, so test by switching to the app and pressing the key.
+
+Runtime changes live in `$LOFT_STATE_DIR/overrides/keymap.json` (don't edit
+it or `xremap/config.json` by hand). For a fix every machine should get, use
+the Nix seed instead (`programs.loft.keyboard.apps."APP".like = [ "terminals" ];`,
+`.groups`, `.classes`, `.remap`, `.extraGroups`); runtime still wins over it.
+niri's own binds (Mod+…) aren't remaps: change those with `loft niri binds`
+and Settings → Keyboard Shortcuts.
+
 ## `loft mcp` — the desktop as MCP tools for an agent
 
 `loft mcp` is a Model Context Protocol server on stdin/stdout (JSON-RPC 2.0,
@@ -211,6 +253,7 @@ exports the user's session environment (`systemctl --user show-environment`:
 | `loft_theme_list` · `loft_theme_apply` (`name`, `mode`?) | `loft theme …` |
 | `loft_appearance_get` · `loft_appearance_set` (transparency, blur, terminals, gtk) | `loft appearance …` |
 | `loft_niri_show` · `loft_niri_keys` · `loft_niri_set` (`key`, `value`) | `loft niri …` (set renders + reloads) |
+| `loft_keys_show` · `loft_keys_app` (`app_id`, `like`/`unlike`/`off`/`on` lists, `remap` {from: to\|null}, `leave_alone`, `reset`) · `loft_keys_group` (`id`, `state`) | `loft keys …` (the keyboard layer; `loft_keys_app` with only `app_id` explains what reaches the app) |
 | `shell_ipc_list` · `shell_ipc_call` (`target`, `function`, `args`) | the shell's Quickshell IPC (island, controlcenter, settings, mixer, monitor, wallpaper, timers …), only what `SHELL_ALLOW` in `cli/loft/mcptools.py` lists; arguments are checked against `quickshell ipc show` |
 
 Not exposed on purpose: power, log out, lock, killing processes, the phone,

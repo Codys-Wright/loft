@@ -10,9 +10,9 @@ import Quickshell.Io
 //                         shortcuts (⌘Q / hold to quit, Paste as Plain Text,
 //                         Snippets, Quick Panel, Radial Menu, Arrange, custom
 //                         shortcuts' window actions) do nothing while one of
-//                         them is focused, and `loft keys xremap` turns the
-//                         list into xremap's config (cli/loft/keys.py) when the
-//                         consumer wired xremap to it.
+//                         them is focused, and `loft keys xremap` turns every
+//                         remap of Loft's keyboard layer off in them
+//                         (cli/loft/keys.py, xremap via loft-keys.service).
 //   pauseShellShortcuts   whether the shell part applies (the xremap part
 //                         always does)
 //
@@ -52,8 +52,8 @@ Singleton {
     }
 
     // ── xremap ───────────────────────────────────────────────────────────
-    // `loft keys xremap`: rewrites <state>/xremap/config.json from the base
-    // config the xremap service recorded (nothing until it did).
+    // `loft keys xremap`: rewrites <state>/xremap/config.json, Loft's keymap
+    // with the list applied; the status line says whether xremap reads it.
     property string xremapStatus: ""
 
     function syncXremap() {
