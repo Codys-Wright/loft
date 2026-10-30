@@ -767,7 +767,16 @@
           Install.WantedBy = [ "default.target" ];
         };
 
-        systemd.user.services.loft-launcher = service "Loft launcher (walker + elephant)" "${lib.getExe sp.loft-launcher} service";
+        # Spotlight must open instantly however long it sat idle: walker and
+        # elephant stay in RAM (no swap, and their memory — libraries, icons
+        # included — isn't reclaimed under pressure). Paging them back in
+        # from swap made the first open after a while take seconds.
+        systemd.user.services.loft-launcher =
+          lib.recursiveUpdate (service "Loft launcher (walker + elephant)" "${lib.getExe sp.loft-launcher} service")
+            {
+              Service.MemorySwapMax = 0;
+              Service.MemoryMin = "512M";
+            };
 
         # Bluetooth off during sleep (crates/loft-sleep); idle until the
         # setting is switched on.
