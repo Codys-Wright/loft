@@ -141,6 +141,9 @@ PanelWindow {
         }
         for (const a of running)
             t.push(`app:running:${a}`);
+        // Launchpad second, after the first pinned app (macOS: Finder).
+        if (Features.on("launchpad"))
+            t.splice(Math.min(1, pinned.length), 0, "launchpad::");
         if (Features.on("dockRecents")) {
             const shown = pinned.concat(running);
             const recent = AppUsage.recentApps(40, shown).filter(a => Apps.own[a] === undefined && Apps.entry(a) !== null && !shown.some(s => DockData.sameApp(s, a))).slice(0, prefs.recentCount);
@@ -327,7 +330,7 @@ PanelWindow {
                             root.hovered = null;
                     }
 
-                    sourceComponent: tile.kind === "app" ? appTile : tile.kind === "folder" ? folderTile : tile.kind === "trash" ? trashTile : divider
+                    sourceComponent: tile.kind === "app" ? appTile : tile.kind === "folder" ? folderTile : tile.kind === "trash" ? trashTile : tile.kind === "launchpad" ? launchpadTile : divider
 
                     Component {
                         id: appTile
@@ -365,6 +368,16 @@ PanelWindow {
                             iconSize: root.iconSize
                             magnify: slot.magnify
                             onMenuRequested: root.menuFor(slot, false)
+                        }
+                    }
+                    Component {
+                        id: launchpadTile
+                        DockLaunchpad {
+                            screenName: root.modelData.name
+                            showIndicator: root.prefs.indicators
+                            edge: root.edge
+                            iconSize: root.iconSize
+                            magnify: slot.magnify
                         }
                     }
                     Component {

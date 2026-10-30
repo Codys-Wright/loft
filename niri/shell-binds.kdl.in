@@ -56,6 +56,10 @@ binds {
     Mod+Ctrl+S hotkey-overlay-title="Space Switcher" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "switcher"; }
     Mod+Ctrl+Left hotkey-overlay-title="Previous Space" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "prev"; }
     Mod+Ctrl+Right hotkey-overlay-title="Next Space" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "next"; }
+    // Launchpad (src/launchpad/LaunchpadWindow.qml); XF86LaunchA is the Launchpad
+    // key on Apple keyboards (F4).
+    Mod+Shift+A hotkey-overlay-title="Launchpad" { spawn "timeout" "-k" "1" "5" @IPC@ "launchpad" "toggle"; }
+    XF86LaunchA hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "launchpad" "toggle"; }
     // ⌘Tab: Loft's app switcher (src/switcher/Switcher.qml), one icon per
     // running app. The first press opens it with the keyboard, so letting go
     // of ⌘ switches. Physical ⌘ is Mod with lv3:lwin_switch, Super without.

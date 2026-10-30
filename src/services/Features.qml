@@ -29,6 +29,7 @@ Singleton {
         { id: "island", label: "Dynamic Island", icon: "󰟜", group: "Everyday", description: "Now playing, live activities, notifications, system pages" },
         { id: "controlcenter", label: "Control Center", icon: "󰒓", group: "Desktop", description: "Network, Bluetooth, toggles, now playing, volume, calendar" },
         { id: "osd", label: "Volume display", icon: "󰄧", group: "Sound", description: "Volume, brightness and sound changes: in the Dynamic Island, or a pill above the Dock" },
+        { id: "launchpad", label: "Launchpad", icon: "󰀻", group: "Windows", description: "Every installed app in a grid: the dock's second icon, ⌘⇧A or the Launchpad key; type to search" },
         { id: "switcher", label: "App switcher", icon: "󰕰", group: "Windows", description: "⌘Tab: one icon per running app, let go of ⌘ to switch (⌥Tab and ⌘` stay niri's window previews)" },
         { id: "wallpaperPicker", label: "Wallpaper picker", icon: "󰸉", group: "Desktop", description: "Browse and apply wallpapers" },
         { id: "desktopMenu", label: "Desktop menu", icon: "󰍝", group: "Desktop", page: "DesktopMenuPage.qml", description: "Right-click the wallpaper: wallpaper, theme, appearance, displays, screenshot, terminal, lock, settings" },

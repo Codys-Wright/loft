@@ -11,6 +11,7 @@ import qs.island
 import qs.lock
 import qs.osd
 import qs.switcher
+import qs.launchpad
 import qs.wallpaper
 import qs.audio
 import qs.settings
@@ -78,6 +79,12 @@ ShellRoot {
     Variants {
         model: Features.on("switcher") ? Quickshell.screens : []
         Switcher {}
+    }
+
+    // Launchpad: every installed app (the dock's second icon, Mod+Shift+A).
+    Variants {
+        model: Features.on("launchpad") ? Quickshell.screens : []
+        LaunchpadWindow {}
     }
 
     // The space switcher (Mod+Ctrl+S; services/Spaces.qml).
