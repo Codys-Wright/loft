@@ -57,8 +57,9 @@ Singleton {
     readonly property bool powerSaver: PowerProfiles.profile === PowerProfile.PowerSaver
     readonly property bool batteryPause: cfg.pauseOnBattery && (onBattery || powerSaver)
 
-    // Why videos are held everywhere ("" = they may play).
-    readonly property string globalReason: stillOnly ? "still frame only" : LockState.locked ? "locked" : idle ? "idle" : batteryPause ? (onBattery ? "on battery" : "power saver") : ""
+    // Why videos are held everywhere ("" = they may play). In a performance
+    // mode they aren't even opened (WallpaperView.videoAllowed).
+    readonly property string globalReason: PerformanceMode.on ? "performance mode" : stillOnly ? "still frame only" : LockState.locked ? "locked" : idle ? "idle" : batteryPause ? (onBattery ? "on battery" : "power saver") : ""
 
     // Screens whose active workspace an opaque window covers: name → reason.
     readonly property var covered: {

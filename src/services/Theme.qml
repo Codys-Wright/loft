@@ -70,7 +70,8 @@ Singleton {
     }
     readonly property real glass: clamp(glassPreview >= 0 ? glassPreview : Settings.appearance.glass >= 0 ? Settings.appearance.glass : dialGlass(glassDefault, transparencyLevel), 0, 1)
 
-    readonly property bool blur: !reduceTransparency && (Settings.appearance.blur >= 0 ? Settings.appearance.blur === 1 : theme.glass.blur)
+    // Ultra Performance: no blur (the wallpaper is a flat color; PerformanceMode).
+    readonly property bool blur: !reduceTransparency && !PerformanceMode.ultra && (Settings.appearance.blur >= 0 ? Settings.appearance.blur === 1 : theme.glass.blur)
     // Fill opacity of a strength-1 surface. The slider maps 1:1 (so a theme's
     // default looks exactly as before), kept just off fully clear / opaque.
     readonly property real glassOpacity: reduceTransparency ? 1 : clamp(glass, 0.03, 0.95)

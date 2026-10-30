@@ -29,7 +29,8 @@ import qs.services
 // `decodeScale` < 1 decodes the image smaller (sourceSize × scale) and draws
 // it scaled back up: the overview shows workspaces at its zoom, so a
 // workspace seen only there needs no full-size copy (WorkspaceWallpapers).
-// Such a surface never loads its video.
+// Such a surface never loads its video, and neither does any in a
+// performance mode (PerformanceMode: no decoder, not even the file open).
 Item {
     // How long a video that stopped being wanted keeps its decoder (paused).
     property int releaseMs: 10000
@@ -42,7 +43,7 @@ Item {
     property real decodeScale: 1
     property bool playVideo: true
     readonly property string source: Vibes.url(path)
-    readonly property bool videoAllowed: decodeScale >= 1
+    readonly property bool videoAllowed: decodeScale >= 1 && !PerformanceMode.on
     // The current image has decoded (or there is none: the gradient).
     readonly property bool ready: source === "" || (flip ? a : b).status === Image.Ready
     // Bytes of decoded image data held (both layers), for the stats.

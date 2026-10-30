@@ -42,6 +42,7 @@ Singleton {
         { id: "cleaning", label: "Cleaning Mode", icon: "󰃢", group: "Everyday", feature: "cleaningMode", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "action" },
         { id: "nightLight", label: "Night Light", icon: "󰖔", group: "Display", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "toggle", activeOnly: "default" },
         { id: "powerMode", label: "Power Mode", icon: "󰾅", group: "System", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "toggle" },
+        { id: "performanceMode", label: "Performance Mode", icon: "󰓅", group: "Display", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "toggle", activeOnly: "default" },
         { id: "focusTimer", label: "Focus Timer", icon: "󰔟", group: "Everyday", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "toggle", activeOnly: "default" },
         { id: "screenshot", label: "Screenshot", icon: "󰹑", group: "Capture", feature: "capture", sizes: ["1x1", "2x1"], bar: true, barDefault: false, kind: "action" },
         { id: "record", label: "Screen Recording", icon: "󰻃", group: "Capture", feature: "capture", sizes: ["1x1", "2x1"], bar: true, barDefault: true, kind: "toggle", activeOnly: "default" },
@@ -70,7 +71,7 @@ Singleton {
         })
 
     // Bar items left to right (readouts first, the clock last).
-    readonly property var barDefaultOrder: ["readout.cpu", "readout.memory", "readout.cpuTemp", "readout.gpu", "readout.network", "readout.battery", "tray", "camera", "micMute", "record", "nowPlaying", "caffeine", "nightLight", "focusTimer", "powerMode", "cleaning", "screenshot", "colorPicker", "clipboard", "overview", "displays", "lock", "inputSource", "eject", "phone", "focus", "battery", "bluetooth", "wifi", "sound", "display", "spotlight", "controlcenter", "clock"]
+    readonly property var barDefaultOrder: ["readout.cpu", "readout.memory", "readout.cpuTemp", "readout.gpu", "readout.network", "readout.battery", "tray", "camera", "micMute", "record", "nowPlaying", "caffeine", "nightLight", "focusTimer", "powerMode", "performanceMode", "cleaning", "screenshot", "colorPicker", "clipboard", "overview", "displays", "lock", "inputSource", "eject", "phone", "focus", "battery", "bluetooth", "wifi", "sound", "display", "spotlight", "controlcenter", "clock"]
 
     readonly property var ccDefaultLayout: [
         { id: "connectivity", size: "2x2" },
@@ -78,6 +79,7 @@ Singleton {
         { id: "caffeine", size: "1x1" },
         { id: "phone", size: "2x1" },
         { id: "nightLight", size: "1x1" },
+        { id: "performanceMode", size: "1x1" },
         { id: "display", size: "4x1" },
         { id: "sound", size: "4x1" },
         { id: "nowPlaying", size: "2x2" },
@@ -148,6 +150,8 @@ Singleton {
             return NightLight.enabled;
         case "powerMode":
             return PowerProfiles.profile !== PowerProfile.Balanced;
+        case "performanceMode":
+            return PerformanceMode.on;
         case "focusTimer":
             return FocusTimer.active;
         case "record":
@@ -416,6 +420,8 @@ Singleton {
             return NightLight.enabled ? `${NightLight.temperature}K` : "Off";
         case "powerMode":
             return PowerProfile.toString(PowerProfiles.profile);
+        case "performanceMode":
+            return PerformanceMode.ultra ? "Ultra" : PerformanceMode.on ? "On" : "Off";
         case "focusTimer":
             return FocusTimer.active ? FocusTimer.format(FocusTimer.remaining) : `${Settings.island.focusMinutes} min`;
         case "record":
@@ -447,6 +453,8 @@ Singleton {
             return Sound.micsMuted ? "󰍭" : "󰍬";
         case "powerMode":
             return PowerProfiles.profile === PowerProfile.Performance ? "󰓅" : PowerProfiles.profile === PowerProfile.PowerSaver ? "󰌪" : "󰾅";
+        case "performanceMode":
+            return PerformanceMode.ultra ? "󱐋" : "󰓅";
         case "battery":
             {
                 const p = batteryPercent;

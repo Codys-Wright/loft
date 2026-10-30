@@ -30,6 +30,10 @@ Singleton {
         case "nightLight":
             NightLight.enabled = !NightLight.enabled;
             break;
+        case "performanceMode":
+            // Off → Performance → Ultra → Off.
+            PerformanceMode.cycle();
+            break;
         case "powerMode":
             {
                 const order = [PowerProfile.PowerSaver, PowerProfile.Balanced, PowerProfile.Performance];
