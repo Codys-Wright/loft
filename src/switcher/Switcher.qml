@@ -6,10 +6,12 @@ import Quickshell.Wayland
 import qs.components
 import qs.services
 
-// Cmd+Tab app switcher (javiiervm's AltTabOverlay, on niri). niri binds
-// Mod+Tab / Mod+Shift+Tab to `switcher next|prev`; the first call opens it
-// with keyboard focus, so releasing the modifier commits (focuses the
-// selected app's most recent window) and Escape cancels.
+// ⌘Tab app switcher (javiiervm's AltTabOverlay, on niri). niri binds
+// ⌘Tab / ⌘⇧Tab to `switcher next|prev` (niri/shell-binds.kdl.in); the first
+// call takes the keyboard, so letting go of ⌘ commits (focuses the selected
+// app's most recent window) and Escape cancels. Like niri's own switcher the
+// panel shows only after `showDelay`: a quick tap goes back to the previous
+// app without flashing it. ⌥Tab and ⌘` are niri's window switcher.
 PanelWindow {
     id: root
 
@@ -17,6 +19,8 @@ PanelWindow {
     screen: modelData
 
     property bool open: false
+    // The panel appears once ⌘ has been held this long (niri's open-delay-ms).
+    readonly property int showDelay: 120
     property int selected: 0
     // One entry per app, most recently focused first: { appId, windows[] }.
     property var apps: []
@@ -35,7 +39,7 @@ PanelWindow {
     BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: Theme.blur && open ? panel : null
+        item: Theme.blur && open && panel.opacity > 0 ? panel : null
         radius: panel.radius
     }
 
@@ -61,15 +65,30 @@ PanelWindow {
             // Like macOS: the first press selects the previous app.
             selected = apps.length > 1 ? (delta > 0 ? 1 : apps.length - 1) : 0;
             open = true;
+            showTimer.restart();
             return;
         }
         selected = (selected + delta + apps.length) % apps.length;
+        // Stepping again means ⌘ is held: show the panel now.
+        showTimer.stop();
+        panel.opacity = 1;
     }
 
     function commit() {
         if (open && apps[selected])
             Niri.focusWindow(apps[selected].windows[0].id);
         open = false;
+    }
+
+    onOpenChanged: if (!open) {
+        showTimer.stop();
+        panel.opacity = 0;
+    }
+
+    Timer {
+        id: showTimer
+        interval: root.showDelay
+        onTriggered: panel.opacity = 1
     }
 
     // IPC (SwitcherIpc, one handler for all screens).
@@ -92,11 +111,13 @@ PanelWindow {
         anchors.fill: parent
         radius: 30
         strength: 1.6
+        opacity: 0
 
         focus: root.open
         Keys.onReleased: event => {
-            // Modifier released → commit (Alt when nested, Super otherwise).
-            if (event.key === Qt.Key_Alt || event.key === Qt.Key_Super_L || event.key === Qt.Key_Super_R || event.key === Qt.Key_Meta)
+            // ⌘ let go → commit. ⌘ is Super, the Level3 key (AltGr /
+            // Mode_switch) with lv3:lwin_switch, or Alt when niri is nested.
+            if ([Qt.Key_Alt, Qt.Key_AltGr, Qt.Key_Mode_switch, Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_Meta].includes(event.key))
                 root.commit();
         }
         Keys.onPressed: event => {

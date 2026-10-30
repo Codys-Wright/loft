@@ -56,12 +56,19 @@ binds {
     Mod+Ctrl+S hotkey-overlay-title="Space Switcher" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "switcher"; }
     Mod+Ctrl+Left hotkey-overlay-title="Previous Space" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "prev"; }
     Mod+Ctrl+Right hotkey-overlay-title="Next Space" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "next"; }
+    // ⌘Tab: Loft's app switcher (src/switcher/Switcher.qml), one icon per
+    // running app. The first press opens it with the keyboard, so letting go
+    // of ⌘ switches. Physical ⌘ is Mod with lv3:lwin_switch, Super without.
+    Mod+Tab hotkey-overlay-title="Switch Apps" { spawn "timeout" "-k" "1" "5" @IPC@ "switcher" "next"; }
+    Mod+Shift+Tab hotkey-overlay-title="Switch Apps Backwards" { spawn "timeout" "-k" "1" "5" @IPC@ "switcher" "prev"; }
+    Super+Tab hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "switcher" "next"; }
+    Super+Shift+Tab hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "switcher" "prev"; }
 }
 
-// ⌘Tab: niri's recent-windows switcher (live previews). xremap sends a
-// physical ⌘Tab as Alt+Tab and ⌘` as Alt+grave; Super+Tab covers keyboards
-// without the remap, Mod+Tab the window-manager key. The theme's niri.kdl
-// sets the highlight colors and radius.
+// ⌥Tab: niri's recent-windows switcher, one live preview per window. ⌘`
+// is the same for the focused app's windows: xremap sends a physical ⌘` as
+// Alt+grave; Super+grave and Mod+grave cover keyboards without the remap.
+// The theme's niri.kdl sets the highlight colors and radius.
 recent-windows {
     open-delay-ms 120
     binds {
@@ -69,12 +76,8 @@ recent-windows {
         Alt+Shift+Tab     { previous-window; }
         Alt+grave         { next-window     filter="app-id"; }
         Alt+Shift+grave   { previous-window filter="app-id"; }
-        Super+Tab         { next-window; }
-        Super+Shift+Tab   { previous-window; }
         Super+grave       { next-window     filter="app-id"; }
         Super+Shift+grave { previous-window filter="app-id"; }
-        Mod+Tab           { next-window; }
-        Mod+Shift+Tab     { previous-window; }
         Mod+grave         { next-window     filter="app-id"; }
         Mod+Shift+grave   { previous-window filter="app-id"; }
     }

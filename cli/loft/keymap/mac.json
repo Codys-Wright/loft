@@ -129,11 +129,9 @@
       "id": "app-switching",
       "name": "App and tab switching",
       "section": "keymap",
-      "description": "⌘Tab / ⌘` switch apps and windows (⇧ backwards)",
+      "description": "⌘` switches the app's windows (⇧ backwards); ⌘Tab reaches niri as it is, for Loft's app switcher",
       "remap": {
-        "Super_L-Shift-Tab": "Alt-Shift-Tab",
         "Super_L-Shift-grave": "Alt-Shift-grave",
-        "Super_L-Tab": "Alt-Tab",
         "Super_L-grave": "Alt-grave"
       }
     },

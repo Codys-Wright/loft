@@ -54,7 +54,7 @@ still todo — and Loft adds a whole desktop's worth of features vorssaint doesn
 ## Windows and the Dock
 | vorssaint | Loft | How |
 |---|---|---|
-| App switcher (live previews, search) | 🧩 | niri's recent-windows switcher: ⌘Tab / ⌥Tab with live window previews, ⌘` within the app |
+| App switcher (live previews, search) | 🧩 | ⌘Tab: Loft's app switcher (one icon per app, no previews yet); ⌥Tab / ⌘`: niri's recent-windows switcher with live window previews |
 | Window layout (snapping, move between displays, restore) | ✅ | Arrange ▸ in the app menu and dock menu, ⌘⌃A palette: floating windows snap to halves / thirds / ⅔ / quarters / fill / center; tiled ones get column widths ⅓ ½ ⅔ full, heights, center, join/split columns; move to display |
 | Dock Preview (hover → windows, switch/close/move) | ✅ | Hover (or click) an app: Liquid Glass cards per window with title, desktop / display, hidden state; click focuses anywhere, × closes, ⋯ / right-click moves to a desktop or display, hides. Thumbnails only where niri allows (floating / fullscreen windows; niri 26.04 has no per-window capture), else the app icon |
 | Dock clicks (minimize / hide / cycle) | ✅ | Click focuses, again cycles the app's windows; Hide via a parking workspace (niri has no minimize) |
