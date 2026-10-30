@@ -93,6 +93,19 @@ EOF
 # when the session exports GDK_BACKEND=x11 for some other app's sake.
 export GDK_BACKEND=wayland
 
+# Hand a command line to the running walker service over D-Bus (GApplication
+# CommandLine, what the `walker` client sends): ~20 ms from the key to the
+# window, where the walker client is a whole GTK start (50–270 ms) just to
+# forward it. GApplication parses options in the client, so they travel as
+# platform data. Fails (no service, or it hangs) → the caller runs walker.
+#   ask [PROVIDER PLACEHOLDER]
+ask() {
+  local opts=""
+  [ $# -eq 2 ] && opts="'options': <{'provider': <'$1'>, 'placeholder': <'$2'>}>"
+  gdbus call --session --timeout 2 --dest dev.benz.walker --object-path /dev/benz/walker \
+    --method org.gtk.Application.CommandLine /dev/benz/walker/loft "[b'walker']" "{$opts}" >/dev/null 2>&1
+}
+
 case "${1:-open}" in
   service)
     prepare
@@ -110,16 +123,19 @@ case "${1:-open}" in
     LD_PRELOAD="@LAYERSHELL@${LD_PRELOAD:+:$LD_PRELOAD}" walker --gapplication-service
     ;;
   open)
-    exec walker
+    ask || exec walker
     ;;
   emoji)
-    exec walker --provider symbols --placeholder "Emoji & Symbols"
+    ask symbols "Emoji & Symbols" ||
+      exec walker --provider symbols --placeholder "Emoji & Symbols"
     ;;
   clipboard)
-    exec walker --provider clipboard --placeholder "Clipboard History"
+    ask clipboard "Clipboard History" ||
+      exec walker --provider clipboard --placeholder "Clipboard History"
     ;;
   help)
-    exec walker --provider commands --placeholder "Spotlight Help"
+    ask commands "Spotlight Help" ||
+      exec walker --provider commands --placeholder "Spotlight Help"
     ;;
   *)
     echo "usage: loft-launcher [service|open|emoji|clipboard|help]" >&2
