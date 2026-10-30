@@ -793,6 +793,42 @@ Singleton {
         hidden = hidden.filter(h => !moved.some(m => m.id === h.id)).concat(moved);
     }
 
+    // The traffic lights niri draws on server-side-decorated windows: yellow
+    // hides (like the menu's Hide), a held green opens the window menu there.
+    Connections {
+        target: Niri
+        function onWindowMinimizeRequested(id) {
+            const w = Niri.windowMap[id];
+            if (w)
+                root.hideWindows([w]);
+        }
+        function onWindowActionsMenuRequested(id, output, x, y) {
+            if (Niri.windowMap[id])
+                root.openContext(output, x, y, "bottom", () => root.trafficLightItems(Niri.windowMap[id]));
+        }
+    }
+
+    // macOS's green-button menu: full screen, tiling, moving.
+    function trafficLightItems(w) {
+        if (!w)
+            return [];
+        const items = [];
+        items.push({ key: "fullscreen", label: "Enter Full Screen", enabled: true, shortcut: niriShortcut("fullscreen-window"), run: () => Niri.action("FullscreenWindow", { id: w.id }) });
+        items.push({ key: "maximize", label: "Maximize Column", enabled: !w.is_floating, shortcut: niriShortcut("maximize-column"), run: () => {
+                Niri.focusWindow(w.id);
+                Niri.action("MaximizeColumn");
+            } });
+        items.push({ key: "float", label: w.is_floating ? "Tile Window" : "Float Window", enabled: true, shortcut: niriShortcut("toggle-window-floating"), run: () => Niri.action("ToggleWindowFloating", { id: w.id }) });
+        items.push({ key: "center", label: "Center", enabled: true, shortcut: niriShortcut("center-column"), run: () => Niri.action("CenterWindow", { id: w.id }) });
+        if (Features.on("arrange"))
+            items.push({ key: "arrange", label: "Arrange", enabled: true, submenu: true, children: Arrange.items(w) });
+        items.push(sep("s-move"));
+        items.push({ key: "workspace", label: "Move to Workspace", enabled: true, submenu: true, children: workspaceItems(w) });
+        const displays = displayItems(w);
+        items.push({ key: "display", label: "Move to Display", enabled: displays.length > 0, submenu: displays.length > 0, children: displays });
+        return items;
+    }
+
     function hideApp(appId) {
         hideWindows(Niri.windows.filter(x => x.app_id === appId));
     }

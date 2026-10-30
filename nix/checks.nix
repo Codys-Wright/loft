@@ -158,8 +158,8 @@
 
         niri-workspace-layers = check "niri-workspace-layers" [ ] ''
           export HOME=$TMPDIR
-          printf 'include "%s"\ninclude "%s"\n' ${../niri}/base.kdl ${../niri/workspace-wallpapers.kdl} > config.kdl
-          echo "niri-loft validate: base.kdl + workspace-wallpapers.kdl"
+          printf 'include "%s"\ninclude "%s"\ninclude "%s"\n' ${../niri}/base.kdl ${../niri/workspace-wallpapers.kdl} ${../niri/traffic-lights.kdl} > config.kdl
+          echo "niri-loft validate: base.kdl + workspace-wallpapers.kdl + traffic-lights.kdl"
           ${lib.getExe self'.packages.niri-loft} validate -c config.kdl
           if ${lib.getExe pkgs.niri} validate -c config.kdl 2>/dev/null; then
             echo "stock niri accepted place-within-workspace: the session gate is stale" >&2

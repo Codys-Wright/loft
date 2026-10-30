@@ -112,6 +112,8 @@
 
       # The consumer runs a niri that parses `place-within-workspace`.
       workspaceLayers = cfg.niriPackage.passthru.loftWorkspaceLayers or false;
+      # …and `traffic-lights` (nix/niri/traffic-lights.patch).
+      trafficLights = cfg.niriPackage.passthru.loftTrafficLights or false;
 
       # programs.loft.keyboard: the seed `loft keys` layers runtime changes on.
       keyboardSeed = {
@@ -680,6 +682,14 @@
         ''
         + lib.optionalString workspaceLayers ''
           include "${self}/niri/workspace-wallpapers.kdl"
+        ''
+        + lib.optionalString trafficLights ''
+          include "${self}/niri/traffic-lights.kdl"
+        ''
+        # `loft-live` (nix/dev/loft-live.sh): a checkout's fragments over these
+        # while it runs the desktop; the file only exists then.
+        + ''
+          include optional=true "${stateDir}/dev/niri.kdl"
         '';
 
         xdg.configFile."loft/niri-early.kdl".text = ''
@@ -697,6 +707,9 @@
               # the crashed image's helpers (nmcli / udisksctl monitors,
               # watchers) live on next to the new ones, then as zombies.
               Service.Environment = env ++ [ "QS_DISABLE_CRASH_HANDLER=1" ];
+              # Stands down while `loft-live` runs a checkout's shell: a
+              # switch or a crash restart can't start this one underneath.
+              Unit.ConditionPathExists = "!%t/loft-live/active";
               # First start: apply the configured theme if none is active yet.
               Service.ExecStartPre = "${pkgs.writeShellScript "loft-first-theme" ''
                 [ -e "${stateDir}/current/theme.json" ] && exit 0
@@ -776,6 +789,8 @@
             {
               Service.MemorySwapMax = 0;
               Service.MemoryMin = "512M";
+              # Stands down while `loft-live` runs a checkout's launcher.
+              Unit.ConditionPathExists = "!%t/loft-live/active";
             };
 
         # Bluetooth off during sleep (crates/loft-sleep); idle until the
