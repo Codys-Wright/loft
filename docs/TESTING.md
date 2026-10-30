@@ -378,6 +378,17 @@ played 100–290 ms, paused or stopped 1–33 ms, unloaded and reloaded 85–130
 WallpaperView: neighbours open but never decoding, a played video paused for 10 s and then
 reopened (decoder dropped).
 
+Whole shell, one live wallpaper (a 5120x2560 still + video), `--gpu`, fresh session per row,
+2026-10-30 (#12): stills only (`wallpaper.video` "still", or Performance mode) 93 MB at
+2560x1440 / 185 MB at 5120x1440, Ultra 102 MB; playing the display copy 683 / 1102 MB, the
+original 1304 MB. Per-workspace surfaces (`moveWithWorkspaces`) make no difference. nvidia-vaapi-
+driver's detached backing-image cache (exported frames kept for reuse, up to VRAM/64 = 256 MB)
+was part of that: `NVD_MAX_DETACHED_BACKING_IMAGES=0` (set in `qtMultimediaEnv`, loft-dev,
+loft-live) gives 602 / 952 MB, and 952 instead of 1285 MB at the start, with the same CPU (6 %)
+and frame lag. What stays per 5120x1440 copy: the shared device (~264 MB, once), the decoder's
+surfaces and 9 active backing images (106 MB). `NVD_LOG=<file> NVD_STATS=1` in loft-dev's
+environment logs decoders and backing-image counts.
+
 Zero-copy with FFmpeg's frame threads hung the GUI thread in 4 of 16 starts
 (`waitSurfaceResolved` in nvidia-vaapi-driver); with one decoder thread: 0 of 25.
 `ffmpeg -i X -f null -` on one 12 s 5K clip, CPU per second of video: software 1.6 cores,

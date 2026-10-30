@@ -414,7 +414,7 @@ if [ -n "${QT_FFMPEG_DECODING_HW_DEVICE_TYPES+x}" ]; then
 elif [ "$gpu" != 1 ] && { [ "$headless" = 1 ] || [ -n "$output_sizes" ]; }; then
   video_env='"QT_FFMPEG_DECODING_HW_DEVICE_TYPES=," '
 else
-  video_env='"QT_FFMPEG_DECODING_HW_DEVICE_TYPES=vaapi" "LOFT_QT_VAAPI_ZERO_COPY=1" '
+  video_env='"QT_FFMPEG_DECODING_HW_DEVICE_TYPES=vaapi" "LOFT_QT_VAAPI_ZERO_COPY=1" "NVD_MAX_DETACHED_BACKING_IMAGES=0" '
 fi
 shell_env="$shell_env$video_env"
 
