@@ -103,6 +103,21 @@ ColumnLayout {
         }
 
         SettingsRow {
+            label: "Performance mode"
+            hint: PerformanceMode.ultra ? "Flat background colors, no images or videos, no blur: the least GPU memory" : PerformanceMode.on ? "Still wallpapers with no video open, one surface per screen (the wallpaper swaps on switch instead of sliding)" : "Wallpapers as set below. Performance and Ultra give back the GPU memory they use"
+            SettingsSegmented {
+                options: [
+                    { value: "off", label: "Off" },
+                    { value: "performance", label: "Performance" },
+                    { value: "ultra", label: "Ultra" }
+                ]
+                current: PerformanceMode.mode
+                onActivated: v => PerformanceMode.set(v)
+            }
+        }
+
+        SettingsRow {
+            visible: !PerformanceMode.on
             label: "Video wallpapers"
             hint: VideoWallpapers.stillOnly ? "Live wallpapers show their still frame" : VideoWallpapers.playingCount > 0 ? `${VideoWallpapers.playingCount} playing · ${VideoWallpapers.decodePath}` : VideoWallpapers.globalReason !== "" ? `Paused: ${VideoWallpapers.globalReason}` : "Live wallpapers play on the workspace you see, and hold their frame everywhere else"
             SettingsSegmented {
@@ -116,7 +131,7 @@ ColumnLayout {
         }
 
         SettingsRow {
-            visible: !VideoWallpapers.stillOnly
+            visible: !VideoWallpapers.stillOnly && !PerformanceMode.on
             label: "    Pause while a window fills the screen"
             hint: "Not only fullscreen opaque windows (those always pause it): any window covering most of the screen"
             SettingsSwitch {
@@ -126,7 +141,7 @@ ColumnLayout {
         }
 
         SettingsRow {
-            visible: !VideoWallpapers.stillOnly
+            visible: !VideoWallpapers.stillOnly && !PerformanceMode.on
             label: "    Pause on battery or in power saver"
             SettingsSwitch {
                 checked: Settings.wallpaper.pauseOnBattery
@@ -135,7 +150,7 @@ ColumnLayout {
         }
 
         SettingsRow {
-            visible: !VideoWallpapers.stillOnly
+            visible: !VideoWallpapers.stillOnly && !PerformanceMode.on
             label: "    Pause when idle"
             hint: "After this long without input (and always while locked)"
             SettingsSlider {
@@ -149,7 +164,7 @@ ColumnLayout {
         }
 
         SettingsRow {
-            visible: !VideoWallpapers.stillOnly
+            visible: !VideoWallpapers.stillOnly && !PerformanceMode.on
             label: "    Play display-sized copies"
             hint: "Each screen plays a copy of just the part it shows, made once in the background (NVENC on NVIDIA) and cached; the originals are untouched"
             SettingsSwitch {

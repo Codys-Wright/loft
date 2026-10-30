@@ -21,6 +21,7 @@ Singleton {
     readonly property alias displays: settings.displays
     readonly property alias island: settings.island
     readonly property alias wallpaper: settings.wallpaper
+    readonly property alias performance: settings.performance
     readonly property alias appearance: settings.appearance
     readonly property alias system: settings.system
     readonly property alias sound: settings.sound
@@ -181,6 +182,13 @@ Singleton {
                 property real pauseWhenIdleMinutes: 5
                 // Play display-sized 8-bit copies (made once, cached).
                 property bool smallerCopies: true
+            }
+
+            // Performance mode (PerformanceMode.qml): "off", "performance"
+            // (still wallpapers, one surface per screen) or "ultra" (flat
+            // colors, no blur).
+            property JsonObject performance: JsonObject {
+                property string mode: "off"
             }
 
             property var features: ({})

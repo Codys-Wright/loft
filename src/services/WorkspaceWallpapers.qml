@@ -32,7 +32,8 @@ import "wswallpapers.js" as Plan
 // programs.loft for a niri that has the patch) and the running compositor
 // reports the feature in its version string (`niri msg version`). Otherwise
 // Wallpaper.qml keeps swapping one surface per screen on activation.
-// Settings → Wallpaper → "Wallpapers move with workspaces" turns it off.
+// Settings → Wallpaper → "Wallpapers move with workspaces" turns it off, and
+// so does a performance mode (PerformanceMode: one surface per screen).
 Singleton {
     id: root
 
@@ -40,7 +41,7 @@ Singleton {
     property bool compositorHasIt: false
     property string compositorVersion: ""
     readonly property bool supported: configured && compositorHasIt
-    readonly property bool active: supported && Settings.wallpaper.moveWithWorkspaces && Niri.available && Vibes.fakeLayout === null
+    readonly property bool active: supported && Settings.wallpaper.moveWithWorkspaces && !PerformanceMode.on && Niri.available && Vibes.fakeLayout === null
     // Tests / measurements: every workspace gets a surface (the naive way).
     readonly property bool all: (Quickshell.env("LOFT_WS_WALLPAPERS_ALL") ?? "") === "1"
 

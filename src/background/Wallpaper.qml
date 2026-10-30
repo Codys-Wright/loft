@@ -39,12 +39,18 @@ PanelWindow {
     readonly property bool stepAside: WorkspaceWallpapers.active && WorkspaceWallpapers.isCovered(modelData.name)
     visible: !stepAside
 
-    WallpaperView {
+    // Ultra Performance (PerformanceMode): no image at all, just the window's
+    // flat color; the view and everything it decoded are gone.
+    Loader {
         anchors.fill: parent
-        path: root.stepAside ? "" : Vibes.wallpaperFor(root.modelData.name)
-        screenName: root.modelData.name
-        playVideo: !root.stepAside
-        onDecodedBytesChanged: WorkspaceWallpapers.report("base|" + root.modelData.name, decodedBytes)
+        active: !PerformanceMode.ultra
+        sourceComponent: WallpaperView {
+            path: root.stepAside ? "" : Vibes.wallpaperFor(root.modelData.name)
+            screenName: root.modelData.name
+            playVideo: !root.stepAside
+            onDecodedBytesChanged: WorkspaceWallpapers.report("base|" + root.modelData.name, decodedBytes)
+            Component.onDestruction: WorkspaceWallpapers.report("base|" + root.modelData.name, null)
+        }
     }
 
     DesktopMouse {
