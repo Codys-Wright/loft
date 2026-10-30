@@ -173,7 +173,10 @@ start() {
   fi
 
   # The checkout's niri fragments, after the installed ones (later wins).
-  sed "s|@IPC@|\"quickshell\" \"ipc\" \"--path\" \"$root/src\" \"call\"|g" \
+  # quickshell by absolute path: niri spawns with its own PATH, which
+  # doesn't have it (a bare name made every shell keybind do nothing).
+  qs="$(command -v quickshell)"
+  sed "s|@IPC@|\"$qs\" \"ipc\" \"--path\" \"$root/src\" \"call\"|g" \
     "$root/niri/shell-binds.kdl.in" > "$live/shell-binds.kdl"
   {
     echo "// loft-live: $root over the installed Loft. Removed by \`loft-live stop\`."
