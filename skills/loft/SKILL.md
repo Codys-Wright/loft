@@ -202,7 +202,8 @@ loft keys app APP-ID            # which groups reach the app (✓) and why not (
 loft keys show                  # every group (on/off), the app classes, per-app rules
 ```
 
-Fix the one app, not the whole layer:
+The same is in Settings → Keyboard Remaps (for a person; the dock's Window Rules ▸
+Keyboard Remaps… opens it on an app). Fix the one app, not the whole layer:
 
 | Symptom | Fix |
 |---|---|

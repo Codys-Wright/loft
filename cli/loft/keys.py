@@ -579,9 +579,14 @@ def add_parser(top, state_dir_of) -> None:
 
             def mutate(layer):
                 apps = layer.setdefault("apps", {})
-                rule = {} if a.reset else apps.get(a.app, {})
-                model = resolve(st)
-                cur = model["apps"].get(a.app, {"like": [], "off": []})
+                if a.reset:
+                    apps.pop(a.app, None)
+                rule = apps.get(a.app, {})
+                # What the layers below runtime give (the Nix seed): the
+                # base an unset field falls back to.
+                below = {k: v for k, v in layer.items() if k != "apps"}
+                below["apps"] = {x: y for x, y in apps.items() if x != a.app}
+                cur = resolve(st, runtime=below)["apps"].get(a.app, {"like": [], "off": []})
                 like = [c for c in (rule.get("like", cur["like"])) if c not in a.unlike]
                 rule["like"] = like + [c for c in a.like if c not in like]
                 off = [g for g in rule.get("off", cur["off"]) if g not in a.on]
