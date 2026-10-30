@@ -13,7 +13,7 @@ import Quickshell.Io
 //                small file reads, no processes. Feeds the island's alert
 //                border, the bar readouts, the alerts and the history graphs.
 //   detailed     the island's system page: also the GPU (nvidia-smi on NVIDIA,
-//                sysfs gpu_busy_percent on AMD), every second.
+//                amdgpu sysfs on AMD, the discrete card first), every second.
 //   monitorOpen  the System Monitor window: the above plus per-core load,
 //                processes (one awk over /proc/<pid>/stat + status), every
 //                hwmon sensor and fan, and disks.
@@ -337,10 +337,12 @@ Singleton {
         onLoaded: root.uptime = Number(text().split(/\s+/)[0])
     }
 
-    // GPU: NVIDIA via nvidia-smi, else the first AMD/Intel sysfs busy counter.
+    // GPU: NVIDIA via nvidia-smi, else amdgpu sysfs. With an iGPU and a discrete card both
+    // present the discrete one wins (only dedicated VRAM has mem_info_vram_vendor; card0 is
+    // often the idle iGPU), then the most VRAM; temp, power and fan come from its hwmon.
     Process {
         id: gpuProbe
-        command: ["sh", "-c", "if command -v nvidia-smi >/dev/null; then nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,fan.speed,power.draw,name --format=csv,noheader,nounits | head -n1; else for f in /sys/class/drm/card*/device/gpu_busy_percent; do [ -r \"$f\" ] && echo \"$(cat $f), -1\" && exit; done; fi"]
+        command: ["sh", "-c", "if command -v nvidia-smi >/dev/null; then nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,fan.speed,power.draw,name --format=csv,noheader,nounits | head -n1; exit; fi\nbest=; score=-1\nfor d in /sys/class/drm/card[0-9]*/device; do\n  [ -r \"$d/gpu_busy_percent\" ] || continue\n  s=$(cat \"$d/mem_info_vram_total\" 2>/dev/null || echo 0)\n  [ -e \"$d/mem_info_vram_vendor\" ] && s=$((s + (1 << 60)))\n  [ \"$s\" -gt \"$score\" ] && best=$d && score=$s\ndone\n[ -n \"$best\" ] || exit 0\nr() { cat \"$1\" 2>/dev/null || echo -1; }\nh=$(ls -d \"$best\"/hwmon/hwmon* 2>/dev/null | head -n1)\nt=$(r \"$h/temp1_input\"); [ \"$t\" -ge 0 ] && t=$((t / 1000))\np=$(r \"$h/power1_average\"); [ \"$p\" -ge 0 ] || p=$(r \"$h/power1_input\"); [ \"$p\" -ge 0 ] && p=$((p / 1000000))\nf=$(r \"$h/pwm1\"); [ \"$f\" -ge 0 ] && f=$((f * 100 / 255))\nu=$(r \"$best/mem_info_vram_used\"); [ \"$u\" -ge 0 ] && u=$((u / 1048576))\nm=$(r \"$best/mem_info_vram_total\"); [ \"$m\" -ge 0 ] && m=$((m / 1048576))\nn=\"AMD Radeon\"; [ -e \"$best/mem_info_vram_vendor\" ] || n=\"AMD Radeon (integrated)\"\necho \"$(r \"$best/gpu_busy_percent\"), $t, $u, $m, $f, $p, $n\""]
         stdout: StdioCollector {
             onStreamFinished: {
                 const f = text.trim().split(",").map(s => s.trim());
