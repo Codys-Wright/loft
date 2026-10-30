@@ -154,6 +154,10 @@ PanelWindow {
     // Unread = notifications arrived since the notifications page was last seen.
     property int seenCount: 0
     readonly property bool unread: Notifications.history.length > seenCount
+    // Cleared or dismissed: what's left was seen, so new ones count again.
+    readonly property int historyCount: Notifications.history.length
+    onHistoryCountChanged: if (historyCount < seenCount)
+        seenCount = historyCount
 
     readonly property color alertColor: IslandIpc.alertLevel === "urgent" ? Theme.urgent : IslandIpc.alertLevel === "warn" ? Theme.warn : "transparent"
     // Swiped away: quiet until it clears or gets worse (IslandIpc).
@@ -312,12 +316,15 @@ PanelWindow {
     // Input and blur cover the body only: an attached island's square top
     // and rounded bottom, never its shoulders, so the transparent corners
     // beside them leave the bar's clicks alone.
-    // The pill's resting place (hitBox), not the pill: a Region maps its
-    // item with transforms, so the pill mid-slide (Translate, below) would
-    // give an empty mask, which Quickshell makes WindowTransparentForInput
-    // for good (QtWayland never drops it when the mask fills again).
+    // Input: where the pill is going (hoverBox), not the pill: a Region maps
+    // its item with transforms, so the pill mid-slide (Translate, below)
+    // would give an empty mask, which Quickshell makes
+    // WindowTransparentForInput for good (QtWayland never drops it when the
+    // mask fills again); and mid-morph it would close under the pointer.
+    // Blur follows the pill's resting size (hitBox), so it never runs ahead
+    // of the shape.
     mask: Region {
-        item: hitBox
+        item: hoverBox
         topLeftRadius: root.attached ? 0 : pill.radius
         topRightRadius: root.attached ? 0 : pill.radius
         bottomLeftRadius: pill.radius
@@ -342,6 +349,22 @@ PanelWindow {
         }
         width: pill.width
         height: pill.height
+    }
+
+    // Input (the window mask): where the pill is going, not where its
+    // morph is.
+    // Opening takes ~400 ms; measured against the growing shape, a pointer
+    // heading for the lower half (the notification list) was outside it
+    // for a moment, the island closed, and passing back over it opened it
+    // again — a loop that never let the list be reached.
+    Item {
+        id: hoverBox
+        anchors {
+            top: parent.top
+            horizontalCenter: parent.horizontalCenter
+        }
+        width: root.targetWidth
+        height: root.targetHeight
     }
 
     Item {
@@ -425,28 +448,6 @@ PanelWindow {
             NumberAnimation {
                 duration: pill.morphMs
                 easing.type: Easing.OutQuint
-            }
-        }
-
-        // A fresh HoverHandler each time the window maps: an unmapped
-        // window gets no leave event, so one kept across going away in full
-        // screen with the pointer on it would stay hovered for good (and
-        // hold every later banner on screen).
-        QtObject {
-            id: hover
-            readonly property bool hovered: hoverLoader.item?.hovered ?? false
-            onHoveredChanged: if (!hovered)
-                root.dismissed = false
-        }
-        Loader {
-            id: hoverLoader
-            anchors.fill: parent
-            active: root.visible
-            sourceComponent: Item {
-                readonly property alias hovered: handler.hovered
-                HoverHandler {
-                    id: handler
-                }
             }
         }
 
@@ -1215,6 +1216,35 @@ PanelWindow {
                 shutter.restart();
             else
                 root.showPage(cmd);
+        }
+    }
+
+    // Hover: the pointer is in the window, whose input is the mask above
+    // (where the pill is going). Not a handler on the pill: one on an item
+    // that moves every frame of the morph lost hover under a fast pointer
+    // (Qt), the island closed mid-opening and passing over it opened it
+    // again — the loop that never let the notification list be reached.
+    // Above the pill and the whole window, with no buttons of its own, so
+    // clicks and the pages' own hover go through. A fresh HoverHandler each
+    // time the window maps: an unmapped window gets no leave event, so one
+    // kept across going away in full screen with the pointer on it would
+    // stay hovered for good (and hold every later banner on screen).
+    QtObject {
+        id: hover
+        readonly property bool hovered: hoverLoader.item?.hovered ?? false
+        onHoveredChanged: if (!hovered)
+            root.dismissed = false
+    }
+    Loader {
+        id: hoverLoader
+        anchors.fill: parent
+        z: 100
+        active: root.visible
+        sourceComponent: Item {
+            readonly property alias hovered: handler.hovered
+            HoverHandler {
+                id: handler
+            }
         }
     }
 }
