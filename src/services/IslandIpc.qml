@@ -11,8 +11,17 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    // cmd: toggle | close | next | prev | flash | a page name (media, system, …)
+    // cmd: toggle | close | dismiss | next | prev | flash | a page name (media, system, …)
     signal command(string cmd)
+
+    // A system alert swiped away (Island.qml): "warn" (overload) or "urgent"
+    // (overheating), shared by every screen's island. It stays quiet until
+    // the alert clears or gets worse (overload → overheating).
+    property string alertSilenced: ""
+    readonly property string alertLevel: SystemStats.overheating ? "urgent" : SystemStats.overloaded ? "warn" : ""
+    readonly property bool alertQuiet: alertSilenced !== "" && (alertSilenced === "urgent" || alertLevel !== "urgent")
+    onAlertLevelChanged: if (alertLevel === "" || (alertLevel === "urgent" && alertSilenced === "warn"))
+        alertSilenced = ""
 
     IpcHandler {
         target: "island"
@@ -22,6 +31,10 @@ Singleton {
         }
         function close(): void {
             root.command("close");
+        }
+        // What swiping up does: close it, the banner, then a system alert.
+        function dismiss(): void {
+            root.command("dismiss");
         }
         // The next / previous page (opens the island first when it's closed).
         function next(): void {

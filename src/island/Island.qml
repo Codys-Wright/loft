@@ -30,6 +30,11 @@ import "paging.js" as Paging
 // icon and name for a moment (Spaces.activated). The border pulses on system alerts
 // (overheating / overload) and turns white for unread notifications.
 //
+// Swipe up — drag it upwards (or scroll up over a banner) — to send away
+// what's there, all at once: an open island closes, a banner goes, and a
+// system alert's outline goes quiet (IslandIpc: until it clears or gets
+// worse, on every screen). A call stays until it is answered or declined.
+//
 // Hover expands it into a carousel of pages (IslandPages: order and which
 // are shown live in Settings → Dynamic Island) — live activity, camera,
 // notifications, calendar, media, timers, controls, system, screen time, AI
@@ -40,7 +45,8 @@ import "paging.js" as Paging
 // Paging, expanded: the wheel or a horizontal touchpad swipe (one page per
 // gesture), the ‹ › that appear at its edges, the page dots (click; hover
 // names the page), ← / → once it has the keyboard (click it; Esc closes),
-// and Mod+Alt+← / → (shell-binds).
+// and Mod+Alt+← / → (shell-binds). A page picked by hand is where it opens
+// next time, for `chosenMs`, unless a live activity has started since.
 //
 // Full screen (FullscreenChrome; Settings → Dynamic Island → Hide in full
 // screen): while this display shows a fullscreen window the island slides up
@@ -149,8 +155,9 @@ PanelWindow {
     property int seenCount: 0
     readonly property bool unread: Notifications.history.length > seenCount
 
-    readonly property color alertColor: SystemStats.overheating ? Theme.urgent : SystemStats.overloaded ? Theme.warn : "transparent"
-    readonly property bool alerting: alertColor.a > 0
+    readonly property color alertColor: IslandIpc.alertLevel === "urgent" ? Theme.urgent : IslandIpc.alertLevel === "warn" ? Theme.warn : "transparent"
+    // Swiped away: quiet until it clears or gets worse (IslandIpc).
+    readonly property bool alerting: alertColor.a > 0 && !IslandIpc.alertQuiet
 
     readonly property bool showEvent: live === "" && soonEvent !== null
     readonly property bool agentMark: Settings.island.aiIndicator && AiUsage.enabled && AiUsage.sessions.length > 0
@@ -180,11 +187,52 @@ PanelWindow {
 
     function showPage(name) {
         pinned = true;
-        page = pages.includes(name) ? name : pages[0];
+        choose(pages.includes(name) ? name : pages[0]);
     }
 
     function step(delta) {
-        page = pages[(pageIndex + delta + pages.length) % pages.length];
+        choose(pages[(pageIndex + delta + pages.length) % pages.length]);
+    }
+
+    // A page picked by hand (wheel, swipe, ‹ ›, dots, keys, IPC): the island
+    // opens on it again for `chosenMs` instead of jumping back to the most
+    // relevant page — unless a live activity has started since.
+    readonly property int chosenMs: 5 * 60 * 1000
+    property string chosenPage: ""
+    property real chosenAt: 0
+    property var chosenLive: []
+    function choose(p) {
+        page = p;
+        chosenPage = p;
+        chosenAt = Date.now();
+        chosenLive = liveActivities.slice();
+    }
+    function remembered() {
+        if (chosenPage === "" || !pages.includes(chosenPage) || Date.now() - chosenAt > chosenMs)
+            return "";
+        return liveActivities.some(a => !chosenLive.includes(a)) ? "" : chosenPage;
+    }
+
+    // Swipe up: send away all of it at once — the pointer that swipes has
+    // to hover the island first, which opens it, so "one thing per swipe"
+    // only ever closed it. Returns whether there was anything.
+    function swipeAway() {
+        if (ringing)
+            return false;
+        let any = false;
+        if (alerting) {
+            IslandIpc.alertSilenced = IslandIpc.alertLevel;
+            any = true;
+        }
+        if (banner !== null && !expanded) {
+            Notifications.next();
+            any = true;
+        }
+        if (expanded) {
+            dismiss();
+            any = true;
+        }
+        return any;
     }
 
     // Close, even under the pointer (Esc): until the pointer leaves.
@@ -222,6 +270,8 @@ PanelWindow {
                 return;
             if (root.expanded)
                 root.step(d);
+            else if (d < 0 && orientation === Qt.Vertical && root.swipeAway())
+                return;
             else if (root.liveActivities.length > 1)
                 root.liveIndex = (root.liveIndex + 1) % root.liveActivities.length;
         }
@@ -232,7 +282,7 @@ PanelWindow {
             keys.forceActiveFocus();
         // Open on the most relevant page.
         if (expanded && !pinned)
-            page = [live !== "" ? "live" : "", unread ? "notifications" : "", soonEvent ? "calendar" : "", player ? "media" : "", "system"].find(p => p && pages.includes(p)) ?? pages[0];
+            page = remembered() || ([live !== "" ? "live" : "", unread ? "notifications" : "", soonEvent ? "calendar" : "", player ? "media" : "", "system"].find(p => p && pages.includes(p)) ?? pages[0]);
     }
     onPageChanged: if (page === "notifications")
         seenCount = Notifications.history.length
@@ -413,6 +463,23 @@ PanelWindow {
         }
         PageWheel {
             orientation: Qt.Horizontal
+        }
+
+        // Swipe up: press and drag upwards 14 px — a fixed distance, not the
+        // pill's: hovering has already opened it to full height, and the
+        // screen edge is right above. Takes over only once the drag starts,
+        // so clicks on the pages' buttons still work.
+        DragHandler {
+            target: null
+            xAxis.enabled: false
+            dragThreshold: 6
+            property real dy: 0
+            onActiveTranslationChanged: dy = activeTranslation.y
+            onActiveChanged: {
+                if (!active && dy < -14)
+                    root.swipeAway();
+                dy = 0;
+            }
         }
 
         // Keys while expanded (focus on click): ← / → page, Esc closes.
@@ -959,7 +1026,7 @@ PanelWindow {
                             height: 18
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.page = root.pages[index]
+                            onClicked: root.choose(root.pages[index])
                             onContainsMouseChanged: {
                                 if (containsMouse)
                                     dots.hovered = index;
@@ -1123,6 +1190,8 @@ PanelWindow {
                 root.pinned = !root.pinned;
             else if (cmd === "close")
                 root.dismiss();
+            else if (cmd === "dismiss")
+                root.swipeAway();
             else if (cmd === "next" || cmd === "prev") {
                 if (root.expanded)
                     root.step(cmd === "next" ? 1 : -1);
