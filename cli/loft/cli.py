@@ -1065,6 +1065,23 @@ def _fail(msg: str):
     raise Fail(msg)
 
 
+def run_live(args: list[str], checkout: Path | None) -> int:
+    """`loft dev live …` is `loft-live …`: the checkout on the real desktop, the installed
+    shell and launcher standing down (nix/dev/loft-live.sh)."""
+    starting = not args or args[0] == "start" or args[0].startswith("-")
+    positional = [a for a in args if not a.startswith("-") and a not in ("start", "stop", "status")]
+    if checkout and starting and not positional and not {"-h", "--help"} & set(args):
+        args = [*args, str(checkout)]
+    exe = shutil.which("loft-live")
+    if exe:
+        os.execv(exe, [exe, *args])
+    elif checkout and shutil.which("nix"):
+        os.execvp("nix", ["nix", "run", f"{checkout}#live", "--", *args])
+    else:
+        print("loft: loft-live is not on PATH (try `nix run github:Codys-Wright/loft#live`)", file=sys.stderr)
+    return 1  # exec only returns by failing
+
+
 def run_dev(args: list[str]) -> int:
     """`loft dev …` is `loft-dev …`: the dev / test sessions (nix/dev/loft-dev.sh).
 
@@ -1072,6 +1089,8 @@ def run_dev(args: list[str]) -> int:
     session's default source."""
     here = Path(__file__).resolve().parents[2]
     checkout = here if (here / "src" / "shell.qml").is_file() and (here / "flake.nix").is_file() else None
+    if args[:1] == ["live"]:
+        return run_live(args[1:], checkout)
     positional, i = [], 0
     while i < len(args):
         a = args[i]

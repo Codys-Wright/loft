@@ -199,6 +199,7 @@
             include optional=true "$state/overrides/spaces.kdl"
             include optional=true "$state/overrides/niri.kdl"
             include "${../niri/workspace-wallpapers.kdl}"
+            include "${../niri/traffic-lights.kdl}"
             spawn-at-startup "${lib.getExe self'.packages.loft-shell}"
             spawn-at-startup "${lib.getExe self'.packages.loft-launcher}" "service"
             EOF
@@ -244,12 +245,16 @@
         });
 
         niri-loft = pkgs.niri.overrideAttrs (old: {
-          patches = (old.patches or [ ]) ++ [ ./niri/workspace-layers.patch ];
+          patches = (old.patches or [ ]) ++ [
+            ./niri/workspace-layers.patch
+            ./niri/traffic-lights.patch
+          ];
           env = (old.env or { }) // {
-            NIRI_BUILD_COMMIT = "Nixpkgs, loft: workspace-layers";
+            NIRI_BUILD_COMMIT = "Nixpkgs, loft: workspace-layers, traffic-lights";
           };
           passthru = (old.passthru or { }) // {
             loftWorkspaceLayers = true;
+            loftTrafficLights = true;
           };
         });
 
@@ -272,6 +277,7 @@
             self'.packages.loft-appmenu
             self'.packages.loft-sleep
             self'.packages.loft-input # loft-input / loft-shot inside the session
+            self'.packages.loft-live # `loft-dev live …`
             pkgs.dbus # dbus-run-session: the private bus of isolated sessions
           ];
           text =
@@ -306,6 +312,85 @@
               ]
               (builtins.readFile ./dev/loft-dev.sh);
         };
+
+        # The checkout on the real desktop (nix/dev/loft-live.sh): the installed
+        # shell and launcher stand down while it runs.
+        loft-live = pkgs.writeShellApplication {
+          name = "loft-live";
+          runtimeInputs = runtimeDeps ++ [
+            self'.packages.loft-launcher
+            self'.packages.loft
+            self'.packages.loft-niri
+            self'.packages.loft-appmenu
+            pkgs.nix
+          ];
+          text =
+            builtins.replaceStrings
+              [
+                "@PYTHON@"
+                "@UI_FONT@"
+                "@ICON_FONT@"
+                "@LOCK_QML_PATH@"
+                "@QT_MM_PLUGINS@"
+              ]
+              [
+                "${python}/bin/python3"
+                uiFont
+                iconFont
+                lockQmlPath
+                "${qtMultimedia}/lib/qt-6/plugins"
+              ]
+              (builtins.readFile ./dev/loft-live.sh);
+        };
+
+        # niri-loft for a session that `loft-live --niri` can switch: when
+        # <state>/dev/niri (a checkout's niri-loft build) exists, the compositor
+        # started at login is that one — if it accepts the config; otherwise,
+        # and without it, the installed niri-loft. Use it as programs.niri.package.
+        # Back to the installed one: `loft-live stop --niri` (or remove the link
+        # from a TTY) and log in again.
+        niri-loft-live =
+          let
+            niri = self'.packages.niri-loft;
+            wrapper = pkgs.writeShellScript "niri" ''
+              dev="''${XDG_STATE_HOME:-$HOME/.local/state}/loft/dev/niri/bin/niri"
+              if [ -x "$dev" ]; then
+                if [ "''${1:-}" != "--session" ]; then
+                  exec "$dev" "$@"
+                elif "$dev" validate >/dev/null 2>&1; then
+                  echo "niri-loft-live: running the dev niri $(readlink -f "$dev")" >&2
+                  exec "$dev" "$@"
+                else
+                  echo "niri-loft-live: the dev niri rejects the config; running the installed one" >&2
+                fi
+              fi
+              exec ${lib.getExe niri} "$@"
+            '';
+          in
+          pkgs.runCommand "niri-loft-live-${niri.version}"
+            {
+              inherit (niri) version;
+              passthru = niri.passthru // {
+                providedSessions = niri.passthru.providedSessions or [ "niri" ];
+                # Read off programs.niri.package by niri-flake's module (portals).
+                cargoBuildNoDefaultFeatures = niri.cargoBuildNoDefaultFeatures or false;
+                cargoBuildFeatures = niri.cargoBuildFeatures or [ ];
+              };
+              meta = niri.meta // {
+                mainProgram = "niri";
+              };
+            }
+            ''
+              # Everything but the binary (small: units, sessions, completions),
+              # pointing at this package's niri instead.
+              mkdir -p $out/bin
+              cp -r --no-preserve=mode ${niri}/share ${niri}/lib $out/
+              cp ${wrapper} $out/bin/niri
+              sed 's|${niri}|'"$out"'|g' ${niri}/lib/systemd/user/niri.service > $out/lib/systemd/user/niri.service
+              sed 's|${niri}|'"$out"'|g' ${niri}/bin/niri-session > $out/bin/niri-session
+              chmod +x $out/bin/niri-session
+              grep -rl ${niri} $out/lib $out/share $out/bin/niri-session && { echo "niri-loft-live: still points at ${niri}" >&2; exit 1; } || true
+            '';
 
         # The keyboard layer by hand (programs.loft.keyboard runs it as a
         # service): `loft keys xremap` renders Loft's keymap (cli/loft/keys.py)

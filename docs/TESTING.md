@@ -236,6 +236,31 @@ As a last resort, `--uinput --live --yes-live` creates kernel input devices (nee
 focus on the real desktop gets it. Nested and headless sessions can't receive uinput at all.
 This mode is untested by design.
 
+### A checkout as your real desktop: `loft dev live`
+
+To use a branch for real (your niri, windows, state, settings and theme), let the checkout
+take over from the installed Loft instead of running it in a window:
+
+```sh
+loft dev live            # from the checkout (= nix run .#live): installed shell + launcher stop,
+                         #   the checkout's run with hot reload (QML, niri fragments, themes)
+loft dev live status
+loft dev live stop       # hand back to the installed Loft
+```
+
+While it runs, `$XDG_RUNTIME_DIR/loft-live/active` exists and the installed `loft-shell` /
+`loft-launcher` units refuse to start, so a home-manager switch or a crash restart can't
+bring them back underneath (`programs.loft`). The live shell's unit removes it when it stops,
+including when the session ends, so a reboot or a new login is always the installed Loft. Logs: `journalctl --user -fu loft-live-shell`.
+
+The compositor can't be swapped under a running session. `loft dev live --niri` builds the
+checkout's `niri-loft` into `~/.local/state/loft/dev/niri`. If the session's niri is the
+`niri-loft-live` package (`programs.niri.package`), the next login runs that build, as long
+as it accepts the config. `loft dev live stop --niri` (or removing the link from a TTY) goes
+back to the installed niri at the next login.
+
+Agents: this changes the person's desktop. Only start it when asked.
+
 ## Worked example
 
 ```sh

@@ -13,6 +13,8 @@
 #   loft-dev --session NAME --outputs WxH,WxH,…   the same with several
 #                                            monitors (niri on virtual outputs)
 #   loft-dev --list | --stop NAME
+#   loft-dev live [stop|status] [--niri]    the checkout on the real desktop
+#                                            instead (loft-live, nix/dev/loft-live.sh)
 #
 # Each session lives in $XDG_RUNTIME_DIR/loft-dev (dev) or
 # $XDG_RUNTIME_DIR/loft-dev-NAME, with a session.env saying how to reach it
@@ -66,6 +68,12 @@ usage: loft-dev [--session NAME] [--size WxH | --outputs WxH[+X+Y],…] [--headl
 EOF
   exit 2
 }
+
+# `loft-dev live …` is loft-live: the checkout on the real desktop.
+if [ "${1:-}" = live ]; then
+  shift
+  exec loft-live "$@"
+fi
 
 session=dev
 size=""
@@ -419,7 +427,9 @@ shell_env="$shell_env$video_env"
 ws_kdl=""
 ws_env=""
 if [ "$ws_layers" = 1 ]; then
-  ws_kdl="include \"$root/niri/workspace-wallpapers.kdl\""
+  # niri-loft's traffic lights too (nix/niri/traffic-lights.patch).
+  ws_kdl="include \"$root/niri/workspace-wallpapers.kdl\"
+include \"$root/niri/traffic-lights.kdl\""
   ws_env='"LOFT_NIRI_WORKSPACE_LAYERS=1" '
 fi
 
