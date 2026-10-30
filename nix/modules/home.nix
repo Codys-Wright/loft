@@ -113,6 +113,62 @@
       # The consumer runs a niri that parses `place-within-workspace`.
       workspaceLayers = cfg.niriPackage.passthru.loftWorkspaceLayers or false;
 
+      # programs.loft.keyboard: the seed `loft keys` layers runtime changes on.
+      keyboardSeed = {
+        inherit (cfg.keyboard)
+          groups
+          classes
+          apps
+          remap
+          extraGroups
+          ;
+      };
+      keymapConfig = "${stateDir}/xremap/config.json";
+      # The keymap as this seed renders it, for when `loft keys xremap` fails
+      # at start: a Loft failure never costs the remaps.
+      keymapFallback =
+        pkgs.runCommand "loft-keymap-fallback.json"
+          {
+            seed = builtins.toJSON keyboardSeed;
+            passAsFile = [ "seed" ];
+          }
+          ''
+            HOME=$TMPDIR LOFT_STATE_DIR=$TMPDIR/state LOFT_KEYMAP_SEED=$seedPath \
+              ${lib.getExe sp.loft} keys render --out $out
+          '';
+      # xremap's per-app remaps need NIRI_SOCKET, which niri doesn't put in
+      # the systemd user environment. More than one niri can be running (a
+      # stray `niri` from a TTY): take this session's (niri.$WAYLAND_DISPLAY.
+      # <pid>.sock) whose niri is alive, else any live one — a stale or
+      # foreign socket makes per-app remaps see the wrong window.
+      findNiriSocket = pkgs.writeShellScript "loft-keys-niri-socket" ''
+        live() {
+          local pid=''${1%.sock}; pid=''${pid##*.}
+          [ -S "$1" ] && [ -d "/proc/$pid" ]
+        }
+        pick=""
+        if [ -n "''${WAYLAND_DISPLAY:-}" ]; then
+          for sock in /run/user/$UID/niri."$WAYLAND_DISPLAY".*.sock; do
+            live "$sock" && pick=$sock
+          done
+        fi
+        if [ -z "$pick" ]; then
+          for sock in /run/user/$UID/niri.*.sock; do
+            live "$sock" && pick=$sock
+          done
+        fi
+        [ -n "$pick" ] && exec ${pkgs.systemd}/bin/systemctl --user set-environment NIRI_SOCKET="$pick"
+        exit 0
+      '';
+      keymapStart = pkgs.writeShellScript "loft-keys-render" ''
+        ${lib.concatMapStrings (e: "export ${lib.escapeShellArg e}\n") env}
+        ${lib.getExe sp.loft} keys xremap && exit 0
+        echo "loft keys xremap failed; using the keymap as Nix configured it" >&2
+        mkdir -p "$(dirname ${lib.escapeShellArg keymapConfig})"
+        cp ${keymapFallback} ${lib.escapeShellArg keymapConfig}
+        chmod 644 ${lib.escapeShellArg keymapConfig}
+      '';
+
       service = description: exec: {
         Unit = {
           Description = description;
@@ -434,6 +490,91 @@
           };
         };
 
+        keyboard = {
+          enable = lib.mkEnableOption ''
+            Loft's keyboard layer: macOS-style remaps (Super = Cmd, Esc / Caps
+            hold = the window-manager key, Option word navigation, per-app
+            extras), run by xremap from the config Loft renders
+            (`loft keys xremap`, cli/loft/keys.py). Change it at runtime with
+            `loft keys …` (or the loft_keys_* MCP tools); what you set here is
+            the seed those changes go on top of. Needs read access to
+            /dev/input and /dev/uinput: the user in the `input` and `uinput`
+            groups, `hardware.uinput.enable` on NixOS'';
+
+          package = lib.mkOption {
+            type = lib.types.package;
+            default = pkgs.xremap.niri;
+            defaultText = lib.literalExpression "pkgs.xremap.niri";
+            description = "xremap, built with niri support (per-app remaps follow the focused niri window).";
+          };
+
+          groups = lib.mkOption {
+            type = lib.types.attrsOf lib.types.bool;
+            default = { };
+            example = {
+              symbols = true;
+              right-ctrl-mod = true;
+              browser = false;
+            };
+            description = ''
+              Remap groups on / off by id (`loft keys show` lists them; the
+              defaults are cli/loft/keymap/mac.json). `loft keys group` still wins.
+            '';
+          };
+
+          classes = lib.mkOption {
+            type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
+            default = { };
+            example = {
+              daws = {
+                name = "DAWs";
+                apps = [ "REAPER" ];
+              };
+            };
+            description = ''
+              App classes, or more apps for Loft's own (terminals, browsers,
+              fileManagers, codeEditors, jetbrains): `{ name; apps; }` by id.
+              Groups name a class as `@id` in their application lists.
+            '';
+          };
+
+          apps = lib.mkOption {
+            type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
+            default = { };
+            example = {
+              "dev.cody.term".like = [ "terminals" ];
+              REAPER = {
+                off = [ "cmd" ];
+                remap."Super_L-s" = "Ctrl-s";
+              };
+            };
+            description = ''
+              Per-app rules by niri app id: `like` (join classes), `off`
+              (groups off in this app), `remap` (the app's own remaps, which
+              win over every group). Runtime `loft keys app` changes go on top.
+            '';
+          };
+
+          remap = lib.mkOption {
+            type = lib.types.attrsOf lib.types.anything;
+            default = { };
+            example = {
+              "Super_L-F1" = "F1";
+            };
+            description = "Remaps in every app (xremap key names), before the groups.";
+          };
+
+          extraGroups = lib.mkOption {
+            type = lib.types.listOf (lib.types.attrsOf lib.types.anything);
+            default = [ ];
+            description = ''
+              More groups, after Loft's: `{ id; name; section ? "keymap";
+              application ? { only | not = [ … "@class" ]; }; remap; on ? true; }`.
+              A group with the id of one of Loft's replaces it.
+            '';
+          };
+        };
+
         theme = lib.mkOption {
           type = lib.types.str;
           default = "default";
@@ -564,6 +705,26 @@
               ''}";
             };
 
+        # programs.loft.keyboard: the seed, and xremap on Loft's config. The
+        # shell and `loft keys …` rewrite the config; --watch=config reloads it.
+        xdg.configFile."loft/keyboard.json" = lib.mkIf cfg.keyboard.enable {
+          text = builtins.toJSON keyboardSeed;
+        };
+        systemd.user.services.loft-keys = lib.mkIf cfg.keyboard.enable (
+          lib.recursiveUpdate
+            (service "Loft keyboard layer (xremap)" "${lib.getExe cfg.keyboard.package} --mouse --watch=config,device ${keymapConfig}")
+            {
+              Unit.After = [
+                "graphical-session.target"
+                "niri.service"
+              ];
+              Service.ExecStartPre = [
+                "${findNiriSocket}"
+                "${keymapStart}"
+              ];
+            }
+        );
+
         # Idle: lock through the shell (its WlSessionLock) and blank the screens.
         services.swayidle = {
           enable = true;
@@ -666,14 +827,16 @@
           # Units still running under their studio-linux names (a "suggest"
           # switch leaves removed units running): hand over to the new ones.
           started=" "
-          for pair in studio-shell:loft-shell studio-launcher:loft-launcher; do
+          # The same for a plain xremap.service once Loft runs the keyboard
+          # layer: two xremaps would remap every key twice.
+          for pair in studio-shell:loft-shell studio-launcher:loft-launcher${lib.optionalString cfg.keyboard.enable " xremap:loft-keys"}; do
             if ${pkgs.systemd}/bin/systemctl --user is-active --quiet "''${pair%%:*}.service"; then
               run ${pkgs.systemd}/bin/systemctl --user stop "''${pair%%:*}.service" || true
               run ${pkgs.systemd}/bin/systemctl --user start "''${pair#*:}.service" || true
               started="$started''${pair#*:} "
             fi
           done
-          for unit in loft-shell loft-launcher; do
+          for unit in loft-shell loft-launcher loft-keys; do
             new="$(${pkgs.systemd}/bin/systemctl --user cat "$unit.service" 2>/dev/null | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
             old="$(cat "$state/$unit.unit-hash" 2>/dev/null || true)"
             if [ "$new" != "$old" ]; then

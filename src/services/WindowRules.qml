@@ -254,7 +254,8 @@ Singleton {
             { key: "wr-float", label: "Always Open Floating", enabled: true, toggle: "check", checked: floating, run: () => root.setField(id, "open-floating", floating ? null : true) },
             { key: "s-wr", separator: true, label: "", enabled: true },
             { key: "wr-glass", label: "Translucent Windows", enabled: true, toggle: "check", checked: root.enabled, run: () => root.setGlass({ enabled: !root.enabled }) },
-            { key: "wr-open", label: "Window Rules…", enabled: true, run: () => root.openSettings(id) }
+            { key: "wr-open", label: "Window Rules…", enabled: true, run: () => root.openSettings(id) },
+            { key: "wr-keys", label: "Keyboard Remaps…", enabled: true, run: () => KeyRemaps.openSettings(id) }
         ];
     }
 

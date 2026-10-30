@@ -1,0 +1,421 @@
+{
+  "$comment": "Loft's keyboard layer (cli/loft/keys.py renders it into xremap's config). Groups render in this order; a group with \"on\": false is off unless turned on. \"@class\" in an application list is that class's apps.",
+  "classes": {
+    "terminals": {
+      "name": "Terminals",
+      "apps": [
+        "Alacritty",
+        "kitty",
+        "ghostty",
+        "foot",
+        "wezterm",
+        "org.wezfurlong.wezterm",
+        "org.gnome.Terminal",
+        "org.gnome.Console",
+        "org.gnome.Ptyxis",
+        "konsole",
+        "tilix",
+        "com.gexperts.Tilix",
+        "terminator",
+        "xterm",
+        "urxvt",
+        "st",
+        "io.elementary.terminal"
+      ]
+    },
+    "fileManagers": {
+      "name": "File managers",
+      "apps": [
+        "org.gnome.Nautilus",
+        "nautilus",
+        "Nautilus",
+        "org.gnome.Files",
+        "dolphin",
+        "thunar",
+        "pcmanfm",
+        "nemo",
+        "caja"
+      ]
+    },
+    "browsers": {
+      "name": "Browsers",
+      "apps": [
+        "firefox",
+        "Firefox",
+        "firefox-esr",
+        "librewolf",
+        "LibreWolf",
+        "zen",
+        "zen-browser",
+        "chromium",
+        "Chromium",
+        "google-chrome",
+        "Google-chrome",
+        "brave-browser",
+        "Brave-browser",
+        "Microsoft-edge",
+        "vivaldi",
+        "opera",
+        "epiphany",
+        "org.gnome.Epiphany"
+      ]
+    },
+    "codeEditors": {
+      "name": "VS Code and Cursor",
+      "apps": [
+        "code",
+        "Code",
+        "code-oss",
+        "Code - OSS",
+        "vscodium",
+        "VSCodium",
+        "cursor",
+        "Cursor"
+      ]
+    },
+    "jetbrains": {
+      "name": "JetBrains IDEs",
+      "apps": [
+        "/jetbrains-.*/",
+        "idea",
+        "pycharm",
+        "webstorm",
+        "phpstorm",
+        "goland",
+        "clion",
+        "rider",
+        "datagrip",
+        "rubymine",
+        "android-studio"
+      ]
+    }
+  },
+  "groups": [
+    {
+      "id": "dual-role",
+      "name": "Esc / Caps Lock: tap = Escape, hold = window-manager key",
+      "section": "modmap",
+      "description": "Hold emits Right Alt, which XKB lv3:ralt_switch makes niri's mod key (ISO_Level3_Shift).",
+      "remap": {
+        "Esc": {
+          "tap": "Esc",
+          "hold": "Alt_R",
+          "held_threshold_millis": 100,
+          "tap_timeout_millis": 1000
+        },
+        "CapsLock": {
+          "tap": "Esc",
+          "hold": "Alt_R",
+          "held_threshold_millis": 100,
+          "tap_timeout_millis": 1000
+        }
+      }
+    },
+    {
+      "id": "right-ctrl-mod",
+      "name": "Right Ctrl = window-manager key",
+      "section": "modmap",
+      "on": false,
+      "remap": {
+        "Ctrl_R": {
+          "tap": "Ctrl_R",
+          "hold": "Alt_R",
+          "held_threshold_millis": 0,
+          "tap_timeout_millis": 200
+        }
+      }
+    },
+    {
+      "id": "app-switching",
+      "name": "App and tab switching",
+      "section": "keymap",
+      "description": "⌘Tab / ⌘` switch apps and windows (⇧ backwards)",
+      "remap": {
+        "Super_L-Shift-Tab": "Alt-Shift-Tab",
+        "Super_L-Shift-grave": "Alt-Shift-grave",
+        "Super_L-Tab": "Alt-Tab",
+        "Super_L-grave": "Alt-grave"
+      }
+    },
+    {
+      "id": "cmd",
+      "name": "Cmd shortcuts (non-terminal)",
+      "section": "keymap",
+      "description": "⌘ as Ctrl in apps: ⌘C/V/X/Z/A/S/T/W/Q/F/…",
+      "application": {
+        "not": [
+          "@terminals"
+        ]
+      },
+      "remap": {
+        "Super_L-0": "Ctrl-0",
+        "Super_L-Shift-g": "Ctrl-Shift-g",
+        "Super_L-Shift-n": "Ctrl-Shift-n",
+        "Super_L-Shift-q": "Alt-F4",
+        "Super_L-Shift-r": "Ctrl-Shift-r",
+        "Super_L-Shift-s": "Ctrl-Shift-s",
+        "Super_L-Shift-slash": "Ctrl-Shift-slash",
+        "Super_L-Shift-t": "Ctrl-Shift-t",
+        "Super_L-Shift-z": "Ctrl-Shift-z",
+        "Super_L-a": "Ctrl-a",
+        "Super_L-b": "Ctrl-b",
+        "Super_L-c": "Ctrl-c",
+        "Super_L-comma": "Ctrl-comma",
+        "Super_L-d": "Ctrl-d",
+        "Super_L-e": "Ctrl-e",
+        "Super_L-equal": "Ctrl-equal",
+        "Super_L-f": "Ctrl-f",
+        "Super_L-g": "Ctrl-g",
+        "Super_L-h": "Ctrl-h",
+        "Super_L-i": "Ctrl-i",
+        "Super_L-k": "Ctrl-k",
+        "Super_L-l": "Ctrl-l",
+        "Super_L-minus": "Ctrl-minus",
+        "Super_L-n": "Ctrl-n",
+        "Super_L-o": "Ctrl-o",
+        "Super_L-p": "Ctrl-p",
+        "Super_L-q": "Alt-F4",
+        "Super_L-r": "Ctrl-r",
+        "Super_L-s": "Ctrl-s",
+        "Super_L-slash": "Ctrl-slash",
+        "Super_L-t": "Ctrl-t",
+        "Super_L-u": "Ctrl-u",
+        "Super_L-v": "Ctrl-v",
+        "Super_L-w": "Ctrl-w",
+        "Super_L-x": "Ctrl-x",
+        "Super_L-z": "Ctrl-z"
+      }
+    },
+    {
+      "id": "cmd-terminal",
+      "name": "Cmd shortcuts (terminal)",
+      "section": "keymap",
+      "description": "⌘ in terminals: ⌘C/V → Ctrl+Shift+C/V, ⌘T/W tabs",
+      "application": {
+        "only": [
+          "@terminals"
+        ]
+      },
+      "remap": {
+        "Super_L-0": "Ctrl-0",
+        "Super_L-c": "Ctrl-Shift-c",
+        "Super_L-comma": "Ctrl-comma",
+        "Super_L-equal": "Ctrl-equal",
+        "Super_L-f": "Ctrl-Shift-f",
+        "Super_L-k": "Ctrl-Shift-k",
+        "Super_L-minus": "Ctrl-minus",
+        "Super_L-n": "Ctrl-Shift-n",
+        "Super_L-q": "Alt-F4",
+        "Super_L-t": "Ctrl-Shift-t",
+        "Super_L-v": "Ctrl-Shift-v",
+        "Super_L-w": "Ctrl-Shift-w"
+      }
+    },
+    {
+      "id": "text-editing",
+      "name": "Text navigation and editing",
+      "section": "keymap",
+      "description": "⌘/⌥ + arrows / Backspace: line and word navigation",
+      "application": {
+        "not": [
+          "@terminals",
+          "@fileManagers"
+        ]
+      },
+      "remap": {
+        "Alt-Backspace": "Ctrl-Backspace",
+        "Alt-Delete": "Ctrl-Delete",
+        "Alt-Down": "Ctrl-Down",
+        "Alt-Left": "Ctrl-Left",
+        "Alt-Right": "Ctrl-Right",
+        "Alt-Shift-Down": "Ctrl-Shift-Down",
+        "Alt-Shift-Left": "Ctrl-Shift-Left",
+        "Alt-Shift-Right": "Ctrl-Shift-Right",
+        "Alt-Shift-Up": "Ctrl-Shift-Up",
+        "Alt-Up": "Ctrl-Up",
+        "Super_L-Backspace": [
+          "Shift-Home",
+          "Backspace"
+        ],
+        "Super_L-Delete": [
+          "Shift-End",
+          "Delete"
+        ],
+        "Super_L-Down": "Ctrl-End",
+        "Super_L-Left": "Home",
+        "Super_L-Right": "End",
+        "Super_L-Shift-Down": "Ctrl-Shift-End",
+        "Super_L-Shift-Left": "Shift-Home",
+        "Super_L-Shift-Right": "Shift-End",
+        "Super_L-Shift-Up": "Ctrl-Shift-Home",
+        "Super_L-Up": "Ctrl-Home"
+      }
+    },
+    {
+      "id": "browser",
+      "name": "Browser shortcuts",
+      "section": "keymap",
+      "description": "⌘[ / ⌘] back and forward, ⌘⇧[ / ⌘⇧] previous and next tab",
+      "application": {
+        "only": [
+          "@browsers"
+        ]
+      },
+      "remap": {
+        "Super_L-Shift-leftbrace": "Ctrl-PageUp",
+        "Super_L-Shift-rightbrace": "Ctrl-PageDown",
+        "Super_L-leftbrace": "Alt-Left",
+        "Super_L-rightbrace": "Alt-Right"
+      }
+    },
+    {
+      "id": "file-manager",
+      "name": "File manager shortcuts",
+      "section": "keymap",
+      "description": "⌘⌫ delete, ⌘↓ open, ⌘↑ parent folder, ⌘I properties, ⌘Y preview",
+      "application": {
+        "only": [
+          "@fileManagers"
+        ]
+      },
+      "remap": {
+        "Super_L-Backspace": "Delete",
+        "Super_L-Down": "Enter",
+        "Super_L-Up": "Alt-Up",
+        "Super_L-i": "Alt-Enter",
+        "Super_L-leftbrace": "Alt-Left",
+        "Super_L-rightbrace": "Alt-Right",
+        "Super_L-y": "Space"
+      }
+    },
+    {
+      "id": "code-editor",
+      "name": "VS Code and Cursor",
+      "section": "keymap",
+      "description": "⌘D, ⌘⇧K / ⌘⇧L, ⌘[ / ⌘], ⌥← / ⌥→ by word",
+      "application": {
+        "only": [
+          "@codeEditors"
+        ]
+      },
+      "remap": {
+        "Alt-Left": "Ctrl-Left",
+        "Alt-Right": "Ctrl-Right",
+        "Super_L-Shift-k": "Ctrl-Shift-k",
+        "Super_L-Shift-l": "Ctrl-Shift-l",
+        "Super_L-Shift-slash": "Ctrl-Shift-a",
+        "Super_L-d": "Ctrl-d",
+        "Super_L-leftbrace": "Ctrl-leftbrace",
+        "Super_L-rightbrace": "Ctrl-rightbrace"
+      }
+    },
+    {
+      "id": "jetbrains",
+      "name": "JetBrains IDEs",
+      "section": "keymap",
+      "description": "⌥← / ⌥→ (with ⇧) by word",
+      "application": {
+        "only": [
+          "@jetbrains"
+        ]
+      },
+      "remap": {
+        "Alt-Left": "Ctrl-Left",
+        "Alt-Right": "Ctrl-Right",
+        "Alt-Shift-Left": "Ctrl-Shift-Left",
+        "Alt-Shift-Right": "Ctrl-Shift-Right"
+      }
+    },
+    {
+      "id": "mac-screenshots",
+      "name": "macOS screenshot shortcuts → Loft capture",
+      "section": "keymap",
+      "on": false,
+      "description": "⌘⇧3/4/5 on Left Super reach Loft's capture binds when XKB lv3:lwin_switch makes Left Super a mod key",
+      "remap": {
+        "Super_L-Shift-3": "Super_R-Shift-3",
+        "Super_L-Shift-4": "Super_R-Shift-4",
+        "Super_L-Shift-5": "Super_R-Shift-5"
+      }
+    },
+    {
+      "id": "symbols",
+      "name": "Symbols layer (Right Super held)",
+      "section": "keymap",
+      "on": false,
+      "description": "Hold Right Super + a letter for a symbol",
+      "remap": {
+        "Super_R-0": "Shift-9",
+        "Super_R-1": "leftbrace",
+        "Super_R-2": "Shift-9",
+        "Super_R-3": "Shift-0",
+        "Super_R-4": "rightbrace",
+        "Super_R-5": "dot",
+        "Super_R-6": "Shift-5",
+        "Super_R-7": "Shift-6",
+        "Super_R-8": "Shift-7",
+        "Super_R-9": "Shift-8",
+        "Super_R-Backspace": "Backspace",
+        "Super_R-Enter": "Enter",
+        "Super_R-Shift_L": "Shift_L",
+        "Super_R-Tab": "Shift-1",
+        "Super_R-a": "Shift-6",
+        "Super_R-b": "Shift-dot",
+        "Super_R-c": "Shift-backslash",
+        "Super_R-comma": "Shift-semicolon",
+        "Super_R-d": "Shift-minus",
+        "Super_R-dot": "Shift-7",
+        "Super_R-e": "Shift-rightbrace",
+        "Super_R-f": "Shift-4",
+        "Super_R-g": "Shift-8",
+        "Super_R-h": "h",
+        "Super_R-i": "i",
+        "Super_R-j": "j",
+        "Super_R-k": "apostrophe",
+        "Super_R-l": "Shift-apostrophe",
+        "Super_R-m": "Shift-5",
+        "Super_R-n": "backslash",
+        "Super_R-o": "o",
+        "Super_R-p": "p",
+        "Super_R-q": "comma",
+        "Super_R-r": "semicolon",
+        "Super_R-s": "equal",
+        "Super_R-semicolon": "Shift-equal",
+        "Super_R-slash": "Shift-comma",
+        "Super_R-space": "space",
+        "Super_R-t": "Shift-slash",
+        "Super_R-u": "u",
+        "Super_R-v": "minus",
+        "Super_R-w": "Shift-leftbrace",
+        "Super_R-x": "Shift-comma",
+        "Super_R-y": "y",
+        "Super_R-z": "Shift-grave"
+      }
+    },
+    {
+      "id": "terminal-cmd-swallow",
+      "name": "Swallow Cmd keys in terminals (prevent niri Mod leak)",
+      "section": "keymap",
+      "on": false,
+      "description": "With lv3:lwin_switch, keep unmapped ⌘ keys in terminals from reaching niri as Mod",
+      "application": {
+        "only": [
+          "@terminals"
+        ]
+      },
+      "remap": {
+        "Super_L-Enter": "Enter",
+        "Super_L-d": "d",
+        "Super_L-e": "e",
+        "Super_L-g": "g",
+        "Super_L-h": "h",
+        "Super_L-j": "j",
+        "Super_L-l": "l",
+        "Super_L-o": "o",
+        "Super_L-p": "p",
+        "Super_L-r": "r"
+      }
+    }
+  ],
+  "virtual_modifiers": []
+}

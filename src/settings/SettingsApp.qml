@@ -29,6 +29,7 @@ Scope {
         { id: "input", icon: "󰌌", badge: "gray", label: "Keyboard & Mouse" },
         { id: "layout", icon: "󰕰", badge: "mint", label: "Layout & Motion" },
         { id: "keybinds", icon: "󰘳", badge: "graphite", label: "Keyboard Shortcuts" },
+        { id: "keyremaps", icon: "󰌌", badge: "indigo", label: "Keyboard Remaps" },
         { id: "windowrules", icon: "󰖲", badge: "teal", label: "Window Rules" },
         { id: "system", icon: "󰍛", badge: "gray", label: "System" },
         { id: "sound", icon: "󰕾", badge: "pink", label: "Sound" },
@@ -69,6 +70,9 @@ Scope {
         }
         function windowrules(): void {
             root.show("windowrules");
+        }
+        function keyremaps(): void {
+            root.show("keyremaps");
         }
 
         function features(): void {
@@ -126,6 +130,8 @@ Scope {
             NiriSettings.refreshBinds();
         else if (section === "windowrules")
             WindowRules.refresh();
+        else if (section === "keyremaps")
+            KeyRemaps.refresh();
         else if (["displays", "input", "layout"].includes(section))
             NiriSettings.refresh();
     }
@@ -441,6 +447,13 @@ Scope {
                     WindowRulesPage {
                         Layout.fillWidth: true
                         visible: root.section === "windowrules"
+                        shown: root.open
+                        flick: content
+                    }
+
+                    KeyRemapsPage {
+                        Layout.fillWidth: true
+                        visible: root.section === "keyremaps"
                         shown: root.open
                         flick: content
                     }

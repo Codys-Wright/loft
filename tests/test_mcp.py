@@ -80,7 +80,7 @@ class Protocol(unittest.TestCase):
         self.assertEqual(init["serverInfo"]["name"], "loft")
         self.assertEqual(out[1]["result"], {})
         names = [t["name"] for t in out[2]["result"]["tools"]]
-        for want in ("list_windows", "screenshot_output", "shell_ipc_call", "loft_windows_rule", "loft_niri_set"):
+        for want in ("list_windows", "screenshot_output", "shell_ipc_call", "loft_windows_rule", "loft_niri_set", "loft_keys_show", "loft_keys_app", "loft_keys_group"):
             self.assertIn(want, names)
         self.assertEqual(len(names), len(set(names)))
         for t in out[2]["result"]["tools"]:
@@ -308,6 +308,50 @@ def _png(w: int, h: int) -> bytes:
 
     raw = b"".join(b"\0" + b"\0\0\0" * w for _ in range(h))
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+
+
+class KeysTools(unittest.TestCase):
+    """loft_keys_* through the real `loft keys` CLI, in a scratch state dir."""
+
+    def setUp(self):
+        tmp = Path(tempfile.mkdtemp(prefix="loft-mcp-keys-"))
+        self.addCleanup(shutil.rmtree, tmp)
+        self.state = tmp / "state"
+        env = {"LOFT_STATE_DIR": str(self.state), "LOFT_KEYMAP_SEED": str(tmp / "seed.json")}
+        old = {k: os.environ.get(k) for k in env}
+        os.environ.update(env)
+        self.addCleanup(lambda: [os.environ.pop(k) if v is None else os.environ.__setitem__(k, v) for k, v in old.items()])
+        self.server = mcp.Server(mcptools.tools(), mcptools.INSTRUCTIONS)
+
+    def result(self, name, args):
+        r = call(self.server, name, args)["result"]
+        self.assertFalse(r.get("isError"), r)
+        return json.loads(r["content"][0]["text"])
+
+    def test_app_rule_round_trip(self):
+        v = self.result("loft_keys_app", {"app_id": "dev.cody.term", "like": ["terminals"], "off": ["app-switching"], "remap": {"Super_L-k": "Ctrl-l"}})
+        self.assertEqual(v["classes"], ["terminals"])
+        self.assertEqual(v["rule"]["remap"], {"Super_L-k": "Ctrl-l"})
+        why = {g["id"]: g["why"] for g in v["groups"]}
+        self.assertEqual(why["app-switching"], "off for this app")
+        cfg = json.loads((self.state / "xremap" / "config.json").read_text())
+        self.assertEqual(cfg["keymap"][0]["application"], {"only": ["dev.cody.term"]})
+        v = self.result("loft_keys_app", {"app_id": "dev.cody.term", "remap": {"Super_L-k": None}, "leave_alone": True})
+        self.assertTrue(v["leaveAlone"])
+        self.assertEqual(v["rule"]["remap"], {})
+        v = self.result("loft_keys_app", {"app_id": "dev.cody.term", "reset": True, "leave_alone": False})
+        self.assertEqual((v["rule"]["like"], v["rule"]["off"], v["classes"]), ([], [], []), "reset drops the runtime rule")
+        self.result("loft_keys_app", {"app_id": "dev.cody.term", "leave_alone": True})
+        g = self.result("loft_keys_group", {"id": "symbols", "state": "on"})
+        self.assertTrue(g["on"])
+        show = self.result("loft_keys_show", {})
+        self.assertEqual(show["leaveAlone"], ["dev.cody.term"])
+
+    def test_bad_remaps_are_errors(self):
+        for args in ({"app_id": "x", "remap": {"Super_L-k": "Ctrl-Bogus"}}, {"app_id": "x", "remap": {"--reset": "a"}}):
+            r = call(self.server, "loft_keys_app", args)["result"]
+            self.assertTrue(r.get("isError"), args)
+        self.assertFalse((self.state / "overrides" / "keymap.json").exists())
 
 
 if __name__ == "__main__":

@@ -778,14 +778,18 @@ ColumnLayout {
         }
 
         SettingsRow {
-            readonly property bool wired: Shortcuts.xremapStatus !== "" && !Shortcuts.xremapStatus.startsWith("loft: no xremap base")
+            readonly property bool wired: Shortcuts.xremapStatus !== "" && !Shortcuts.xremapStatus.startsWith("loft")
             label: "Keyboard remaps (xremap)"
-            hint: wired ? `Following this list — ${Shortcuts.xremapStatus.replace(/^.*: /, "")}` : "Not wired to this list"
+            hint: wired ? `Following this list — ${Shortcuts.xremapStatus.replace(/^.*: /, "")}` : "xremap isn't running Loft's keymap"
+            SettingsButton {
+                text: "Keyboard Remaps…"
+                onClicked: Panels.settingsSection = "keyremaps"
+            }
         }
         Text {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
-            text: "xremap's remaps (the macOS keys, Caps Lock / Esc as Mod, the symbol layer) are switched off in these apps when the xremap service reads Loft's copy of its config: it runs `loft keys xremap --base <its config as JSON>` before starting and xremap watches <state>/xremap/config.json (see FEATURES.md → Apps to leave alone)."
+            text: "Loft's keyboard layer (the macOS keys, Caps Lock / Esc as Mod, the symbol layer) is switched off in these apps. It runs as xremap on the config Loft renders (programs.loft.keyboard, loft-keys.service); Keyboard Remaps (or `loft keys app <app id>`) fixes one app's keys without turning everything off."
             color: Theme.subtext
             font.family: Theme.fontUi
             font.pixelSize: 11
