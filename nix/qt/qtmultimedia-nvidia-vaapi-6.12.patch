@@ -1,0 +1,182 @@
+diff --git a/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegcodeccontext.cpp b/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegcodeccontext.cpp
+index 759f546..fefc054 100644
+--- a/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegcodeccontext.cpp
++++ b/src/plugins/multimedia/ffmpeg/playbackengine/qffmpegcodeccontext.cpp
+@@ -125,7 +125,11 @@ q23::expected<CodecContext, QString> CodecContext::create(AVStream *stream,
+         av_dict_set(opts, "flags", "low_delay", 0);
+ 
+     av_dict_set(opts, "refcounted_frames", "1", 0);
+-    av_dict_set(opts, "threads", "auto", 0);
++    // Hardware decoding gains nothing from frame threads, and with them
++    // nvidia-vaapi-driver can lose track of a surface: the GUI thread then
++    // waits forever in vaExportSurfaceHandle (waitSurfaceResolved). One
++    // thread, as mpv does for hwdec.
++    av_dict_set(opts, "threads", hwAccel ? "1" : "auto", 0);
+     applyExperimentalCodecOptions(*decoder, opts);
+ 
+     ret = avcodec_open2(context.get(), decoder->get(), opts);
+diff --git a/src/plugins/multimedia/ffmpeg/qffmpeghwaccel.cpp b/src/plugins/multimedia/ffmpeg/qffmpeghwaccel.cpp
+index 877b3a8..129a9fa 100644
+--- a/src/plugins/multimedia/ffmpeg/qffmpeghwaccel.cpp
++++ b/src/plugins/multimedia/ffmpeg/qffmpeghwaccel.cpp
+@@ -3,6 +3,11 @@
+ 
+ #include "qffmpeghwaccel_p.h"
+ 
++#include <mutex>
++
++#include <QtCore/QCoreApplication>
++#include <QtCore/QTimer>
++
+ #ifdef Q_OS_WINDOWS
+ #  include "qffmpeghwaccel_d3d11_p.h"
+ #  include <QtCore/private/qsystemlibrary_p.h>
+@@ -304,10 +309,49 @@ AVPixelFormat getFormat(AVCodecContext *codecContext, const AVPixelFormat *fmt)
+     return format;
+ }
+ 
+-HWAccel::~HWAccel() = default;
++// VAAPI decoders share one device (VADisplay) while any of them is alive.
++// nvidia-vaapi-driver backs each device with its own CUDA context, a few
++// hundred MB of VRAM apiece: with a device per player, every video
++// wallpaper paid that again.
++static std::mutex sharedVaapiMutex;
++static AVBufferRef *sharedVaapiDevice = nullptr;
++
++// Drops the shared device when nothing but `alsoHeld` other references
++// (the dying HWAccel's own) still use it.
++static void releaseSharedVaapiIfUnused(int alsoHeld = 0)
++{
++    std::lock_guard lock(sharedVaapiMutex);
++    if (sharedVaapiDevice && av_buffer_get_ref_count(sharedVaapiDevice) == 1 + alsoHeld)
++        av_buffer_unref(&sharedVaapiDevice);
++}
++
++HWAccel::~HWAccel()
++{
++    m_hwFramesContext.reset();
++    if (m_hwDeviceContext && hwDeviceContext()->type == AV_HWDEVICE_TYPE_VAAPI) {
++        // m_hwDeviceContext is const and goes after this body: if it is the
++        // shared device's only other reference, drop the shared one now.
++        releaseSharedVaapiIfUnused(1);
++        // The codec context and frames still in flight hold the device a
++        // little longer; look again once they are gone.
++        if (auto *app = QCoreApplication::instance())
++            QTimer::singleShot(3000, app, [] { releaseSharedVaapiIfUnused(); });
++    }
++}
+ 
+ HWAccelUPtr HWAccel::create(AVHWDeviceType deviceType)
+ {
++    if (deviceType == AV_HWDEVICE_TYPE_VAAPI) {
++        std::lock_guard lock(sharedVaapiMutex);
++        if (!sharedVaapiDevice) {
++            auto ctx = loadHWContext(deviceType);
++            if (!ctx)
++                return {};
++            sharedVaapiDevice = av_buffer_ref(ctx.get());
++            return HWAccelUPtr(new HWAccel(std::move(ctx)));
++        }
++        return HWAccelUPtr(new HWAccel(AVBufferUPtr(av_buffer_ref(sharedVaapiDevice))));
++    }
+     if (auto ctx = loadHWContext(deviceType))
+         return HWAccelUPtr(new HWAccel(std::move(ctx)));
+     else
+diff --git a/src/plugins/multimedia/ffmpeg/qffmpeghwaccel_vaapi.cpp b/src/plugins/multimedia/ffmpeg/qffmpeghwaccel_vaapi.cpp
+index 8cea34c..1b2f7f2 100644
+--- a/src/plugins/multimedia/ffmpeg/qffmpeghwaccel_vaapi.cpp
++++ b/src/plugins/multimedia/ffmpeg/qffmpeghwaccel_vaapi.cpp
+@@ -21,6 +21,7 @@ extern "C" {
+ #include <va/va.h>
+ #include <va/va_drmcommon.h>
+ 
++#include <atomic>
+ #include <unistd.h>
+ 
+ static_assert(QT_CONFIG(vaapi));
+@@ -33,8 +34,6 @@ namespace QFFmpeg {
+ 
+ using QtMultimediaPrivate::DRMFormat;
+ 
+-constexpr bool VAExportUseLayers = false;
+-
+ VAAPITextureConverter::VAAPITextureConverter(QRhi *rhi)
+     : TextureConverterBackend(nullptr), eglContext(rhi)
+ {
+@@ -77,16 +76,32 @@ VAAPITextureConverter::createTextureHandles(AVFrame *frame,
+ 
+     VASurfaceID vaSurface = (uintptr_t)frame->data[3];
+ 
++    // Drivers export either one composed layer with a plane per component
++    // (Mesa) or one layer per plane (nvidia-vaapi-driver supports only
++    // VA_EXPORT_SURFACE_SEPARATE_LAYERS). Try composed first, then separate,
++    // and remember what worked.
+     VADRMPRIMESurfaceDescriptor prime = {};
+-    if (vaExportSurfaceHandle(vaDisplay, vaSurface, VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2,
+-                              VA_EXPORT_SURFACE_READ_ONLY
+-                                      | (VAExportUseLayers ? VA_EXPORT_SURFACE_SEPARATE_LAYERS
+-                                                           : VA_EXPORT_SURFACE_COMPOSED_LAYERS),
+-                              &prime)
+-        != VA_STATUS_SUCCESS) {
++    static std::atomic<int> exportMode{ 0 }; // 0 unknown, 1 composed, 2 separate
++    bool separateLayers = exportMode.load() == 2;
++    auto exportSurface = [&](bool separate) {
++        prime = {};
++        return vaExportSurfaceHandle(vaDisplay, vaSurface, VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2,
++                                     VA_EXPORT_SURFACE_READ_ONLY
++                                             | (separate ? VA_EXPORT_SURFACE_SEPARATE_LAYERS
++                                                         : VA_EXPORT_SURFACE_COMPOSED_LAYERS),
++                                     &prime)
++                == VA_STATUS_SUCCESS;
++    };
++    bool exported = exportSurface(separateLayers);
++    if (!exported && exportMode.load() == 0) {
++        separateLayers = !separateLayers;
++        exported = exportSurface(separateLayers);
++    }
++    if (!exported) {
+         qWarning() << "vaExportSurfaceHandle failed";
+         return nullptr;
+     }
++    exportMode.store(separateLayers ? 2 : 1);
+ 
+     // Make sure all fd's in 'prime' are closed when we return from this function
+     QScopeGuard closeObjectsGuard([&prime]() {
+@@ -115,22 +130,27 @@ VAAPITextureConverter::createTextureHandles(AVFrame *frame,
+     nPlanes = desc->nplanes;
+ //        qCDebug(qLHWAccelVAAPI) << "VAAPIAccel: nPlanes" << nPlanes;
+ 
+-    DmaBufPlane planes[4];
+-    for (int i = 0;  i < nPlanes;  ++i) {
+-        const int layer = VAExportUseLayers ? i : 0;
+-        const int plane = VAExportUseLayers ? 0 : i;
+-
+-        if constexpr (VAExportUseLayers) {
+-            if (prime.layers[i].drm_format != quint32(drm_formats[i])) {
+-                qWarning() << "expected DRM format check failed expected" << Qt::hex
+-                           << quint32(drm_formats[i]) << "got" << prime.layers[i].drm_format;
++    if (separateLayers) {
++        for (int i = 0; i < nPlanes; ++i) {
++            if (uint32_t(i) >= prime.num_layers || prime.layers[i].num_planes != 1) {
++                qWarning() << "VAAPI separate layers: unexpected layout for plane" << i;
++                return nullptr;
+             }
+         }
++    }
++
++    DmaBufPlane planes[4];
++    for (int i = 0;  i < nPlanes;  ++i) {
++        const int layer = separateLayers ? i : 0;
++        const int plane = separateLayers ? 0 : i;
+ 
+         planes[i].fd = prime.objects[prime.layers[layer].object_index[plane]].fd;
+         planes[i].offset = prime.layers[layer].offset[plane];
+         planes[i].pitch = prime.layers[layer].pitch[plane];
+-        planes[i].drmFormat = drm_formats[i];
++        // Separate layers: the format the driver reports for each one
++        // (nvidia-vaapi-driver says RG88/RG1616 for the chroma plane).
++        planes[i].drmFormat = separateLayers ? DRMFormat(prime.layers[i].drm_format)
++                                             : drm_formats[i];
+         planes[i].modifier =
+                 prime.objects[prime.layers[layer].object_index[plane]].drm_format_modifier;
+     }
