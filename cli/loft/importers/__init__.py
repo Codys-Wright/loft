@@ -239,11 +239,25 @@ def install_v1(
 
 
 def add_index_vibes(pack_dir: Path, index: dict) -> None:
-    """Merge the index's curated links for this pack into its manifest."""
+    """What the themes index curates for this freshly built v1 pack: its vibe
+    links go into the manifest (`vibes`, so they hold offline), and a curated
+    palette mapping (PLAN §8.2) is laid over the derived palette in
+    theme.json (manifest upstream.palette = curated)."""
     mf = pack_dir / "manifest.json"
     manifest = json.loads(mf.read_text())
+    changed = False
     links = theme_index.merge_links(manifest.get("vibes"), theme_index.links_for(index, manifest["name"]))
     links = {k: v for k, v in links.items() if v}
     if links:
         manifest["vibes"] = links
+        changed = True
+    curated = theme_index.curated_for(index, manifest["name"])
+    tf = pack_dir / "theme.json"
+    if curated and tf.is_file():
+        theme = json.loads(tf.read_text())
+        tf.write_text(json.dumps(theme_index.apply_curated(theme, curated), indent=2) + "\n")
+        if isinstance(manifest.get("upstream"), dict):
+            manifest["upstream"]["palette"] = "curated"
+        changed = True
+    if changed:
         mf.write_text(json.dumps(manifest, indent=2) + "\n")

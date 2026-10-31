@@ -72,6 +72,8 @@ loft theme list | current
 loft theme apply latte                        # render (cached) → swap `current` → reload shell, niri, kitty, Ghostty, GTK
 loft theme render tokyonight ./out            # just render a pack's files
 loft theme new mytheme --from latte           # scaffold in the library's Packs/ (else ~/.local/share/loft/themes)
+loft theme browse [words…] | search WORDS | info NAME   # the themes index (loft-themes)
+loft theme install NAME                       # from the index: Loft's packs and every importer theme
 loft theme install ./pack | pack.tar.zst | https://…/repo.git [--subdir packs/x]
 loft theme install cozytile:all               # importers convert upstream themes at install time
 loft theme install qylock:pixel-sakura        #   (--list cozytile: / qylock: shows what's available)

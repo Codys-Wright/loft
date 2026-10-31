@@ -281,7 +281,9 @@ Nix calls the *same* renderer at build time for the built-in packs, so
 **Theme manager CLI** (`loft theme`; the shell's selector is a GUI over the same commands):
 
 ```
-loft theme list [--installed|--available]        # local packs + index entries
+loft theme list [--available]                    # local packs; --available: index entries not installed
+loft theme browse|search [words…] / info <name>  # the themes index (loft-themes)
+loft theme install <name>                        # by name, from the index (a pack or an importer theme)
 loft theme vibes [<name>] [--json] [--dir DIR]    # wallpapers + lock designs that fit (own, curated, ranked)
 loft theme apply <name>                          # render (cached) → swap current → reload hooks
 loft theme install <git-url|tarball|path>        # any pack
@@ -308,9 +310,12 @@ third-party is committed here or built into a machine:
   wallpaper, SDDM art → `greeter/`. Cozytile's SDDM themes are themselves
   qylock-format, so `greeter/` could also be declared as the pack's `lock`.
 
-**Index for sharing:** `loft theme` reads one or more index URLs (JSON:
-name → source, preview image). The default index is a repo of ours listing
-our own packs plus the qylock/cozytile importer entries. Anyone can host one.
+**Index for sharing:** `loft theme` reads one index (`$LOFT_THEME_INDEX`:
+a path or URL, `none` = off; cached a day). The default is `index.json` in
+our loft-themes repo (§8.3), listing our own packs plus every qylock/cozytile
+importer theme, with preview palettes, vibe groups and curated palettes
+(§8.2). Anyone can host one. Format and commands: THEME-FORMAT.md, "Themes
+index".
 
 **Overrides and save-back** (§4.1): per-token tweaks go to
 `overrides/theme-<name>.json`. `loft save --as-theme <new>` writes
@@ -529,7 +534,7 @@ Motion cover its ground (Phase 7).
 blur), terminals, GTK and Noctalia live with no rebuild, and the default
 theme comes from Nix.
 
-### Phase 1b: Theme manager + importers *(manager + importers done; index TODO)*
+### Phase 1b: Theme manager + importers *(done; index — branch `theme-index`, #5)*
 
 > **Status:** `loft theme install <dir|tarball|tarball URL|git URL> [--subdir]
 > [--force]` (validated against the schema, manifest required), `new [--from]`,
@@ -538,7 +543,20 @@ theme comes from Nix.
 > sparse at install time and write `cozytile-<theme>` / `qylock-<theme>` packs
 > (manifest `upstream` + `lock`; see docs/THEME-FORMAT.md "Importers").
 > `cozytile:all` downloads ~15 MB; a qylock theme downloads only its own
-> directory (0.3–78 MB). Index support is not started.
+> directory (0.3–78 MB).
+>
+> **Index** (#5): the themes index lives in loft-themes (§8.3), format 2
+> (`entries`: name, title, collection, the theme it becomes, source = git
+> URL + rev + path or importer + id, preview palette/image, `curated`
+> palette; `importers`; `vibes`; a v1 index still reads). `loft theme
+> browse|search|info`, `list --available`, `install NAME` (through the
+> importer / git install paths; a git entry at its rev), `index where`.
+> `loft theme index build` generates loft-themes' `index.json` from its
+> `packs/`, `catalog.json` and the importers' upstream catalogs
+> (deterministic, `--check` for CI, `--extract` records derived palettes);
+> loft-themes' `tools/gen-index` runs it. Curated palettes are applied at
+> import (manifest `upstream.palette: curated`). Tests:
+> `tests/test_theme_index.py`.
 
 - `install|new|export|remove`, index support, `~/.local/share/loft themes`.
 - `cozytile:` importer (all five) and `qylock:` importer (palette + assets;
@@ -706,8 +724,10 @@ docs/PLAN.md  CREDITS.md  LICENSE
 
 **loft-themes**
 ```
-index.json                # name → source, preview; includes qylock:*/cozytile:* importer entries
-packs/<name>/             # manifest.json, theme.json (palette + glass), optional wallpaper/fonts/lock/greeter/apps
+index.json                # generated (`tools/gen-index` = `loft theme index build`): format 2 entries for packs/ + every qylock/cozytile theme
+catalog.json              # hand-maintained: repo/branch, importers, per-entry overrides (tags, preview, curated palettes, hidden), vibe groups
+packs/<name>/             # v1 (manifest.json + theme.json) or v2 (pack.json) packs; optional preview.{png,jpg,webp}
+tools/gen-index
 ```
 
 **Fleet (`~/.flake`) after integration**
@@ -730,18 +750,29 @@ den.hosts.x86_64-linux.THEBATTLESHIP.settings.desktop = {
 
 1. **Keyboard:** Option A (Caps-hold WM key on both + mac Ctrl aliases) or
    Option B (Ctrl as WM key)? *Recommend A.*
-2. **Pack palette mapping for imports:** when a qylock or Cozytile theme has
-   no explicit palette, extract it from the wallpaper (matugen/wallust) and
-   let the user fix it in the editor. Or require hand-mapping each one once
-   and publishing the results in our index? *Leaning: extract, then curate
-   the ones we use.*
-3. **Theme index home:** a separate public repo (e.g. `loft-themes`) holding
-   our own packs + importer entries, or a directory in this repo?
+2. ~~Pack palette mapping for imports~~ — decided, see below.
+3. ~~Theme index home~~ — decided, see below.
 4. **Shell name** (placeholder: `loft-shell`).
 5. **voyager WM:** stay with OmniWM (as `desktop-design.md` plans), or
    AeroSpace, which has a richer config, for the parity layer?
 
 ### Decided
+- **Theme index home (§8.3, #5):** the separate public **loft-themes** repo
+  (`Codys-Wright/loft-themes`) holds `index.json` (generated), `catalog.json`
+  (curated data) and our shareable packs; Loft reads it by URL
+  (`$LOFT_THEME_INDEX`, default its raw GitHub URL) and nothing in it is a
+  build input. Loft carries the format, the reader and the generator
+  (`loft theme index build`), so they're tested with the CLI.
+- **Palette mapping for imports (§8.2, #5): extract, then curate the ones we
+  use.** Importers derive every palette automatically: the theme's own config
+  colors first (Cozytile: qtile/rofi/pywal; qylock: `theme.conf`), the rest
+  extracted from its background with our own median cut + k-means
+  (`palette.py`, not matugen/wallust), video frames via ffmpeg, roles the
+  upstream lacks filled and contrast-checked. Nothing requires hand-mapping.
+  Where a derived palette is wrong for a theme we use, a curated mapping
+  (any roles, and/or polarity) goes in loft-themes' `catalog.json` →
+  `index.json` `curated`, and is laid over the derived one at install time;
+  the result stays an ordinary pack, editable afterwards.
 - Themes are mainly **palette + glass/blur state**. The design language
   (Liquid Glass, mac-like components) is fixed, and themes need not be
   mac-like.

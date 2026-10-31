@@ -316,7 +316,10 @@ PNG decoder, so a bare `python3` with no extra modules still imports PNG
 backgrounds.
 
 Vibe links the themes index declares for an imported pack (see below) are
-written into its `manifest.json` `vibes`, so they hold offline too.
+written into its `manifest.json` `vibes`, so they hold offline too. A
+**curated palette** the index has for it (`curated`, see "Themes index") is
+laid over the derived palette in its `theme.json`, and the manifest's
+`upstream.palette` says `curated`.
 
 An importer is a module registered in `cli/loft/importers/__init__.py`
 with `list_themes`, `resolve`, `pack_name`, `install(theme, dest, up)` and an
@@ -359,6 +362,71 @@ The index is read from `$LOFT_THEME_INDEX` (a path, `file://` or http(s)
 URL; `none` turns it off), by default the GitHub raw URL, cached a day in
 `$LOFT_STATE_DIR/cache/index.json`; unreachable means no index links, never
 an error.
+
+## Themes index
+
+The index lives in [loft-themes](https://github.com/Codys-Wright/loft-themes)
+(`index.json`), next to Loft's own shareable packs (`packs/<name>/`). Nothing
+in it is needed to build a machine. It lists Loft's packs and every theme the
+importers can bring in, and carries the curated data: vibe groups and curated
+palettes.
+
+```sh
+loft theme browse [WORDS…] [--collection C] [--installed|--available] [--json] [--refresh]
+loft theme search WORDS…                        # = browse WORDS
+loft theme list --available                     # = browse --available
+loft theme info NAME [--json]                   # source, palette (derived / curated), preview, vibes
+loft theme install NAME [--force]               # by entry name, theme (cozytile@sakura), IMPORTER:ID or a unique id/title
+loft theme index where [--json]                 # source, cache age, entry count
+loft theme index build [REPO] [-o FILE] [--check] [--no-importers] [--extract[=IMPORTER,…]]
+```
+
+`install NAME` is tried only when NAME is not an existing path, URL or
+`IMPORTER:` ref, and goes through the usual install paths: an importer entry
+installs `IMPORTER:ID[@REV]`; a git entry fetches `git` at `rev` (shallow;
+branch, tag or commit) and installs the pack at `path`.
+
+Format (version 2):
+
+```json
+{
+  "version": 2,
+  "repo": "https://github.com/Codys-Wright/loft-themes",
+  "importers": { "qylock": { "source": "https://github.com/Darkkal44/qylock", "license": "GPL-3.0",
+                             "description": "…", "commit": "<upstream commit listed>" } },
+  "entries": [
+    { "name": "moss", "title": "Moss", "collection": "loft-themes", "theme": "moss",
+      "license": "CC0-1.0", "description": "…", "tags": ["green"],
+      "source": { "git": "https://github.com/Codys-Wright/loft-themes", "rev": "main", "path": "packs/moss" },
+      "preview": { "image": "https://raw.githubusercontent.com/…/packs/moss/preview.png",
+                   "polarity": "dark", "palette": { "bg": "#…", "…": "…" }, "paletteFrom": "pack" } },
+    { "name": "cozytile-sakura", "title": "Cozytile Sakura", "collection": "cozytile",
+      "theme": "cozytile@sakura", "license": "NOASSERTION",
+      "source": { "importer": "cozytile", "id": "Sakura" },
+      "preview": { "polarity": "dark", "palette": { "…": "…" }, "paletteFrom": "upstream" },
+      "curated": { "polarity": "dark", "palette": { "accent": "#e5b9c6" } } }
+  ],
+  "vibes": [ { "name": "sakura", "description": "…", "packs": ["cozytile-sakura", "qylock-pixel-sakura"] } ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `name` | What `install NAME` takes; for importer entries the v1 pack name (what vibe groups use) |
+| `theme` | The theme (`theme@variant`) it becomes in format 2 |
+| `source` | `{git, rev, path}` (a pack in a repo), `{url, path?}` (a tarball) or `{importer, id, rev?}` |
+| `preview` | `image` (a URL), `polarity`, `palette` (the ten roles) and `paletteFrom`: `pack`, `upstream` (the theme's own config colors), `extracted` (from its background) or `default` |
+| `curated` | A hand-checked palette mapping (any of the ten roles, and/or `polarity`) laid over the derived one at install time; readers show `preview` with it applied (`paletteFrom: curated`) |
+
+A version-1 index (no `entries`; `packs` map and importer `themes` lists)
+still reads. `loft theme index build` generates the file from the repo's
+`packs/`, its hand-maintained `catalog.json` (repo URL and branch, importers,
+per-entry overrides: `title`, `description`, `tags`, `preview.image`,
+`curated`, `hidden`; the vibe groups) and the importers' upstream catalogs
+(tree-only fetches). Without `--extract` the derived palettes of the previous
+`index.json` are kept; an importer that can't be reached keeps its previous
+entries. The output is deterministic, so `--check` works in CI. loft-themes'
+`tools/gen-index` runs it.
 
 ## Authoring
 
