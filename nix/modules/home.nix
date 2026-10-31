@@ -248,7 +248,9 @@
             overview: ~/.config/loft/niri.kdl then includes the
             `place-within-workspace` layer rule (which a stock niri would
             reject) and the shell turns the feature on. Also used for
-            `niri msg` in the idle timeouts.
+            `niri msg` in the idle timeouts. On a NixOS host that imports
+            Loft's NixOS module, the default is the system's
+            `programs.niri.package` instead.
           '';
         };
 

@@ -27,6 +27,10 @@ binds {
     Mod+Shift+Period hotkey-overlay-title="Snippets" { spawn "timeout" "-k" "1" "5" @IPC@ "snippets" "toggle"; }
     Mod+Shift+N hotkey-overlay-title="Scratchpad" { spawn "timeout" "-k" "1" "5" @IPC@ "scratchpad" "toggle"; }
     Mod+Shift+O hotkey-overlay-title="Next Audio Output" { spawn "timeout" "-k" "1" "5" @IPC@ "audio" "nextOutput"; }
+    // Laptop brightness keys: the built-in panel (else every display, DDC/CI),
+    // with the island's HUD (src/services/Brightness.qml).
+    XF86MonBrightnessUp allow-when-locked=true hotkey-overlay-title="Brightness Up" { spawn "timeout" "-k" "1" "5" @IPC@ "brightness" "up"; }
+    XF86MonBrightnessDown allow-when-locked=true hotkey-overlay-title="Brightness Down" { spawn "timeout" "-k" "1" "5" @IPC@ "brightness" "down"; }
     Mod+Shift+M hotkey-overlay-title="Mute Microphones" { spawn "timeout" "-k" "1" "5" @IPC@ "mic" "toggleMute"; }
     // ⌘Q through the shell (src/everyday/QuitGuard.qml): apps with quit
     // protection need it held; the rest close the focused window as before.
