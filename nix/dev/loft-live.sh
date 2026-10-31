@@ -141,16 +141,17 @@ start() {
   [ ${#unit_env[@]} -gt 0 ] || unit_env=("LOFT_STATE_DIR=$state")
 
   # `loft` for the shell: the checkout's CLI (its renderers and templates).
-  # Without LOFT_DEV: this is the real desktop, so a theme applied from
-  # Settings runs every hook (GTK's color scheme, Qt apps), as installed.
   mkdir -p "$live/bin"
-  printf '#!/bin/sh\nexec env -u LOFT_DEV %s -B "%s" "$@"\n' "@PYTHON@" "$root/cli/loft" > "$live/bin/loft"
+  printf '#!/bin/sh\nexec %s -B "%s" "$@"\n' "@PYTHON@" "$root/cli/loft" > "$live/bin/loft"
   chmod +x "$live/bin/loft"
   path="$live/bin:$PATH"
   [ -d "$root/target/debug" ] && path="$root/target/debug:$path"
 
+  # No LOFT_DEV: that marks an isolated test session (loft-dev), and turns
+  # on test hooks — the lock screen's unlock-without-password among them —
+  # and test-only hook sets. This is the real desktop: it runs as installed,
+  # from the checkout.
   loft_env=(
-    "LOFT_DEV=1"
     "LOFT_STATE_DIR=$state"
     "LOFT_DATA_DIR=$root"
     "LOFT_THEME_PATH=${XDG_DATA_HOME:-$HOME/.local/share}/loft/themes:$root/themes"
