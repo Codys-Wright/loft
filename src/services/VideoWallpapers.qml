@@ -21,7 +21,12 @@ import qs.services
 //   - an opaque window covers the whole screen: a fullscreen tiled window of
 //     an app on the opaque list, or any app when window glass is off (a
 //     translucent window shows the wallpaper through it), or with
-//     pauseWhenMaximized any window filling the screen.
+//     pauseWhenMaximized any window filling the screen,
+//   - with videoPlayOn "focused", the screen isn't the focused one.
+//
+// What a playing video costs in GPU memory (#12, RTX 4080, one 2560x1440
+// display): ~580 MB at the display's size, of which ~264 MB is the VAAPI
+// device shared by all players; videoScale 0.75 ~485 MB, 0.5 ~395 MB.
 //
 // Display-sized copies (`smallerCopies`): the originals are often 5K, 10-bit
 // HEVC, cropped to cover each screen. Decoding more than the screen shows
@@ -89,8 +94,14 @@ Singleton {
         return out;
     }
 
+    // videoPlayOn "focused": only the focused display's video plays.
+    readonly property string focusedScreen: Niri.focusedWorkspace?.output ?? ""
     function holdReason(screenName) {
-        return globalReason || (covered[screenName] ?? "");
+        if (globalReason)
+            return globalReason;
+        if (cfg.videoPlayOn === "focused" && focusedScreen !== "" && screenName !== focusedScreen)
+            return "not the focused display";
+        return covered[screenName] ?? "";
     }
     function mayPlay(screenName) {
         return holdReason(screenName) === "";
@@ -132,11 +143,13 @@ Singleton {
     property string busyKey: ""
 
     // The copy of `video` showing the crop [x, y, w, h] (fractions of the
-    // frame) at w × h pixels; "" until it exists. Pure (bindable); layers
-    // call request() for the same arguments to have it made.
+    // frame) at w × h pixels × videoScale; "" until it exists. Pure
+    // (bindable); layers call request() for the same arguments to have it
+    // made. VideoOutput stretches a smaller copy over the screen.
+    readonly property real videoScale: Math.min(1, Math.max(0.25, cfg.videoScale || 1))
     function variantKey(video, crop, w, h) {
         const r = v => Math.round(v * 1000) / 1000;
-        return [video, crop.map(r).join(","), Math.round(w), Math.round(h)].join("|");
+        return [video, crop.map(r).join(","), Math.round(w * videoScale), Math.round(h * videoScale)].join("|");
     }
     function variant(video, crop, w, h) {
         if (!cfg.smallerCopies || !video || w < 16 || h < 16)

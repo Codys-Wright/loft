@@ -208,16 +208,21 @@ Item {
         readonly property var visibleCrop: img.width > 0 && img.height > 0 ? [Math.max(0, -img.x / img.width), Math.max(0, -img.y / img.height), Math.min(1, root.width / img.width), Math.min(1, root.height / img.height)] : null
         readonly property bool laidOut: layer.video !== "" && img.status === Image.Ready && root.width > 0 && visibleCrop !== null
         readonly property string variant: laidOut ? VideoWallpapers.variant(layer.video, visibleCrop, root.width * root.dpr, root.height * root.dpr) : ""
-        onLaidOutChanged: if (laidOut)
-            Qt.callLater(() => {
-                if (layer.laidOut)
-                    VideoWallpapers.request(layer.video, layer.visibleCrop, root.width * root.dpr, root.height * root.dpr);
-            })
-        onVisibleCropChanged: if (laidOut)
-            Qt.callLater(() => {
-                if (layer.laidOut)
-                    VideoWallpapers.request(layer.video, layer.visibleCrop, root.width * root.dpr, root.height * root.dpr);
-            })
+        function requestCopy() {
+            if (laidOut)
+                Qt.callLater(() => {
+                    if (layer.laidOut)
+                        VideoWallpapers.request(layer.video, layer.visibleCrop, root.width * root.dpr, root.height * root.dpr);
+                });
+        }
+        onLaidOutChanged: requestCopy()
+        onVisibleCropChanged: requestCopy()
+        Connections {
+            target: VideoWallpapers
+            function onVideoScaleChanged() {
+                layer.requestCopy();
+            }
+        }
         readonly property string playSource: layer.video === "" ? "" : variant !== "" ? variant : layer.video
 
         // The video over the still (same aspect, so the same crop). No
