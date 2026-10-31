@@ -5,8 +5,8 @@ import qs.components
 import qs.services
 
 // Settings → Dock: size and magnification, window previews (hover / click,
-// delay, thumbnails), per-display dock (on/off; show / auto-hide /
-// hidden; position),
+// delay, thumbnails), per-display dock (on/off; default / show /
+// auto-hide / hidden, the default being "Default visibility"; position),
 // behavior, the recent-apps section, docked folders and the Trash, and the
 // pinned apps.
 ColumnLayout {
@@ -141,6 +141,22 @@ ColumnLayout {
             }
         }
 
+        // What displays set to Default do (Settings.dock.autoHide).
+        SettingsRow {
+            visible: Quickshell.screens.length > 1
+            label: "Default visibility"
+            hint: Settings.dock.autoHide === "always" ? "Hidden until the pointer touches the edge" : Settings.dock.autoHide === "whenWindows" ? "Shown on an empty desktop, hidden once a window is open there" : "Always there (an ultrawide display hides it once a window is open)"
+            SettingsSegmented {
+                options: [
+                    { value: "never", label: "Show" },
+                    { value: "whenWindows", label: "Hide with windows" },
+                    { value: "always", label: "Auto-hide" }
+                ]
+                current: DockData.hideMode(Settings.dock.autoHide)
+                onActivated: v => Settings.dock.autoHide = v
+            }
+        }
+
         // The active space's `dock.visible` wins over every display's own
         // choice while it's active (SPACES §5).
         SettingsRow {
@@ -159,6 +175,7 @@ ColumnLayout {
                 required property var modelData
                 readonly property var prefs: DockData.displayPrefs(modelData)
                 readonly property bool several: Quickshell.screens.length > 1
+                readonly property bool followsDefault: several && !prefs.own
                 Layout.fillWidth: true
                 Layout.topMargin: several ? 8 : 0
                 spacing: 8
@@ -182,19 +199,21 @@ ColumnLayout {
                 SettingsRow {
                     visible: disp.prefs.enabled
                     label: disp.several ? "Dock" : "Dock on this display"
-                    hint: disp.prefs.visibility === "hidden" ? "Hidden: no Dock and no edge to summon it, unless a space shows it" : disp.prefs.visibility === "autohide" ? "Move the pointer to the edge to show it" : "Always there. Every dock steps aside while a window is fullscreen"
+                    hint: (disp.followsDefault ? `Default: ${disp.prefs.autoHide === "never" ? "shown" : disp.prefs.autoHide === "always" ? "auto-hides" : "hides with windows"}. ` : "") + (disp.prefs.visibility === "hidden" ? "Hidden: no Dock and no edge to summon it, unless a space shows it" : disp.prefs.visibility === "autohide" ? "Move the pointer to the edge to show it" : "Always there. Every dock steps aside while a window is fullscreen")
+                    // With several displays, Default follows "Default
+                    // visibility" above until the display gets its own.
                     SettingsSegmented {
-                        options: [
+                        options: (disp.several ? [{ value: "default", label: "Default" }] : []).concat([
                             { value: "show", label: "Show" },
                             { value: "autohide", label: "Auto-hide" },
                             { value: "hidden", label: "Hidden" }
-                        ]
-                        current: disp.prefs.visibility
-                        onActivated: v => DockData.setDisplayVisibility(disp.modelData, v)
+                        ])
+                        current: disp.followsDefault ? "default" : disp.prefs.visibility
+                        onActivated: v => DockData.chooseDisplayVisibility(disp.modelData, v)
                     }
                 }
                 SettingsRow {
-                    visible: disp.prefs.enabled && disp.prefs.visibility === "autohide"
+                    visible: disp.prefs.enabled && disp.prefs.visibility === "autohide" && !disp.followsDefault
                     label: "Automatically hide"
                     hint: "With windows: shown on an empty desktop, hidden once a window is open there"
                     SettingsSegmented {

@@ -97,27 +97,37 @@ Singleton {
         return ["never", "always", "whenWindows"].includes(v) ? v : "never";
     }
 
-    // { enabled, autoHide (mode), hidden, visibility, position } for a
+    // { enabled, autoHide (mode), hidden, visibility, own, position } for a
     // screen: its own entry in Settings.dock.displays, else the dock-wide
-    // defaults (an ultrawide, ≥ 2.2:1, hides when windows are open).
-    // visibility: "show" | "autohide" | "hidden" — the display's choice in
-    // the same words as a space's `dock.visible` (SPACES §5). Hidden keeps
-    // the dock (unlike enabled: false), so a space can still show it.
+    // defaults (defaultHideMode). visibility: "show" | "autohide" |
+    // "hidden" — the display's choice in the same words as a space's
+    // `dock.visible` (SPACES §5). Hidden keeps the dock (unlike enabled:
+    // false), so a space can still show it. own: the display has its own
+    // visibility; false = it follows the dock-wide setting.
     function displayPrefs(screen) {
         const all = Settings.dock.displays ?? {};
         const p = all[displayKey(screen)] ?? all[screen.name] ?? {};
-        const ultrawide = screen.width / Math.max(1, screen.height) >= 2.2;
         const pos = p.position ?? Settings.dock.position;
-        const fallback = Settings.dock.autoHide !== false && Settings.dock.autoHide !== "never" ? Settings.dock.autoHide : ultrawide ? "whenWindows" : "never";
-        const autoHide = hideMode(p.autoHide ?? fallback);
+        const autoHide = hideMode(p.autoHide ?? defaultHideMode(screen));
         const hidden = p.hidden === true;
         return {
             enabled: p.enabled ?? true,
             autoHide: autoHide,
             hidden: hidden,
             visibility: hidden ? "hidden" : autoHide === "never" ? "show" : "autohide",
+            own: p.hidden !== undefined || p.autoHide !== undefined,
             position: pos === "left" || pos === "right" ? pos : "bottom"
         };
+    }
+
+    // What a display without its own choice does: Settings.dock.autoHide,
+    // and while that says never, an ultrawide (≥ 2.2:1) hides when
+    // windows are open.
+    function defaultHideMode(screen) {
+        const d = Settings.dock.autoHide;
+        if (d !== false && d !== "never" && d !== undefined && d !== null)
+            return hideMode(d);
+        return screen.width / Math.max(1, screen.height) >= 2.2 ? "whenWindows" : "never";
     }
 
     // Settings → Dock: Show / Automatically Hide / Hidden for one display.
@@ -135,6 +145,36 @@ Singleton {
             e.autoHide = cur.autoHide !== "never" ? cur.autoHide : "always";
         all[k] = e;
         Settings.dock.displays = all;
+    }
+
+    // Back to the dock-wide visibility ("Default"); position and on/off stay.
+    function resetDisplayVisibility(screen) {
+        const all = Object.assign({}, Settings.dock.displays ?? {});
+        const k = displayKey(screen);
+        const e = Object.assign({}, all[k] ?? all[screen.name] ?? {});
+        delete all[screen.name];
+        delete e.hidden;
+        delete e.autoHide;
+        if (Object.keys(e).length > 0)
+            all[k] = e;
+        else
+            delete all[k];
+        Settings.dock.displays = all;
+    }
+
+    // "show" | "autohide" | "hidden", or "default" (resetDisplayVisibility):
+    // what the desktop menu and IPC set.
+    function chooseDisplayVisibility(screen, v) {
+        if (v === "default")
+            resetDisplayVisibility(screen);
+        else
+            setDisplayVisibility(screen, v);
+    }
+
+    // A display by connector ("DP-1") or niri identity; "" = the focused one.
+    function screenNamed(name) {
+        const n = name || Niri.focusedWorkspace?.output || "";
+        return Quickshell.screens.find(s => s.name === n || displayKey(s) === n) ?? null;
     }
 
     function setDisplayPref(screen, key, value) {
@@ -438,6 +478,63 @@ Singleton {
 
     // Which stack popup is open: { screen, index, x, y, edge } or null.
     property var openStack: null
+
+    // One display's dock, the choices of Settings → Dock and the desktop
+    // menu's Dock ▸. OUTPUT: connector or niri identity, "" = focused.
+    IpcHandler {
+        target: "dock"
+
+        // show | autohide | hidden | default (the dock-wide setting).
+        function visibility(output: string, value: string): string {
+            const s = root.screenNamed(output);
+            if (!s)
+                return `no display “${output}”`;
+            if (!["show", "autohide", "hidden", "default"].includes(value))
+                return "show | autohide | hidden | default";
+            root.chooseDisplayVisibility(s, value);
+            return root.displayPrefs(s).visibility;
+        }
+        // An auto-hiding display's mode: always | whenWindows.
+        function autohide(output: string, mode: string): string {
+            const s = root.screenNamed(output);
+            if (!s || !["always", "whenWindows"].includes(mode))
+                return "dock autohide OUTPUT always|whenWindows";
+            root.setDisplayPref(s, "autoHide", mode);
+            return mode;
+        }
+        function position(output: string, side: string): string {
+            const s = root.screenNamed(output);
+            if (!s || !["left", "bottom", "right"].includes(side))
+                return "dock position OUTPUT left|bottom|right";
+            root.setDisplayPref(s, "position", side);
+            return side;
+        }
+        function enable(output: string, on: bool): string {
+            const s = root.screenNamed(output);
+            if (!s)
+                return `no display “${output}”`;
+            root.setDisplayPref(s, "enabled", on);
+            return String(on);
+        }
+        // Every display: its choice, and what its dock does now (a space's
+        // `dock.visible` included).
+        function state(): string {
+            return JSON.stringify(Quickshell.screens.map(s => {
+                const p = root.displayPrefs(s);
+                const prof = root.profileFor(s);
+                return {
+                    output: s.name,
+                    key: root.displayKey(s),
+                    enabled: p.enabled,
+                    visibility: p.visibility,
+                    own: p.own,
+                    autoHide: p.autoHide,
+                    position: p.position,
+                    now: prof.hidden ? "hidden" : prof.autoHide
+                };
+            }));
+        }
+    }
 
     Component.onCompleted: {
         refreshRecents();

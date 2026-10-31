@@ -47,7 +47,7 @@ Singleton {
         { id: "appearance", label: "Appearance", submenu: true, hint: "Light / Dark, Liquid Glass, Reduce Transparency, menu bar background" },
         { id: "sep-appearance", separator: true },
         { id: "displays", label: "Display Settings…", hint: "Settings → Displays" },
-        { id: "dock", label: "Dock Settings…", feature: "dock", hint: "Settings → Dock" },
+        { id: "dock", label: "Dock", submenu: true, feature: "dock", hint: "Show, auto-hide or hide the dock on this display; its position; Dock Settings…" },
         { id: "controlCenter", label: "Control Center", feature: "controlcenter", hint: "Opens on this display" },
         { id: "notifications", label: "Notification History", hint: "Calendar and recent notifications (the clock's panel)" },
         { id: "sep-panels", separator: true },
@@ -346,7 +346,7 @@ Singleton {
             it.run = () => root.settingsPage("displays");
             break;
         case "dock":
-            it.run = () => root.settingsPage("dock");
+            it.build = () => root.dockItems();
             break;
         case "controlCenter":
             {
@@ -618,6 +618,40 @@ Singleton {
         return items;
     }
 
+    // Dock ▸ — the clicked display's dock (DockData's per-display prefs,
+    // the same as Settings → Dock). With several displays, Use Default
+    // puts it back on the dock-wide setting.
+    function dockItems() {
+        const s = Quickshell.screens.find(x => x.name === screen) ?? Quickshell.screens[0];
+        if (!s)
+            return [];
+        const p = DockData.displayPrefs(s);
+        const items = [];
+        if (multiDisplay)
+            items.push(header("h-dock", DockData.displayLabel(s)));
+        if (!p.enabled) {
+            // Off in Settings → Dock: no dock here at all.
+            items.push({ key: "dock-on", label: "Show Dock on This Display", enabled: true, run: () => DockData.setDisplayPref(s, "enabled", true) });
+        } else {
+            const own = !multiDisplay || p.own;
+            const vis = (key, label, v) => ({ key: key, label: label, enabled: true, toggle: "radio", checked: own && p.visibility === v, run: () => DockData.chooseDisplayVisibility(s, v) });
+            if (multiDisplay)
+                items.push({ key: "vis-default", label: "Use Default", enabled: true, toggle: "radio", checked: !own, run: () => DockData.resetDisplayVisibility(s) });
+            items.push(vis("vis-show", "Show", "show"), vis("vis-autohide", "Automatically Hide", "autohide"), vis("vis-hidden", "Hide", "hidden"));
+            // A space's `dock.visible` wins while it's active (SPACES §5).
+            const spaceVis = Spaces.dock?.visible ?? "";
+            if (spaceVis !== "")
+                items.push({ key: "vis-space", label: `Set by the space “${Spaces.active?.name ?? ""}” for now`, enabled: false });
+            if (p.visibility !== "hidden") {
+                const pos = (key, label, v) => ({ key: key, label: label, enabled: true, toggle: "radio", checked: p.position === v, run: () => DockData.setDisplayPref(s, "position", v) });
+                items.push(sep("s-pos"), { key: "position", label: "Position on Screen", enabled: true, submenu: true, children: [pos("pos-left", "Left", "left"), pos("pos-bottom", "Bottom", "bottom"), pos("pos-right", "Right", "right")] });
+            }
+        }
+        items.push(sep("s-docksettings"));
+        items.push({ key: "dockSettings", label: "Dock Settings…", enabled: true, run: () => root.settingsPage("dock") });
+        return items;
+    }
+
     // Screenshot ▸ — the capture module's entry points; a beat later so the
     // menu is gone from the frame.
     function screenshotItems() {
@@ -673,6 +707,9 @@ Singleton {
         }
         function screenshot(): void {
             root.openSub("screenshot");
+        }
+        function dock(): void {
+            root.openSub("dock");
         }
         // Keys without a keyboard.
         function down(): void {
