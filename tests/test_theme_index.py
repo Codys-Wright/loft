@@ -227,7 +227,12 @@ class Generator(Env):
 
     def test_v2_pack(self):
         repo = self.tmp / "r"
-        shutil.copytree(ROOT / "packs" / "loft", repo / "packs" / "mine")
+        # copyfile, not copy2: under `nix flake check` the source is the
+        # read-only store, and its modes would stick to the copy.
+        shutil.copytree(ROOT / "packs" / "loft", repo / "packs" / "mine", copy_function=shutil.copyfile)
+        for d in [repo / "packs" / "mine", *(repo / "packs" / "mine").rglob("*")]:
+            if d.is_dir():
+                d.chmod(0o755)
         meta = json.loads((repo / "packs" / "mine" / "pack.json").read_text())
         write(repo / "packs" / "mine" / "pack.json", dict(meta, id="mine", name="Mine"))
         for f in (repo / "packs" / "mine" / "themes").glob("*.json"):
