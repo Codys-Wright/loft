@@ -230,7 +230,18 @@
         #    waits forever (waitSurfaceResolved).
         qtmultimedia-loft = pkgs.kdePackages.qtmultimedia.overrideAttrs (old: {
           pname = "qtmultimedia-loft";
-          patches = (old.patches or [ ]) ++ [ ./qt/qtmultimedia-nvidia-vaapi.patch ];
+          # Qt 6.12 rewrote qffmpeghwaccel_vaapi.cpp (DmaBufPlane +
+          # importDmaBufTextures): the same changes, rebased.
+          patches =
+            (old.patches or [ ])
+            ++ [
+              (
+                if lib.versionAtLeast old.version "6.12" then
+                  ./qt/qtmultimedia-nvidia-vaapi-6.12.patch
+                else
+                  ./qt/qtmultimedia-nvidia-vaapi.patch
+              )
+            ];
         });
 
         # nvidia-vaapi-driver + nix/qt/nvidia-vaapi-driver-no-hang.patch, for
