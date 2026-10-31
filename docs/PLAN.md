@@ -721,7 +721,14 @@ changes both the lock screen and the login screen with no rebuild.
 - Multi-monitor focus handling (password field only on the focused output)
   is untested: the nested dev session has a single output.
 
-### Phase 6: Cut-over + keyboard parity
+### Phase 6: Cut-over + keyboard parity *(in progress)*
+
+> **Status (2026-10-31):** nix-config #61 already replaced Noctalia with Loft
+> on every desktop host, but isn't deployed yet; [CUTOVER.md](CUTOVER.md) has
+> the per-host gaps and the nix-config checklist (THEBATTLESHIP's other
+> accounts need monitor power-off disabled first). The Linux side of the
+> keyboard decision is done (§5, Option A); voyager's is open.
+
 - Replace Noctalia in `startup.kdl`/aspects. Delete `noctalia` bits and
   `wlr-which-key` if the shell takes it over.
 - Keyboard decision (§5) implemented on both machines from shared bind data.
