@@ -88,8 +88,10 @@
           ../tests
           ../schemas
           ../spaces
-          # tests/test_parity.py: the generated block in the shell binds.
+          # tests/test_parity.py: the shell binds' generated block, and the
+          # binds niri already has.
           ../niri/shell-binds.kdl.in
+          ../niri/base.kdl
         ];
       };
       check =
