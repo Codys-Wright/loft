@@ -1,5 +1,7 @@
 # Loft
 
+[![Checks](https://github.com/Codys-Wright/loft/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/Codys-Wright/loft/actions/workflows/checks.yml)
+
 (Formerly studio-linux.) A desktop for creative work, music production and programming: [niri](https://github.com/niri-wm/niri)
 plus our own [Quickshell](https://quickshell.org) shell, with a macOS-inspired Liquid Glass design language
 that is fully themeable at runtime.
@@ -133,7 +135,9 @@ Point your apps at the rendered fragments once; `apply` keeps them current:
 `LOFT_HOOKS=none|all|shell,niri,wallpapers,kitty,ghostty,gtk,spotify` picks the reload hooks
 (each runs only when its files changed; `loft theme apply --reload` runs them all). From a checkout,
 `python3 cli/loft …` runs the same CLI (the dev shell has `jsonschema`), and
-`nix flake check` runs the schema, unit, golden-render and `niri validate` checks.
+`nix flake check` runs the schema, unit, golden-render and `niri validate` checks, plus the
+Rust crates' tests and clippy (all of `nix/checks.nix`). CI runs it on every push to `main` and
+every PR ([.github/workflows/checks.yml](.github/workflows/checks.yml); the badge above).
 
 ### Spotify
 
