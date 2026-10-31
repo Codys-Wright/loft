@@ -791,7 +791,8 @@
         # included — isn't reclaimed under pressure). Paging them back in
         # from swap made the first open after a while take seconds.
         systemd.user.services.loft-launcher =
-          lib.recursiveUpdate (service "Loft launcher (walker + elephant)" "${lib.getExe sp.loft-launcher} service")
+          lib.recursiveUpdate
+            (service "Loft launcher (walker + elephant)" "${lib.getExe sp.loft-launcher} service")
             {
               Service.MemorySwapMax = 0;
               Service.MemoryMin = "512M";
@@ -852,52 +853,61 @@
         # never restarts other user services, e.g. audio). Compares a hash of
         # each unit as systemd now sees it with the one from the last switch.
         home.activation.loftRestart = lib.hm.dag.entryAfter [ "reloadSystemd" ] ''
-          state="''${XDG_STATE_HOME:-$HOME/.local/state}/loft"
-          run mkdir -p "$state"
-          # Units still running under their studio-linux names (a "suggest"
-          # switch leaves removed units running): hand over to the new ones.
-          started=" "
-          # The same for a plain xremap.service once Loft runs the keyboard
-          # layer: two xremaps would remap every key twice.
-          for pair in studio-shell:loft-shell studio-launcher:loft-launcher${lib.optionalString cfg.keyboard.enable " xremap:loft-keys"}; do
-            if ${pkgs.systemd}/bin/systemctl --user is-active --quiet "''${pair%%:*}.service"; then
-              run ${pkgs.systemd}/bin/systemctl --user stop "''${pair%%:*}.service" || true
-              run ${pkgs.systemd}/bin/systemctl --user start "''${pair#*:}.service" || true
-              started="$started''${pair#*:} "
-            fi
-          done
-          for unit in loft-shell loft-launcher loft-keys; do
-            new="$(${pkgs.systemd}/bin/systemctl --user cat "$unit.service" 2>/dev/null | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
-            old="$(cat "$state/$unit.unit-hash" 2>/dev/null || true)"
-            if [ "$new" != "$old" ]; then
+          # No user manager to talk to (home-manager-<user>.service at boot,
+          # or a switch for someone not logged in): nothing runs, so nothing
+          # to restart, and the unit hashes stay as they were for the next
+          # switch. Like reloadSystemd, skip instead of failing activation.
+          export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}"
+          if [ ! -S "$XDG_RUNTIME_DIR/bus" ]; then
+            echo "User systemd daemon not running. Skipping the Loft shell/launcher restart."
+          else
+            state="''${XDG_STATE_HOME:-$HOME/.local/state}/loft"
+            run mkdir -p "$state"
+            # Units still running under their studio-linux names (a "suggest"
+            # switch leaves removed units running): hand over to the new ones.
+            started=" "
+            # The same for a plain xremap.service once Loft runs the keyboard
+            # layer: two xremaps would remap every key twice.
+            for pair in studio-shell:loft-shell studio-launcher:loft-launcher${lib.optionalString cfg.keyboard.enable " xremap:loft-keys"}; do
+              if ${pkgs.systemd}/bin/systemctl --user is-active --quiet "''${pair%%:*}.service"; then
+                run ${pkgs.systemd}/bin/systemctl --user stop "''${pair%%:*}.service" || true
+                run ${pkgs.systemd}/bin/systemctl --user start "''${pair#*:}.service" || true
+                started="$started''${pair#*:} "
+              fi
+            done
+            for unit in loft-shell loft-launcher loft-keys; do
+              new="$( { ${pkgs.systemd}/bin/systemctl --user cat "$unit.service" 2>/dev/null || true; } | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
+              old="$(cat "$state/$unit.unit-hash" 2>/dev/null || true)"
+              if [ "$new" != "$old" ]; then
+                case "$started" in
+                  *" $unit "*) ;; # just started above
+                  *)
+                    if ${pkgs.systemd}/bin/systemctl --user is-active --quiet "$unit.service"; then
+                      run ${pkgs.systemd}/bin/systemctl --user restart "$unit.service" || true
+                    fi
+                    ;;
+                esac
+                [ -n "''${DRY_RUN:-}" ] || echo "$new" > "$state/$unit.unit-hash"
+                started="$started$unit "
+              fi
+            done
+            # Installed apps changed (a .desktop added or removed in the profile
+            # or the system): the launcher's index watches the old profile path,
+            # so re-index by restarting it.
+            apps="$( { ${pkgs.coreutils}/bin/ls "$newGenPath/home-path/share/applications" 2>/dev/null; \
+              ${pkgs.coreutils}/bin/ls /run/current-system/sw/share/applications 2>/dev/null || true; } \
+              | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
+            if [ "$apps" != "$(cat "$state/apps.hash" 2>/dev/null || true)" ]; then
               case "$started" in
-                *" $unit "*) ;; # just started above
+                *" loft-launcher "*) ;;
                 *)
-                  if ${pkgs.systemd}/bin/systemctl --user is-active --quiet "$unit.service"; then
-                    run ${pkgs.systemd}/bin/systemctl --user restart "$unit.service" || true
+                  if ${pkgs.systemd}/bin/systemctl --user is-active --quiet loft-launcher.service; then
+                    run ${pkgs.systemd}/bin/systemctl --user restart loft-launcher.service || true
                   fi
                   ;;
               esac
-              [ -n "''${DRY_RUN:-}" ] || echo "$new" > "$state/$unit.unit-hash"
-              started="$started$unit "
+              [ -n "''${DRY_RUN:-}" ] || echo "$apps" > "$state/apps.hash"
             fi
-          done
-          # Installed apps changed (a .desktop added or removed in the profile
-          # or the system): the launcher's index watches the old profile path,
-          # so re-index by restarting it.
-          apps="$( { ${pkgs.coreutils}/bin/ls "$newGenPath/home-path/share/applications" 2>/dev/null; \
-            ${pkgs.coreutils}/bin/ls /run/current-system/sw/share/applications 2>/dev/null; } \
-            | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
-          if [ "$apps" != "$(cat "$state/apps.hash" 2>/dev/null || true)" ]; then
-            case "$started" in
-              *" loft-launcher "*) ;;
-              *)
-                if ${pkgs.systemd}/bin/systemctl --user is-active --quiet loft-launcher.service; then
-                  run ${pkgs.systemd}/bin/systemctl --user restart loft-launcher.service || true
-                fi
-                ;;
-            esac
-            [ -n "''${DRY_RUN:-}" ] || echo "$apps" > "$state/apps.hash"
           fi
         '';
       };

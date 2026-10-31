@@ -136,7 +136,12 @@ in
       Install.WantedBy = [ "default.target" ];
     };
     home.activation.loftSpotify = lib.hm.dag.entryAfter [ "reloadSystemd" ] ''
-      run ${pkgs.systemd}/bin/systemctl --user start --no-block loft-spotify-setup.service || true
+      # Only with a user manager to start it in (not at boot, nor for a user
+      # who isn't logged in); the unit runs at their next login anyway.
+      if [ -S "''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}/bus" ]; then
+        run env XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}" \
+          ${pkgs.systemd}/bin/systemctl --user start --no-block loft-spotify-setup.service || true
+      fi
     '';
   };
 }
