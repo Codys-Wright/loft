@@ -77,6 +77,11 @@ Singleton {
     readonly property var genericIcons: ["application-x-executable", "applications-other", "application-default-icon", "exec", "system-run"]
     property var iconCache: ({})
     // Themed name → path, "" for a miss: each name is looked up once.
+    // Quickshell.iconPath(name, true) is synchronous (QIcon::fromTheme: a
+    // miss walks every theme directory, 20–90 ms with MacTahoe and 12 data
+    // dirs on THEBATTLESHIP), so the shell's other theme lookups
+    // (notifications, banners, process rows, stacks) go through here too
+    // instead of paying it per delegate and refresh (#16).
     property var themedCache: ({})
 
     function themed(n) {

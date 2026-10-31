@@ -6,6 +6,9 @@
 #   loft-session           niri-loft + Loft's base config + the shell, all from the store
 #   niri-loft              niri + nix/niri/workspace-layers.patch (per-workspace
 #                          wallpapers: the `place-within-workspace` layer rule)
+#                          + title-bar.patch + toplevel-export.patch
+#                          (hyprland-toplevel-export-v1: window thumbnails in the
+#                          app switcher and the dock preview)
 #   loft-dev               the same session, loading niri fragments, QML, templates
 #                          and themes from a checkout so everything hot-reloads
 #   loft-niri              niri settings backend (crates/loft-niri): live outputs,
@@ -133,6 +136,11 @@
         # nvidia-vaapi-driver-loft ahead of the system's drivers (libva takes
         # the first match per name, so Mesa's still come from the system).
         export LIBVA_DRIVERS_PATH="${self'.packages.nvidia-vaapi-driver-loft}/lib/dri:''${LIBVA_DRIVERS_PATH:-/run/opengl-driver/lib/dri}"
+        # nvidia-vaapi-driver keeps exported frames it no longer uses, up to
+        # VRAM/64 (256 MB on a 16 GB card); a wallpaper never asks for them
+        # again. Off: −150 MB steady and −330 MB at start per 5120x1440 video,
+        # same CPU (docs/TESTING.md, measured on THEBATTLESHIP).
+        export NVD_MAX_DETACHED_BACKING_IMAGES="''${NVD_MAX_DETACHED_BACKING_IMAGES:-0}"
       '';
 
       python = pkgs.python3.withPackages (ps: [ ps.jsonschema ]);
@@ -199,7 +207,8 @@
             include optional=true "$state/overrides/spaces.kdl"
             include optional=true "$state/overrides/niri.kdl"
             include "${../niri/workspace-wallpapers.kdl}"
-            include "${../niri/traffic-lights.kdl}"
+            include "${../niri/title-bar.kdl}"
+            include optional=true "$state/current/niri-loft.kdl"
             spawn-at-startup "${lib.getExe self'.packages.loft-shell}"
             spawn-at-startup "${lib.getExe self'.packages.loft-launcher}" "service"
             EOF
@@ -255,17 +264,25 @@
           patches = (old.patches or [ ]) ++ [ ./qt/nvidia-vaapi-driver-no-hang.patch ];
         });
 
+        # …+ nix/niri/title-bar.patch: a KWin-style server-side title bar (traffic
+        # lights, centered title) above every window that lets niri decorate it;
+        # the tile reserves its height. `layout { title-bar { … } }` and the
+        # window rule of the same name (niri/title-bar.kdl,
+        # docs/WINDOW-DECORATIONS.md). The version string carries "title-bar"
+        # and `passthru.loftTitleBar` gates the fragment like the layer rule.
         niri-loft = pkgs.niri.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [
             ./niri/workspace-layers.patch
-            ./niri/traffic-lights.patch
+            ./niri/title-bar.patch
+            ./niri/toplevel-export.patch
           ];
           env = (old.env or { }) // {
-            NIRI_BUILD_COMMIT = "Nixpkgs, loft: workspace-layers, traffic-lights";
+            NIRI_BUILD_COMMIT = "Nixpkgs, loft: workspace-layers, title-bar, toplevel-export";
           };
           passthru = (old.passthru or { }) // {
             loftWorkspaceLayers = true;
-            loftTrafficLights = true;
+            loftTitleBar = true;
+            loftToplevelExport = true;
           };
         });
 

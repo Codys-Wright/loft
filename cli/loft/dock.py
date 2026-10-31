@@ -794,9 +794,12 @@ def autostart_run(*, once: str | None = None, dry_run: bool = False) -> dict:
 # ── CLI ─────────────────────────────────────────────────────────────────────
 
 
-# ── capture support (the dock preview's thumbnails) ─────────────────────────
+# ── capture support (window thumbnails: switcher, dock preview) ─────────────
 
 # Per-window capture protocols a client could use, and what reads a display.
+# Quickshell 0.3's ScreencopyView captures a Toplevel only over
+# hyprland-toplevel-export v2 (by wlr-foreign-toplevel handle): niri-loft
+# offers it (nix/niri/toplevel-export.patch), stock niri doesn't.
 TOPLEVEL_CAPTURE = ("ext_foreign_toplevel_image_capture_source_manager_v1", "hyprland_toplevel_export_manager_v1")
 OUTPUT_CAPTURE = ("zwlr_screencopy_manager_v1", "ext_output_image_capture_source_manager_v1")
 
@@ -837,10 +840,12 @@ def wayland_globals(display: str | None = None, timeout: float = 2.0) -> dict[st
 
 
 def capture_support(globals_: dict[str, int] | None = None) -> dict:
-    """What the preview can use. `screencopy`: a still of a display, safe for
-    Quickshell's ScreencopyView — its buffer code asks zwp_linux_dmabuf_v1
-    for default feedback (v4+) unconditionally, which kills the client on a
-    v3-only compositor (niri on a software renderer offers just v3)."""
+    """What the shell can capture. `screencopy`: a still of a display;
+    `toplevel`: one window (Quickshell's ScreencopyView on a Toplevel). Both
+    only where ScreencopyView is safe — its buffer code asks
+    zwp_linux_dmabuf_v1 for default feedback (v4+) unconditionally, which
+    kills the client on a v3-only compositor (niri on a software renderer
+    offers just v3)."""
     try:
         g = wayland_globals() if globals_ is None else globals_
     except OSError as e:
@@ -848,14 +853,16 @@ def capture_support(globals_: dict[str, int] | None = None) -> dict:
     dmabuf = g.get("zwp_linux_dmabuf_v1", 0)
     output = [p for p in OUTPUT_CAPTURE if p in g]
     toplevel = [p for p in TOPLEVEL_CAPTURE if p in g]
+    soft = 0 < dmabuf < 4
+    window = g.get("hyprland_toplevel_export_manager_v1", 0) >= 2 and "zwlr_foreign_toplevel_manager_v1" in g
     reason = ""
     if not output:
         reason = "the compositor offers no display capture"
-    elif 0 < dmabuf < 4:
+    elif soft:
         reason = f"zwp_linux_dmabuf_v1 is v{dmabuf} (no GPU feedback); Quickshell's capture needs v4+"
     return {
-        "screencopy": bool(output) and not (0 < dmabuf < 4),
-        "toplevel": bool(toplevel),
+        "screencopy": bool(output) and not soft,
+        "toplevel": window and not soft,
         "protocols": output + toplevel,
         "dmabuf": dmabuf,
         "reason": reason,

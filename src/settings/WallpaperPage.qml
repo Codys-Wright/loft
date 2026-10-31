@@ -174,6 +174,35 @@ ColumnLayout {
         }
 
         SettingsRow {
+            visible: !VideoWallpapers.stillOnly && !PerformanceMode.on && Settings.wallpaper.smallerCopies
+            label: "    Copy resolution"
+            hint: "Smaller copies are drawn scaled up, a little softer. GPU memory per playing screen at 2560x1440: ~320 MB full, ~220 MB at 75 %, ~130 MB at half (plus ~260 MB once for the video device)"
+            SettingsSegmented {
+                options: [
+                    { value: 1, label: "Full" },
+                    { value: 0.75, label: "75 %" },
+                    { value: 0.5, label: "Half" }
+                ]
+                current: VideoWallpapers.videoScale
+                onActivated: v => Settings.wallpaper.videoScale = v
+            }
+        }
+
+        SettingsRow {
+            visible: !VideoWallpapers.stillOnly && !PerformanceMode.on && Quickshell.screens.length > 1
+            label: "    Play on"
+            hint: Settings.wallpaper.videoPlayOn === "focused" ? "Only the focused display plays; the others hold their frame (one decoder's GPU memory instead of one per display)" : "Every display plays its video"
+            SettingsSegmented {
+                options: [
+                    { value: "all", label: "All displays" },
+                    { value: "focused", label: "Focused display" }
+                ]
+                current: Settings.wallpaper.videoPlayOn
+                onActivated: v => Settings.wallpaper.videoPlayOn = v
+            }
+        }
+
+        SettingsRow {
             label: "Folder"
             hint: Settings.wallpaper.directory + " · its images are ranked under Matching vibes"
             SettingsButton {

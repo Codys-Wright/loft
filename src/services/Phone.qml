@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Bluetooth
 import "phone.js" as P
 
 // The iPhone, through tetherd (github.com/zackb/tether): it presents this
@@ -20,7 +21,7 @@ import "phone.js" as P
 // activity, the Control Center tile and Settings → Phone.
 //
 // IPC: phone status|send TO BODY|answer|decline|hangup|dial NUMBER|messages|
-//      thread KEY|refresh
+//      thread KEY|refresh|awayLock ON SECONDS
 Singleton {
     id: root
 
@@ -33,13 +34,26 @@ Singleton {
     readonly property string link: P.linkState(state, up)
     readonly property bool connected: link === "connected"
     readonly property string deviceName: P.deviceName(state)
-    readonly property string statusLine: enabled ? P.statusLine(state, up) : "Off"
+    readonly property string statusLine: enabled ? P.statusLine(state, up, bluezBattery) : "Off"
     readonly property string detail: P.detailLine(state, up)
-    readonly property int battery: P.batteryPercent(state)
+    // The phone as BlueZ sees it: its org.bluez.Battery1 is the iPhone's LE
+    // Battery Service (exact %), read over the LE link tetherd keeps up for
+    // notifications. Without it the battery is HFP's 0–5 level × 20.
+    readonly property string address: P.phoneAddress(state)
+    readonly property var bluezDevice: address === "" ? null : Bluetooth.devices.values.find(d => String(d.address).toUpperCase() === address) ?? null
+    readonly property int bluezBattery: bluezDevice && bluezDevice.batteryAvailable ? Math.round(bluezDevice.battery * 100) : -1
+    readonly property var batteryInfo: P.batteryInfo(state, bluezBattery)
+    readonly property int battery: batteryInfo.percent
+    readonly property bool batteryExact: batteryInfo.exact
+    // "87%", "About 80%" (HFP steps) or "".
+    readonly property string batteryText: P.batteryText(batteryInfo)
     readonly property int signal: P.signalBars(state)
     readonly property string carrier: P.carrier(state)
     readonly property string version: state.status?.version ?? ""
     readonly property bool callControl: state.status?.calls_enabled ?? false
+    // tetherd's away lock (phone.js awayLock): { supported, enabled, seconds }.
+    readonly property var awayLock: P.awayLock(state)
+    readonly property var awayLockChoices: P.awayLockChoices()
     readonly property var threads: state.threads
     readonly property int unread: P.unreadCount(state)
     readonly property var notifications: state.notifications
@@ -170,6 +184,20 @@ Singleton {
     // tetherd's call control (HFP). Off in tetherd by default; persisted there.
     function setCallControl(on) {
         write(P.command("bt_set_calls", { enabled: on }));
+    }
+
+    // tetherd's away lock: lock the session when the iPhone has been out of
+    // range for `seconds` (tetherd watches the link and locks through logind,
+    // which reaches Loft's lock screen through swayidle's lock event; see
+    // programs.loft). Off by default; persisted in tetherd. Leaving `seconds`
+    // out keeps the current grace period (tetherd would reset it to 30).
+    function setAwayLock(on, seconds) {
+        const s = Math.max(1, Math.round(seconds ?? awayLock.seconds));
+        return write(P.command("bt_set_lock_on_away", { enabled: !!on, grace_seconds: s }));
+    }
+
+    function graceLabel(seconds) {
+        return P.graceLabel(seconds);
     }
 
     // Ask the phone to re-offer the Messages / Contacts / notification toggles.
@@ -352,9 +380,12 @@ Singleton {
                 device: root.deviceName,
                 version: root.version,
                 battery: root.battery,
+                batteryExact: root.batteryExact,
+                batterySource: root.batteryInfo.source,
                 signal: root.signal,
                 carrier: root.carrier,
                 callControl: root.callControl,
+                awayLock: root.awayLock,
                 threads: root.threads.length,
                 unread: root.unread,
                 notifications: root.notifications.length,
@@ -401,6 +432,10 @@ Singleton {
         }
         function refresh(): void {
             root.refresh();
+        }
+        // tetherd's away lock on / off; seconds 0 keeps the grace period.
+        function awayLock(enabled: bool, seconds: int): bool {
+            return root.setAwayLock(enabled, seconds > 0 ? seconds : undefined);
         }
     }
 }

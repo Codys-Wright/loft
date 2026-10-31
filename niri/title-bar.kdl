@@ -1,0 +1,54 @@
+// A KDE-style title bar above every window that lets niri draw its
+// decorations (prefer-no-csd: Qt/KDE apps, terminals, mpv, Electron with the
+// system title bar, …): the macOS buttons at the left (close / hide / full
+// screen), the title centered. The tile reserves its height, so it never
+// covers the app. GTK apps keep their own header bars and get none. Drag the
+// bar to move the window, double-click it to maximize, right-click for the
+// shell's window menu. Needs nix/niri/title-bar.patch (package niri-loft): a
+// stock niri rejects this file, so sessions include it only when they run
+// that niri. Yellow, a held green and the right-click talk to the shell over
+// niri's IPC (WindowMinimizeRequested / WindowActionsMenuRequested,
+// services/Niri.qml).
+//
+// Turn it off per app, like KWin's "No titlebar and frame" rule; the window
+// then gets the whole tile:
+//
+//     window-rule {
+//         match app-id="^mpv$"
+//         title-bar { off; }
+//     }
+//
+// or give an app its own height, or a bar without the buttons:
+//
+//     window-rule {
+//         match app-id=r"^org\.kde\.dolphin$"
+//         title-bar { height 34; }
+//         traffic-lights { off; }
+//     }
+// Thin: 20 px, with 10 px beads and an 11 px title. The colors here are a
+// fallback; the theme writes its own into <state>/current/niri-loft.kdl
+// (templates/render/niri-loft.kdl), which sessions include after this file.
+layout {
+    title-bar {
+        on
+        height 20
+        active-color "#2c2c30"
+        inactive-color "#222226"
+        active-text-color "#e6e6ea"
+        inactive-text-color "#8a8a90"
+        font "sans 11px"
+    }
+    // The buttons inside the bar: 10 px beads 6 px apart, 8 px in from its
+    // left edge, centered vertically.
+    traffic-lights {
+        size 10
+        spacing 6
+        offset x=8 y=0
+    }
+}
+
+// The shell's own windows draw their own chrome (WindowChrome.qml).
+window-rule {
+    match app-id=r"^org\.quickshell$"
+    title-bar { off; }
+}

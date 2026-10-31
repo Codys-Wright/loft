@@ -5,7 +5,10 @@ import qs.services
 import qs.settings
 
 // System Monitor → Disks & Sensors: space per filesystem (df, one row per
-// device), every hwmon temperature and fan (read-only RPM), and the GPU.
+// device), every hwmon temperature and fan RPM, the GPU, and fan control:
+// a writable hwmon pwm output can run automatic, at a manual speed or on a
+// temperature curve (services/Fans.qml → `loft fans`, a pkexec helper;
+// programs.loft.fanControl). Without it, or without pwm, fans are read-only.
 ColumnLayout {
     id: page
     spacing: 12
@@ -161,7 +164,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: "Temperatures and fan speeds from the kernel's hwmon drivers. Fans are read-only."
+            text: "Temperatures and fan speeds from the kernel's hwmon drivers."
             color: Theme.subtext
             font.family: Theme.fontUi
             font.pixelSize: 11
@@ -258,6 +261,9 @@ ColumnLayout {
             font.pixelSize: 11
         }
     }
+
+    // ── Fan control ─────────────────────────────────────────────────────
+    FanControlCard {}
 
     component SensorChip: Rectangle {
         id: sc

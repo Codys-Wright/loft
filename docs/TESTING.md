@@ -66,9 +66,11 @@ A named session is, by default:
   `--share-audio` links the host's PipeWire in, but only do that when the test is about audio.
 - **no screen capture**: niri runs on a software renderer here, so it offers dmabuf only at v3,
   and Quickshell's ScreencopyView would end the shell with a protocol error (it always asks for
-  v4 feedback). The dock preview checks first (`loft dock capture`) and shows icons. To test its
-  thumbnails, start the shell with `LOFT_DEV_PREVIEW_STILL=<a loft-shot PNG of the session>`
-  in its environment: that still stands in for the display capture.
+  v4 feedback). The switcher and the dock preview check first (`loft dock capture`) and show
+  icons. To test window thumbnails, use `--gpu` (still headless; niri-loft's toplevel export
+  and dmabuf v5 are there). To test the stock-niri crop fallback without a GPU, start the shell
+  with `LOFT_DEV_PREVIEW_STILL=<a loft-shot PNG of the session>` in its environment: that
+  still stands in for the display capture.
 
 ### Several monitors: `--outputs`
 
@@ -377,6 +379,58 @@ too; a never-played player holds ~1 MB; unloading frees it. First frame after `p
 played 100–290 ms, paused or stopped 1–33 ms, unloaded and reloaded 85–130 ms. Hence
 WallpaperView: neighbours open but never decoding, a played video paused for 10 s and then
 reopened (decoder dropped).
+
+Whole shell, one live wallpaper (a 5120x2560 still + video), `--gpu`, fresh session per row,
+2026-10-30 (#12): stills only (`wallpaper.video` "still", or Performance mode) 93 MB at
+2560x1440 / 185 MB at 5120x1440, Ultra 102 MB; playing the display copy 683 / 1102 MB, the
+original 1304 MB. Per-workspace surfaces (`moveWithWorkspaces`) make no difference. nvidia-vaapi-
+driver's detached backing-image cache (exported frames kept for reuse, up to VRAM/64 = 256 MB)
+was part of that: `NVD_MAX_DETACHED_BACKING_IMAGES=0` (set in `qtMultimediaEnv`, loft-dev,
+loft-live) gives 602 / 952 MB, and 952 instead of 1285 MB at the start, with the same CPU (6 %)
+and frame lag. What stays per 5120x1440 copy: the shared device (~264 MB, once), the decoder's
+surfaces and 9 active backing images (106 MB). `NVD_LOG=<file> NVD_STATS=1` in loft-dev's
+environment logs decoders and backing-image counts.
+
+Copy resolution (`wallpaper.videoScale`, #12), whole shell, one 2560x1440 `--gpu` output, the
+display copy playing, fresh shell per row, 2026-10-31: Ultra (no wallpaper) 65 MB; Full 674 MB,
+75 % 579 MB, Half 487 MB. The VAAPI device (~264 MB) is paid once whatever plays; the rest goes
+with the copy's pixels (~320 / 220 / 130 MB per playing screen). `wallpaper.videoPlayOn:
+"focused"` holds every other display's video, which drops its decoder after 10 s. On the live
+desktop (3 outputs, Ultra) the shell held 312 MB.
+
+**Finding GUI-thread stalls (#16).** The `shell slow` line says the event loop ran late, not why:
+
+- *When*: poll `qs ipc call perf status` every 10 s and line `troubled` up with `reloads` /
+  `uptime`. On THEBATTLESHIP, 30 min of the live desktop (checkout running live, agents
+  committing to it): 5 troubled episodes, each within 30 s of a hot reload or a restart (a reload
+  rebuilds every surface: 1–3 s of GUI thread, p99 115–275 ms); between them p99 12–28 ms, max
+  ≤ 45 ms. The log had 21 `shell slow` lines against 25 reloads in 22.6 h. Perf now counts lag
+  from 20 s after a (re)load.
+- *Where (C++)*: `perf record -F 499 --call-graph dwarf -t <shell pid>` (the main thread's tid
+  is the pid; reading your own process needs no root) and bucket the samples per 100 ms
+  (`perf script -F time,ip,sym`). Live, Ultra, 4 min: rendering is 33 % of the GUI thread
+  (`QSGGuiThreadRenderLoop`: Qt picks the basic render loop on desktop NVIDIA, QTBUG-95817),
+  of which `eglMakeCurrent` 10 % and `eglSwapBuffers` 11.6 % (NVIDIA busy-waits in
+  `clock_gettime`); bursts of 100–200 ms are the QML collector (`QV4::GCStateMachine`, from
+  its incremental steps) every 30–60 s.
+- *Where (QML)*: run the shell with `--debug PORT` (in your session: kill the session's shell,
+  start `quickshell --path <checkout>/src --debug PORT` with its environment from
+  `/proc/<pid>/environ`) and record with `qmlprofiler --interactive --attach localhost -p PORT`
+  (`r` stops, `o FILE` writes the `.qtd`: ranges with file:line and duration, and per-frame
+  sync / render / swap). Found that way, in a session with the user's settings (Ultra, bar
+  readouts), 89 s idle: the System Monitor's pages rebuilt their interface rows every 2 s while
+  it was closed (360 RowLayouts, ~3.5 ms a tick inside `SystemStats` netdev); the bar's network
+  readout rebuilt its two labels every tick; QML time 956 → 245 ms per 89 s once both stopped.
+  At start, the Launchpad's icon warmer ran 8 apps per 30 ms tick: a themed lookup that misses
+  (`Quickshell.iconPath(name, true)` → `QIcon::fromTheme`) takes 20–90 ms here (MacTahoe, 12
+  data dirs), so a tick held the GUI thread up to 270 ms, 3.5 s in all without a matching theme.
+  It now stops after ~8 ms (at least one app), and the shell's other theme lookups
+  (notifications, banners, process and port rows, stacks, sound) share `Apps.themed`'s cache.
+- *Threaded rendering* (not the default): `QT_OPENGL_NO_SANITY_CHECK=1` in the shell's
+  environment lets Qt use the threaded render loop on NVIDIA (a render thread per window). Same
+  `--gpu` session, 60 s: Ultra lag p99 13 → 4 ms, GUI thread 1.9 → 0.5 %; a video playing p99
+  13 → 9 ms, GUI thread 3.7 → 1.6 %; resizing Settings and the island showed no freeze in a
+  short test, but Qt turned it off for freezes on resize (QTBUG-95817), so it stays opt-in.
 
 Zero-copy with FFmpeg's frame threads hung the GUI thread in 4 of 16 starts
 (`waitSurfaceResolved` in nvidia-vaapi-driver); with one decoder thread: 0 of 25.

@@ -14,9 +14,26 @@ Singleton {
     property var themes: []
     property bool applying: false
     property string error: ""
+    // The active theme's light / dark variants (`loft theme state`): which
+    // appearances it maps ([] = one look only) and its display name.
+    property var modes: []
+    property string label: ""
+    readonly property bool hasModes: modes.includes("light") && modes.includes("dark")
 
     function refresh() {
         list.running = true;
+        stateProc.running = true;
+    }
+
+    // Prefer Light / Prefer Dark: the theme's variant for that appearance,
+    // applied everywhere (GTK's color-scheme follows, so apps switch too).
+    function setMode(mode) {
+        if (applying || !hasModes || mode === (Theme.dark ? "dark" : "light"))
+            return;
+        error = "";
+        applying = true;
+        applyProc.command = ["loft", "theme", "apply", "--mode", mode];
+        applyProc.running = true;
     }
 
     function apply(name) {
@@ -50,6 +67,22 @@ Singleton {
     }
 
     Process {
+        id: stateProc
+        command: ["loft", "theme", "state", "--compact"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const s = JSON.parse(text);
+                    root.modes = s.modes ?? [];
+                    root.label = s.label || s.name || "";
+                } catch (e) {
+                    root.modes = [];
+                }
+            }
+        }
+    }
+
+    Process {
         id: applyProc
         stderr: StdioCollector {
             onStreamFinished: if (text.trim() !== "")
@@ -57,6 +90,7 @@ Singleton {
         }
         onExited: code => {
             root.applying = false;
+            stateProc.running = true;
             if (code !== 0 && root.error === "")
                 root.error = `loft theme apply exited with ${code}`;
         }

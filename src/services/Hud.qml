@@ -87,7 +87,7 @@ Singleton {
     }
 
     // ── Signals ─────────────────────────────────────────────────────────
-    readonly property PwNode sink: Pipewire.defaultAudioSink
+    readonly property PwNode sink: Sound.defaultSink
     readonly property bool ready: sink?.ready ?? false
     readonly property real sinkVolume: ready ? sink.audio.volume : 0
     readonly property bool sinkMuted: ready ? sink.audio.muted : false

@@ -90,14 +90,35 @@ ColumnLayout {
         onClicked: root.picked(null)
     }
 
+    // Devices, then routing under its own heading (Sound.sinks puts
+    // devices first).
     Repeater {
         model: root.nodes
-        delegate: Entry {
+        delegate: ColumnLayout {
+            id: row
             required property var modelData
-            glyph: root.iconFor(modelData)
-            text: Sound.label(modelData)
-            checked: !root.followingDefault && modelData.id === root.currentId
-            onClicked: root.picked(modelData)
+            required property int index
+            readonly property bool routing: !Sound.isHardware(modelData)
+            Layout.fillWidth: true
+            spacing: 1
+
+            Text {
+                visible: row.routing && (row.index === 0 || Sound.isHardware(root.nodes[row.index - 1]))
+                Layout.fillWidth: true
+                Layout.topMargin: row.index === 0 ? 0 : 6
+                Layout.leftMargin: 8
+                text: "Routing"
+                color: Theme.subtext
+                font.family: Theme.fontUi
+                font.pixelSize: 11
+            }
+
+            Entry {
+                glyph: root.iconFor(row.modelData)
+                text: Sound.label(row.modelData)
+                checked: !root.followingDefault && row.modelData.id === root.currentId
+                onClicked: root.picked(row.modelData)
+            }
         }
     }
 }

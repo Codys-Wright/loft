@@ -1,5 +1,7 @@
 # Loft
 
+[![Checks](https://github.com/Codys-Wright/loft/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/Codys-Wright/loft/actions/workflows/checks.yml)
+
 (Formerly studio-linux.) A desktop for creative work, music production and programming: [niri](https://github.com/niri-wm/niri)
 plus our own [Quickshell](https://quickshell.org) shell, with a macOS-inspired Liquid Glass design language
 that is fully themeable at runtime.
@@ -70,6 +72,8 @@ loft theme list | current
 loft theme apply latte                        # render (cached) → swap `current` → reload shell, niri, kitty, Ghostty, GTK
 loft theme render tokyonight ./out            # just render a pack's files
 loft theme new mytheme --from latte           # scaffold in the library's Packs/ (else ~/.local/share/loft/themes)
+loft theme browse [words…] | search WORDS | info NAME   # the themes index (loft-themes)
+loft theme install NAME                       # from the index: Loft's packs and every importer theme
 loft theme install ./pack | pack.tar.zst | https://…/repo.git [--subdir packs/x]
 loft theme install cozytile:all               # importers convert upstream themes at install time
 loft theme install qylock:pixel-sakura        #   (--list cozytile: / qylock: shows what's available)
@@ -133,7 +137,9 @@ Point your apps at the rendered fragments once; `apply` keeps them current:
 `LOFT_HOOKS=none|all|shell,niri,wallpapers,kitty,ghostty,gtk,spotify` picks the reload hooks
 (each runs only when its files changed; `loft theme apply --reload` runs them all). From a checkout,
 `python3 cli/loft …` runs the same CLI (the dev shell has `jsonschema`), and
-`nix flake check` runs the schema, unit, golden-render and `niri validate` checks.
+`nix flake check` runs the schema, unit, golden-render and `niri validate` checks, plus the
+Rust crates' tests and clippy (all of `nix/checks.nix`). CI runs it on every push to `main` and
+every PR ([.github/workflows/checks.yml](.github/workflows/checks.yml); the badge above).
 
 ### Spotify
 
@@ -429,4 +435,4 @@ loft-niri apply '{"bind_ops":[{"op":"set","id":"d:Mod+Shift+T","combo":"Mod+Alt+
 loft-niri reset [input|layout.gaps|…]     # drop overrides and re-render
 ```
 
-Status: Phase 0 (dev loop), Phase 1 (theme engine + selector + Cozytile/qylock importers), the shell port (bar, dock, Control Center, Dynamic Island, OSD, switcher, notifications, wallpaper picker, Settings incl. niri Displays/Input/Layout/Keyboard Shortcuts), the Spotlight launcher, the System module (monitor, bar readouts, network, alerts; `qs ipc call monitor toggle`) and Phase 5 (lock + login screen). See [docs/PLAN.md](docs/PLAN.md). Themes: [loft-themes](https://github.com/Codys-Wright/loft-themes).
+Status: Phase 0 (dev loop), Phase 1 (theme engine + selector + Cozytile/qylock importers), the shell port (bar, dock, Control Center, Dynamic Island, OSD, switcher, notifications, wallpaper picker, Settings incl. niri Displays/Input/Layout/Keyboard Shortcuts), the Spotlight launcher, the System module (monitor, bar readouts, network, alerts; `qs ipc call monitor toggle`) and Phase 5 (lock + login screen). See [docs/PLAN.md](docs/PLAN.md). Themes: [loft-themes](https://github.com/Codys-Wright/loft-themes). Credits: [CREDITS.md](CREDITS.md).

@@ -98,11 +98,12 @@ Singleton {
                 property var displays: ({})
                 // Window previews (feature dockPreview): open on "hover"
                 // (after previewDelay ms) or on "click" (an app with several
-                // windows); previewThumbnails = snapshots where niri allows
-                // (off by default until the capture is verified on a GPU desktop).
+                // windows); previewThumbnails = window pictures where niri
+                // allows (niri-loft: every window; stock niri: floating and
+                // fullscreen ones on screen).
                 property string preview: "hover"
                 property int previewDelay: 450
-                property bool previewThumbnails: false
+                property bool previewThumbnails: true
             }
 
             // Which display carries the dock and the bar's status area (see
@@ -182,6 +183,16 @@ Singleton {
                 property real pauseWhenIdleMinutes: 5
                 // Play display-sized 8-bit copies (made once, cached).
                 property bool smallerCopies: true
+                // The copies' size as a fraction of the display's pixels
+                // (1, 0.75 or 0.5), drawn scaled up to fill it. A playing
+                // decoder's GPU memory goes with its pixel count: 0.5 is
+                // about a quarter of it, a little softer. Needs smallerCopies.
+                property real videoScale: 1
+                // Where videos play: "all" displays, or only the "focused"
+                // one (the others hold their frame and, after 10 s, drop
+                // their decoder: one decoder's memory instead of one per
+                // display).
+                property string videoPlayOn: "all"
             }
 
             // Performance mode (PerformanceMode.qml): "off", "performance"

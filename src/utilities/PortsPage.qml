@@ -183,7 +183,7 @@ ColumnLayout {
                 required property var modelData
                 required property int index
                 readonly property var pr: modelData.process
-                readonly property string iconSource: pr ? Quickshell.iconPath(pr.name.toLowerCase(), true) : ""
+                readonly property string iconSource: pr ? Apps.themed(pr.name.toLowerCase()) : ""
                 readonly property bool canStop: modelData.mine && modelData.pid !== null
 
                 Layout.fillWidth: true

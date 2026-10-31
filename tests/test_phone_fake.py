@@ -162,6 +162,27 @@ class FakeTetherdTest(unittest.TestCase):
         self.assertFalse(link["classic_connected"])
         self.assertIsNone(link["calls"])
 
+    def test_away_lock_setting(self):
+        self.c.until("bt_connection_changed")
+        self.c.send(command="bt_status")
+        st = self.c.until("bt_status")
+        self.assertEqual((st["lock_on_away"], st["lock_away_seconds"]), (False, 30))
+        self.c.send(command="bt_set_lock_on_away", enabled=True, grace_seconds=120)
+        st = self.c.until("bt_status")
+        self.assertEqual((st["lock_on_away"], st["lock_away_seconds"]), (True, 120))
+        self.assertEqual(self.c.line(), "OK")
+        # Like tetherd: grace_seconds left out → 30 again.
+        self.c.send(command="bt_set_lock_on_away", enabled=False)
+        st = self.c.until("bt_status")
+        self.assertEqual((st["lock_on_away"], st["lock_away_seconds"]), (False, 30))
+
+    def test_exact_battery(self):
+        self.assertNotIn("battery", self.c.until("bt_connection_changed"))  # 0.2.35's shape
+        self.c.send(command="fake_inject", kind="battery", text="63")
+        link = self.c.until("bt_connection_changed")
+        self.assertEqual(link["battery"], 63)
+        self.assertEqual(link["calls"]["battery"], 4)
+
     def test_garbage_is_ignored(self):
         self.c.until("bt_connection_changed")
         self.c.s.sendall(b"not json\n[1,2]\n")

@@ -64,6 +64,31 @@ Singleton {
         adjusted(Math.max(0.01, Math.min(1, v)));
     }
 
+    // The brightness keys (XF86MonBrightnessUp/Down → IPC `brightness up|down`,
+    // niri/shell-binds.kdl.in): the laptop panel when there is one, else
+    // every display. Before the first probe the step waits for it.
+    property real queuedStep: 0
+    property real queuedSet: -1
+
+    function step(delta) {
+        if (!fake && probedAt === 0) {
+            queuedStep += delta;
+            refresh();
+            return;
+        }
+        const keys = displays.filter(d => d.kind === "backlight");
+        const targets = keys.length > 0 ? keys : displays;
+        if (targets.length === 0)
+            return;
+        let shown = 0;
+        for (const d of targets) {
+            const v = Math.max(0.01, Math.min(1, Math.round((d.value + delta) * 20) / 20));
+            apply(d.key, v);
+            shown += v;
+        }
+        adjusted(shown / targets.length);
+    }
+
     property var pending: ({})
     Timer {
         id: writer
@@ -114,6 +139,39 @@ done`]
         onExited: {
             root.probing = false;
             root.probedAt = Date.now();
+            if (root.queuedSet >= 0) {
+                const v = root.queuedSet;
+                root.queuedSet = -1;
+                root.setAll(v);
+            }
+            if (root.queuedStep !== 0) {
+                const d = root.queuedStep;
+                root.queuedStep = 0;
+                root.step(d);
+            }
+        }
+    }
+
+    IpcHandler {
+        target: "brightness"
+
+        function up(): void {
+            root.step(0.05);
+        }
+        function down(): void {
+            root.step(-0.05);
+        }
+        // 0..1 on every display, like the Control Center slider.
+        function set(v: real): void {
+            if (!root.fake && root.probedAt === 0) {
+                root.queuedSet = v;
+                root.refresh();
+                return;
+            }
+            root.setAll(v);
+        }
+        function get(): string {
+            return JSON.stringify(root.displays.map(d => ({ name: d.name, kind: d.kind, value: Math.round(d.value * 100) / 100 })));
         }
     }
 }

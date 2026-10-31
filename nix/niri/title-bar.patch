@@ -1,0 +1,3085 @@
+diff --git a/niri-config/src/appearance.rs b/niri-config/src/appearance.rs
+--- a/niri-config/src/appearance.rs
++++ b/niri-config/src/appearance.rs
+@@ -389,6 +389,197 @@
+     pub y: FloatOrInt<-65535, 65535>,
+ }
+ 
++/// macOS-style window buttons (close, minimize, zoom) at the left of the title bar.
++///
++/// They show only where the title bar does; `off` keeps a bar without buttons.
++#[derive(Debug, Clone, Copy, PartialEq)]
++pub struct TrafficLights {
++    pub on: bool,
++    /// Diameter of one button.
++    pub size: f64,
++    /// Space between two buttons.
++    pub spacing: f64,
++    /// `x`: inset of the first button from the bar's left edge. `y` is ignored: the buttons are
++    /// centered in the bar (it was their offset from the window's corner before the title bar).
++    pub offset: ShadowOffset,
++    pub close_color: Color,
++    pub minimize_color: Color,
++    pub zoom_color: Color,
++    /// Color of all buttons while the window is inactive and the pointer is not over them.
++    pub inactive_color: Color,
++    /// Color of the glyphs shown while the pointer is over the buttons.
++    pub glyph_color: Color,
++}
++
++impl Default for TrafficLights {
++    fn default() -> Self {
++        Self {
++            on: true,
++            size: 12.,
++            spacing: 8.,
++            offset: ShadowOffset {
++                x: FloatOrInt(12.),
++                y: FloatOrInt(0.),
++            },
++            close_color: Color::from_rgba8_unpremul(0xff, 0x5f, 0x57, 0xff),
++            minimize_color: Color::from_rgba8_unpremul(0xfe, 0xbc, 0x2e, 0xff),
++            zoom_color: Color::from_rgba8_unpremul(0x28, 0xc8, 0x40, 0xff),
++            inactive_color: Color::from_rgba8_unpremul(0x80, 0x80, 0x80, 0x59),
++            glyph_color: Color::from_rgba8_unpremul(0, 0, 0, 0x99),
++        }
++    }
++}
++
++impl MergeWith<TrafficLightsRule> for TrafficLights {
++    fn merge_with(&mut self, part: &TrafficLightsRule) {
++        self.on |= part.on;
++        if part.off {
++            self.on = false;
++        }
++
++        merge!((self, part), size, spacing);
++
++        merge_clone!(
++            (self, part),
++            offset,
++            close_color,
++            minimize_color,
++            zoom_color,
++            inactive_color,
++            glyph_color,
++        );
++    }
++}
++
++#[derive(knuffel::Decode, Debug, Default, Clone, Copy, PartialEq)]
++pub struct TrafficLightsRule {
++    #[knuffel(child)]
++    pub off: bool,
++    #[knuffel(child)]
++    pub on: bool,
++    #[knuffel(child, unwrap(argument))]
++    pub size: Option<FloatOrInt<1, 256>>,
++    #[knuffel(child, unwrap(argument))]
++    pub spacing: Option<FloatOrInt<0, 256>>,
++    #[knuffel(child)]
++    pub offset: Option<ShadowOffset>,
++    #[knuffel(child)]
++    pub close_color: Option<Color>,
++    #[knuffel(child)]
++    pub minimize_color: Option<Color>,
++    #[knuffel(child)]
++    pub zoom_color: Option<Color>,
++    #[knuffel(child)]
++    pub inactive_color: Option<Color>,
++    #[knuffel(child)]
++    pub glyph_color: Option<Color>,
++}
++
++impl MergeWith<Self> for TrafficLightsRule {
++    fn merge_with(&mut self, part: &Self) {
++        merge_on_off!((self, part));
++
++        merge_clone_opt!(
++            (self, part),
++            size,
++            spacing,
++            offset,
++            close_color,
++            minimize_color,
++            zoom_color,
++            inactive_color,
++            glyph_color,
++        );
++    }
++}
++
++/// A server-side title bar above windows that use server-side decorations, like KWin's.
++///
++/// The tile reserves its height: the window gets the tile minus the bar, below it.
++#[derive(Debug, Clone, PartialEq)]
++pub struct TitleBar {
++    pub on: bool,
++    pub height: f64,
++    /// Bar background of the focused window.
++    pub active_color: Color,
++    /// Bar background of other windows.
++    pub inactive_color: Color,
++    pub active_text_color: Color,
++    pub inactive_text_color: Color,
++    /// Pango font description of the title.
++    pub font: String,
++}
++
++impl Default for TitleBar {
++    fn default() -> Self {
++        Self {
++            on: false,
++            height: 30.,
++            active_color: Color::from_rgba8_unpremul(0x2c, 0x2c, 0x30, 0xff),
++            inactive_color: Color::from_rgba8_unpremul(0x22, 0x22, 0x26, 0xff),
++            active_text_color: Color::from_rgba8_unpremul(0xe6, 0xe6, 0xea, 0xff),
++            inactive_text_color: Color::from_rgba8_unpremul(0x8a, 0x8a, 0x90, 0xff),
++            font: String::from("sans 13px"),
++        }
++    }
++}
++
++impl MergeWith<TitleBarRule> for TitleBar {
++    fn merge_with(&mut self, part: &TitleBarRule) {
++        self.on |= part.on;
++        if part.off {
++            self.on = false;
++        }
++
++        merge!((self, part), height);
++
++        merge_clone!(
++            (self, part),
++            active_color,
++            inactive_color,
++            active_text_color,
++            inactive_text_color,
++            font,
++        );
++    }
++}
++
++#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
++pub struct TitleBarRule {
++    #[knuffel(child)]
++    pub off: bool,
++    #[knuffel(child)]
++    pub on: bool,
++    #[knuffel(child, unwrap(argument))]
++    pub height: Option<FloatOrInt<1, 256>>,
++    #[knuffel(child)]
++    pub active_color: Option<Color>,
++    #[knuffel(child)]
++    pub inactive_color: Option<Color>,
++    #[knuffel(child)]
++    pub active_text_color: Option<Color>,
++    #[knuffel(child)]
++    pub inactive_text_color: Option<Color>,
++    #[knuffel(child, unwrap(argument))]
++    pub font: Option<String>,
++}
++
++impl MergeWith<Self> for TitleBarRule {
++    fn merge_with(&mut self, part: &Self) {
++        merge_on_off!((self, part));
++
++        merge_clone_opt!(
++            (self, part),
++            height,
++            active_color,
++            inactive_color,
++            active_text_color,
++            inactive_text_color,
++            font,
++        );
++    }
++}
++
+ #[derive(Debug, Clone, Copy, PartialEq)]
+ pub struct WorkspaceShadow {
+     pub off: bool,
+diff --git a/niri-config/src/layout.rs b/niri-config/src/layout.rs
+--- a/niri-config/src/layout.rs
++++ b/niri-config/src/layout.rs
+@@ -2,10 +2,14 @@
+ use niri_ipc::{ColumnDisplay, SizeChange};
+ 
+ use crate::appearance::{
+-    Border, FocusRing, InsertHint, Shadow, TabIndicator, DEFAULT_BACKGROUND_COLOR,
++    Border, FocusRing, InsertHint, Shadow, TabIndicator, TitleBar, TrafficLights,
++    DEFAULT_BACKGROUND_COLOR,
+ };
+ use crate::utils::{expect_only_children, Flag, MergeWith};
+-use crate::{BorderRule, Color, FloatOrInt, InsertHintPart, ShadowRule, TabIndicatorPart};
++use crate::{
++    BorderRule, Color, FloatOrInt, InsertHintPart, ShadowRule, TabIndicatorPart, TitleBarRule,
++    TrafficLightsRule,
++};
+ 
+ #[derive(Debug, Clone, PartialEq)]
+ pub struct Layout {
+@@ -13,6 +17,8 @@
+     pub border: Border,
+     pub shadow: Shadow,
+     pub tab_indicator: TabIndicator,
++    pub title_bar: TitleBar,
++    pub traffic_lights: TrafficLights,
+     pub insert_hint: InsertHint,
+     pub preset_column_widths: Vec<PresetSize>,
+     pub default_column_width: Option<PresetSize>,
+@@ -33,6 +39,8 @@
+             border: Border::default(),
+             shadow: Shadow::default(),
+             tab_indicator: TabIndicator::default(),
++            title_bar: TitleBar::default(),
++            traffic_lights: TrafficLights::default(),
+             insert_hint: InsertHint::default(),
+             preset_column_widths: vec![
+                 PresetSize::Proportion(1. / 3.),
+@@ -64,6 +72,8 @@
+             border,
+             shadow,
+             tab_indicator,
++            title_bar,
++            traffic_lights,
+             insert_hint,
+             always_center_single_column,
+             empty_workspace_above_first,
+@@ -105,6 +115,10 @@
+     #[knuffel(child)]
+     pub tab_indicator: Option<TabIndicatorPart>,
+     #[knuffel(child)]
++    pub title_bar: Option<TitleBarRule>,
++    #[knuffel(child)]
++    pub traffic_lights: Option<TrafficLightsRule>,
++    #[knuffel(child)]
+     pub insert_hint: Option<InsertHintPart>,
+     #[knuffel(child, unwrap(children))]
+     pub preset_column_widths: Option<Vec<PresetSize>>,
+diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
+--- a/niri-config/src/lib.rs
++++ b/niri-config/src/lib.rs
+@@ -810,6 +810,20 @@
+                     position "top"
+                 }
+ 
++                title-bar {
++                    on
++                    height 32
++                    active-color "#123"
++                    font "Inter 12px"
++                }
++
++                traffic-lights {
++                    on
++                    size 14
++                    offset x=16 y=18
++                    close-color "#f00"
++                }
++
+                 preset-column-widths {
+                     proportion 0.25
+                     proportion 0.5
+@@ -928,6 +942,15 @@
+                 tab-indicator {
+                     active-color "#f00"
+                 }
++
++                title-bar {
++                    off
++                    height 24
++                }
++
++                traffic-lights {
++                    off
++                }
+             }
+ 
+             layer-rule {
+@@ -1407,6 +1430,78 @@
+                     inactive_gradient: None,
+                     urgent_gradient: None,
+                 },
++                title_bar: TitleBar {
++                    on: true,
++                    height: 32.0,
++                    active_color: Color {
++                        r: 0.06666667,
++                        g: 0.13333334,
++                        b: 0.2,
++                        a: 1.0,
++                    },
++                    inactive_color: Color {
++                        r: 0.13333334,
++                        g: 0.13333334,
++                        b: 0.14901961,
++                        a: 1.0,
++                    },
++                    active_text_color: Color {
++                        r: 0.9019608,
++                        g: 0.9019608,
++                        b: 0.91764706,
++                        a: 1.0,
++                    },
++                    inactive_text_color: Color {
++                        r: 0.5411765,
++                        g: 0.5411765,
++                        b: 0.5647059,
++                        a: 1.0,
++                    },
++                    font: "Inter 12px",
++                },
++                traffic_lights: TrafficLights {
++                    on: true,
++                    size: 14.0,
++                    spacing: 8.0,
++                    offset: ShadowOffset {
++                        x: FloatOrInt(
++                            16.0,
++                        ),
++                        y: FloatOrInt(
++                            18.0,
++                        ),
++                    },
++                    close_color: Color {
++                        r: 1.0,
++                        g: 0.0,
++                        b: 0.0,
++                        a: 1.0,
++                    },
++                    minimize_color: Color {
++                        r: 0.99607843,
++                        g: 0.7372549,
++                        b: 0.18039216,
++                        a: 1.0,
++                    },
++                    zoom_color: Color {
++                        r: 0.15686275,
++                        g: 0.78431374,
++                        b: 0.2509804,
++                        a: 1.0,
++                    },
++                    inactive_color: Color {
++                        r: 0.5019608,
++                        g: 0.5019608,
++                        b: 0.5019608,
++                        a: 0.34901962,
++                    },
++                    glyph_color: Color {
++                        r: 0.0,
++                        g: 0.0,
++                        b: 0.0,
++                        a: 0.6,
++                    },
++                },
+                 insert_hint: InsertHint {
+                     off: false,
+                     color: Color {
+@@ -1874,6 +1969,32 @@
+                         inactive_gradient: None,
+                         urgent_gradient: None,
+                     },
++                    title_bar: TitleBarRule {
++                        off: true,
++                        on: false,
++                        height: Some(
++                            FloatOrInt(
++                                24.0,
++                            ),
++                        ),
++                        active_color: None,
++                        inactive_color: None,
++                        active_text_color: None,
++                        inactive_text_color: None,
++                        font: None,
++                    },
++                    traffic_lights: TrafficLightsRule {
++                        off: true,
++                        on: false,
++                        size: None,
++                        spacing: None,
++                        offset: None,
++                        close_color: None,
++                        minimize_color: None,
++                        zoom_color: None,
++                        inactive_color: None,
++                        glyph_color: None,
++                    },
+                     draw_border_with_background: None,
+                     opacity: None,
+                     geometry_corner_radius: None,
+diff --git a/niri-config/src/window_rule.rs b/niri-config/src/window_rule.rs
+--- a/niri-config/src/window_rule.rs
++++ b/niri-config/src/window_rule.rs
+@@ -2,7 +2,7 @@
+ 
+ use crate::appearance::{
+     BackgroundEffect, BackgroundEffectRule, BlockOutFrom, BorderRule, CornerRadius, ShadowRule,
+-    TabIndicatorRule,
++    TabIndicatorRule, TitleBarRule, TrafficLightsRule,
+ };
+ use crate::layout::DefaultPresetSize;
+ use crate::utils::{MergeWith, RegexEq};
+@@ -53,6 +53,10 @@
+     pub shadow: ShadowRule,
+     #[knuffel(child, default)]
+     pub tab_indicator: TabIndicatorRule,
++    #[knuffel(child, default)]
++    pub title_bar: TitleBarRule,
++    #[knuffel(child, default)]
++    pub traffic_lights: TrafficLightsRule,
+     #[knuffel(child, unwrap(argument))]
+     pub draw_border_with_background: Option<bool>,
+     #[knuffel(child, unwrap(argument))]
+diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
+--- a/niri-ipc/src/lib.rs
++++ b/niri-ipc/src/lib.rs
+@@ -1687,6 +1687,26 @@
+         /// be converted to a `String` (e.g. contained invalid UTF-8 bytes).
+         path: Option<String>,
+     },
++    /// A window asked to be minimized, or its minimize traffic light was clicked.
++    ///
++    /// niri itself has no minimized state; a desktop shell can hide the window its own way.
++    WindowMinimizeRequested {
++        /// Id of the window.
++        id: u64,
++    },
++    /// The zoom traffic light of a window was pressed and held.
++    ///
++    /// A desktop shell can show a menu of window actions at this position.
++    WindowActionsMenuRequested {
++        /// Id of the window.
++        id: u64,
++        /// Name of the output the pointer is on.
++        output: Option<String>,
++        /// Pointer position within that output, in logical pixels.
++        x: f64,
++        /// Pointer position within that output, in logical pixels.
++        y: f64,
++    },
+     /// The screencasts have changed.
+     CastsChanged {
+         /// The new screencast information.
+diff --git a/src/handlers/xdg_shell.rs b/src/handlers/xdg_shell.rs
+--- a/src/handlers/xdg_shell.rs
++++ b/src/handlers/xdg_shell.rs
+@@ -406,6 +406,18 @@
+         });
+     }
+ 
++    fn minimize_request(&mut self, toplevel: ToplevelSurface) {
++        // niri has no minimized state: tell the shell, which may hide the window its own way.
++        let id = self
++            .niri
++            .layout
++            .find_window_and_output(toplevel.wl_surface())
++            .map(|(mapped, _)| mapped.id().get());
++        if let Some(id) = id {
++            self.ipc_window_minimize_requested(id);
++        }
++    }
++
+     fn maximize_request(&mut self, toplevel: ToplevelSurface) {
+         if let Some((mapped, _)) = self
+             .niri
+diff --git a/src/input/mod.rs b/src/input/mod.rs
+--- a/src/input/mod.rs
++++ b/src/input/mod.rs
+@@ -48,8 +48,9 @@
+ #[cfg(feature = "dbus")]
+ use crate::dbus::freedesktop_a11y::KbMonBlock;
+ use crate::layout::scrolling::ScrollDirection;
+-use crate::layout::{ActivateWindow, LayoutElement as _};
+-use crate::niri::{CastTarget, PointerVisibility, State};
++use crate::layout::traffic_lights::TrafficLight;
++use crate::layout::{ActivateWindow, HitType, LayoutElement as _};
++use crate::niri::{CastTarget, PointerVisibility, State, TrafficLightPress};
+ use crate::ui::mru::{WindowMru, WindowMruUi};
+ use crate::ui::screenshot_ui::ScreenshotUi;
+ use crate::utils::spawning::{spawn, spawn_sh};
+@@ -70,6 +71,8 @@
+ use backend_ext::{NiriInputBackend as InputBackend, NiriInputDevice as _};
+ 
+ pub const DOUBLE_CLICK_TIME: Duration = Duration::from_millis(400);
++/// How long the zoom traffic light is held for the window actions menu.
++const TRAFFIC_LIGHT_HOLD_TIME: Duration = Duration::from_millis(350);
+ 
+ #[derive(Debug, Clone, Copy, PartialEq)]
+ pub struct TabletData {
+@@ -2579,7 +2582,7 @@
+ 
+         self.niri.handle_focus_follows_mouse(&under);
+ 
+-        self.niri.pointer_contents.clone_from(&under);
++        self.niri.set_pointer_contents(&under);
+ 
+         pointer.motion(
+             self,
+@@ -2682,7 +2685,7 @@
+ 
+         self.niri.handle_focus_follows_mouse(&under);
+ 
+-        self.niri.pointer_contents.clone_from(&under);
++        self.niri.set_pointer_contents(&under);
+ 
+         pointer.motion(
+             self,
+@@ -2873,7 +2876,33 @@
+                 }
+             }
+ 
+-            if let Some(mapped) = self.niri.window_under_cursor() {
++            let mod_down = modifiers_from_state(mods).contains(mod_key.to_modifiers());
++            // A press on a title bar, outside the overview and Mod gestures: the window's
++            // traffic light under the pointer, or `None` for the rest of the bar.
++            let title_bar_hit = match &self.niri.pointer_contents.window {
++                Some((window, HitType::TitleBar { button }))
++                    if !pointer.is_grabbed() && !is_overview_open && !mod_down =>
++                {
++                    Some((window.clone(), *button))
++                }
++                _ => None,
++            };
++
++            if button == Some(MouseButton::Left)
++                && matches!(title_bar_hit, Some((_, Some(_))))
++                && self.traffic_light_pointer_down()
++            {
++                // The traffic lights take the click: the window neither activates nor moves.
++            } else if let (Some(MouseButton::Left), Some((window, None))) = (button, &title_bar_hit)
++            {
++                // The rest of the bar: drag moves the window, double-click maximizes it.
++                self.title_bar_pointer_down(window.clone(), button_code, serial);
++            } else if let (Some(MouseButton::Right), Some((window, _))) = (button, &title_bar_hit) {
++                self.niri.layout.activate_window(window);
++                self.title_bar_menu(window.clone());
++                // FIXME: granular.
++                self.niri.queue_redraw_all();
++            } else if let Some(mapped) = self.niri.window_under_cursor() {
+                 let window = mapped.window.clone();
+ 
+                 // Check if we need to start an interactive move.
+@@ -3009,6 +3038,10 @@
+ 
+         self.update_pointer_contents();
+ 
++        if button == Some(MouseButton::Left) && button_state == ButtonState::Released {
++            self.traffic_light_pointer_up();
++        }
++
+         if ButtonState::Pressed == button_state {
+             let layer_under = self.niri.pointer_contents.layer.clone();
+             self.niri.focus_layer_surface_if_on_demand(layer_under);
+@@ -3055,6 +3088,188 @@
+         pointer.frame(self);
+     }
+ 
++    /// Handles the left button going down on a title bar, off its traffic lights: a drag moves
++    /// the window (as a client's own title bar does through xdg `move`), a double-click toggles
++    /// maximize (as GTK's header bar does through xdg `set_maximized`).
++    fn title_bar_pointer_down(&mut self, window: smithay::desktop::Window, button_code: u32, serial: smithay::utils::Serial) {
++        let pointer = self.niri.seat.get_pointer().unwrap();
++        self.niri.layout.activate_window(&window);
++
++        let time = get_monotonic_time();
++        let is_double = matches!(
++            &self.niri.title_bar_last_press,
++            Some((last, last_time))
++                if *last == window && time.saturating_sub(*last_time) <= DOUBLE_CLICK_TIME
++        );
++
++        if is_double {
++            self.niri.title_bar_last_press = None;
++            if let Some(id) = self.mapped_id(&window) {
++                self.do_action(Action::MaximizeWindowToEdgesById(id), false);
++            }
++        } else {
++            self.niri.title_bar_last_press = Some((window.clone(), time));
++
++            let start_data = PointerGrabStartData {
++                focus: None,
++                button: button_code,
++                location: pointer.current_location(),
++            };
++            let start_data = PointerOrTouchStartData::Pointer(start_data);
++            if let Some(grab) = MoveGrab::new(self, start_data, window, true, None) {
++                pointer.set_grab(self, grab, serial, Focus::Clear);
++            }
++        }
++
++        // FIXME: granular.
++        self.niri.queue_redraw_all();
++    }
++
++    /// Right-click on a title bar: asks the shell for its window menu at the pointer.
++    fn title_bar_menu(&mut self, window: smithay::desktop::Window) {
++        let Some(id) = self.mapped_id(&window) else {
++            return;
++        };
++        let pos = self.niri.seat.get_pointer().unwrap().current_location();
++        let (output, pos) = match self.niri.output_under(pos) {
++            Some((output, pos_within_output)) => (Some(output.name()), pos_within_output),
++            None => (None, pos),
++        };
++        self.ipc_window_actions_menu_requested(id, output, pos);
++    }
++
++    /// The IPC id of a mapped window.
++    fn mapped_id(&self, window: &smithay::desktop::Window) -> Option<u64> {
++        let toplevel = window.toplevel()?;
++        let (mapped, _) = self
++            .niri
++            .layout
++            .find_window_and_output(toplevel.wl_surface())?;
++        Some(mapped.id().get())
++    }
++
++    /// Handles the left button going down over a window's traffic lights.
++    ///
++    /// Returns `false` when the pointer isn't over them.
++    fn traffic_light_pointer_down(&mut self) -> bool {
++        let Some((window, HitType::TitleBar {
++            button: Some(button),
++        })) = self.niri.pointer_contents.window.clone()
++        else {
++            return false;
++        };
++
++        let serial = self
++            .niri
++            .traffic_light_press
++            .as_ref()
++            .map_or(0, |press| press.serial.wrapping_add(1));
++        self.niri.traffic_light_press = Some(TrafficLightPress {
++            window: window.clone(),
++            button,
++            serial,
++            held: false,
++        });
++        self.niri
++            .update_traffic_lights_input(&window, |input| input.pressed = Some(button));
++
++        // Press and hold zoom for the window actions menu, as on macOS.
++        if button == TrafficLight::Zoom {
++            let timer = Timer::from_duration(TRAFFIC_LIGHT_HOLD_TIME);
++            self.niri
++                .event_loop
++                .insert_source(timer, move |_, _, state| {
++                    state.traffic_light_hold(serial);
++                    TimeoutAction::Drop
++                })
++                .unwrap();
++        }
++
++        // FIXME: granular.
++        self.niri.queue_redraw_all();
++        true
++    }
++
++    fn traffic_light_hold(&mut self, serial: u64) {
++        let Some(press) = &mut self.niri.traffic_light_press else {
++            return;
++        };
++        if press.serial != serial || press.held {
++            return;
++        }
++        press.held = true;
++        let window = press.window.clone();
++
++        let Some(toplevel) = window.toplevel() else {
++            return;
++        };
++        let Some((mapped, _)) = self
++            .niri
++            .layout
++            .find_window_and_output(toplevel.wl_surface())
++        else {
++            return;
++        };
++        let id = mapped.id().get();
++
++        let pos = self.niri.seat.get_pointer().unwrap().current_location();
++        let (output, pos) = match self.niri.output_under(pos) {
++            Some((output, pos_within_output)) => (Some(output.name()), pos_within_output),
++            None => (None, pos),
++        };
++
++        self.niri
++            .update_traffic_lights_input(&window, |input| input.pressed = None);
++        self.ipc_window_actions_menu_requested(id, output, pos);
++
++        // FIXME: granular.
++        self.niri.queue_redraw_all();
++    }
++
++    /// Handles the left button going up after it went down over a traffic light: the button
++    /// acts if the pointer is still over it.
++    fn traffic_light_pointer_up(&mut self) {
++        let Some(press) = self.niri.traffic_light_press.take() else {
++            return;
++        };
++
++        self.niri
++            .update_traffic_lights_input(&press.window, |input| input.pressed = None);
++        // FIXME: granular.
++        self.niri.queue_redraw_all();
++
++        if press.held {
++            return;
++        }
++
++        let still_over = matches!(
++            &self.niri.pointer_contents.window,
++            Some((window, HitType::TitleBar { button: Some(button) }))
++                if *window == press.window && *button == press.button
++        );
++        if !still_over {
++            return;
++        }
++
++        let Some(toplevel) = press.window.toplevel() else {
++            return;
++        };
++        let Some((mapped, _)) = self
++            .niri
++            .layout
++            .find_window_and_output(toplevel.wl_surface())
++        else {
++            return;
++        };
++        let id = mapped.id().get();
++
++        match press.button {
++            TrafficLight::Close => mapped.toplevel().send_close(),
++            TrafficLight::Minimize => self.ipc_window_minimize_requested(id),
++            TrafficLight::Zoom => self.do_action(Action::FullscreenWindowById(id), false),
++        }
++    }
++
+     fn on_pointer_axis<I: InputBackend>(&mut self, event: I::PointerAxisEvent) {
+         let pointer = &self.niri.seat.get_pointer().unwrap();
+ 
+diff --git a/src/ipc/client.rs b/src/ipc/client.rs
+--- a/src/ipc/client.rs
++++ b/src/ipc/client.rs
+@@ -497,6 +497,13 @@
+                         let description = parts.join(" and ");
+                         println!("Screenshot captured: {description}");
+                     }
++                    Event::WindowMinimizeRequested { id } => {
++                        println!("Window {id}: minimize requested");
++                    }
++                    Event::WindowActionsMenuRequested { id, output, x, y } => {
++                        let output = output.as_deref().unwrap_or("(no output)");
++                        println!("Window {id}: actions menu requested on {output} at {x}, {y}");
++                    }
+                     Event::CastsChanged { casts } => {
+                         println!("Casts changed: {casts:?}");
+                     }
+diff --git a/src/ipc/server.rs b/src/ipc/server.rs
+--- a/src/ipc/server.rs
++++ b/src/ipc/server.rs
+@@ -27,7 +27,7 @@
+ use smithay::reexports::calloop::generic::Generic;
+ use smithay::reexports::calloop::{Interest, LoopHandle, Mode, PostAction};
+ use smithay::reexports::rustix::fs::unlink;
+-use smithay::utils::SERIAL_COUNTER;
++use smithay::utils::{Logical, Point, SERIAL_COUNTER};
+ use smithay::wayland::shell::wlr_layer::{KeyboardInteractivity, Layer};
+ 
+ use crate::backend::IpcOutputMap;
+@@ -942,4 +942,30 @@
+         state.apply(event.clone());
+         server.send_event(event);
+     }
++
++    pub fn ipc_window_minimize_requested(&mut self, id: u64) {
++        let Some(server) = &self.niri.ipc_server else {
++            return;
++        };
++
++        server.send_event(Event::WindowMinimizeRequested { id });
++    }
++
++    pub fn ipc_window_actions_menu_requested(
++        &mut self,
++        id: u64,
++        output: Option<String>,
++        pos: Point<f64, Logical>,
++    ) {
++        let Some(server) = &self.niri.ipc_server else {
++            return;
++        };
++
++        server.send_event(Event::WindowActionsMenuRequested {
++            id,
++            output,
++            x: pos.x,
++            y: pos.y,
++        });
++    }
+ }
+diff --git a/src/layout/floating.rs b/src/layout/floating.rs
+--- a/src/layout/floating.rs
++++ b/src/layout/floating.rs
+@@ -1245,17 +1245,19 @@
+         width: Option<PresetSize>,
+         height: Option<PresetSize>,
+         rules: &ResolvedWindowRules,
++        // Height of the title bar the tile will reserve above the window.
++        title_bar: f64,
+     ) -> Size<i32, Logical> {
+         let border = self.options.layout.border.merged_with(&rules.border);
+ 
+-        let resolve = |size: Option<PresetSize>, working_area_size: f64| {
++        let resolve = |size: Option<PresetSize>, working_area_size: f64, chrome: f64| {
+             if let Some(size) = size {
+                 let size = match resolve_preset_size(size, working_area_size) {
+                     ResolvedSize::Tile(mut size) => {
+                         if !border.off {
+                             size -= border.width * 2.;
+                         }
+-                        size
++                        size - chrome
+                     }
+                     ResolvedSize::Window(size) => size,
+                 };
+@@ -1266,8 +1268,8 @@
+             }
+         };
+ 
+-        let width = resolve(width, self.working_area.size.w);
+-        let height = resolve(height, self.working_area.size.h);
++        let width = resolve(width, self.working_area.size.w, 0.);
++        let height = resolve(height, self.working_area.size.h, title_bar);
+ 
+         Size::from((width, height))
+     }
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -54,6 +54,7 @@
+ 
+ pub use self::monitor::MonitorRenderElement;
+ use self::monitor::{Monitor, WorkspaceSwitch};
++use self::traffic_lights::{TrafficLight, TrafficLightsInput};
+ use self::workspace::{OutputId, Workspace};
+ use crate::animation::{Animation, Clock};
+ use crate::input::swipe_tracker::SwipeTracker;
+@@ -85,6 +86,8 @@
+ pub mod shadow;
+ pub mod tab_indicator;
+ pub mod tile;
++pub mod title_bar;
++pub mod traffic_lights;
+ pub mod workspace;
+ 
+ #[cfg(test)]
+@@ -234,6 +237,17 @@
+     fn max_size(&self) -> Size<i32, Logical>;
+     fn is_wl_surface(&self, wl_surface: &WlSurface) -> bool;
+     fn has_ssd(&self) -> bool;
++
++    /// Pointer state over this window's traffic lights.
++    fn traffic_lights_input(&self) -> TrafficLightsInput {
++        TrafficLightsInput::default()
++    }
++
++    /// The window's title, for its title bar.
++    fn title(&self) -> Option<String> {
++        None
++    }
++
+     fn set_preferred_scale_transform(&self, scale: output::Scale, transform: Transform);
+     fn output_enter(&self, output: &Output);
+     fn output_leave(&self, output: &Output);
+@@ -540,6 +554,10 @@
+         /// Whether the hit was on the tab indicator.
+         is_tab_indicator: bool,
+     },
++    /// The hit is on the window's title bar.
++    ///
++    /// `button` is the traffic light under the point, `None` on the rest of the bar.
++    TitleBar { button: Option<TrafficLight> },
+ }
+ 
+ #[derive(Debug)]
+@@ -594,13 +612,17 @@
+ impl<W: LayoutElement> InteractiveMoveData<W> {
+     fn tile_render_location(&self, zoom: f64) -> Point<f64, Logical> {
+         let scale = Scale::from(self.output.current_scale().fractional_scale());
+-        let window_size = self.tile.window_size();
++        // Ratios are within the window and its title bar (see interactive_move_begin()).
++        let title_bar = self.tile.effective_title_bar_height();
++        let mut window_size = self.tile.window_size();
++        window_size.h += title_bar;
++        let window_loc = self.tile.window_loc() - Point::from((0., title_bar));
+         let pointer_offset_within_window = Point::from((
+             window_size.w * self.pointer_ratio_within_window.0,
+             window_size.h * self.pointer_ratio_within_window.1,
+         ));
+         let pos = self.pointer_pos_within_output
+-            - (pointer_offset_within_window + self.tile.window_loc() - self.tile.render_offset())
++            - (pointer_offset_within_window + window_loc - self.tile.render_offset())
+                 .upscale(zoom);
+         // Round to physical pixels.
+         pos.to_physical_precise_round(scale).to_logical(scale)
+@@ -621,7 +643,7 @@
+     pub fn offset_win_pos(mut self, offset: Point<f64, Logical>) -> Self {
+         match &mut self {
+             HitType::Input { win_pos } => *win_pos += offset,
+-            HitType::Activate { .. } => (),
++            HitType::Activate { .. } | HitType::TitleBar { .. } => (),
+         }
+         self
+     }
+@@ -641,7 +663,7 @@
+             HitType::Input { .. } => HitType::Activate {
+                 is_tab_indicator: false,
+             },
+-            HitType::Activate { .. } => self,
++            HitType::Activate { .. } | HitType::TitleBar { .. } => self,
+         }
+     }
+ }
+@@ -3819,13 +3841,17 @@
+             .tiles_with_render_positions()
+             .find(|(tile, _, _)| tile.window().id() == &window_id)
+             .unwrap();
+-        let window_offset = tile.window_loc();
++        // The window together with its title bar, so a drag by the bar keeps the pointer on it.
++        let title_bar = tile.effective_title_bar_height();
++        let window_offset = tile.window_loc() - Point::from((0., title_bar));
+ 
+         let tile_pos = ws_geo.loc + tile_offset.upscale(zoom);
+ 
+         let pointer_offset_within_window =
+             start_pos_within_output - tile_pos - window_offset.upscale(zoom);
+-        let window_size = tile.window_size().upscale(zoom);
++        let mut window_size = tile.window_size();
++        window_size.h += title_bar;
++        let window_size = window_size.upscale(zoom);
+         let pointer_ratio_within_window = (
+             f64::clamp(pointer_offset_within_window.x / window_size.w, 0., 1.),
+             f64::clamp(pointer_offset_within_window.y / window_size.h, 0., 1.),
+diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
+--- a/src/layout/scrolling.rs
++++ b/src/layout/scrolling.rs
+@@ -483,6 +483,8 @@
+         width: Option<PresetSize>,
+         height: Option<PresetSize>,
+         rules: &ResolvedWindowRules,
++        // Height of the title bar the tile will reserve above the window.
++        title_bar: f64,
+     ) -> Size<i32, Logical> {
+         let border = self.options.layout.border.merged_with(&rules.border);
+ 
+@@ -518,6 +520,7 @@
+         if !border.off {
+             full_height -= border.width * 2.;
+         }
++        full_height -= title_bar;
+ 
+         let height = if let Some(height) = height {
+             let height = match resolve_preset_size(height, &self.options, working_size.h, extra.h) {
+@@ -525,7 +528,7 @@
+                     if !border.off {
+                         size -= border.width * 2.;
+                     }
+-                    size
++                    size - title_bar
+                 }
+                 ResolvedSize::Window(size) => size,
+             };
+@@ -4045,6 +4048,11 @@
+             update_sizes = true;
+         }
+ 
++        let (old_bar, new_bar) = (&self.options.layout.title_bar, &options.layout.title_bar);
++        if old_bar.on != new_bar.on || old_bar.height != new_bar.height {
++            update_sizes = true;
++        }
++
+         for (tile, data) in zip(&mut self.tiles, &mut self.data) {
+             tile.update_config(view_size, scale, options.clone());
+             data.update(tile);
+diff --git a/src/layout/tests/title_bar.rs b/src/layout/tests/title_bar.rs
+--- a/src/layout/tests/title_bar.rs
++++ b/src/layout/tests/title_bar.rs
+@@ -0,0 +1,277 @@
++//! The title bar is part of the tile: the tile reserves its height and the window goes below it.
++//!
++//! The test output is 1280 × 720 with the default 16 px gaps, so a lone tiled window's tile is
++//! 720 - 2 × 16 = 688 px tall.
++
++use super::*;
++use crate::layout::traffic_lights::TrafficLight;
++
++fn ssd(id: usize) -> TestWindowParams {
++    TestWindowParams {
++        has_ssd: true,
++        ..TestWindowParams::new(id)
++    }
++}
++
++fn options() -> Options {
++    Options {
++        layout: niri_config::Layout {
++            title_bar: niri_config::TitleBar {
++                on: true,
++                height: 30.,
++                ..Default::default()
++            },
++            ..Default::default()
++        },
++        ..Default::default()
++    }
++}
++
++fn tile(layout: &Layout<TestWindow>, id: usize) -> &Tile<TestWindow> {
++    layout
++        .active_workspace()
++        .unwrap()
++        .tiles()
++        .find(|tile| tile.window().0.id == id)
++        .unwrap()
++}
++
++fn requested_height(layout: &Layout<TestWindow>, id: usize) -> i32 {
++    let (_, win) = layout.windows().find(|(_, w)| w.0.id == id).unwrap();
++    win.requested_size().unwrap().h
++}
++
++#[test]
++fn tiled_window_goes_below_the_bar() {
++    let ops = [
++        Op::AddOutput(1),
++        Op::AddWindow { params: ssd(1) },
++        Op::Communicate(1),
++        Op::CompleteAnimations,
++    ];
++    let layout = check_ops_with_options(options(), ops);
++
++    // The window gets the tile minus the bar…
++    assert_eq!(requested_height(&layout, 1), 688 - 30);
++    let tile = tile(&layout, 1);
++    assert_eq!(tile.window_size().h, 658.);
++    // …the tile keeps its height, and the window sits right under the bar.
++    assert_eq!(tile.tile_size().h, 688.);
++    assert_eq!(tile.window_loc(), Point::from((0., 30.)));
++    assert_eq!(tile.title_bar_height(), 30.);
++
++    // The bar takes input: the traffic lights at its left, the rest is the bar itself.
++    assert!(matches!(
++        tile.hit(Point::from((18., 15.))),
++        Some(HitType::TitleBar {
++            button: Some(TrafficLight::Close)
++        })
++    ));
++    assert!(matches!(
++        tile.hit(Point::from((90., 15.))),
++        Some(HitType::TitleBar { button: None })
++    ));
++    // Below the bar is the window.
++    assert!(!matches!(
++        tile.hit(Point::from((90., 45.))),
++        Some(HitType::TitleBar { .. })
++    ));
++}
++
++#[test]
++fn csd_window_gets_no_bar() {
++    let ops = [
++        Op::AddOutput(1),
++        Op::AddWindow {
++            params: TestWindowParams::new(1),
++        },
++        Op::Communicate(1),
++    ];
++    let layout = check_ops_with_options(options(), ops);
++
++    assert_eq!(requested_height(&layout, 1), 688);
++    let tile = tile(&layout, 1);
++    assert_eq!(tile.title_bar_height(), 0.);
++    assert_eq!(tile.window_loc(), Point::from((0., 0.)));
++}
++
++#[test]
++fn window_rule_turns_the_bar_off() {
++    let mut params = ssd(1);
++    params.rules = Some(ResolvedWindowRules {
++        title_bar: niri_config::TitleBarRule {
++            off: true,
++            ..Default::default()
++        },
++        ..Default::default()
++    });
++    let ops = [
++        Op::AddOutput(1),
++        Op::AddWindow { params },
++        Op::Communicate(1),
++    ];
++    let layout = check_ops_with_options(options(), ops);
++
++    // The window grows into the whole tile.
++    assert_eq!(requested_height(&layout, 1), 688);
++    assert_eq!(tile(&layout, 1).window_loc(), Point::from((0., 0.)));
++}
++
++#[test]
++fn window_rule_sets_the_height() {
++    let mut params = ssd(1);
++    params.rules = Some(ResolvedWindowRules {
++        title_bar: niri_config::TitleBarRule {
++            height: Some(FloatOrInt(24.)),
++            ..Default::default()
++        },
++        ..Default::default()
++    });
++    let ops = [
++        Op::AddOutput(1),
++        Op::AddWindow { params },
++        Op::Communicate(1),
++    ];
++    let layout = check_ops_with_options(options(), ops);
++
++    assert_eq!(requested_height(&layout, 1), 688 - 24);
++    assert_eq!(tile(&layout, 1).window_loc(), Point::from((0., 24.)));
++}
++
++#[test]
++fn bar_sits_inside_the_border() {
++    let mut options = options();
++    options.layout.border.off = false;
++    options.layout.border.width = 4.;
++    let ops = [
++        Op::AddOutput(1),
++        Op::AddWindow { params: ssd(1) },
++        Op::Communicate(1),
++    ];
++    let layout = check_ops_with_options(options, ops);
++
++    assert_eq!(requested_height(&layout, 1), 688 - 8 - 30);
++    let tile = tile(&layout, 1);
++    assert_eq!(tile.tile_size().h, 688.);
++    assert_eq!(tile.window_loc(), Point::from((4., 34.)));
++    assert!(matches!(
++        tile.hit(Point::from((90., 4. + 15.))),
++        Some(HitType::TitleBar { button: None })
++    ));
++}
++
++#[test]
++fn fullscreen_drops_the_bar() {
++    let ops = [
++        Op::AddOutput(1),
++        Op::AddWindow { params: ssd(1) },
++        Op::Communicate(1),
++        Op::FullscreenWindow(1),
++        Op::Communicate(1),
++        Op::CompleteAnimations,
++    ];
++    let mut layout = check_ops_with_options(options(), ops);
++
++    assert_eq!(requested_height(&layout, 1), 720);
++    {
++        let tile = tile(&layout, 1);
++        assert_eq!(tile.effective_title_bar_height(), 0.);
++        assert_eq!(tile.window_loc(), Point::from((0., 0.)));
++        assert!(!matches!(
++            tile.hit(Point::from((90., 15.))),
++            Some(HitType::TitleBar { .. })
++        ));
++    }
++
++    // And it comes back after.
++    check_ops_on_layout(
++        &mut layout,
++        [
++            Op::FullscreenWindow(1),
++            Op::Communicate(1),
++            Op::CompleteAnimations,
++        ],
++    );
++    assert_eq!(requested_height(&layout, 1), 688 - 30);
++    assert_eq!(tile(&layout, 1).window_loc(), Point::from((0., 30.)));
++}
++
++#[test]
++fn maximized_window_keeps_the_bar() {
++    let mut options = options();
++    options.layout.border.off = false;
++    options.layout.border.width = 4.;
++    let ops = [
++        Op::AddOutput(1),
++        Op::AddWindow { params: ssd(1) },
++        Op::Communicate(1),
++        Op::MaximizeWindowToEdges { id: Some(1) },
++        Op::Communicate(1),
++        Op::CompleteAnimations,
++    ];
++    let layout = check_ops_with_options(options, ops);
++
++    // Like KWin: no border, but the bar stays, and the window gets the rest of the screen.
++    assert_eq!(requested_height(&layout, 1), 720 - 30);
++    let tile = tile(&layout, 1);
++    assert_eq!(tile.tile_size().h, 720.);
++    assert_eq!(tile.window_loc(), Point::from((0., 30.)));
++}
++
++#[test]
++fn floating_tile_adds_the_bar() {
++    let mut params = ssd(1);
++    params.is_floating = true;
++    let ops = [
++        Op::AddOutput(1),
++        Op::AddWindow { params },
++        Op::Communicate(1),
++    ];
++    let layout = check_ops_with_options(options(), ops);
++
++    // Floating windows keep their size; the tile grows by the bar.
++    let tile = tile(&layout, 1);
++    assert_eq!(tile.window_size(), Size::from((100., 200.)));
++    assert_eq!(tile.tile_size(), Size::from((100., 230.)));
++    assert_eq!(tile.window_loc(), Point::from((0., 30.)));
++}
++
++#[test]
++fn new_window_size_leaves_room_for_the_bar() {
++    let ops = [Op::AddOutput(1)];
++    let layout = check_ops_with_options(options(), ops);
++    let ws = layout.active_workspace().unwrap();
++    let rules = ResolvedWindowRules::default();
++
++    let size = ws.scrolling().new_window_size(None, None, &rules, 30.);
++    assert_eq!(size.h, 688 - 30);
++    let size = ws.scrolling().new_window_size(None, None, &rules, 0.);
++    assert_eq!(size.h, 688);
++
++    // Proportional heights are tile heights: the bar comes out of them too.
++    let half = Some(PresetSize::Proportion(0.5));
++    let size = ws.floating().new_window_size(None, half, &rules, 30.);
++    assert_eq!(size.h, 360 - 30);
++}
++
++#[test]
++fn title_bar_rules_merge() {
++    let config = niri_config::TitleBar {
++        on: true,
++        ..Default::default()
++    };
++    let off = niri_config::TitleBarRule {
++        off: true,
++        ..Default::default()
++    };
++    assert!(!config.clone().merged_with(&off).on);
++
++    let on = niri_config::TitleBarRule {
++        on: true,
++        height: Some(FloatOrInt(40.)),
++        ..Default::default()
++    };
++    let merged = niri_config::TitleBar::default().merged_with(&on);
++    assert!(merged.on);
++    assert_eq!(merged.height, 40.);
++}
+diff --git a/src/layout/tests.rs b/src/layout/tests.rs
+--- a/src/layout/tests.rs
++++ b/src/layout/tests.rs
+@@ -15,6 +15,7 @@
+ 
+ mod animations;
+ mod fullscreen;
++mod title_bar;
+ 
+ impl<W: LayoutElement> Default for Layout<W> {
+     fn default() -> Self {
+@@ -41,6 +42,7 @@
+     animate_next_configure: Cell<bool>,
+     animation_snapshot: RefCell<Option<LayoutElementRenderSnapshot>>,
+     rules: ResolvedWindowRules,
++    has_ssd: bool,
+ }
+ 
+ #[derive(Debug, Clone)]
+@@ -59,6 +61,8 @@
+     min_max_size: (Size<i32, Logical>, Size<i32, Logical>),
+     #[proptest(strategy = "prop::option::of(arbitrary_rules())")]
+     rules: Option<ResolvedWindowRules>,
++    /// Server-side decorations, which get the title bar.
++    has_ssd: bool,
+ }
+ 
+ impl TestWindowParams {
+@@ -70,6 +74,7 @@
+             bbox: Rectangle::from_size(Size::from((100, 200))),
+             min_max_size: Default::default(),
+             rules: None,
++            has_ssd: false,
+         }
+     }
+ }
+@@ -93,6 +98,7 @@
+             animate_next_configure: Cell::new(false),
+             animation_snapshot: RefCell::new(None),
+             rules: params.rules.unwrap_or_default(),
++            has_ssd: params.has_ssd,
+         }))
+     }
+ 
+@@ -202,7 +208,7 @@
+     fn set_preferred_scale_transform(&self, _scale: output::Scale, _transform: Transform) {}
+ 
+     fn has_ssd(&self) -> bool {
+-        false
++        self.0.has_ssd
+     }
+ 
+     fn output_enter(&self, _output: &Output) {}
+@@ -348,15 +354,31 @@
+     fn arbitrary_rules()(
+         focus_ring in arbitrary_focus_ring(),
+         border in arbitrary_border(),
++        title_bar in arbitrary_title_bar(),
+     ) -> ResolvedWindowRules {
+         ResolvedWindowRules {
+             focus_ring,
+             border,
++            title_bar,
+             ..ResolvedWindowRules::default()
+         }
+     }
+ }
+ 
++prop_compose! {
++    fn arbitrary_title_bar()(
++        off in any::<bool>(),
++        height in prop::option::of((1f64..64.).prop_map(FloatOrInt)),
++    ) -> niri_config::TitleBarRule {
++        niri_config::TitleBarRule {
++            off,
++            on: !off,
++            height,
++            ..Default::default()
++        }
++    }
++}
++
+ fn arbitrary_view_offset_gesture_delta() -> impl Strategy<Value = f64> {
+     prop_oneof![(-10f64..10f64), (-50000f64..50000f64),]
+ }
+@@ -3885,6 +3907,7 @@
+         border in prop::option::of(arbitrary_border()),
+         shadow in prop::option::of(arbitrary_shadow()),
+         tab_indicator in prop::option::of(arbitrary_tab_indicator()),
++        title_bar in prop::option::of(arbitrary_title_bar()),
+         center_focused_column in prop::option::of(arbitrary_center_focused_column()),
+         always_center_single_column in prop::option::of(any::<bool>().prop_map(Flag)),
+         empty_workspace_above_first in prop::option::of(any::<bool>().prop_map(Flag)),
+@@ -3899,6 +3922,7 @@
+             border,
+             shadow,
+             tab_indicator,
++            title_bar,
+             ..Default::default()
+         }
+     }
+diff --git a/src/layout/tile.rs b/src/layout/tile.rs
+--- a/src/layout/tile.rs
++++ b/src/layout/tile.rs
+@@ -11,6 +11,8 @@
+ use super::focus_ring::{FocusRing, FocusRingRenderElement};
+ use super::opening_window::{OpenAnimation, OpeningWindowRenderElement};
+ use super::shadow::Shadow;
++use super::title_bar::{rounded_height, TitleBar, TitleBarRenderElement};
++use super::traffic_lights::TrafficLight;
+ use super::{
+     HitType, LayoutElement, LayoutElementRenderElement, LayoutElementRenderSnapshot, Options,
+     SizeFrac, RESIZE_ANIMATION_THRESHOLD,
+@@ -31,6 +33,7 @@
+ use crate::render_helpers::xray::{Xray, XrayPos};
+ use crate::render_helpers::{RenderCtx, RenderTarget};
+ use crate::utils::transaction::Transaction;
++use crate::window::ResolvedWindowRules;
+ use crate::utils::{
+     baba_is_float_offset, round_logical_in_physical, round_logical_in_physical_max1,
+ };
+@@ -50,6 +53,12 @@
+     /// The shadow around the window.
+     shadow: Shadow,
+ 
++    /// The server-side title bar above the window, with the traffic lights.
++    title_bar: TitleBar,
++
++    /// Whether the tile was active at the last `update_render_elements()`.
++    is_active: bool,
++
+     /// This tile's current sizing mode.
+     ///
+     /// This will update only when the `window` actually goes maximized or fullscreen, rather than
+@@ -120,6 +129,22 @@
+     pub(super) options: Rc<Options>,
+ }
+ 
++/// Height of the title bar a new window's tile will reserve, for its initial configure (which
++/// comes before there is a tile).
++pub fn new_window_title_bar_height(
++    options: &Options,
++    rules: &ResolvedWindowRules,
++    has_ssd: bool,
++    scale: f64,
++) -> f64 {
++    let config = options.layout.title_bar.clone().merged_with(&rules.title_bar);
++    if config.on && has_ssd {
++        rounded_height(config.height, scale)
++    } else {
++        0.
++    }
++}
++
+ niri_render_elements! {
+     TileRenderElement<R> => {
+         LayoutElement = LayoutElementRenderElement<R>,
+@@ -133,6 +158,7 @@
+         Offscreen = OffscreenRenderElement,
+         ExtraDamage = ExtraDamage,
+         BackgroundEffect = BackgroundEffectElement,
++        TitleBar = TitleBarRenderElement,
+     }
+ }
+ 
+@@ -186,6 +212,11 @@
+         let border_config = options.layout.border.merged_with(&rules.border);
+         let focus_ring_config = options.layout.focus_ring.merged_with(&rules.focus_ring);
+         let shadow_config = options.layout.shadow.merged_with(&rules.shadow);
++        let title_bar_config = options.layout.title_bar.clone().merged_with(&rules.title_bar);
++        let traffic_lights_config = options
++            .layout
++            .traffic_lights
++            .merged_with(&rules.traffic_lights);
+         let sizing_mode = window.sizing_mode();
+ 
+         Self {
+@@ -193,6 +224,8 @@
+             border: FocusRing::new(border_config.into()),
+             focus_ring: FocusRing::new(focus_ring_config),
+             shadow: Shadow::new(shadow_config),
++            title_bar: TitleBar::new(title_bar_config, traffic_lights_config, scale),
++            is_active: false,
+             sizing_mode,
+             fullscreen_backdrop: SolidColorBuffer::new((0., 0.), [0., 0., 0., 1.]),
+             restore_to_floating: false,
+@@ -252,9 +285,23 @@
+         let shadow_config = self.options.layout.shadow.merged_with(&rules.shadow);
+         self.shadow.update_config(shadow_config);
+ 
++        self.update_title_bar_config();
++
+         self.window.update_config(self.options.blur);
+     }
+ 
++    fn update_title_bar_config(&mut self) {
++        let rules = self.window.rules();
++        let title_bar_config = self.options.layout.title_bar.clone().merged_with(&rules.title_bar);
++        let traffic_lights_config = self
++            .options
++            .layout
++            .traffic_lights
++            .merged_with(&rules.traffic_lights);
++        self.title_bar
++            .update_config(title_bar_config, traffic_lights_config, self.scale);
++    }
++
+     pub fn update_shaders(&mut self) {
+         self.border.update_shaders();
+         self.focus_ring.update_shaders();
+@@ -282,10 +329,13 @@
+                 if prev_sizing_mode.is_fullscreen() {
+                     tile_size.w = f64::max(tile_size.w, self.view_size.w);
+                     tile_size.h = f64::max(tile_size.h, self.view_size.h);
+-                } else if prev_sizing_mode.is_normal() && !self.border.is_off() {
+-                    let width = self.border.width();
+-                    tile_size.w += width * 2.;
+-                    tile_size.h += width * 2.;
++                } else {
++                    tile_size.h += self.title_bar_height();
++                    if prev_sizing_mode.is_normal() && !self.border.is_off() {
++                        let width = self.border.width();
++                        tile_size.w += width * 2.;
++                        tile_size.h += width * 2.;
++                    }
+                 }
+ 
+                 tile_size.w = tile_size_from.w + (tile_size.w - tile_size_from.w) * val;
+@@ -321,10 +371,13 @@
+                 if prev_sizing_mode.is_fullscreen() {
+                     tile_size.w = f64::max(tile_size.w, self.view_size.w);
+                     tile_size.h = f64::max(tile_size.h, self.view_size.h);
+-                } else if prev_sizing_mode.is_normal() && !self.border.is_off() {
+-                    let width = self.border.width();
+-                    tile_size.w += width * 2.;
+-                    tile_size.h += width * 2.;
++                } else {
++                    tile_size.h += self.title_bar_height();
++                    if prev_sizing_mode.is_normal() && !self.border.is_off() {
++                        let width = self.border.width();
++                        tile_size.w += width * 2.;
++                        tile_size.h += width * 2.;
++                    }
+                 }
+ 
+                 let fullscreen_from = if prev_sizing_mode.is_fullscreen() {
+@@ -402,10 +455,11 @@
+         let shadow_config = self.options.layout.shadow.merged_with(&rules.shadow);
+         self.shadow.update_config(shadow_config);
+ 
++        self.update_title_bar_config();
++
+         let window_size = self.window_size();
+         let radius = self
+-            .window
+-            .geometry_corner_radius()
++            .window_corner_radius(self.effective_title_bar_height())
+             .fit_to(window_size.w as f32, window_size.h as f32);
+         self.rounded_corner_damage.set_corner_radius(radius);
+     }
+@@ -457,6 +511,7 @@
+     }
+ 
+     pub fn update_render_elements(&mut self, is_active: bool, view_rect: Rectangle<f64, Logical>) {
++        self.is_active = is_active;
+         let rules = self.window.rules();
+         let animated_tile_size = self.animated_tile_size();
+         let expanded_progress = self.expanded_progress();
+@@ -537,6 +592,34 @@
+         );
+ 
+         self.fullscreen_backdrop.resize(animated_tile_size);
++
++        // The bar takes the tile's top corners; the window below it keeps the bottom ones.
++        let bar_size = self.title_bar_rect().size;
++        let geo_radius = self
++            .window
++            .geometry_corner_radius()
++            .scaled_by(1. - expanded_progress as f32);
++        let bar_radius = CornerRadius {
++            bottom_right: 0.,
++            bottom_left: 0.,
++            ..geo_radius
++        };
++        let alpha = self.window_alpha() * (1. - self.fullscreen_progress() as f32);
++        self.title_bar
++            .update_render_elements(bar_size, is_active, bar_radius, self.scale, alpha);
++    }
++
++    /// The window's opacity rule, going to 1 toward fullscreen.
++    fn window_alpha(&self) -> f32 {
++        if self.window.is_ignoring_opacity_window_rule() {
++            return 1.;
++        }
++
++        let alpha = self.window.rules().opacity.unwrap_or(1.).clamp(0., 1.);
++
++        // Interpolate towards alpha = 1. at fullscreen.
++        let p = self.fullscreen_progress() as f32;
++        alpha * (1. - p) + 1. * p
+     }
+ 
+     pub fn scale(&self) -> f64 {
+@@ -736,14 +819,72 @@
+         Some(self.border.width())
+     }
+ 
++    /// Height of the title bar this tile reserves above the window, whatever the sizing mode.
++    ///
++    /// Like the border width in `request_tile_size()`: a window going fullscreen still has it.
++    /// Only windows with server-side decorations get a bar; the rest draw their own.
++    pub fn title_bar_height(&self) -> f64 {
++        if self.title_bar.is_on() && self.window.has_ssd() {
++            self.title_bar.height()
++        } else {
++            0.
++        }
++    }
++
++    /// Height of the title bar in the current sizing mode: none in fullscreen.
++    pub fn effective_title_bar_height(&self) -> f64 {
++        if self.sizing_mode.is_fullscreen() {
++            0.
++        } else {
++            self.title_bar_height()
++        }
++    }
++
++    /// Height of the title bar as drawn: it shrinks away with the fullscreen animation.
++    fn visual_title_bar_height(&self) -> f64 {
++        let height = self.title_bar_height();
++        if height == 0. {
++            return 0.;
++        }
++        let height = height * (1. - self.fullscreen_progress());
++        round_logical_in_physical(self.scale, height)
++    }
++
++    /// The title bar within this tile: right above the window, as wide as it.
++    fn title_bar_rect(&self) -> Rectangle<f64, Logical> {
++        let height = self.visual_title_bar_height();
++        let window_loc = self.window_loc();
++        let width = self.animated_window_size().w;
++        Rectangle::new(
++            Point::from((window_loc.x, window_loc.y - height)),
++            Size::from((width, height)),
++        )
++    }
++
++    /// The window's corner radius: square at the top under a title bar, which takes the top
++    /// corners.
++    fn window_corner_radius(&self, title_bar_height: f64) -> CornerRadius {
++        let radius = self.window.geometry_corner_radius();
++        if title_bar_height > 0. {
++            CornerRadius {
++                top_left: 0.,
++                top_right: 0.,
++                ..radius
++            }
++        } else {
++            radius
++        }
++    }
++
+     /// Returns the location of the window's visual geometry within this Tile.
+     pub fn window_loc(&self) -> Point<f64, Logical> {
+         let mut loc = Point::from((0., 0.));
+ 
+         let window_size = self.animated_window_size();
+         let target_size = self.animated_tile_size();
++        let title_bar = self.visual_title_bar_height();
+ 
+-        // Center the window within its tile.
++        // Center the window within its tile, below the title bar.
+         //
+         // - Without borders, the sizes match, so this difference is zero.
+         // - Borders always match from all sides, so this difference is pre-rounded to physical.
+@@ -752,7 +893,7 @@
+         // - During animations, the window remains centered within the tile; this is important for
+         //   the to/from fullscreen animation.
+         loc.x += (target_size.w - window_size.w) / 2.;
+-        loc.y += (target_size.h - window_size.h) / 2.;
++        loc.y += title_bar + (target_size.h - title_bar - window_size.h) / 2.;
+ 
+         // Round to physical pixels.
+         loc = loc
+@@ -773,6 +914,8 @@
+             return size;
+         }
+ 
++        size.h += self.title_bar_height();
++
+         if let Some(width) = self.effective_border_width() {
+             size.w += width * 2.;
+             size.h += width * 2.;
+@@ -792,6 +935,8 @@
+             return size;
+         }
+ 
++        size.h += self.title_bar_height();
++
+         if let Some(width) = self.effective_border_width() {
+             size.w += width * 2.;
+             size.h += width * 2.;
+@@ -881,13 +1026,25 @@
+         activation_region.contains(point)
+     }
+ 
++    /// Hit-tests the title bar: `Some(button)` on it, with the traffic light under the point.
++    fn title_bar_hit(&self, point: Point<f64, Logical>) -> Option<Option<TrafficLight>> {
++        let bar = self.title_bar_rect();
++        if bar.size.h <= 0. || !bar.contains(point) {
++            return None;
++        }
++        Some(self.title_bar.hit(point - bar.loc, bar.size, self.scale))
++    }
++
+     pub fn hit(&self, point: Point<f64, Logical>) -> Option<HitType> {
+         let offset = self.bob_offset();
+         let point = point - offset;
+ 
++        // The window first: its popups may reach over the bar.
+         if self.is_in_input_region(point) {
+             let win_pos = self.buf_loc() + offset;
+             Some(HitType::Input { win_pos })
++        } else if let Some(button) = self.title_bar_hit(point) {
++            Some(HitType::TitleBar { button })
+         } else if self.is_in_activation_region(point) {
+             Some(HitType::Activate {
+                 is_tab_indicator: false,
+@@ -909,6 +1066,7 @@
+             size.w = f64::max(1., size.w - width * 2.);
+             size.h = f64::max(1., size.h - width * 2.);
+         }
++        size.h = f64::max(1., size.h - self.title_bar_height());
+ 
+         // The size request has to be i32 unfortunately, due to Wayland. We floor here instead of
+         // round to avoid situations where proportionally-sized columns don't fit on the screen
+@@ -930,6 +1088,7 @@
+     }
+ 
+     pub fn tile_height_for_window_height(&self, size: f64) -> f64 {
++        let size = size + self.title_bar_height();
+         if self.border.is_off() {
+             size
+         } else {
+@@ -946,6 +1105,7 @@
+     }
+ 
+     pub fn window_height_for_tile_height(&self, size: f64) -> f64 {
++        let size = size - self.title_bar_height();
+         if self.border.is_off() {
+             size
+         } else {
+@@ -955,10 +1115,13 @@
+ 
+     pub fn request_maximized(
+         &mut self,
+-        size: Size<f64, Logical>,
++        mut size: Size<f64, Logical>,
+         animate: bool,
+         transaction: Option<Transaction>,
+     ) {
++        // Maximized windows keep their title bar, as in KWin; borders go away.
++        size.h = f64::max(1., size.h - self.title_bar_height());
++
+         self.window.request_size(
+             size.to_i32_round(),
+             SizingMode::Maximized,
+@@ -990,6 +1153,11 @@
+             size.h += width * 2.;
+         }
+ 
++        let title_bar = self.title_bar_height();
++        if title_bar > 0. {
++            size.h = f64::max(1., size.h) + title_bar;
++        }
++
+         size
+     }
+ 
+@@ -1008,6 +1176,10 @@
+             }
+         }
+ 
++        if size.h > 0. {
++            size.h += self.title_bar_height();
++        }
++
+         size
+     }
+ 
+@@ -1035,15 +1207,7 @@
+         let fullscreen_progress = self.fullscreen_progress();
+         let expanded_progress = self.expanded_progress();
+ 
+-        let win_alpha = if self.window.is_ignoring_opacity_window_rule() {
+-            1.
+-        } else {
+-            let alpha = self.window.rules().opacity.unwrap_or(1.).clamp(0., 1.);
+-
+-            // Interpolate towards alpha = 1. at fullscreen.
+-            let p = fullscreen_progress as f32;
+-            alpha * (1. - p) + 1. * p
+-        };
++        let win_alpha = self.window_alpha();
+ 
+         // This is here rather than in render_offset() because render_offset() is currently assumed
+         // by the code to be temporary. So, for example, interactive move will try to "grab" the
+@@ -1069,9 +1233,9 @@
+         // Clip to geometry including during the fullscreen animation to help with buggy clients
+         // that submit a full-sized buffer before acking the fullscreen state (Firefox).
+         let clip_to_geometry = fullscreen_progress < 1. && rules.clip_to_geometry == Some(true);
++        let title_bar = self.title_bar_rect();
+         let radius = self
+-            .window
+-            .geometry_corner_radius()
++            .window_corner_radius(title_bar.size.h)
+             .scaled_by(1. - expanded_progress as f32);
+ 
+         // Popups go on top, whether it's resize or not.
+@@ -1084,6 +1248,28 @@
+             &mut |elem| push(elem.into()),
+         );
+ 
++        // The title bar, right above the window and below its popups. It shrinks and fades out
++        // with the fullscreen animation. Blocked-out windows keep the bar but not their title.
++        if title_bar.size.h > 0. && fullscreen_progress < 1. {
++            let alpha = win_alpha * (1. - fullscreen_progress as f32);
++            let title = if ctx.target.should_block_out(rules.block_out_from) {
++                None
++            } else {
++                self.window.title()
++            };
++            self.title_bar.render(
++                ctx.renderer,
++                location + title_bar.loc,
++                title_bar.size,
++                self.scale,
++                self.is_active,
++                self.window.traffic_lights_input(),
++                title.as_deref(),
++                alpha,
++                &mut |elem| push(elem.into()),
++            );
++        }
++
+         // If we're resizing, try to render a shader, or a fallback.
+         let mut pushed_resize = false;
+         if let Some(resize) = &self.resize_animation {
+diff --git a/src/layout/title_bar.rs b/src/layout/title_bar.rs
+--- a/src/layout/title_bar.rs
++++ b/src/layout/title_bar.rs
+@@ -0,0 +1,396 @@
++//! A server-side title bar, like KWin's: a strip above a window with server-side decorations,
++//! with the traffic lights at the left and the title centered.
++//!
++//! The tile reserves the bar's height (`Tile::title_bar_height()`), so the window gets the tile
++//! minus the bar and the bar never covers it. Window rules turn it off per app, and then the window
++//! gets the whole tile again.
++
++use std::cell::RefCell;
++
++use anyhow::{ensure, Context as _};
++use niri_config::{Color, CornerRadius, GradientInterpolation};
++use pangocairo::cairo::{self, ImageSurface};
++use pangocairo::pango::{EllipsizeMode, FontDescription};
++use smithay::backend::renderer::element::Kind;
++use smithay::backend::renderer::gles::GlesTexture;
++use smithay::reexports::gbm::Format as Fourcc;
++use smithay::utils::{Logical, Point, Rectangle, Size, Transform};
++
++use super::traffic_lights::{TrafficLight, TrafficLights, TrafficLightsInput};
++use crate::niri_render_elements;
++use crate::render_helpers::border::BorderRenderElement;
++use crate::render_helpers::memory::MemoryBuffer;
++use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
++use crate::render_helpers::renderer::NiriRenderer;
++use crate::render_helpers::solid_color::{SolidColorBuffer, SolidColorRenderElement};
++use crate::render_helpers::texture::{TextureBuffer, TextureRenderElement};
++use crate::utils::{round_logical_in_physical, to_physical_precise_round};
++
++/// Space between the traffic lights (or the bar's edge) and the title.
++const TITLE_PADDING: f64 = 12.;
++
++/// Titles narrower than this aren't drawn at all.
++const MIN_TITLE_WIDTH: f64 = 24.;
++
++/// The bar's height: whole logical pixels, so window heights (integers) plus the bar add up to
++/// whole tile heights at integer scales, then rounded to physical pixels.
++pub fn rounded_height(height: f64, scale: f64) -> f64 {
++    round_logical_in_physical(scale, height.round().max(1.))
++}
++
++niri_render_elements! {
++    TitleBarRenderElement => {
++        Background = BorderRenderElement,
++        SolidColor = SolidColorRenderElement,
++        Texture = PrimaryGpuTextureRenderElement,
++    }
++}
++
++#[derive(Debug)]
++pub struct TitleBar {
++    config: niri_config::TitleBar,
++    /// Config height rounded to physical pixels.
++    height: f64,
++    traffic_lights: TrafficLights,
++    /// The bar's rounded background; kept across frames so damage tracking sees one element.
++    background: BorderRenderElement,
++    /// Background without the border shader (no rounded corners).
++    fallback_background: SolidColorBuffer,
++    title: RefCell<TitleCache>,
++}
++
++/// What a title texture shows.
++#[derive(Debug, Clone, PartialEq)]
++struct TitleLook {
++    title: String,
++    color: Color,
++    scale_bits: u64,
++}
++
++#[derive(Debug, Default)]
++struct TitleCache {
++    look: Option<TitleLook>,
++    /// The title at its natural width.
++    full: Option<Option<TextureBuffer<GlesTexture>>>,
++    /// The title ellipsized to a maximum physical width, when the full one doesn't fit.
++    ellipsized: Option<(i32, Option<TextureBuffer<GlesTexture>>)>,
++}
++
++impl TitleBar {
++    pub fn new(
++        config: niri_config::TitleBar,
++        traffic_lights: niri_config::TrafficLights,
++        scale: f64,
++    ) -> Self {
++        Self {
++            height: rounded_height(config.height, scale),
++            config,
++            traffic_lights: TrafficLights::new(traffic_lights),
++            background: BorderRenderElement::empty(),
++            fallback_background: SolidColorBuffer::default(),
++            title: RefCell::new(TitleCache::default()),
++        }
++    }
++
++    pub fn update_config(
++        &mut self,
++        config: niri_config::TitleBar,
++        traffic_lights: niri_config::TrafficLights,
++        scale: f64,
++    ) {
++        self.height = rounded_height(config.height, scale);
++        if self.config != config {
++            self.config = config;
++            *self.title.get_mut() = TitleCache::default();
++        }
++        self.traffic_lights.update_config(traffic_lights);
++    }
++
++    pub fn is_on(&self) -> bool {
++        self.config.on
++    }
++
++    /// The bar's height, rounded to physical pixels.
++    pub fn height(&self) -> f64 {
++        self.height
++    }
++
++    pub fn update_render_elements(
++        &mut self,
++        size: Size<f64, Logical>,
++        is_active: bool,
++        radius: CornerRadius,
++        scale: f64,
++        alpha: f32,
++    ) {
++        let color = if is_active {
++            self.config.active_color
++        } else {
++            self.config.inactive_color
++        };
++        let area = Rectangle::from_size(size);
++        self.background.update(
++            size,
++            area,
++            GradientInterpolation::default(),
++            color,
++            color,
++            0.,
++            area,
++            // Zero width fills the whole area.
++            0.,
++            radius.fit_to(size.w as f32, size.h as f32),
++            scale as f32,
++            alpha,
++        );
++        self.fallback_background.update(size, color);
++    }
++
++    /// Hit-tests a point relative to the bar: the traffic light under it, or `None` for the rest
++    /// of the bar.
++    pub fn hit(
++        &self,
++        point: Point<f64, Logical>,
++        size: Size<f64, Logical>,
++        scale: f64,
++    ) -> Option<TrafficLight> {
++        self.traffic_lights.hit(point, size, scale)
++    }
++
++    /// Room for the title: centered in the bar, clear of the traffic lights on both sides.
++    fn title_area(&self, size: Size<f64, Logical>, scale: f64) -> f64 {
++        let side = self.traffic_lights.end_x(size, scale) + TITLE_PADDING;
++        size.w - side * 2.
++    }
++
++    #[allow(clippy::too_many_arguments)]
++    pub fn render<R: NiriRenderer>(
++        &self,
++        renderer: &mut R,
++        location: Point<f64, Logical>,
++        size: Size<f64, Logical>,
++        scale: f64,
++        is_active: bool,
++        input: TrafficLightsInput,
++        title: Option<&str>,
++        alpha: f32,
++        push: &mut dyn FnMut(TitleBarRenderElement),
++    ) {
++        if alpha <= 0. || size.w <= 0. || size.h <= 0. {
++            return;
++        }
++
++        if let Some(elem) = self.traffic_lights.render(
++            renderer, location, size, scale, is_active, input, alpha,
++        ) {
++            push(elem.into());
++        }
++
++        let max_width = self.title_area(size, scale);
++        if let Some(title) = title.filter(|t| !t.is_empty() && max_width >= MIN_TITLE_WIDTH) {
++            let color = if is_active {
++                self.config.active_text_color
++            } else {
++                self.config.inactive_text_color
++            };
++            let look = TitleLook {
++                title: title.to_owned(),
++                color,
++                scale_bits: scale.to_bits(),
++            };
++            if let Some(buffer) = self.title_texture(renderer, look, max_width, scale) {
++                let text_size = buffer.logical_size();
++                let offset = Point::from((
++                    round_logical_in_physical(scale, (size.w - text_size.w) / 2.),
++                    round_logical_in_physical(scale, (size.h - text_size.h) / 2.),
++                ));
++                let elem = TextureRenderElement::from_texture_buffer(
++                    buffer,
++                    location + offset,
++                    alpha,
++                    None,
++                    None,
++                    Kind::Unspecified,
++                );
++                push(PrimaryGpuTextureRenderElement(elem).into());
++            }
++        }
++
++        // The background's size, color, radius and alpha were set in update_render_elements().
++        if BorderRenderElement::has_shader(renderer) {
++            push(self.background.clone().with_location(location).into());
++        } else {
++            let elem = SolidColorRenderElement::from_buffer(
++                &self.fallback_background,
++                location,
++                alpha,
++                Kind::Unspecified,
++            );
++            push(elem.into());
++        }
++    }
++
++    /// The title texture: the full title when it fits in `max_width`, else one ellipsized to it.
++    fn title_texture<R: NiriRenderer>(
++        &self,
++        renderer: &mut R,
++        look: TitleLook,
++        max_width: f64,
++        scale: f64,
++    ) -> Option<TextureBuffer<GlesTexture>> {
++        let mut cache = self.title.borrow_mut();
++        if cache.look.as_ref() != Some(&look) {
++            *cache = TitleCache {
++                look: Some(look.clone()),
++                ..Default::default()
++            };
++        }
++
++        let font = &self.config.font;
++        let full = cache
++            .full
++            .get_or_insert_with(|| {
++                let buffer = draw_title(font, &look.title, look.color, None, scale)
++                    .map_err(|err| warn!("error drawing window title: {err:?}"))
++                    .ok()?;
++                TextureBuffer::from_memory_buffer(renderer.as_gles_renderer(), &buffer)
++                    .map_err(|err| warn!("error uploading window title: {err:?}"))
++                    .ok()
++            })
++            .clone()?;
++
++        if full.logical_size().w <= max_width {
++            return Some(full);
++        }
++
++        let max_px = to_physical_precise_round::<i32>(scale, max_width).max(1);
++        if cache.ellipsized.as_ref().map(|(w, _)| *w) != Some(max_px) {
++            let buffer = draw_title(font, &look.title, look.color, Some(max_px), scale)
++                .map_err(|err| warn!("error drawing window title: {err:?}"))
++                .ok()
++                .and_then(|buffer| {
++                    TextureBuffer::from_memory_buffer(renderer.as_gles_renderer(), &buffer)
++                        .map_err(|err| warn!("error uploading window title: {err:?}"))
++                        .ok()
++                });
++            cache.ellipsized = Some((max_px, buffer));
++        }
++        cache.ellipsized.as_ref().and_then(|(_, b)| b.clone())
++    }
++}
++
++/// Draws a one-line title, ellipsized at the end to `max_width` physical pixels if given.
++fn draw_title(
++    font: &str,
++    title: &str,
++    color: Color,
++    max_width: Option<i32>,
++    scale: f64,
++) -> anyhow::Result<MemoryBuffer> {
++    let _span = tracy_client::span!("title_bar::draw_title");
++
++    let mut font = FontDescription::from_string(font);
++    font.set_absolute_size(to_physical_precise_round(scale, font.size()));
++
++    let surface = ImageSurface::create(cairo::Format::ARgb32, 0, 0)?;
++    let cr = cairo::Context::new(&surface)?;
++    let layout = pangocairo::functions::create_layout(&cr);
++    layout.context().set_round_glyph_positions(false);
++    layout.set_single_paragraph_mode(true);
++    layout.set_font_description(Some(&font));
++    if let Some(max_width) = max_width {
++        layout.set_width(max_width * pangocairo::pango::SCALE);
++        layout.set_ellipsize(EllipsizeMode::End);
++    }
++    layout.set_text(title);
++
++    let (width, height) = layout.pixel_size();
++    ensure!(width > 0 && height > 0, "empty title layout");
++    let width = width.min(max_width.unwrap_or(16383)).min(16383);
++    let height = height.min(16383);
++
++    let surface = ImageSurface::create(cairo::Format::ARgb32, width, height)?;
++    let cr = cairo::Context::new(&surface)?;
++    cr.set_source_rgba(
++        color.r.into(),
++        color.g.into(),
++        color.b.into(),
++        color.a.into(),
++    );
++    pangocairo::functions::show_layout(&cr, &layout);
++    drop(cr);
++
++    let data = surface.take_data().context("taking surface data")?;
++    Ok(MemoryBuffer::new(
++        data.to_vec(),
++        Fourcc::Argb8888,
++        (width, height),
++        scale,
++        Transform::Normal,
++    ))
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn title_area_clears_traffic_lights() {
++        let bar = TitleBar::new(
++            niri_config::TitleBar {
++                on: true,
++                ..Default::default()
++            },
++            niri_config::TrafficLights::default(),
++            1.,
++        );
++        assert_eq!(bar.height(), 30.);
++        // Traffic lights end at 64; 12 px padding on each side of the centered title.
++        assert_eq!(bar.title_area(Size::from((400., 30.)), 1.), 400. - 76. * 2.);
++
++        let bar = TitleBar::new(
++            niri_config::TitleBar::default(),
++            niri_config::TrafficLights {
++                on: false,
++                ..Default::default()
++            },
++            1.,
++        );
++        assert_eq!(bar.title_area(Size::from((400., 30.)), 1.), 400. - 24.);
++    }
++
++    #[test]
++    fn height_rounds_to_physical_pixels() {
++        let bar = TitleBar::new(
++            niri_config::TitleBar {
++                height: 29.,
++                ..Default::default()
++            },
++            niri_config::TrafficLights::default(),
++            1.5,
++        );
++        // 29 * 1.5 = 43.5 → 44 physical px.
++        assert_eq!(bar.height(), 44. / 1.5);
++        // Whole logical pixels first, even where half ones would be physical-aligned.
++        assert_eq!(rounded_height(12.5, 2.), 13.);
++    }
++
++    #[test]
++    fn draws_titles() {
++        let buffer = draw_title("sans 13px", "Terminal", Color::new_unpremul(1., 1., 1., 1.), None, 2.)
++            .unwrap();
++        let full = buffer.size();
++        assert!(full.w > 0 && full.h > 0);
++
++        let long = "A very long window title that will not fit in a narrow bar at all";
++        let buffer = draw_title(
++            "sans 13px",
++            long,
++            Color::new_unpremul(1., 1., 1., 1.),
++            Some(100),
++            1.,
++        )
++        .unwrap();
++        assert!(buffer.size().w <= 100);
++    }
++}
+diff --git a/src/layout/traffic_lights.rs b/src/layout/traffic_lights.rs
+--- a/src/layout/traffic_lights.rs
++++ b/src/layout/traffic_lights.rs
+@@ -0,0 +1,464 @@
++//! macOS-style window buttons: close, minimize and zoom, at the left of a window's title bar
++//! (see `title_bar.rs`), vertically centered in it.
++
++use std::cell::RefCell;
++use std::collections::HashMap;
++use std::f64::consts::PI;
++
++use anyhow::Context as _;
++use niri_config::Color;
++use pangocairo::cairo::{self, ImageSurface, LinearGradient};
++use smithay::backend::renderer::element::Kind;
++use smithay::backend::renderer::gles::GlesTexture;
++use smithay::reexports::gbm::Format as Fourcc;
++use smithay::utils::{Logical, Point, Rectangle, Size, Transform};
++
++use crate::render_helpers::memory::MemoryBuffer;
++use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
++use crate::render_helpers::renderer::NiriRenderer;
++use crate::render_helpers::texture::{TextureBuffer, TextureRenderElement};
++use crate::utils::round_logical_in_physical;
++
++/// One of the three buttons.
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
++pub enum TrafficLight {
++    Close,
++    Minimize,
++    Zoom,
++}
++
++const BUTTONS: [TrafficLight; 3] = [
++    TrafficLight::Close,
++    TrafficLight::Minimize,
++    TrafficLight::Zoom,
++];
++
++/// Pointer state over a window's traffic lights, kept by the window and set by the input code.
++#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
++pub struct TrafficLightsInput {
++    /// The pointer is over the group: every button lights up and shows its glyph.
++    pub hovered: bool,
++    /// The button under the pointer.
++    pub under: Option<TrafficLight>,
++    /// The button the pointer pressed and still holds.
++    pub pressed: Option<TrafficLight>,
++}
++
++/// What a texture shows; one texture is cached per look.
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
++struct Look {
++    scale_bits: u64,
++    lit: bool,
++    glyphs: bool,
++    pressed: Option<TrafficLight>,
++}
++
++#[derive(Debug)]
++pub struct TrafficLights {
++    config: niri_config::TrafficLights,
++    textures: RefCell<HashMap<Look, Option<TextureBuffer<GlesTexture>>>>,
++}
++
++impl TrafficLights {
++    pub fn new(config: niri_config::TrafficLights) -> Self {
++        Self {
++            config,
++            textures: RefCell::new(HashMap::new()),
++        }
++    }
++
++    pub fn update_config(&mut self, config: niri_config::TrafficLights) {
++        if self.config != config {
++            self.config = config;
++            self.textures.get_mut().clear();
++        }
++    }
++
++    pub fn is_on(&self) -> bool {
++        self.config.on
++    }
++
++    fn size(&self, scale: f64) -> f64 {
++        round_logical_in_physical(scale, self.config.size).max(1.)
++    }
++
++    fn spacing(&self, scale: f64) -> f64 {
++        round_logical_in_physical(scale, self.config.spacing)
++    }
++
++    /// The group of buttons relative to the bar: `offset.x` from its left edge, centered
++    /// vertically.
++    fn group(&self, bar_size: Size<f64, Logical>, scale: f64) -> Rectangle<f64, Logical> {
++        let size = self.size(scale);
++        let spacing = self.spacing(scale);
++        let loc = Point::from((
++            round_logical_in_physical(scale, self.config.offset.x.0),
++            round_logical_in_physical(scale, (bar_size.h - size) / 2.),
++        ));
++        Rectangle::new(loc, Size::from((size * 3. + spacing * 2., size)))
++    }
++
++    /// Where the group ends horizontally, relative to the bar's left edge; 0 when off.
++    pub fn end_x(&self, bar_size: Size<f64, Logical>, scale: f64) -> f64 {
++        if !self.is_shown(bar_size, scale) {
++            return 0.;
++        }
++        let group = self.group(bar_size, scale);
++        group.loc.x + group.size.w
++    }
++
++    /// Whether the buttons are on and fit in a bar of this size.
++    pub fn is_shown(&self, bar_size: Size<f64, Logical>, scale: f64) -> bool {
++        if !self.config.on {
++            return false;
++        }
++        let group = self.group(bar_size, scale);
++        let end = group.loc + group.size.to_point();
++        group.loc.x >= 0. && group.loc.y >= 0. && end.x <= bar_size.w && end.y <= bar_size.h
++    }
++
++    /// Hit-tests a point relative to the bar.
++    ///
++    /// Returns the button under the point, or `None` outside the group. The area reaches half the
++    /// spacing around the buttons, so there are no dead gaps between them.
++    pub fn hit(
++        &self,
++        point: Point<f64, Logical>,
++        bar_size: Size<f64, Logical>,
++        scale: f64,
++    ) -> Option<TrafficLight> {
++        if !self.is_shown(bar_size, scale) {
++            return None;
++        }
++
++        let size = self.size(scale);
++        let margin = f64::max(2., self.spacing(scale) / 2.);
++        let mut group = self.group(bar_size, scale);
++        group.loc -= Point::from((margin, margin));
++        group.size += Size::from((margin * 2., margin * 2.));
++        if !group.contains(point) {
++            return None;
++        }
++
++        let x = point.x - group.loc.x;
++        let step = size + self.spacing(scale);
++        let idx = (x / step).floor().clamp(0., 2.) as usize;
++        Some(BUTTONS[idx])
++    }
++
++    #[allow(clippy::too_many_arguments)]
++    pub fn render<R: NiriRenderer>(
++        &self,
++        renderer: &mut R,
++        // Location of the bar's top-left corner.
++        bar_loc: Point<f64, Logical>,
++        bar_size: Size<f64, Logical>,
++        scale: f64,
++        is_active: bool,
++        input: TrafficLightsInput,
++        alpha: f32,
++    ) -> Option<PrimaryGpuTextureRenderElement> {
++        if !self.is_shown(bar_size, scale) || alpha <= 0. {
++            return None;
++        }
++
++        let pressed = input.pressed.filter(|b| input.under == Some(*b));
++        let look = Look {
++            scale_bits: scale.to_bits(),
++            lit: is_active || input.hovered,
++            glyphs: input.hovered,
++            pressed,
++        };
++
++        let mut textures = self.textures.borrow_mut();
++        let buffer = textures.entry(look).or_insert_with(|| {
++            let buffer = draw(
++                &self.config,
++                self.size(scale),
++                self.spacing(scale),
++                scale,
++                look,
++            )
++            .map_err(|err| warn!("error drawing traffic lights: {err:?}"))
++            .ok()?;
++            TextureBuffer::from_memory_buffer(renderer.as_gles_renderer(), &buffer)
++                .map_err(|err| warn!("error uploading traffic lights: {err:?}"))
++                .ok()
++        });
++        let buffer = buffer.clone()?;
++
++        let loc = bar_loc + self.group(bar_size, scale).loc;
++        let loc = loc.to_physical_precise_round(scale).to_logical(scale);
++        let elem = TextureRenderElement::from_texture_buffer(
++            buffer,
++            loc,
++            alpha,
++            None,
++            None,
++            Kind::Unspecified,
++        );
++        Some(PrimaryGpuTextureRenderElement(elem))
++    }
++}
++
++fn scaled(color: Color, factor: f32) -> Color {
++    Color::new_unpremul(
++        (color.r * factor).min(1.),
++        (color.g * factor).min(1.),
++        (color.b * factor).min(1.),
++        color.a,
++    )
++}
++
++fn set_source(cr: &cairo::Context, color: Color, alpha: f32) {
++    cr.set_source_rgba(
++        color.r.into(),
++        color.g.into(),
++        color.b.into(),
++        (color.a * alpha).into(),
++    );
++}
++
++/// Draws the three buttons, like Loft's TrafficLights.qml: an Aqua bead (darker toward the
++/// bottom, a darker rim, a specular lens along the top) with its glyph on hover.
++fn draw(
++    config: &niri_config::TrafficLights,
++    size: f64,
++    spacing: f64,
++    scale: f64,
++    look: Look,
++) -> anyhow::Result<MemoryBuffer> {
++    let _span = tracy_client::span!("traffic_lights::draw");
++
++    let width = ((size * 3. + spacing * 2.) * scale).round() as i32;
++    let height = (size * scale).round() as i32;
++
++    let surface = ImageSurface::create(cairo::Format::ARgb32, width.max(1), height.max(1))?;
++    let cr = cairo::Context::new(&surface)?;
++    cr.scale(scale, scale);
++
++    let r = size / 2.;
++    let line = f64::max(1. / scale, size * 0.09);
++
++    for (i, button) in BUTTONS.into_iter().enumerate() {
++        let tint = match button {
++            TrafficLight::Close => config.close_color,
++            TrafficLight::Minimize => config.minimize_color,
++            TrafficLight::Zoom => config.zoom_color,
++        };
++        let base = if look.lit {
++            tint
++        } else {
++            config.inactive_color
++        };
++
++        let cx = r + i as f64 * (size + spacing);
++        let cy = r;
++
++        // The bead.
++        cr.new_path();
++        cr.arc(cx, cy, r, 0., 2. * PI);
++        if look.lit {
++            let gradient = LinearGradient::new(0., 0., 0., size);
++            let top = scaled(base, 1.12);
++            let bottom = scaled(base, 1. / 1.12);
++            gradient.add_color_stop_rgba(
++                0.,
++                top.r.into(),
++                top.g.into(),
++                top.b.into(),
++                top.a.into(),
++            );
++            gradient.add_color_stop_rgba(
++                1.,
++                bottom.r.into(),
++                bottom.g.into(),
++                bottom.b.into(),
++                bottom.a.into(),
++            );
++            cr.set_source(&gradient)?;
++        } else {
++            set_source(&cr, base, 1.);
++        }
++        cr.fill()?;
++
++        // The rim.
++        cr.new_path();
++        cr.arc(cx, cy, r - 0.5, 0., 2. * PI);
++        cr.set_line_width(1.);
++        if look.lit {
++            set_source(&cr, scaled(tint, 1. / 1.6), 0.55);
++        } else {
++            cr.set_source_rgba(0., 0., 0., 0.12);
++        }
++        cr.stroke()?;
++
++        if look.lit {
++            // The specular lens: a soft bright ellipse along the top.
++            let lens_w = size * 0.6;
++            let lens_h = size * 0.36;
++            let lens_y = size * 0.1;
++            cr.save()?;
++            cr.translate(cx, lens_y + lens_h / 2.);
++            cr.scale(lens_w / 2., lens_h / 2.);
++            cr.new_path();
++            cr.arc(0., 0., 1., 0., 2. * PI);
++            cr.restore()?;
++            let gradient = LinearGradient::new(0., lens_y, 0., lens_y + lens_h);
++            gradient.add_color_stop_rgba(0., 1., 1., 1., 0.7);
++            gradient.add_color_stop_rgba(1., 1., 1., 1., 0.);
++            cr.set_source(&gradient)?;
++            cr.fill()?;
++        }
++
++        if look.pressed == Some(button) {
++            cr.new_path();
++            cr.arc(cx, cy, r, 0., 2. * PI);
++            cr.set_source_rgba(0., 0., 0., 0.22);
++            cr.fill()?;
++        }
++
++        if look.glyphs {
++            set_source(&cr, config.glyph_color, 1.);
++            cr.set_line_width(line);
++            cr.set_line_cap(cairo::LineCap::Round);
++            cr.new_path();
++            match button {
++                TrafficLight::Close => {
++                    let d = size * 0.2;
++                    cr.move_to(cx - d, cy - d);
++                    cr.line_to(cx + d, cy + d);
++                    cr.move_to(cx + d, cy - d);
++                    cr.line_to(cx - d, cy + d);
++                    cr.stroke()?;
++                }
++                TrafficLight::Minimize => {
++                    let d = size * 0.26;
++                    cr.move_to(cx - d, cy);
++                    cr.line_to(cx + d, cy);
++                    cr.stroke()?;
++                }
++                TrafficLight::Zoom => {
++                    // Two triangles pointing at opposite corners, as on macOS.
++                    let far = size * 0.24;
++                    let near = size * 0.1;
++                    cr.move_to(cx - far, cy - far);
++                    cr.line_to(cx + near, cy - far);
++                    cr.line_to(cx - far, cy + near);
++                    cr.close_path();
++                    cr.move_to(cx + far, cy + far);
++                    cr.line_to(cx - near, cy + far);
++                    cr.line_to(cx + far, cy - near);
++                    cr.close_path();
++                    cr.fill()?;
++                }
++            }
++        }
++    }
++
++    drop(cr);
++
++    let data = surface.take_data().context("taking surface data")?;
++    Ok(MemoryBuffer::new(
++        data.to_vec(),
++        Fourcc::Argb8888,
++        (width.max(1), height.max(1)),
++        scale,
++        Transform::Normal,
++    ))
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn lights() -> TrafficLights {
++        TrafficLights::new(niri_config::TrafficLights::default())
++    }
++
++    fn bar() -> Size<f64, Logical> {
++        Size::from((400., 30.))
++    }
++
++    #[test]
++    fn hit_buttons_and_gaps() {
++        let tl = lights();
++        // Defaults: 12 px buttons, 8 px apart, the first 12 px in, centered in the 30 px bar
++        // (y = 9..21).
++        let hit = |x: f64, y: f64| tl.hit(Point::from((x, y)), bar(), 1.);
++        assert_eq!(hit(18., 15.), Some(TrafficLight::Close));
++        assert_eq!(hit(38., 15.), Some(TrafficLight::Minimize));
++        assert_eq!(hit(58., 15.), Some(TrafficLight::Zoom));
++        // Half the spacing around the group still counts: no dead gaps.
++        assert_eq!(hit(27., 15.), Some(TrafficLight::Close));
++        assert_eq!(hit(8.5, 15.), Some(TrafficLight::Close));
++        assert_eq!(hit(67., 15.), Some(TrafficLight::Zoom));
++        assert_eq!(hit(18., 5.5), Some(TrafficLight::Close));
++        // Outside.
++        assert_eq!(hit(3., 15.), None);
++        assert_eq!(hit(18., 2.), None);
++        assert_eq!(hit(18., 28.), None);
++        assert_eq!(hit(80., 15.), None);
++    }
++
++    #[test]
++    fn off_never_hits() {
++        let tl = TrafficLights::new(niri_config::TrafficLights {
++            on: false,
++            ..Default::default()
++        });
++        assert_eq!(tl.hit(Point::from((18., 15.)), bar(), 1.), None);
++        assert_eq!(tl.end_x(bar(), 1.), 0.);
++    }
++
++    #[test]
++    fn shown_only_in_big_enough_bars() {
++        let tl = lights();
++        assert!(tl.is_shown(bar(), 1.));
++        // The group ends at x = 12 + 12 * 3 + 8 * 2 = 64.
++        assert_eq!(tl.end_x(bar(), 1.), 64.);
++        assert!(tl.is_shown(Size::from((64., 12.)), 1.));
++        assert!(!tl.is_shown(Size::from((63., 30.)), 1.));
++        assert!(!tl.is_shown(Size::from((200., 11.)), 1.));
++        assert_eq!(tl.end_x(Size::from((63., 30.)), 1.), 0.);
++    }
++
++    #[test]
++    fn y_offset_is_ignored() {
++        // Old configs set the offset from the window's corner; in the bar, the buttons center.
++        let tl = TrafficLights::new(niri_config::TrafficLights {
++            offset: niri_config::ShadowOffset {
++                x: niri_config::FloatOrInt(12.),
++                y: niri_config::FloatOrInt(14.),
++            },
++            ..Default::default()
++        });
++        assert_eq!(
++            tl.hit(Point::from((18., 15.)), bar(), 1.),
++            Some(TrafficLight::Close)
++        );
++    }
++
++    #[test]
++    fn draws_every_look() {
++        let config = niri_config::TrafficLights::default();
++        for scale in [1., 1.25, 2.] {
++            for lit in [false, true] {
++                for glyphs in [false, true] {
++                    for pressed in [None, Some(TrafficLight::Zoom)] {
++                        let look = Look {
++                            scale_bits: f64::to_bits(scale),
++                            lit,
++                            glyphs,
++                            pressed,
++                        };
++                        let buffer = draw(&config, 12., 8., scale, look).unwrap();
++                        let size = buffer.size();
++                        assert_eq!(size.w, (52. * scale).round() as i32);
++                        assert_eq!(size.h, (12. * scale).round() as i32);
++                    }
++                }
++            }
++        }
++    }
++}
+diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
+--- a/src/layout/workspace.rs
++++ b/src/layout/workspace.rs
+@@ -22,7 +22,7 @@
+     Column, ColumnWidth, ScrollDirection, ScrollingSpace, ScrollingSpaceRenderElement,
+ };
+ use super::shadow::Shadow;
+-use super::tile::{Tile, TileRenderSnapshot};
++use super::tile::{new_window_title_bar_height, Tile, TileRenderSnapshot};
+ use super::{
+     ActivateWindow, HitType, InsertPosition, InteractiveResizeData, LayoutElement, Options,
+     RemovedTile, SizeFrac,
+@@ -38,7 +38,7 @@
+ use crate::utils::transaction::{Transaction, TransactionBlocker};
+ use crate::utils::{
+     ensure_min_max_size, ensure_min_max_size_maybe_zero, output_size, send_scale_transform,
+-    ResizeEdge,
++    toplevel_has_pending_ssd, ResizeEdge,
+ };
+ use crate::window::ResolvedWindowRules;
+ 
+@@ -821,11 +821,13 @@
+         is_floating: bool,
+         rules: &ResolvedWindowRules,
+         (min_size, max_size): (Size<i32, Logical>, Size<i32, Logical>),
++        title_bar: f64,
+     ) -> Size<i32, Logical> {
+         let mut size = if is_floating {
+-            self.floating.new_window_size(width, height, rules)
++            self.floating.new_window_size(width, height, rules, title_bar)
+         } else {
+-            self.scrolling.new_window_size(width, height, rules)
++            self.scrolling
++                .new_window_size(width, height, rules, title_bar)
+         };
+ 
+         // If the window has a fixed size, or we're picking some fixed size, apply min and max
+@@ -863,22 +865,39 @@
+             let current = guard.current();
+             (current.min_size, current.max_size)
+         });
++        // The title bar the tile will reserve, from the decoration mode negotiated so far.
++        let title_bar = new_window_title_bar_height(
++            &self.options,
++            rules,
++            toplevel_has_pending_ssd(toplevel),
++            self.scale.fractional_scale(),
++        );
+         toplevel.with_pending_state(|state| {
+             if state.states.contains(xdg_toplevel::State::Fullscreen) {
+                 state.size = Some(self.view_size.to_i32_round());
+             } else if state.states.contains(xdg_toplevel::State::Maximized) {
+-                state.size = Some(self.working_area.size.to_i32_round());
++                let mut size = self.working_area.size;
++                size.h = f64::max(1., size.h - title_bar);
++                state.size = Some(size.to_i32_round());
+             } else {
+-                let size =
+-                    self.new_window_size(width, height, is_floating, rules, (min_size, max_size));
++                let size = self.new_window_size(
++                    width,
++                    height,
++                    is_floating,
++                    rules,
++                    (min_size, max_size),
++                    title_bar,
++                );
+                 state.size = Some(size);
+             }
+ 
+-            if is_floating {
+-                state.bounds = Some(self.floating.new_window_toplevel_bounds(rules));
++            let mut bounds = if is_floating {
++                self.floating.new_window_toplevel_bounds(rules)
+             } else {
+-                state.bounds = Some(self.scrolling.new_window_toplevel_bounds(rules));
+-            }
++                self.scrolling.new_window_toplevel_bounds(rules)
++            };
++            bounds.h = max(1, bounds.h - title_bar.ceil() as i32);
++            state.bounds = Some(bounds);
+         });
+     }
+ 
+diff --git a/src/niri.rs b/src/niri.rs
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -139,6 +139,7 @@
+ use crate::layer::mapped::LayerSurfaceRenderElement;
+ use crate::layer::MappedLayer;
+ use crate::layout::tile::TileRenderElement;
++use crate::layout::traffic_lights::{TrafficLight, TrafficLightsInput};
+ use crate::layout::workspace::{Workspace, WorkspaceId};
+ use crate::layout::{
+     HitType, Layout, LayoutElement as _, LayoutElementRenderElement, MonitorRenderElement,
+@@ -355,6 +356,10 @@
+     /// taking grabs into account is expected, because we pass the information to pointer.motion()
+     /// which passes it down through grabs, which decide what to do with it as they see fit.
+     pub pointer_contents: PointContents,
++    /// The traffic light the left button went down on, until it goes up.
++    pub traffic_light_press: Option<TrafficLightPress>,
++    /// The last left press on a title bar, for double-click.
++    pub title_bar_last_press: Option<(Window, Duration)>,
+     pub pointer_visibility: PointerVisibility,
+     pub pointer_inactivity_timer: Option<RegistrationToken>,
+     /// Whether the pointer inactivity timer got reset this event loop iteration.
+@@ -539,6 +544,17 @@
+     pub hot_corner: bool,
+ }
+ 
++/// A press on a window's traffic light.
++#[derive(Debug, Clone)]
++pub struct TrafficLightPress {
++    pub window: Window,
++    pub button: TrafficLight,
++    /// Tells this press from later ones, for the hold timer.
++    pub serial: u64,
++    /// The press was held long enough to request the window actions menu.
++    pub held: bool,
++}
++
+ #[derive(Debug, Default)]
+ pub enum LockState {
+     #[default]
+@@ -860,7 +876,7 @@
+             under = PointContents::default();
+         }
+ 
+-        self.niri.pointer_contents.clone_from(&under);
++        self.niri.set_pointer_contents(&under);
+ 
+         let pointer = &self.niri.seat.get_pointer().unwrap();
+         pointer.motion(
+@@ -1080,7 +1096,7 @@
+             }
+         }
+ 
+-        self.niri.pointer_contents.clone_from(&under);
++        self.niri.set_pointer_contents(&under);
+ 
+         pointer.motion(
+             self,
+@@ -2267,7 +2283,12 @@
+         let compositor_state = CompositorState::new_v6::<State>(&display_handle);
+         let xdg_shell_state = XdgShellState::new_with_capabilities::<State>(
+             &display_handle,
+-            [WmCapabilities::Fullscreen, WmCapabilities::Maximize],
++            // Minimize too: niri emits WindowMinimizeRequested over IPC for a shell to act on.
++            [
++                WmCapabilities::Fullscreen,
++                WmCapabilities::Maximize,
++                WmCapabilities::Minimize,
++            ],
+         );
+         let xdg_decoration_state =
+             XdgDecorationState::new_with_filter::<State, _>(&display_handle, |client| {
+@@ -2583,6 +2604,8 @@
+             cursor_shape_manager_state,
+             dnd_icon: None,
+             pointer_contents: PointContents::default(),
++            traffic_light_press: None,
++            title_bar_last_press: None,
+             pointer_visibility: PointerVisibility::Visible,
+             pointer_inactivity_timer: None,
+             pointer_inactivity_timer_got_reset: false,
+@@ -3288,6 +3311,65 @@
+         self.window_under(pos)
+     }
+ 
++    /// Sets the pointer contents, updating the hover state of the traffic lights it leaves and
++    /// enters.
++    pub fn set_pointer_contents(&mut self, under: &PointContents) {
++        fn traffic_lights(contents: &PointContents) -> Option<(Window, Option<TrafficLight>)> {
++            match &contents.window {
++                Some((window, HitType::TitleBar { button: Some(button) })) => {
++                    Some((window.clone(), Some(*button)))
++                }
++                _ => None,
++            }
++        }
++
++        let old = traffic_lights(&self.pointer_contents);
++        let new = traffic_lights(under).filter(|_| !self.layout.is_overview_open());
++        self.pointer_contents.clone_from(under);
++
++        if old == new {
++            return;
++        }
++
++        let mut changed = false;
++        if let Some((window, _)) = &old {
++            if new.as_ref().map(|(w, _)| w) != Some(window) {
++                changed |= self.update_traffic_lights_input(window, |input| {
++                    input.hovered = false;
++                    input.under = None;
++                });
++            }
++        }
++        if let Some((window, button)) = new {
++            changed |= self.update_traffic_lights_input(&window, |input| {
++                input.hovered = true;
++                input.under = button;
++            });
++        }
++
++        if changed {
++            // FIXME: granular.
++            self.queue_redraw_all();
++        }
++    }
++
++    /// Changes a window's traffic lights input state; returns whether it changed.
++    pub fn update_traffic_lights_input(
++        &self,
++        window: &Window,
++        f: impl FnOnce(&mut TrafficLightsInput),
++    ) -> bool {
++        let Some(toplevel) = window.toplevel() else {
++            return false;
++        };
++        let Some((mapped, _)) = self.layout.find_window_and_output(toplevel.wl_surface()) else {
++            return false;
++        };
++        let mut input = mapped.traffic_lights_input();
++        f(&mut input);
++        mapped.set_traffic_lights_input(input)
++    }
++
+     /// Returns contents under the given point.
+     ///
+     /// We don't have a proper global space for all windows, so this function converts window
+diff --git a/src/protocols/foreign_toplevel.rs b/src/protocols/foreign_toplevel.rs
+--- a/src/protocols/foreign_toplevel.rs
++++ b/src/protocols/foreign_toplevel.rs
+@@ -5,11 +5,13 @@
+ use arrayvec::ArrayVec;
+ use smithay::output::Output;
+ use smithay::reexports::wayland_protocols::ext::foreign_toplevel_list::v1::server::{
+-    ext_foreign_toplevel_handle_v1::{self, ExtForeignToplevelHandleV1}, ext_foreign_toplevel_list_v1::{self, ExtForeignToplevelListV1},
++    ext_foreign_toplevel_handle_v1::{self, ExtForeignToplevelHandleV1},
++    ext_foreign_toplevel_list_v1::{self, ExtForeignToplevelListV1},
+ };
+ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+ use smithay::reexports::wayland_protocols_wlr::foreign_toplevel::v1::server::{
+-    zwlr_foreign_toplevel_handle_v1::{self, ZwlrForeignToplevelHandleV1}, zwlr_foreign_toplevel_manager_v1::{self, ZwlrForeignToplevelManagerV1},
++    zwlr_foreign_toplevel_handle_v1::{self, ZwlrForeignToplevelHandleV1},
++    zwlr_foreign_toplevel_manager_v1::{self, ZwlrForeignToplevelManagerV1},
+ };
+ use smithay::reexports::wayland_server::backend::ClientId;
+ use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
+@@ -18,12 +20,12 @@
+     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
+ };
+ use smithay::wayland::shell::xdg::{
+-    ToplevelState, ToplevelStateSet, XdgToplevelSurfaceRoleAttributes
++    ToplevelState, ToplevelStateSet, XdgToplevelSurfaceRoleAttributes,
+ };
+ 
+ use crate::niri::State;
+-use crate::window::mapped::MappedId;
+ use crate::utils::with_toplevel_role_and_current;
++use crate::window::mapped::MappedId;
+ 
+ const EXT_LIST_VERSION: u32 = 1;
+ const WLR_MANAGEMENT_VERSION: u32 = 3;
+diff --git a/src/utils/mod.rs b/src/utils/mod.rs
+--- a/src/utils/mod.rs
++++ b/src/utils/mod.rs
+@@ -410,6 +410,22 @@
+     })
+ }
+ 
++/// Whether a toplevel negotiated server-side decorations so far, like `Mapped::has_ssd()` but
++/// from the pending state: for the initial configure, before anything is committed.
++pub fn toplevel_has_pending_ssd(toplevel: &ToplevelSurface) -> bool {
++    match toplevel.with_pending_state(|state| state.decoration_mode) {
++        Some(zxdg_toplevel_decoration_v1::Mode::ServerSide) => true,
++        Some(_) => false,
++        None => with_states(toplevel.wl_surface(), |states| {
++            states
++                .data_map
++                .get::<KdeDecorationsModeState>()
++                .map(KdeDecorationsModeState::is_server)
++                == Some(true)
++        }),
++    }
++}
++
+ pub fn update_tiled_state(
+     toplevel: &ToplevelSurface,
+     prefer_no_csd: bool,
+diff --git a/src/window/mapped.rs b/src/window/mapped.rs
+--- a/src/window/mapped.rs
++++ b/src/window/mapped.rs
+@@ -23,6 +23,7 @@
+ 
+ use super::{ResolvedWindowRules, WindowRef};
+ use crate::handlers::KdeDecorationsModeState;
++use crate::layout::traffic_lights::TrafficLightsInput;
+ use crate::layout::{
+     ConfigureIntent, InteractiveResizeData, LayoutElement, LayoutElementRenderElement,
+     LayoutElementRenderSnapshot, SizingMode,
+@@ -135,6 +136,9 @@
+     /// Used for double-resize-click tracking.
+     last_interactive_resize_start: Cell<Option<(Duration, ResizeEdge)>>,
+ 
++    /// Pointer state over the traffic lights.
++    traffic_lights_input: Cell<TrafficLightsInput>,
++
+     /// Whether this window is in windowed (fake) fullscreen.
+     ///
+     /// In this mode, the underlying window is told that it's fullscreen, while keeping it as
+@@ -301,6 +305,7 @@
+             pending_transactions: Vec::new(),
+             interactive_resize: None,
+             last_interactive_resize_start: Cell::new(None),
++            traffic_lights_input: Cell::new(TrafficLightsInput::default()),
+             is_windowed_fullscreen: false,
+             is_pending_windowed_fullscreen: false,
+             uncommitted_windowed_fullscreen: Vec::new(),
+@@ -495,6 +500,11 @@
+         &self.last_interactive_resize_start
+     }
+ 
++    /// Sets the pointer state over the traffic lights; returns whether it changed.
++    pub fn set_traffic_lights_input(&self, input: TrafficLightsInput) -> bool {
++        self.traffic_lights_input.replace(input) != input
++    }
++
+     pub fn render_for_screen_cast<R: NiriRenderer>(
+         &self,
+         renderer: &mut R,
+@@ -925,6 +935,14 @@
+         });
+     }
+ 
++    fn traffic_lights_input(&self) -> TrafficLightsInput {
++        self.traffic_lights_input.get()
++    }
++
++    fn title(&self) -> Option<String> {
++        with_toplevel_role(self.toplevel(), |role| role.title.clone())
++    }
++
+     fn has_ssd(&self) -> bool {
+         let toplevel = self.toplevel();
+         let mode = self
+diff --git a/src/window/mod.rs b/src/window/mod.rs
+--- a/src/window/mod.rs
++++ b/src/window/mod.rs
+@@ -4,7 +4,7 @@
+ use niri_config::window_rule::{Match, WindowRule};
+ use niri_config::{
+     BackgroundEffect, BlockOutFrom, BorderRule, CornerRadius, FloatingPosition, PresetSize,
+-    ResolvedPopupsRules, ShadowRule, TabIndicatorRule,
++    ResolvedPopupsRules, ShadowRule, TabIndicatorRule, TitleBarRule, TrafficLightsRule,
+ };
+ use niri_ipc::ColumnDisplay;
+ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+@@ -90,6 +90,10 @@
+     pub shadow: ShadowRule,
+     /// Tab indicator overrides.
+     pub tab_indicator: TabIndicatorRule,
++    /// Title bar overrides.
++    pub title_bar: TitleBarRule,
++    /// Traffic lights overrides.
++    pub traffic_lights: TrafficLightsRule,
+ 
+     /// Whether or not to draw the border with a solid background.
+     ///
+@@ -274,6 +278,8 @@
+                 resolved.border.merge_with(&rule.border);
+                 resolved.shadow.merge_with(&rule.shadow);
+                 resolved.tab_indicator.merge_with(&rule.tab_indicator);
++                resolved.title_bar.merge_with(&rule.title_bar);
++                resolved.traffic_lights.merge_with(&rule.traffic_lights);
+ 
+                 if let Some(x) = rule.draw_border_with_background {
+                     resolved.draw_border_with_background = Some(x);

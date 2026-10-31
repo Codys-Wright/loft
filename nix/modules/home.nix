@@ -112,8 +112,8 @@
 
       # The consumer runs a niri that parses `place-within-workspace`.
       workspaceLayers = cfg.niriPackage.passthru.loftWorkspaceLayers or false;
-      # …and `traffic-lights` (nix/niri/traffic-lights.patch).
-      trafficLights = cfg.niriPackage.passthru.loftTrafficLights or false;
+      # …and `title-bar` (nix/niri/title-bar.patch).
+      titleBar = cfg.niriPackage.passthru.loftTitleBar or false;
 
       # programs.loft.keyboard: the seed `loft keys` layers runtime changes on.
       keyboardSeed = {
@@ -248,7 +248,9 @@
             overview: ~/.config/loft/niri.kdl then includes the
             `place-within-workspace` layer rule (which a stock niri would
             reject) and the shell turns the feature on. Also used for
-            `niri msg` in the idle timeouts.
+            `niri msg` in the idle timeouts. On a NixOS host that imports
+            Loft's NixOS module, the default is the system's
+            `programs.niri.package` instead.
           '';
         };
 
@@ -683,8 +685,9 @@
         + lib.optionalString workspaceLayers ''
           include "${self}/niri/workspace-wallpapers.kdl"
         ''
-        + lib.optionalString trafficLights ''
-          include "${self}/niri/traffic-lights.kdl"
+        + lib.optionalString titleBar ''
+          include "${self}/niri/title-bar.kdl"
+          include optional=true "${stateDir}/current/niri-loft.kdl"
         ''
         # `loft-live` (nix/dev/loft-live.sh): a checkout's fragments over these
         # while it runs the desktop; the file only exists then.
@@ -751,6 +754,9 @@
               command = "${lib.getExe cfg.niriPackage} msg action power-off-monitors";
             };
           events.before-sleep = lockCmd;
+          # logind's Lock signal (`loginctl lock-session`): how tetherd's away
+          # lock (Settings → Phone) and other session tools reach the shell.
+          events.lock = lockCmd;
         };
 
         # The iPhone bridge (programs.loft.phone): upstream's tetherd.service,

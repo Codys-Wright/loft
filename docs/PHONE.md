@@ -21,7 +21,8 @@ rows are in [FEATURES.md](FEATURES.md#iphone--wave-3-phone).
 | Messages panel | Conversations, the thread and a reply box. Open it from Spotlight ("Messages"), the Control Center tile, a banner, or `phone messages`. ⌃N starts a new message and Esc closes the panel. |
 | Notifications | The phone's app notifications appear like any other notification, tagged "Instagram · iPhone", with tether's actions. |
 | Control Center / menu bar | An **iPhone** tile showing battery, unread count or the call. Expanding it shows signal, carrier and the latest conversations. The menu bar extra is off by default (Settings → Menu Bar). |
-| Settings → Phone | Status, which links are up, what Loft shows, tetherd's call control, and the pairing guide. |
+| Settings → Phone | Status, which links are up, the battery (exact from the phone's Bluetooth LE Battery Service, else "About 80%" from Hands-Free), **Lock when away** (tetherd locks the screen once the iPhone has been out of range for 10 s – 5 min; opt-in), what Loft shows, tetherd's call control, and the pairing guide. |
+| Not yet | Controlling the phone's music (Apple Media Service): tetherd doesn't implement it. See [research/phone-integration.md](research/phone-integration.md#ams-media-control-what-tetherd-lacks). |
 
 These limits come from iOS, not tether:
 
@@ -160,7 +161,7 @@ against the fixture. In a test session (never on the live desktop):
 ```sh
 loft-dev --session phone "$PWD" &          # then source its session.env
 python3 tests/fake_tetherd.py serve --notify &      # binds the session's $XDG_RUNTIME_DIR/tether/tetherd.sock
-python3 tests/fake_tetherd.py inject message        # | notification | call | outgoing | answer | hangup | away | back
+python3 tests/fake_tetherd.py inject message        # | notification | call | outgoing | answer | hangup | away | back | battery --text 63
 ```
 
 Turn on Features → iPhone in that session. The fake never touches Bluetooth.

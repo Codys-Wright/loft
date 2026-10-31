@@ -22,13 +22,18 @@ import "paging.js" as Paging
 // brightness, sound announcements — the pill widens to an icon, a level bar
 // and the value, or an icon and a line, for 1.5 / 2.2 s; Settings → Dynamic
 // Island → Show changes in the Dynamic Island, else Osd.qml shows it), a
-// notification banner (5 s; hovering holds
+// notification banner (3 s, screenshots 1.5 s; hovering holds
 // it so its buttons can be clicked), a live activity (screen recording,
 // focus timer, timers, downloads — scroll to cycle when several run), the
 // next calendar event when it's close, now playing (art + equalizer), the
 // time — with a mark while AI agents run. A space switch shows the space's
 // icon and name for a moment (Spaces.activated). The border pulses on system alerts
 // (overheating / overload) and turns white for unread notifications.
+//
+// Swipe up — drag it upwards (or scroll up over a banner) — to send away
+// what's there, all at once: an open island closes, a banner goes, and a
+// system alert's outline goes quiet (IslandIpc: until it clears or gets
+// worse, on every screen). A call stays until it is answered or declined.
 //
 // Hover expands it into a carousel of pages (IslandPages: order and which
 // are shown live in Settings → Dynamic Island) — live activity, camera,
@@ -40,7 +45,8 @@ import "paging.js" as Paging
 // Paging, expanded: the wheel or a horizontal touchpad swipe (one page per
 // gesture), the ‹ › that appear at its edges, the page dots (click; hover
 // names the page), ← / → once it has the keyboard (click it; Esc closes),
-// and Mod+Alt+← / → (shell-binds).
+// and Mod+Alt+← / → (shell-binds). A page picked by hand is where it opens
+// next time, for `chosenMs`, unless a live activity has started since.
 //
 // Full screen (FullscreenChrome; Settings → Dynamic Island → Hide in full
 // screen): while this display shows a fullscreen window the island slides up
@@ -148,9 +154,14 @@ PanelWindow {
     // Unread = notifications arrived since the notifications page was last seen.
     property int seenCount: 0
     readonly property bool unread: Notifications.history.length > seenCount
+    // Cleared or dismissed: what's left was seen, so new ones count again.
+    readonly property int historyCount: Notifications.history.length
+    onHistoryCountChanged: if (historyCount < seenCount)
+        seenCount = historyCount
 
-    readonly property color alertColor: SystemStats.overheating ? Theme.urgent : SystemStats.overloaded ? Theme.warn : "transparent"
-    readonly property bool alerting: alertColor.a > 0
+    readonly property color alertColor: IslandIpc.alertLevel === "urgent" ? Theme.urgent : IslandIpc.alertLevel === "warn" ? Theme.warn : "transparent"
+    // Swiped away: quiet until it clears or gets worse (IslandIpc).
+    readonly property bool alerting: alertColor.a > 0 && !IslandIpc.alertQuiet
 
     readonly property bool showEvent: live === "" && soonEvent !== null
     readonly property bool agentMark: Settings.island.aiIndicator && AiUsage.enabled && AiUsage.sessions.length > 0
@@ -180,11 +191,53 @@ PanelWindow {
 
     function showPage(name) {
         pinned = true;
-        page = pages.includes(name) ? name : pages[0];
+        choose(pages.includes(name) ? name : pages[0]);
     }
 
     function step(delta) {
-        page = pages[(pageIndex + delta + pages.length) % pages.length];
+        choose(pages[(pageIndex + delta + pages.length) % pages.length]);
+    }
+
+    // A page picked by hand (wheel, swipe, ‹ ›, dots, keys, IPC): the island
+    // opens on it again for `chosenMs` instead of jumping back to the most
+    // relevant page — unless a live activity has started since.
+    readonly property int chosenMs: 5 * 60 * 1000
+    property string chosenPage: ""
+    property real chosenAt: 0
+    property var chosenLive: []
+    function choose(p) {
+        page = p;
+        chosenPage = p;
+        chosenAt = Date.now();
+        chosenLive = liveActivities.slice();
+    }
+    function remembered() {
+        if (chosenPage === "" || !pages.includes(chosenPage) || Date.now() - chosenAt > chosenMs)
+            return "";
+        return liveActivities.some(a => !chosenLive.includes(a)) ? "" : chosenPage;
+    }
+
+    // Swipe up: send away all of it at once — the pointer that swipes has
+    // to hover the island first, which opens it, so "one thing per swipe"
+    // only ever closed it. Returns whether there was anything.
+    function swipeAway() {
+        if (ringing)
+            return false;
+        let any = false;
+        if (alerting) {
+            IslandIpc.alertSilenced = IslandIpc.alertLevel;
+            any = true;
+        }
+        if (banner !== null && !expanded) {
+            // The whole backlog, not just the banner on screen.
+            Notifications.clearQueue();
+            any = true;
+        }
+        if (expanded) {
+            dismiss();
+            any = true;
+        }
+        return any;
     }
 
     // Close, even under the pointer (Esc): until the pointer leaves.
@@ -222,6 +275,8 @@ PanelWindow {
                 return;
             if (root.expanded)
                 root.step(d);
+            else if (d < 0 && orientation === Qt.Vertical && root.swipeAway())
+                return;
             else if (root.liveActivities.length > 1)
                 root.liveIndex = (root.liveIndex + 1) % root.liveActivities.length;
         }
@@ -232,7 +287,7 @@ PanelWindow {
             keys.forceActiveFocus();
         // Open on the most relevant page.
         if (expanded && !pinned)
-            page = [live !== "" ? "live" : "", unread ? "notifications" : "", soonEvent ? "calendar" : "", player ? "media" : "", "system"].find(p => p && pages.includes(p)) ?? pages[0];
+            page = remembered() || ([live !== "" ? "live" : "", unread ? "notifications" : "", soonEvent ? "calendar" : "", player ? "media" : "", "system"].find(p => p && pages.includes(p)) ?? pages[0]);
     }
     onPageChanged: if (page === "notifications")
         seenCount = Notifications.history.length
@@ -262,12 +317,15 @@ PanelWindow {
     // Input and blur cover the body only: an attached island's square top
     // and rounded bottom, never its shoulders, so the transparent corners
     // beside them leave the bar's clicks alone.
-    // The pill's resting place (hitBox), not the pill: a Region maps its
-    // item with transforms, so the pill mid-slide (Translate, below) would
-    // give an empty mask, which Quickshell makes WindowTransparentForInput
-    // for good (QtWayland never drops it when the mask fills again).
+    // Input: where the pill is going (hoverBox), not the pill: a Region maps
+    // its item with transforms, so the pill mid-slide (Translate, below)
+    // would give an empty mask, which Quickshell makes
+    // WindowTransparentForInput for good (QtWayland never drops it when the
+    // mask fills again); and mid-morph it would close under the pointer.
+    // Blur follows the pill's resting size (hitBox), so it never runs ahead
+    // of the shape.
     mask: Region {
-        item: hitBox
+        item: hoverBox
         topLeftRadius: root.attached ? 0 : pill.radius
         topRightRadius: root.attached ? 0 : pill.radius
         bottomLeftRadius: pill.radius
@@ -292,6 +350,22 @@ PanelWindow {
         }
         width: pill.width
         height: pill.height
+    }
+
+    // Input (the window mask): where the pill is going, not where its
+    // morph is.
+    // Opening takes ~400 ms; measured against the growing shape, a pointer
+    // heading for the lower half (the notification list) was outside it
+    // for a moment, the island closed, and passing back over it opened it
+    // again — a loop that never let the list be reached.
+    Item {
+        id: hoverBox
+        anchors {
+            top: parent.top
+            horizontalCenter: parent.horizontalCenter
+        }
+        width: root.targetWidth
+        height: root.targetHeight
     }
 
     Item {
@@ -378,28 +452,6 @@ PanelWindow {
             }
         }
 
-        // A fresh HoverHandler each time the window maps: an unmapped
-        // window gets no leave event, so one kept across going away in full
-        // screen with the pointer on it would stay hovered for good (and
-        // hold every later banner on screen).
-        QtObject {
-            id: hover
-            readonly property bool hovered: hoverLoader.item?.hovered ?? false
-            onHoveredChanged: if (!hovered)
-                root.dismissed = false
-        }
-        Loader {
-            id: hoverLoader
-            anchors.fill: parent
-            active: root.visible
-            sourceComponent: Item {
-                readonly property alias hovered: handler.hovered
-                HoverHandler {
-                    id: handler
-                }
-            }
-        }
-
         // Expanded: a wheel notch or a swipe (either axis) pages; collapsed,
         // it cycles live activities. Two handlers, as a WheelHandler takes
         // one orientation (vertical by default). All devices: QtWayland
@@ -413,6 +465,23 @@ PanelWindow {
         }
         PageWheel {
             orientation: Qt.Horizontal
+        }
+
+        // Swipe up: press and drag upwards 14 px — a fixed distance, not the
+        // pill's: hovering has already opened it to full height, and the
+        // screen edge is right above. Takes over only once the drag starts,
+        // so clicks on the pages' buttons still work.
+        DragHandler {
+            target: null
+            xAxis.enabled: false
+            dragThreshold: 6
+            property real dy: 0
+            onActiveTranslationChanged: dy = activeTranslation.y
+            onActiveChanged: {
+                if (!active && dy < -14)
+                    root.swipeAway();
+                dy = 0;
+            }
         }
 
         // Keys while expanded (focus on click): ← / → page, Esc closes.
@@ -803,10 +872,25 @@ PanelWindow {
                 }
             }
 
+            // Each banner shows for Notifications.duration (3 s; 1.5 s for
+            // screenshots and while more wait; hovering holds it, so its
+            // buttons can be clicked). Repeating, and restarted per banner: a one-shot
+            // Timer stops itself after firing while `bannering` stays true for
+            // the next banner in the queue, so the binding never ran again and
+            // every banner after the first stayed up until the pointer passed.
             Timer {
+                id: bannerTimer
                 running: root.bannering && !hover.hovered
-                interval: 5000
-                onTriggered: Notifications.next()
+                repeat: true
+                interval: Notifications.duration(root.banner)
+                onTriggered: Notifications.next(root.banner)
+            }
+            Connections {
+                target: root
+                function onBannerChanged() {
+                    if (bannerTimer.running)
+                        bannerTimer.restart();
+                }
             }
 
             // ── Expanded: page carousel ─────────────────────────────────
@@ -959,7 +1043,7 @@ PanelWindow {
                             height: 18
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.page = root.pages[index]
+                            onClicked: root.choose(root.pages[index])
                             onContainsMouseChanged: {
                                 if (containsMouse)
                                     dots.hovered = index;
@@ -1040,10 +1124,19 @@ PanelWindow {
         }
     }
 
+    // The flash comes with the picture: Loft's own captures say so at once
+    // (shutter); niri's own screenshots only once their PNG is encoded
+    // (screenshotTaken), which for ours comes after the flash already ran.
+    property real shutterAt: 0
     Connections {
         target: Niri
-        function onScreenshotTaken() {
+        function onShutter() {
+            root.shutterAt = Date.now();
             shutter.restart();
+        }
+        function onScreenshotTaken() {
+            if (Date.now() - root.shutterAt > 10000)
+                shutter.restart();
         }
     }
 
@@ -1123,6 +1216,8 @@ PanelWindow {
                 root.pinned = !root.pinned;
             else if (cmd === "close")
                 root.dismiss();
+            else if (cmd === "dismiss")
+                root.swipeAway();
             else if (cmd === "next" || cmd === "prev") {
                 if (root.expanded)
                     root.step(cmd === "next" ? 1 : -1);
@@ -1132,6 +1227,35 @@ PanelWindow {
                 shutter.restart();
             else
                 root.showPage(cmd);
+        }
+    }
+
+    // Hover: the pointer is in the window, whose input is the mask above
+    // (where the pill is going). Not a handler on the pill: one on an item
+    // that moves every frame of the morph lost hover under a fast pointer
+    // (Qt), the island closed mid-opening and passing over it opened it
+    // again — the loop that never let the notification list be reached.
+    // Above the pill and the whole window, with no buttons of its own, so
+    // clicks and the pages' own hover go through. A fresh HoverHandler each
+    // time the window maps: an unmapped window gets no leave event, so one
+    // kept across going away in full screen with the pointer on it would
+    // stay hovered for good (and hold every later banner on screen).
+    QtObject {
+        id: hover
+        readonly property bool hovered: hoverLoader.item?.hovered ?? false
+        onHoveredChanged: if (!hovered)
+            root.dismissed = false
+    }
+    Loader {
+        id: hoverLoader
+        anchors.fill: parent
+        z: 100
+        active: root.visible
+        sourceComponent: Item {
+            readonly property alias hovered: handler.hovered
+            HoverHandler {
+                id: handler
+            }
         }
     }
 }

@@ -726,7 +726,7 @@ mod tests {
             wire(&p),
             [
                 json!({ "SetWorkspaceName": { "name": "loft/right", "workspace": { "Id": 4 } } }),
-                // Only main is focused; the folds wait below it (Mod+Ctrl+Down).
+                // Only main is focused; the folds wait below it (Mod+Down).
                 fw("loft"),
             ]
         );

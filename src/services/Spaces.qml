@@ -254,9 +254,13 @@ Singleton {
             run(["focus", s.id]);
     }
 
+    // ⌃←/→ (Mod+Ctrl+Left/Right). With Spaces off, niri's workspaces are
+    // the desktops: step those (vertical in niri, so ← is up).
     function step(delta) {
-        if (!enabled)
+        if (!enabled) {
+            Niri.action(delta > 0 ? "FocusWorkspaceDown" : "FocusWorkspaceUp");
             return;
+        }
         run([delta > 0 ? "next" : "prev"]);
     }
 

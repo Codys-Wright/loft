@@ -129,12 +129,33 @@
       "id": "app-switching",
       "name": "App and tab switching",
       "section": "keymap",
-      "description": "⌘Tab / ⌘` switch apps and windows (⇧ backwards)",
+      "description": "⌘` switches the app's windows (⇧ backwards); ⌘Tab reaches niri as it is, for Loft's app switcher",
       "remap": {
-        "Super_L-Shift-Tab": "Alt-Shift-Tab",
         "Super_L-Shift-grave": "Alt-Shift-grave",
-        "Super_L-Tab": "Alt-Tab",
         "Super_L-grave": "Alt-grave"
+      }
+    },
+    {
+      "id": "mac-parity",
+      "name": "macOS system shortcuts → Loft (⌃←/→/↑/↓, ⌃⌘…, ⌘H/M)",
+      "section": "keymap",
+      "description": "⌃←/→ spaces, ⌃↑ Mission Control, ⌃↓ App Exposé reach niri as Mod+⌃+arrow (plain ⌃+arrows, which ⌥←/→ word navigation sends, stay the app's); ⌃⌘ shortcuts pass through to niri instead of becoming Ctrl+key; ⌘H / ⌘M hide on Right Super (generated from keymap/parity.json)",
+      "exact_match": true,
+      "remap": {
+        "Ctrl-Down": "Ctrl-Alt_R-Down",
+        "Ctrl-Left": "Ctrl-Alt_R-Left",
+        "Ctrl-Right": "Ctrl-Alt_R-Right",
+        "Ctrl-Super_L-Space": "Ctrl-Super_L-Space",
+        "Ctrl-Super_L-a": "Ctrl-Super_L-a",
+        "Ctrl-Super_L-f": "Ctrl-Super_L-f",
+        "Ctrl-Super_L-q": "Ctrl-Super_L-q",
+        "Ctrl-Super_L-s": "Ctrl-Super_L-s",
+        "Ctrl-Super_L-v": "Ctrl-Super_L-v",
+        "Ctrl-Up": "Ctrl-Alt_R-Up",
+        "Super_L-Alt-Esc": "Super_L-Alt-Esc",
+        "Super_L-Space": "Super_L-Space",
+        "Super_L-h": "Super_R-h",
+        "Super_L-m": "Super_R-m"
       }
     },
     {

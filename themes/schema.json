@@ -200,7 +200,8 @@
             "url": { "type": "string" },
             "ref": { "type": "string", "description": "The ref that was requested (HEAD = default branch)" },
             "commit": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
-            "path": { "type": "string", "description": "Theme directory inside the upstream repo" }
+            "path": { "type": "string", "description": "Theme directory inside the upstream repo" },
+            "palette": { "type": "string", "enum": ["curated"], "description": "curated: the themes index's hand-checked palette mapping was laid over the derived one" }
           }
         },
         "lock": {

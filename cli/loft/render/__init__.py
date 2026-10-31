@@ -11,7 +11,7 @@ the same name.
     shell       theme.json (+ wallpaper.*)  colors material shape typography motion icons wallpapers   shell
     manifest    manifest.json          lock wallpapers colors                    —
     wallpapers  wallpapers.json        wallpapers colors                         wallpapers
-    niri        niri.kdl               colors material shape motion              niri
+    niri        niri.kdl niri-loft.kdl colors material shape motion              niri
     gtk         gtk.css                colors material shape                     gtk
     qt          kde.colors kvantum.kvconfig kvantum.svg  colors material shape     qt
     kitty       kitty.conf             colors material typography                kitty

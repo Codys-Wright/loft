@@ -1093,6 +1093,20 @@ Singleton {
             root.close();
         }
 
+        // ⌘H (Super+H, niri/shell-binds.kdl.in): hide the focused app, like
+        // the menu's Hide. ⌘M: niri has no minimize, so the focused window
+        // alone hides (the dock or Show All brings it back).
+        function hide(): void {
+            const w = Niri.focusedWindow;
+            if (w)
+                root.hideApp(w.app_id);
+        }
+        function minimize(): void {
+            const w = Niri.focusedWindow;
+            if (w)
+                root.hideWindows([w]);
+        }
+
         // Debugging / screenshots: arrow keys without a keyboard.
         function right(): void {
             root.key({ key: Qt.Key_Right, text: "" });

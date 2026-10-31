@@ -1,4 +1,6 @@
-"""Unit `niri`: niri.kdl, included right after Loft's base.kdl.
+"""Unit `niri`: niri.kdl, included right after Loft's base.kdl, and
+niri-loft.kdl, what only Loft's niri parses (the title bar's colors),
+included after niri/title-bar.kdl by sessions that run it.
 
   colors    focus ring / border / urgent colors, overview backdrop, ⌘Tab highlight
   material  blur on/off, passes/offset (only when not base.kdl's 3/4), noise,
@@ -146,20 +148,28 @@ def variables(i: dict) -> dict[str, str]:
         "niri_border": ("on\n" + IND * 2 + f"width {kdl_value(border['width'])}") if border["enabled"] else "off",
         "niri_focus_rules": rules,
         "niri_animations": animations(i["motion"]),
+        # niri-loft.kdl: the title bar as gtk.css draws GTK header bars
+        # (surface focused, bg in the backdrop), the beads' grey as GTK's.
+        "title_bar_active": p["surface"],
+        "title_bar_inactive": p["bg"],
+        "title_bar_text": p["text"],
+        "title_bar_text_inactive": p["subtext"],
+        "traffic_inactive": c.with_alpha(p["text"], 0.22),
     }
 
 
 def render(i: dict, template_dir: Path) -> dict:
-    return {"niri.kdl": template(template_dir, "niri.kdl", variables(i))}
+    v = variables(i)
+    return {f: template(template_dir, f, v) for f in ("niri.kdl", "niri-loft.kdl")}
 
 
 UNIT = Unit(
     name="niri",
     reads=("colors", "material", "shape", "motion"),
-    files=("niri.kdl",),
+    files=("niri.kdl", "niri-loft.kdl"),
     inputs=inputs,
     render=render,
     hook="niri",
     module=__file__,
-    templates=("niri.kdl",),
+    templates=("niri.kdl", "niri-loft.kdl"),
 )

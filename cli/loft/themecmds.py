@@ -360,6 +360,10 @@ def cmd_state(ctx, args) -> None:
     res = resolved(ctx, cat, theme, variant, state)
     out = res.to_json()
     out["mode"] = state.get("mode")
+    # The appearances the theme maps to a variant (`apply --mode`): Settings
+    # offers Prefer Light / Prefer Dark only when it has both.
+    app = theme.doc.get("appearance")
+    out["modes"] = sorted(app) if isinstance(app, dict) else []
     out["current"] = ctx.current_name()
     out["file"] = str(A.path(ctx.state_dir))
     out["catalogErrors"] = cat.errors

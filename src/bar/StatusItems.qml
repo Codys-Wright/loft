@@ -232,7 +232,7 @@ Item {
             id: snd
             controlId: "sound"
             screenName: root.screenName
-            readonly property PwNode sink: Pipewire.defaultAudioSink
+            readonly property PwNode sink: Sound.defaultSink
             readonly property bool ready: sink?.ready ?? false
             readonly property real volume: ready ? sink.audio.volume : 0
             readonly property bool muted: ready ? sink.audio.muted : true

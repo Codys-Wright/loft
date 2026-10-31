@@ -246,7 +246,7 @@ GlassSurface {
         Focusable {
             id: sl
             readonly property bool isSound: mod.controlId === "sound"
-            readonly property PwNode sink: Pipewire.defaultAudioSink
+            readonly property PwNode sink: Sound.defaultSink
             readonly property bool ready: sink?.ready ?? false
             ccId: mod.controlId
             ccLabel: isSound ? "Sound" : "Display"

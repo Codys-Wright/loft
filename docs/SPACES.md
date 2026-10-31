@@ -236,7 +236,7 @@ decides what happens:
 
 | `fold` | Behavior |
 |---|---|
-| `"stack"` (default) | The role's workspace lives on `main`'s output, directly below the space's main workspace. Activation focuses only main. Mod+Ctrl+Down reaches it, and the bar shows the space with a "+1" badge. |
+| `"stack"` (default) | The role's workspace lives on `main`'s output, directly below the space's main workspace. Activation focuses only main. Mod+Down reaches it, and the bar shows the space with a "+1" badge. |
 | `"columns"` | The role's apps are gathered into the main workspace as columns: `left` apps before, `right` apps after. Good for one ultrawide. |
 | `"skip"` | The role's apps aren't launched while the display is missing. |
 
@@ -456,7 +456,7 @@ space never changes the global theme selection: leaving it re-applies the global
 |---|---|
 | Mod+1 … Mod+9 | activate the space at that position (singletons and active instances, in `order`) |
 | Mod+Shift+1 … 9 | move the focused window to that space's workspace on the **same role** as the display it is on (else `main`), without following |
-| Mod+Ctrl+Left / Right | previous / next space (macOS Ctrl+←/→) |
+| Mod+Ctrl+Left / Right | previous / next space; a physical ⌃←/→ reaches them through xremap (`mac-parity`, PLAN §5) |
 | Mod+Ctrl+S | space switcher overlay (`src/switcher/SpaceSwitcher.qml`: spaces with their ⌘N keys, type to filter) |
 | Mod+Alt+PageUp / PageDown | niri's own per-output workspace up / down (the escape hatch) |
 

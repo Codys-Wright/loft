@@ -19,16 +19,87 @@ Singleton {
 
     // ── Graph ───────────────────────────────────────────────────────────
     readonly property var nodes: Pipewire.nodes.values ?? []
-    readonly property var sinks: nodes.filter(n => n.audio && n.isSink && !n.isStream).sort(root.byLabel)
-    readonly property var sources: nodes.filter(n => n.audio && !n.isSink && !n.isStream).sort(root.byLabel)
+    // Devices first (a sound card, USB interface, HDMI, Bluetooth), then
+    // routing — null sinks, loopbacks and filters (Dante/Inferno buses,
+    // "Voice Chat"): picking one of those switches, but into the routing,
+    // not to anything you hear, so the menus keep them apart (DeviceList).
+    readonly property var sinks: nodes.filter(n => n.audio && n.isSink && !n.isStream).sort(root.byKind)
+    readonly property var sources: nodes.filter(n => n.audio && !n.isSink && !n.isStream).sort(root.byKind)
+    readonly property var deviceSinks: sinks.filter(n => root.isHardware(n))
+    readonly property var routingSinks: sinks.filter(n => !root.isHardware(n))
     readonly property var streams: nodes.filter(n => n.audio && n.isStream)
     // App playback / capture streams (filters, loopbacks and level meters
     // are plumbing, not apps).
     readonly property var playback: streams.filter(n => n.isSink && root.isAppStream(n))
     readonly property var capture: streams.filter(n => !n.isSink && root.isAppStream(n) && n.properties["stream.capture.sink"] !== "true")
 
-    readonly property PwNode defaultSink: Pipewire.defaultAudioSink
-    readonly property PwNode defaultSource: Pipewire.defaultAudioSource
+    // The defaults as PipeWire has them now (`defaults` below), falling back
+    // to Quickshell's. PipeWire 1.6.8 / WirePlumber 0.5.17 can stop
+    // notifying anyone of changes to its "default" metadata (a fresh read
+    // still sees them; github.com/gaius-codius/nota/issues/190): Quickshell's
+    // default then stays on the old device for good — checkmarks on the
+    // wrong output, volume changing a device nobody hears, ⌘⇧O stuck.
+    readonly property PwNode defaultSink: (defaults.sink !== "" ? sinks.find(n => n.name === defaults.sink) : null) ?? Pipewire.defaultAudioSink
+    readonly property PwNode defaultSource: (defaults.source !== "" ? sources.find(n => n.name === defaults.source) : null) ?? Pipewire.defaultAudioSource
+
+    // Reads `default.audio.sink` / `.source` (pw-metadata) when links change
+    // — a new default relinks the streams that follow it, and Quickshell
+    // still hears links — right after the shell sets one, and every 10 s
+    // for changes with nothing playing.
+    QtObject {
+        id: defaults
+        property string sink: ""
+        property string source: ""
+        function refresh() {
+            if (!reader.running)
+                reader.running = true;
+            else
+                again.restart();
+        }
+    }
+    Process {
+        id: reader
+        command: ["pw-metadata", "-n", "default", "0"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const pick = key => {
+                    const m = text.match(new RegExp(`key:'${key.replace(/\./g, "\\.")}' value:'(\\{[^']*\\})'`));
+                    if (!m)
+                        return "";
+                    try {
+                        return JSON.parse(m[1]).name ?? "";
+                    } catch (e) {
+                        return "";
+                    }
+                };
+                defaults.sink = pick("default.audio.sink");
+                defaults.source = pick("default.audio.source");
+            }
+        }
+    }
+    Timer {
+        id: again
+        interval: 300
+        onTriggered: defaults.refresh()
+    }
+    Timer {
+        id: linkSettle
+        interval: 250
+        onTriggered: defaults.refresh()
+    }
+    Connections {
+        target: Pipewire.links
+        function onValuesChanged() {
+            linkSettle.restart();
+        }
+    }
+    Timer {
+        interval: 10000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: defaults.refresh()
+    }
 
     // Bind everything we show or change, so volumes and properties are live.
     PwObjectTracker {
@@ -39,8 +110,30 @@ Singleton {
         return root.label(a).localeCompare(root.label(b));
     }
 
+    function byKind(a, b) {
+        return (root.isHardware(b) - root.isHardware(a)) || root.byLabel(a, b);
+    }
+
+    // A real device (ALSA, Bluetooth, …) rather than routing: PipeWire gives
+    // device nodes the device they belong to.
+    function isHardware(n) {
+        if (!n)
+            return false;
+        const p = n.properties ?? {};
+        return p["device.id"] !== undefined || ["alsa", "bluez5", "v4l2"].includes(p["device.api"] ?? "") || /^(alsa|bluez)_/.test(n.name ?? "");
+    }
+
+    // An HDMI / DisplayPort output's description is the GPU's
+    // ("AD103 High Definition Audio Controller Digital Stereo (HDMI)
+    // [XV271U M3]"); the monitor in brackets is the name people know.
     function label(n) {
-        return n ? (n.description || n.nickname || n.name || "") : "";
+        if (!n)
+            return "";
+        const d = n.description || "";
+        const monitor = d.match(/\(HDMI[^)]*\)\s*\[(.+)\]$|\(DisplayPort[^)]*\)\s*\[(.+)\]$/);
+        if (monitor)
+            return monitor[1] || monitor[2];
+        return d || n.nickname || n.name || "";
     }
 
     function isAppStream(n) {
@@ -62,7 +155,7 @@ Singleton {
         const p = n?.properties ?? {};
         const named = p["application.icon_name"];
         if (named) {
-            const path = Quickshell.iconPath(named, true);
+            const path = Apps.themed(named);
             if (path)
                 return path;
         }
@@ -191,13 +284,21 @@ Singleton {
     }
 
     // ── Outputs ─────────────────────────────────────────────────────────
+    // wpctl, not Pipewire.preferredDefaultAudioSink: Quickshell skips a
+    // node it believes it already set, and with deaf metadata it never
+    // learns otherwise (above). wpctl writes the configured default
+    // WirePlumber follows.
     function setDefaultSink(n) {
-        if (n)
-            Pipewire.preferredDefaultAudioSink = n;
+        if (!n)
+            return;
+        defaults.sink = n.name;
+        Quickshell.execDetached(["wpctl", "set-default", String(n.id)]);
+        again.restart();
     }
 
+    // ⌘⇧O: devices only — routing is picked on purpose, from a menu.
     function cycleOutput(step) {
-        const l = sinks;
+        const l = deviceSinks;
         if (l.length === 0)
             return;
         const i = l.findIndex(n => n.id === defaultSink?.id);
@@ -285,8 +386,11 @@ Singleton {
 
     // ── Inputs ──────────────────────────────────────────────────────────
     function setDefaultSource(n) {
-        if (n)
-            Pipewire.preferredDefaultAudioSource = n;
+        if (!n)
+            return;
+        defaults.source = n.name;
+        Quickshell.execDetached(["wpctl", "set-default", String(n.id)]);
+        again.restart();
     }
 
     readonly property var mics: sources.filter(n => n.ready)
@@ -348,6 +452,10 @@ Singleton {
         }
         function prevOutput(): void {
             root.cycleOutput(-1);
+        }
+        // The default output as the shell sees it (node name).
+        function current(): string {
+            return root.defaultSink?.name ?? "";
         }
     }
 

@@ -122,7 +122,7 @@ ColumnLayout {
                     rssKiB: 0
                 }
                 readonly property bool mine: modelData.uid === SystemStats.myUid && SystemStats.myUid >= 0
-                readonly property string iconSource: Quickshell.iconPath(modelData.name.toLowerCase(), true)
+                readonly property string iconSource: Apps.themed(modelData.name.toLowerCase())
 
                 Layout.fillWidth: true
                 implicitHeight: 30

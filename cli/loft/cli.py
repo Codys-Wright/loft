@@ -17,8 +17,10 @@ Environment (all optional):
                        output changed): all|none|comma list of shell,niri,
                        wallpapers,kitty,ghostty,gtk,spotify
                        (default: all; --dev: shell,niri,wallpapers)
-  LOFT_THEME_INDEX     themes index (path, file:// or http(s) URL; `none` = off)
-                       for curated vibe links (default: loft-themes on GitHub)
+  LOFT_THEME_INDEX     themes index (path, file:// or http(s) URL; `none` = off):
+                       `theme browse/search/info`, `theme install NAME`, curated
+                       vibe links and palettes (default: loft-themes on GitHub,
+                       cached a day in <state>/cache/index.json)
   LOFT_THEME_ENGINE    `v1`: apply/render a pack by name or path alone, bypassing
                        the catalog and appearance.json (themecmds.py);
                        default: resolve every theme name
@@ -45,7 +47,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import capture, cleaner, dock, doctor, greeter, hooks, importers, index, island, keys, library, mcp, media, ports, render, spotify, themecmds, transparency, updates, utilities, vibes, wallsets, wallvideo
+from . import capture, cleaner, dock, doctor, fans, greeter, hooks, importers, index, indexcmds, island, keys, library, mcp, media, ports, render, spotify, themecmds, transparency, updates, utilities, vibes, wallsets, wallvideo
 from .facets import FacetError
 from .pack import IGNORED, Pack, PackError, is_any_pack, is_pack, is_pack_v2, pack_id, validate_v2
 
@@ -212,6 +214,9 @@ def load_dev_env() -> None:
 
 
 def cmd_list(ctx: Ctx, args) -> None:
+    if args.available:
+        indexcmds.cmd_browse(ctx, args)
+        return
     if args.themes or args.collection:
         themecmds.cmd_theme_list(ctx, args)
         return
@@ -424,6 +429,14 @@ def _import(ctx: Ctx, args) -> None:
         raise Fail(str(e)) from e
 
 
+def _index_name(ref: str) -> bool:
+    """A bare name (not a path, URL or importer ref): `install` looks it up
+    in the themes index."""
+    if "/" in ref or ref.startswith((".", "~")) or ref.endswith(TAR_SUFFIXES) or _is_git(ref):
+        return False
+    return not Path(ref).expanduser().exists()
+
+
 def cmd_install(ctx: Ctx, args) -> None:
     ref = args.source
     if importers.is_importer_ref(ref) or (args.list and ref.rstrip(":") in importers.REGISTRY):
@@ -433,6 +446,13 @@ def cmd_install(ctx: Ctx, args) -> None:
         return
     if args.list:
         raise Fail(f"--list needs an importer: {', '.join(n + ':' for n in sorted(importers.REGISTRY))}")
+    if _index_name(ref):
+        entry = indexcmds.lookup(ctx, ref)
+        if entry is not None:
+            indexcmds.install_entry(ctx, args, entry)
+            return
+        why = "the themes index is off (LOFT_THEME_INDEX=none)" if index.disabled() else f"no themes index ({index.source()})"
+        raise Fail(f"'{ref}' is not a pack directory, tarball, git URL or importer ref, and {why}")
     with tempfile.TemporaryDirectory(prefix="loft-install-") as tmpd:
         tmp = Path(tmpd)
         local = Path(ref).expanduser()
@@ -447,31 +467,52 @@ def cmd_install(ctx: Ctx, args) -> None:
             _extract(archive, tmp / "x")
             root = tmp / "x"
         elif _is_git(ref):
-            url = ref.removeprefix("git+")
-            r = subprocess.run(["git", "clone", "--quiet", "--depth", "1", url, str(tmp / "x")])
-            if r.returncode != 0:
-                raise Fail(f"git clone {url} failed")
-            root = tmp / "x"
+            root = _fetch_git(ref, None, tmp / "x")
         else:
             raise Fail(f"'{ref}' is not a pack directory, tarball or git URL")
+        _install_roots(ctx, root, args)
 
-        roots = _find_pack_roots(root, args.subdir)
-        names = []
-        for r in roots:
-            ctx.validate_any(r, others=[r.parent] if len(roots) > 1 else [])
-            name = pack_id(r)
-            if not NAME.match(name) or name == "default":
-                raise Fail(f"pack name '{name}' is not a valid theme name")
-            if (ctx.user_themes / name).exists() and not args.force:
-                raise Fail(f"{name} is already installed ({ctx.user_themes / name}); use --force to replace it")
-            names.append(name)
-        for r, name in zip(roots, names):
-            dest = ctx.user_themes / name
-            if dest.exists():
-                shutil.rmtree(dest)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            _copy_pack(r, dest)
-            print(f"loft: installed {name} → {dest}")
+
+def _fetch_git(ref: str, rev: str | None, dest: Path) -> Path:
+    """A shallow checkout of a git URL (at rev: a branch, tag or commit)."""
+    url = ref.removeprefix("git+")
+    if rev is None:
+        r = subprocess.run(["git", "clone", "--quiet", "--depth", "1", url, str(dest)])
+        if r.returncode != 0:
+            raise Fail(f"git clone {url} failed")
+        return dest
+    dest.mkdir(parents=True)
+    for cmd in (["init", "--quiet"], ["fetch", "--quiet", "--depth", "1", url, rev], ["checkout", "--quiet", "FETCH_HEAD"]):
+        r = subprocess.run(["git", "-C", str(dest), "-c", "advice.detachedHead=false", *cmd])
+        if r.returncode != 0:
+            raise Fail(f"git {cmd[0]} {url} {rev} failed")
+    return dest
+
+
+def install_git(ctx: Ctx, args, url: str, rev: str | None) -> None:
+    """Install the pack(s) of a git repo at rev (`--subdir`: inside it)."""
+    with tempfile.TemporaryDirectory(prefix="loft-install-") as tmpd:
+        _install_roots(ctx, _fetch_git(url, rev, Path(tmpd) / "x"), args)
+
+
+def _install_roots(ctx: Ctx, root: Path, args) -> None:
+    roots = _find_pack_roots(root, args.subdir)
+    names = []
+    for r in roots:
+        ctx.validate_any(r, others=[r.parent] if len(roots) > 1 else [])
+        name = pack_id(r)
+        if not NAME.match(name) or name == "default":
+            raise Fail(f"pack name '{name}' is not a valid theme name")
+        if (ctx.user_themes / name).exists() and not args.force:
+            raise Fail(f"{name} is already installed ({ctx.user_themes / name}); use --force to replace it")
+        names.append(name)
+    for r, name in zip(roots, names):
+        dest = ctx.user_themes / name
+        if dest.exists():
+            shutil.rmtree(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        _copy_pack(r, dest)
+        print(f"loft: installed {name} → {dest}")
 
 
 def _theme_names(ctx: Ctx, pack_root: Path) -> set[str]:
@@ -1170,6 +1211,7 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true", help="names, paths and palettes as JSON")
     s.add_argument("--themes", action="store_true", help="themes with their variants and collection (the facet model)")
     s.add_argument("--collection", help="only this collection (builtin, user, cozytile, qylock, …); implies --themes")
+    s.add_argument("--available", action="store_true", help="what the themes index offers and isn't installed (= theme browse --available)")
     s.set_defaults(fn=cmd_list)
     s = sub.add_parser("current", help="print the active theme")
     s.add_argument("--json", action="store_true", help="theme, variant, customized and pinned kinds")
@@ -1229,6 +1271,7 @@ def parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_validate)
 
     themecmds.add_theme_parsers(sub)
+    indexcmds.add_parsers(sub)
 
     s = sub.add_parser("migrate", help="= `loft library migrate` (themes, variants, settings; dry run)")
     _migrate_args(s)
@@ -1240,13 +1283,13 @@ def parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser(
         "install",
-        help="install a pack from a directory, tarball, git URL or importer",
+        help="install a pack by name from the themes index, or from a directory, tarball, git URL or importer",
         description="Importers fetch and convert upstream themes: "
         + "; ".join(f"{n}: {m.DESCRIPTION}" for n, m in sorted(importers.REGISTRY.items())),
     )
     s.add_argument(
         "source",
-        help="path | tarball | git URL | IMPORTER:THEME[,THEME…]|all[@REF] (importers: "
+        help="NAME from the themes index (loft theme browse) | path | tarball | git URL | IMPORTER:THEME[,THEME…]|all[@REF] (importers: "
         + ", ".join(sorted(importers.REGISTRY))
         + ")",
     )
@@ -1395,6 +1438,8 @@ def parser() -> argparse.ArgumentParser:
     themecmds.add_kind_parsers(top)
     # The login screen (SDDM) following the lock screen (PLAN §4.5).
     greeter.add_parser(top)
+    # Fan control (System Monitor → Disks & Sensors) through its pkexec helper.
+    fans.add_parser(top)
     spotify.add_parser(top, _fail)
     doctor.add_parser(top)
     mcp.add_parser(top)
@@ -1425,7 +1470,7 @@ def main(argv: list[str] | None = None) -> int:
     except Fail as e:
         print(f"loft: {e}", file=sys.stderr)
         return 1
-    except (PackError, FacetError, greeter.GreeterError) as e:
+    except (PackError, FacetError, greeter.GreeterError, fans.FanError) as e:
         print(f"loft: {e}", file=sys.stderr)
         return 1
     return 0

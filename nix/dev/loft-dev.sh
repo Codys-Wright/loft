@@ -414,7 +414,7 @@ if [ -n "${QT_FFMPEG_DECODING_HW_DEVICE_TYPES+x}" ]; then
 elif [ "$gpu" != 1 ] && { [ "$headless" = 1 ] || [ -n "$output_sizes" ]; }; then
   video_env='"QT_FFMPEG_DECODING_HW_DEVICE_TYPES=," '
 else
-  video_env='"QT_FFMPEG_DECODING_HW_DEVICE_TYPES=vaapi" "LOFT_QT_VAAPI_ZERO_COPY=1" '
+  video_env='"QT_FFMPEG_DECODING_HW_DEVICE_TYPES=vaapi" "LOFT_QT_VAAPI_ZERO_COPY=1" "NVD_MAX_DETACHED_BACKING_IMAGES=0" '
 fi
 shell_env="$shell_env$video_env"
 
@@ -427,9 +427,10 @@ shell_env="$shell_env$video_env"
 ws_kdl=""
 ws_env=""
 if [ "$ws_layers" = 1 ]; then
-  # niri-loft's traffic lights too (nix/niri/traffic-lights.patch).
+  # niri-loft's title bar too (nix/niri/title-bar.patch).
   ws_kdl="include \"$root/niri/workspace-wallpapers.kdl\"
-include \"$root/niri/traffic-lights.kdl\""
+include \"$root/niri/title-bar.kdl\"
+include optional=true \"$dir/current/niri-loft.kdl\""
   ws_env='"LOFT_NIRI_WORKSPACE_LAYERS=1" '
 fi
 

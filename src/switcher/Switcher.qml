@@ -6,10 +6,20 @@ import Quickshell.Wayland
 import qs.components
 import qs.services
 
-// Cmd+Tab app switcher (javiiervm's AltTabOverlay, on niri). niri binds
-// Mod+Tab / Mod+Shift+Tab to `switcher next|prev`; the first call opens it
-// with keyboard focus, so releasing the modifier commits (focuses the
-// selected app's most recent window) and Escape cancels.
+// ⌘Tab app switcher (javiiervm's AltTabOverlay, on niri). niri binds
+// ⌘Tab / ⌘⇧Tab to `switcher next|prev` (niri/shell-binds.kdl.in); the first
+// call takes the keyboard, so letting go of ⌘ commits (focuses the selected
+// app's most recent window) and Escape cancels. Like niri's own switcher the
+// panel shows only after `showDelay`: a quick tap goes back to the previous
+// app without flashing it. ⌥Tab and ⌘` are niri's window switcher.
+//
+// `switcher windows` (⌃↓, macOS App Exposé) opens it on the focused app's
+// windows instead, one entry per window, and leaves it open (no modifier to
+// let go of): ←→ / hover pick, Return / click focuses, Escape closes.
+//
+// Where niri can capture single windows (niri-loft, WindowCapture), each
+// app shows its latest window, refreshed every second while the switcher is
+// open, with the app icon on it; elsewhere, just the icon.
 PanelWindow {
     id: root
 
@@ -17,11 +27,21 @@ PanelWindow {
     screen: modelData
 
     property bool open: false
+    // The panel appears once ⌘ has been held this long (niri's open-delay-ms).
+    readonly property int showDelay: 120
     property int selected: 0
     // One entry per app, most recently focused first: { appId, windows[] }.
+    // In the windows mode, one entry per window of the focused app.
     property var apps: []
+    // The windows mode (App Exposé): stays open until a pick or Escape.
+    property bool windowsMode: false
 
     readonly property bool onThisScreen: (Niri.focusedWorkspace?.output ?? modelData.name) === modelData.name
+
+    // Window thumbnails, sized so every app fits on the display.
+    readonly property bool thumbs: WindowCapture.canWindows
+    readonly property int cellW: thumbs ? Math.max(120, Math.min(220, Math.floor((modelData.width - 100) / Math.max(1, apps.length)) - 14)) : 96
+    readonly property int cellH: thumbs ? Math.round(cellW * 0.72) : 96
 
     visible: open
     WlrLayershell.layer: WlrLayer.Overlay
@@ -29,18 +49,21 @@ PanelWindow {
     WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: Math.max(240, row.implicitWidth + 40)
-    implicitHeight: 170
+    implicitHeight: cellH + 74
     color: "transparent"
 
     BackgroundEffect.blurRegion: blur
     Region {
         id: blur
-        item: Theme.blur && open ? panel : null
+        item: Theme.blur && open && panel.opacity > 0 ? panel : null
         radius: panel.radius
     }
 
+    function stamp(w) {
+        return w.focus_timestamp ? w.focus_timestamp.secs * 1e9 + w.focus_timestamp.nanos : 0;
+    }
+
     function snapshot() {
-        const stamp = w => w.focus_timestamp ? w.focus_timestamp.secs * 1e9 + w.focus_timestamp.nanos : 0;
         const byApp = {};
         for (const w of Niri.windows.slice().sort((a, b) => stamp(b) - stamp(a))) {
             const id = w.app_id || "unknown";
@@ -49,6 +72,29 @@ PanelWindow {
             byApp[id].windows.push(w);
         }
         return Object.values(byApp);
+    }
+
+    // App Exposé: the focused app's windows, most recent first (the focused
+    // one selected). A second ⌃↓ closes it, like macOS.
+    function showWindows() {
+        if (!onThisScreen)
+            return;
+        if (open) {
+            open = false;
+            return;
+        }
+        const appId = Niri.focusedWindow?.app_id;
+        if (!appId)
+            return;
+        apps = Niri.windows.filter(w => w.app_id === appId).sort((a, b) => stamp(b) - stamp(a)).map(w => ({
+                    appId: appId,
+                    windows: [w]
+                }));
+        selected = 0;
+        windowsMode = true;
+        open = true;
+        showTimer.stop();
+        panel.opacity = 1;
     }
 
     function step(delta) {
@@ -61,15 +107,31 @@ PanelWindow {
             // Like macOS: the first press selects the previous app.
             selected = apps.length > 1 ? (delta > 0 ? 1 : apps.length - 1) : 0;
             open = true;
+            showTimer.restart();
             return;
         }
         selected = (selected + delta + apps.length) % apps.length;
+        // Stepping again means ⌘ is held: show the panel now.
+        showTimer.stop();
+        panel.opacity = 1;
     }
 
     function commit() {
         if (open && apps[selected])
             Niri.focusWindow(apps[selected].windows[0].id);
         open = false;
+    }
+
+    onOpenChanged: if (!open) {
+        windowsMode = false;
+        showTimer.stop();
+        panel.opacity = 0;
+    }
+
+    Timer {
+        id: showTimer
+        interval: root.showDelay
+        onTriggered: panel.opacity = 1
     }
 
     // IPC (SwitcherIpc, one handler for all screens).
@@ -84,6 +146,8 @@ PanelWindow {
                 root.commit();
             else if (cmd === "cancel")
                 root.open = false;
+            else if (cmd === "windows")
+                root.showWindows();
         }
     }
 
@@ -92,11 +156,15 @@ PanelWindow {
         anchors.fill: parent
         radius: 30
         strength: 1.6
+        opacity: 0
 
         focus: root.open
         Keys.onReleased: event => {
-            // Modifier released → commit (Alt when nested, Super otherwise).
-            if (event.key === Qt.Key_Alt || event.key === Qt.Key_Super_L || event.key === Qt.Key_Super_R || event.key === Qt.Key_Meta)
+            // ⌘ let go → commit. ⌘ is Super, the Level3 key (AltGr /
+            // Mode_switch) with lv3:lwin_switch, or Alt when niri is nested.
+            // Not in the windows mode: ⌃↓ arrives with a Mod that xremap
+            // lets go of at once.
+            if (!root.windowsMode && [Qt.Key_Alt, Qt.Key_AltGr, Qt.Key_Mode_switch, Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_Meta].includes(event.key))
                 root.commit();
         }
         Keys.onPressed: event => {
@@ -128,17 +196,33 @@ PanelWindow {
                         required property int index
                         readonly property bool current: index === root.selected
 
-                        Layout.preferredWidth: 96
-                        Layout.preferredHeight: 96
-                        radius: 22
+                        Layout.preferredWidth: root.cellW
+                        Layout.preferredHeight: root.cellH
+                        radius: root.thumbs ? 18 : 22
                         color: current ? Theme.withAlpha(Theme.text, 0.18) : "transparent"
                         border.width: current ? 1 : 0
                         border.color: Theme.glassBorder
 
+                        // The app's latest window, captured while the switcher is open
+                        // (from the first press, so it's there when the panel shows).
+                        WindowThumb {
+                            id: thumb
+                            anchors {
+                                fill: parent
+                                margins: 8
+                                bottomMargin: 14
+                            }
+                            windowId: cell.modelData.windows[0].id
+                            active: root.thumbs && root.open
+                        }
+
+                        // The icon: alone, or on the thumbnail's lower edge.
                         AppIcon {
-                            anchors.centerIn: parent
-                            width: 72
-                            height: 72
+                            readonly property int side: thumb.ready ? 44 : 72
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: thumb.ready ? parent.height - side - 2 : (parent.height - side) / 2
+                            width: side
+                            height: side
                             appId: cell.modelData.appId
                         }
 

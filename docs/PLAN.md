@@ -281,7 +281,9 @@ Nix calls the *same* renderer at build time for the built-in packs, so
 **Theme manager CLI** (`loft theme`; the shell's selector is a GUI over the same commands):
 
 ```
-loft theme list [--installed|--available]        # local packs + index entries
+loft theme list [--available]                    # local packs; --available: index entries not installed
+loft theme browse|search [words…] / info <name>  # the themes index (loft-themes)
+loft theme install <name>                        # by name, from the index (a pack or an importer theme)
 loft theme vibes [<name>] [--json] [--dir DIR]    # wallpapers + lock designs that fit (own, curated, ranked)
 loft theme apply <name>                          # render (cached) → swap current → reload hooks
 loft theme install <git-url|tarball|path>        # any pack
@@ -308,9 +310,12 @@ third-party is committed here or built into a machine:
   wallpaper, SDDM art → `greeter/`. Cozytile's SDDM themes are themselves
   qylock-format, so `greeter/` could also be declared as the pack's `lock`.
 
-**Index for sharing:** `loft theme` reads one or more index URLs (JSON:
-name → source, preview image). The default index is a repo of ours listing
-our own packs plus the qylock/cozytile importer entries. Anyone can host one.
+**Index for sharing:** `loft theme` reads one index (`$LOFT_THEME_INDEX`:
+a path or URL, `none` = off; cached a day). The default is `index.json` in
+our loft-themes repo (§8.3), listing our own packs plus every qylock/cozytile
+importer theme, with preview palettes, vibe groups and curated palettes
+(§8.2). Anyone can host one. Format and commands: THEME-FORMAT.md, "Themes
+index".
 
 **Overrides and save-back** (§4.1): per-token tweaks go to
 `overrides/theme-<name>.json`. `loft save --as-theme <new>` writes
@@ -413,45 +418,87 @@ src/
 
 ---
 
-## 5. Keyboard: macOS parity (decision needed)
+## 5. Keyboard: macOS parity (decided: Option A)
 
 The constraint is that **the same physical keys do the same thing on
 THEBATTLESHIP and voyager.**
 
-What exists on Linux today:
-
-| Physical key | Linux today | macOS native |
+| Physical key | Linux (Loft) | macOS native |
 |---|---|---|
-| Super (Cmd position) | **Cmd**: app shortcuts via xremap (copy, paste, tabs, …) | Cmd |
-| Caps (hold), Esc (hold), Right Ctrl | **niri Mod** (Mod5) | — |
-| Ctrl | Ctrl (terminal signals) | Ctrl (terminal, Emacs text nav, **Ctrl+←/→ Spaces, Ctrl+↑ Mission Control**) |
+| Super (Cmd position) | **Cmd**: app shortcuts via xremap (copy, paste, tabs, …); niri Mod too where `lv3:lwin_switch` is set (the fleet) | Cmd |
+| Caps (hold), Esc (hold), Right Alt, Right Ctrl (hold, `right-ctrl-mod`) | **niri Mod** (ISO_Level3_Shift) | — (voyager: Caps-hold → Hyper) |
+| Left Ctrl | Ctrl (terminal signals, readline) **+ ⌃←/→/↑/↓ aliases below** | Ctrl (terminal, Emacs text nav, Ctrl+←/→ Spaces, Ctrl+↑ Mission Control, Ctrl+↓ App Exposé) |
 | Alt | Option (word navigation) | Option |
 
-**Option A, recommended: Caps-hold = WM key on both machines, plus mac-native Ctrl aliases.**
-- Keep Linux as it is. On voyager, map Caps-hold → Hyper with kanata or
-  Karabiner, managed from nix-darwin, and bind the WM (OmniWM per
-  `desktop-design.md`) on Hyper. The whole WM layer is then identical.
-- Add macOS's *own* WM-ish shortcuts on Linux too: Ctrl+←/→ = workspace
-  left/right, Ctrl+↑ = niri overview (Mission Control), Ctrl+↓ = app windows.
-  Muscle memory from stock macOS then works on niri as well.
-- Ctrl+letters stay untouched (terminals, readline, Emacs-style text editing).
+**Option A (decided 2026-10-31): Caps-hold = WM key on both machines, plus
+macOS's own Ctrl aliases on Linux.** Option B (Ctrl as the WM key) was
+rejected: Ctrl+letters collide with terminal signals (C, D, R, W, L, Z) and
+with Emacs text navigation in every macOS text field (A, E, K, N, P).
 
-**Option B: Ctrl as the WM key (Cody's suggestion).** It mirrors macOS
-Spaces for the arrows, but Ctrl+letters collide with terminal signals (C, D,
-R, W, L, Z) and with Emacs text navigation in every macOS text field (A, E, K,
-N, P). It needs per-app exceptions on both OSes.
+- The WM layer stays on Caps-hold (niri Mod). voyager maps Caps-hold → Hyper
+  with kanata from nix-darwin and binds its WM on Hyper (fleet repo).
+- macOS's own WM-ish shortcuts work on Linux too, Ctrl+letters untouched:
 
-Either way, add a **shortcut audit** against the macOS list and fill gaps in
-`_mac-keybindings.nix` / niri binds:
+  | macOS | Loft | niri bind |
+  |---|---|---|
+  | ⌃← / ⌃→ (move a space) | previous / next **Loft space** (`spaces prev/next`; a space spans every display like a macOS Space). With Settings → Features → Spaces off, niri's workspace up / down instead (niri's workspaces are vertical, so ← = up) | Mod+Ctrl+Left / Right |
+  | ⌃↑ Mission Control | niri overview | Mod+Ctrl+Up |
+  | ⌃↓ App Exposé | Loft's switcher on the focused app's windows (`switcher windows`: one entry per window, stays open; ←→ / hover, Return / click, Esc; ⌃↓ again closes). niri's own per-app switcher (⌘`) can't be opened from IPC and closes on the modifier release | Mod+Ctrl+Down |
 
-- Cmd+Space Spotlight · Cmd+Tab / Cmd+` app switcher and same-app windows
-- Cmd+Q quit app vs Cmd+W close window · Cmd+H hide · Cmd+M minimize
-- Cmd+Shift+3/4/5 screenshots · Ctrl+Cmd+Q lock · Cmd+Opt+Esc force quit
-- Cmd+, settings · Cmd+Ctrl+F fullscreen
+**The conflict, and how it is avoided.** xremap sends apps Ctrl+←/→/↑/↓ for
+⌥←/→/↑/↓ (word / paragraph navigation) and Ctrl+Home/End for ⌘↑/↓. Its
+output is a virtual keyboard that niri reads like any other, so a niri bind
+on Ctrl+← would swallow word navigation. So **niri never binds a plain
+Ctrl+arrow.** xremap's `mac-parity` group takes the *physical* ⌃+arrow and
+re-sends it with Right Alt added (Right Alt is niri's Mod through
+`lv3:ralt_switch`): ⌃← reaches niri as Mod+Ctrl+Left, the same bind the
+Caps-hold WM key uses. xremap never re-reads its own output, so the
+Ctrl+Left it sends for ⌥← is not touched. The group is `exact_match`, so
+⌃⇧← (select by word on Linux) and ⌃⌘← stay what they were.
+`tests/test_parity.py` checks that no key any xremap group sends apps is a
+niri bind. Without the keyboard layer (xremap off, or an app in *Apps to
+leave alone*) ⌃←/→ are plain Ctrl+arrows for the app: no alias, nothing
+broken. Right Ctrl with `right-ctrl-mod` on is the WM key, so the aliases
+are on Left Ctrl.
 
-Keep the bind table as **shared Nix data**, generating both niri `binds.kdl`
-fragments and the voyager WM/kanata config. That answers the open question in
-`desktop-design.md`.
+**The bind table is data:** `cli/loft/keymap/parity.json` (flake output
+`lib.keyboardParity`). `python3 -m loft.parity --write` generates the
+parity block of `niri/shell-binds.kdl.in` and the `mac-parity` xremap
+group in `cli/loft/keymap/mac.json` from it; `tests/test_parity.py` fails
+when either drifts. Each entry has the macOS keys, the niri bind, how xremap
+gets the physical keys there (`via`: `ctrl` adds Right Alt, `cmd` passes
+⌃⌘/⌘ combos through with exact match plus a Super twin bind for setups
+without `lwin_switch`, `super` re-sends ⌘H/⌘M on Right Super) and, for
+voyager, the `com.apple.symbolichotkeys` id of the native shortcut.
+
+**Left for voyager (fleet repo, nix-darwin):** kanata Caps-hold → Hyper;
+the WM (OmniWM or AeroSpace, §8.5) bound on Hyper from Loft's Mod binds
+(base.kdl / shell-binds); and making sure the native shortcuts in the table
+are on (`system.defaults.CustomUserPreferences."com.apple.symbolichotkeys"`
+with the `macHotkey` ids: 79/81 spaces, 32 Mission Control, 33 App Exposé,
+64 Spotlight) by reading `inputs.loft.lib.keyboardParity`. The WM layer
+itself isn't in the table yet: that comes with the voyager WM choice.
+
+### Shortcut audit (checked 2026-10-31)
+
+Physical keys on a Mac-layout keyboard, Loft's xremap layer on.
+
+| macOS | Linux (Loft) | Status |
+|---|---|---|
+| ⌘Space Spotlight | Mod+Space (⌘ = Mod with lwin_switch) / Super+Space (without) → Spotlight | ✓ (Super+Space added) |
+| ⌘Tab / ⌘⇧Tab | Mod/Super+Tab → Loft's app switcher | ✓ |
+| ⌘\` | xremap → Alt+grave → niri recent-windows, this app's windows | ✓ |
+| ⌘Q quit app | xremap → Alt+F4 → quit guard (hold to quit protected apps) | ✓ |
+| ⌘W close window | xremap → Ctrl+W (terminals Ctrl+Shift+W), the app closes the tab / window | ✓ |
+| ⌘H hide | was Ctrl+H to the app; now Super+H (Right Super) → `appmenu hide`: the app's windows park like the menu's Hide | ✓ (filled) |
+| ⌘M minimize | was unbound (Mod+M leaked to the app); now Super+M → `appmenu minimize`: the focused window parks (niri has no minimize) | ✓ (filled) |
+| ⌘⇧3 / 4 / 5 | Super+Shift+3/4/5 → capture screen / area / toolbar (with lwin_switch via the `mac-screenshots` group) | ✓ |
+| ⌃⌘Q lock | Mod/Super+Ctrl+Q → lock. Before: xremap's ⌘Q → Alt+F4 also took ⌃⌘Q (extra modifiers match unless exact) and sent Ctrl+Alt+F4 — a VT switch | ✓ (fixed) |
+| ⌘⌥Esc force quit | Mod/Super+Alt+Escape → System Monitor → Processes (Quit / Force Quit) | ✓ (filled) |
+| ⌘, settings | xremap → Ctrl+comma: the app's own settings, like macOS. Loft Settings: Mod+Comma (Caps+,) | ✓ |
+| ⌃⌘F full screen | Mod/Super+Ctrl+F → fullscreen-window (was Ctrl+F to the app: find) | ✓ (filled) |
+| ⌃⌘V / ⌃⌘Space / ⌃⌘A / ⌃⌘S (Loft's own) | Quick Panel / Radial Menu / Arrange / Space Switcher: same fix as ⌃⌘Q, the ⌘→Ctrl groups no longer turn them into Ctrl+V / A / S | ✓ (fixed) |
+| ⌃←/→, ⌃↑, ⌃↓ | Spaces, overview, App Exposé (above) | ✓ (new) |
 
 ---
 
@@ -460,7 +507,12 @@ fragments and the voyager WM/kanata config. That answers the open question in
 Each phase ends with something runnable in the nested dev session (Phase 0),
 and nothing replaces the working Noctalia session until Phase 6.
 
-### Phase 0: Repo + dev loop *(do first)*
+**Status (2026-10-31):** Phases 0–5 and 1c are done, Phase 7's backlog is
+mostly shipped, and Phase 6 (cut-over) is open. Per-feature status lives in
+[FEATURES.md](FEATURES.md), the source of truth; the notes below only say
+what each phase still lacks.
+
+### Phase 0: Repo + dev loop *(done)*
 - Create `Codys-Wright/loft` (flake-parts) and
   `Codys-Wright/loft-themes`. Credit javiiervm in `CREDITS.md`.
 - `nix run` / `nix run .#dev`: niri **nested as a window** (inside KDE
@@ -478,9 +530,12 @@ and nothing replaces the working Noctalia session until Phase 6.
 
 **Done when:** `nix run github:Codys-Wright/loft` opens a nested niri
 window with a glass bar from any machine, and in a checkout `nix run .#dev`
-updates live when KDL or QML is edited.
+updates live when KDL or QML is edited. *(Met; `loft-dev` also runs headless
+test sessions, and `loft-live` runs a checkout on the real desktop.)*
+nirimod was not packaged: Settings → Displays / Keyboard Shortcuts / Layout &
+Motion cover its ground (Phase 7).
 
-### Phase 1: Theme spine *(engine done — branch `phase1-theme-engine`)*
+### Phase 1: Theme spine *(done; fleet-side Stylix narrowing open)*
 
 > **Status:** pack format (`docs/THEME-FORMAT.md`, `themes/schema.json`), the
 > runtime renderer + `loft theme list|current|apply|render|validate`, the
@@ -488,8 +543,10 @@ updates live when KDL or QML is edited.
 > Ghostty, GTK color-scheme), consumers niri/kitty/Ghostty/GTK/walker/Noctalia,
 > `pkgs.loft-themes-builtin` rendered by the same CLI, and checks (schema,
 > unit, golden, `niri validate`, `ghostty +validate-config`) are in.
-> **Not yet:** the `overrides/` directory (lands with the settings UI /
-> `loft save`, §4.1) and the fleet-side Stylix narrowing.
+> **Since:** the `overrides/` directory landed with the settings UI and
+> `loft-niri` (§4.1), and the facet model replaced v1 packs
+> (THEME-ARCHITECTURE.md). **Open:** the fleet-side Stylix narrowing
+> (nix-config, with Phase 6).
 >
 > **Design notes / deviations:**
 > - The CLI is Python (stdlib + `jsonschema`), replacing `cli/loft.sh`: JSON,
@@ -519,7 +576,7 @@ updates live when KDL or QML is edited.
 blur), terminals, GTK and Noctalia live with no rebuild, and the default
 theme comes from Nix.
 
-### Phase 1b: Theme manager + importers *(manager + importers done; index TODO)*
+### Phase 1b: Theme manager + importers *(done; index — branch `theme-index`, #5)*
 
 > **Status:** `loft theme install <dir|tarball|tarball URL|git URL> [--subdir]
 > [--force]` (validated against the schema, manifest required), `new [--from]`,
@@ -528,7 +585,20 @@ theme comes from Nix.
 > sparse at install time and write `cozytile-<theme>` / `qylock-<theme>` packs
 > (manifest `upstream` + `lock`; see docs/THEME-FORMAT.md "Importers").
 > `cozytile:all` downloads ~15 MB; a qylock theme downloads only its own
-> directory (0.3–78 MB). Index support is not started.
+> directory (0.3–78 MB).
+>
+> **Index** (#5): the themes index lives in loft-themes (§8.3), format 2
+> (`entries`: name, title, collection, the theme it becomes, source = git
+> URL + rev + path or importer + id, preview palette/image, `curated`
+> palette; `importers`; `vibes`; a v1 index still reads). `loft theme
+> browse|search|info`, `list --available`, `install NAME` (through the
+> importer / git install paths; a git entry at its rev), `index where`.
+> `loft theme index build` generates loft-themes' `index.json` from its
+> `packs/`, `catalog.json` and the importers' upstream catalogs
+> (deterministic, `--check` for CI, `--extract` records derived palettes);
+> loft-themes' `tools/gen-index` runs it. Curated palettes are applied at
+> import (manifest `upstream.palette: curated`). Tests:
+> `tests/test_theme_index.py`.
 
 - `install|new|export|remove`, index support, `~/.local/share/loft themes`.
 - `cozytile:` importer (all five) and `qylock:` importer (palette + assets;
@@ -554,13 +624,11 @@ works on a machine whose build contains none of them. *(Met.)*
 > wallpapers are per theme (`overrides/shell.json` `perTheme`); "Preview
 > lock" locks with the chosen design. See THEME-FORMAT.md, "Vibes".
 
-**Open:** qylock designs need `SddmComponents`, `Qt5Compat.GraphicalEffects`
-and `QtMultimedia` on the shell's QML import path; the packaged
-`loft-shell` doesn't add them yet (they load in a session whose
-environment already has them, e.g. a KDE session with SDDM installed).
-Videos are not played as desktop wallpapers (the still is shown).
+**Since:** the packaged shell puts qylock's QML modules on its import path
+(`lockQmlPath` in nix/packages.nix), and videos play as desktop wallpapers
+(FEATURES.md, "Live (video) wallpapers").
 
-### Phase 2: Shell skeleton
+### Phase 2: Shell skeleton *(done)*
 - `src/` skeleton, `loft-shell` package, HM systemd user service, dev/installed split.
 - Services: `Niri` adapter (event-stream), `Theme`, `Settings` (defaults ⊕
   overrides).
@@ -570,20 +638,21 @@ Videos are not played as desktop wallpapers (the still is shown).
 **Done when:** in nested niri, the bar tracks workspaces and focus, recolors
 on `loft theme apply`, and a setting changed in `overrides/` applies live.
 
-### Phase 3: Core shell features
+### Phase 3: Core shell features *(done)*
 - Dock, Control Center, notifications (Quickshell server), OSD, media,
   Dynamic Island, Cmd+Tab switcher, theme selector, wallpaper picker.
 - Settings app (writes overrides and marks values that differ from the
   default).
 
-### Phase 4: Launcher + save-back
+### Phase 4: Launcher + save-back *(done)*
 - walker/elephant service, Spotlight theme wired to the theme bundle, binds.
 - `loft diff|save|save --as-theme`.
 
 **Done when:** a theme tweaked in the selector can be saved as a new theme
 JSON in the repo, and it is the default after the next `just switch`.
+*(Met through the facet model: `loft theme diff`, `save-variant`, `save-as`.)*
 
-### Phase 5: Lock + greeter
+### Phase 5: Lock + greeter *(done; fleet greeter switch open)*
 - Loader SDDM theme + loader Quickshell lock + vendored qylock shim. Default
   mac-style design, palette-driven.
 - Lock wired to swayidle and Ctrl+Cmd+Q. The loader replaces MacTahoe-Dark.
@@ -639,8 +708,9 @@ changes both the lock screen and the login screen with no rebuild.
   `greeter-preview` (qylock-wuwa with its video background, and the built-in
   design over the desktop wallpaper). `followLock`: `loft theme apply`
   re-syncs in the background when the greeter's key changes.
-- **Not done yet:** swayidle wiring (documented in the README only) and
-  enabling `programs.loft.greeter` in the fleet (dropping MacTahoe-Dark).
+- **Since:** idle locking is wired (`programs.loft.idle`). **Not done yet:**
+  enabling `programs.loft.greeter` in the fleet (dropping MacTahoe-Dark),
+  with Phase 6.
 
 **Known issues:**
 - Quickshell 0.3.2 can't hot-reload while locked. `WlSessionLock`'s reload
@@ -651,13 +721,21 @@ changes both the lock screen and the login screen with no rebuild.
 - Multi-monitor focus handling (password field only on the focused output)
   is untested: the nested dev session has a single output.
 
-### Phase 6: Cut-over + keyboard parity
+### Phase 6: Cut-over + keyboard parity *(in progress)*
+
+> **Status (2026-10-31):** nix-config #61 already replaced Noctalia with Loft
+> on every desktop host, but isn't deployed yet; [CUTOVER.md](CUTOVER.md) has
+> the per-host gaps and the nix-config checklist (THEBATTLESHIP's other
+> accounts need monitor power-off disabled first). The Linux side of the
+> keyboard decision is done (§5, Option A); voyager's is open.
+
 - Replace Noctalia in `startup.kdl`/aspects. Delete `noctalia` bits and
   `wlr-which-key` if the shell takes it over.
 - Keyboard decision (§5) implemented on both machines from shared bind data.
-  voyager gets kanata/Karabiner + WM config in nix-darwin.
+  *Linux side done (Option A, `cli/loft/keymap/parity.json`).* voyager gets
+  kanata + WM config in nix-darwin (fleet repo), reading `lib.keyboardParity`.
 
-### Phase 7+: Grow the system (the vorssaint-utils feature list)
+### Phase 7+: Grow the system (the vorssaint-utils feature list) *(mostly shipped)*
 Our own shell's backlog, with vorssaint-utils as the reference for "what a
 complete menu-bar system does":
 
@@ -668,6 +746,11 @@ complete menu-bar system does":
 - Plus a settings UI that covers nirimod's ground (monitor arrangement, bind
   conflicts, animation curves) inside our shell. That replaces nirimod once it
   exists.
+
+Shipped (FEATURES.md has each): mixer, system monitor, snapping, clipboard
+history + snippets, shelf, Command Bar, radial menu, capture/recording,
+keep-awake, the nirimod-style Settings pages. Partial or open: fan control
+(#7), window thumbnails in the switcher and dock previews (#8).
 
 ---
 
@@ -691,8 +774,10 @@ docs/PLAN.md  CREDITS.md  LICENSE
 
 **loft-themes**
 ```
-index.json                # name → source, preview; includes qylock:*/cozytile:* importer entries
-packs/<name>/             # manifest.json, theme.json (palette + glass), optional wallpaper/fonts/lock/greeter/apps
+index.json                # generated (`tools/gen-index` = `loft theme index build`): format 2 entries for packs/ + every qylock/cozytile theme
+catalog.json              # hand-maintained: repo/branch, importers, per-entry overrides (tags, preview, curated palettes, hidden), vibe groups
+packs/<name>/             # v1 (manifest.json + theme.json) or v2 (pack.json) packs; optional preview.{png,jpg,webp}
+tools/gen-index
 ```
 
 **Fleet (`~/.flake`) after integration**
@@ -713,20 +798,36 @@ den.hosts.x86_64-linux.THEBATTLESHIP.settings.desktop = {
 
 ## 8. Open decisions
 
-1. **Keyboard:** Option A (Caps-hold WM key on both + mac Ctrl aliases) or
-   Option B (Ctrl as WM key)? *Recommend A.*
-2. **Pack palette mapping for imports:** when a qylock or Cozytile theme has
-   no explicit palette, extract it from the wallpaper (matugen/wallust) and
-   let the user fix it in the editor. Or require hand-mapping each one once
-   and publishing the results in our index? *Leaning: extract, then curate
-   the ones we use.*
-3. **Theme index home:** a separate public repo (e.g. `loft-themes`) holding
-   our own packs + importer entries, or a directory in this repo?
+1. ~~**Keyboard:** Option A or Option B?~~ Decided: A (below).
+2. ~~Pack palette mapping for imports~~ — decided, see below.
+3. ~~Theme index home~~ — decided, see below.
 4. **Shell name** (placeholder: `loft-shell`).
 5. **voyager WM:** stay with OmniWM (as `desktop-design.md` plans), or
    AeroSpace, which has a richer config, for the parity layer?
 
 ### Decided
+- **Keyboard (§5): Option A.** Caps-hold stays the WM key (niri Mod) on both
+  machines; macOS's own Ctrl aliases work on Linux (⌃←/→ spaces, ⌃↑
+  overview, ⌃↓ the app's windows), reaching niri as Mod+Ctrl+arrow through
+  xremap so plain Ctrl+arrows (⌥←/→ word navigation) stay the apps'.
+  Ctrl+letters untouched. The bind table is `cli/loft/keymap/parity.json`
+  (`lib.keyboardParity`); voyager's side lives in the fleet repo.
+- **Theme index home (§8.3, #5):** the separate public **loft-themes** repo
+  (`Codys-Wright/loft-themes`) holds `index.json` (generated), `catalog.json`
+  (curated data) and our shareable packs; Loft reads it by URL
+  (`$LOFT_THEME_INDEX`, default its raw GitHub URL) and nothing in it is a
+  build input. Loft carries the format, the reader and the generator
+  (`loft theme index build`), so they're tested with the CLI.
+- **Palette mapping for imports (§8.2, #5): extract, then curate the ones we
+  use.** Importers derive every palette automatically: the theme's own config
+  colors first (Cozytile: qtile/rofi/pywal; qylock: `theme.conf`), the rest
+  extracted from its background with our own median cut + k-means
+  (`palette.py`, not matugen/wallust), video frames via ffmpeg, roles the
+  upstream lacks filled and contrast-checked. Nothing requires hand-mapping.
+  Where a derived palette is wrong for a theme we use, a curated mapping
+  (any roles, and/or polarity) goes in loft-themes' `catalog.json` →
+  `index.json` `curated`, and is laid over the derived one at install time;
+  the result stays an ordinary pack, editable afterwards.
 - Themes are mainly **palette + glass/blur state**. The design language
   (Liquid Glass, mac-like components) is fixed, and themes need not be
   mac-like.

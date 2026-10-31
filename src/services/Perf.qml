@@ -9,7 +9,8 @@ import qs.services
 //
 //   - event-loop lag: a 100 ms timer notes how late it fires; lateness is
 //     time the GUI thread was busy (QML, rendering, a video frame upload…).
-//     Kept for the last 30 s: p50 / p99 / max, stalls over 50 ms.
+//     Kept for the last 30 s: p50 / p99 / max, stalls over 50 ms; counted
+//     from 20 s after the shell (re)loads.
 //   - CPU % and RSS from /proc/self/stat and /proc/self/statm every 5 s.
 //   - what usually costs: video wallpapers loaded / playing and how they
 //     decode (VideoWallpapers), wallpaper surfaces, child processes,
@@ -29,6 +30,18 @@ Singleton {
     readonly property int sampleMs: 5000
 
     // ── Event-loop lag ───────────────────────────────────────────────────
+    // Loading the shell (a start, a crash restart, a hot reload: every
+    // surface and service built anew) holds the GUI thread for seconds;
+    // that isn't the shell running slow, so lag counts once it has settled.
+    // (#16: on a desktop running the checkout live, every reload logged
+    // "shell slow" with a p99 of 150–2900 ms; between them p99 was 12–28 ms.)
+    readonly property int settleMs: 20000
+    property bool settled: false
+    Timer {
+        interval: root.settleMs
+        running: true
+        onTriggered: root.settled = true
+    }
     property var lags: []          // ms late, one per tick, last windowS
     property real lastTick: 0
     Timer {
@@ -37,7 +50,7 @@ Singleton {
         repeat: true
         onTriggered: {
             const now = Date.now();
-            if (root.lastTick > 0) {
+            if (root.lastTick > 0 && root.settled) {
                 const late = Math.max(0, now - root.lastTick - root.tickMs);
                 const l = root.lags;
                 l.push(late);
@@ -201,7 +214,7 @@ echo $n`, "sh", String(root.pid), String(Math.floor(Quickshell.launchTime.getTim
 
     function check() {
         const l = lagStats();
-        const bad = l.p99 > 50 || cpu > 60;
+        const bad = settled && (l.p99 > 50 || cpu > 60);
         troubleSamples = bad ? troubleSamples + 1 : 0;
         if (!troubled) {
             culprit = "";
@@ -234,6 +247,7 @@ echo $n`, "sh", String(root.pid), String(Math.floor(Quickshell.launchTime.getTim
             window: windowS,
             rssMB: rssMB,
             lag: lagStats(),
+            settled: settled,
             videos: {
                 loaded: v.loadedCount,
                 playing: v.playingCount,

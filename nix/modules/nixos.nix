@@ -1,4 +1,5 @@
 # NixOS module: programs.loft.greeter — the login screen follows the lock screen.
+# (Also brings programs.loft.fanControl, nix/modules/fans.nix.)
 #
 #   imports = [ inputs.loft.nixosModules.default ];
 #   programs.loft.greeter.enable = true;
@@ -12,7 +13,10 @@
 # /etc/loft/greeter.json tells the CLI the helper's path and whether a
 # `loft theme apply` re-syncs the greeter (followLock). PLAN §4.5.
 #
-# Checks: greeter-module (the options land in sddm.conf / polkit / etc) and
+# With home-manager on the host, it also makes every user's
+# programs.loft.niriPackage default to the system's programs.niri.package.
+#
+# Checks: niri-follows-system (that default), greeter-module (the options land in sddm.conf / polkit / etc) and
 # greeter-vm (a NixOS VM: a wheel user logged in on tty1 runs `loft greeter
 # sync` → pkexec → helper without a password; a user outside the group is
 # refused; a theme change re-syncs in the background).
@@ -60,6 +64,47 @@
           grep -q 'isInGroup("wheel")' ${pkgs.writeText "polkit.js" c.security.polkit.extraConfig}
           touch $out
         '';
+
+      # Home-manager users' programs.loft.niriPackage defaults to the system's
+      # niri (home-manager.sharedModules; stubbed here, Loft has no
+      # home-manager input), and only when niri is the system's compositor.
+      checks.niri-follows-system =
+        let
+          eval =
+            extra:
+            (self.inputs.nixpkgs.lib.nixosSystem {
+              modules = [
+                self.nixosModules.default
+                {
+                  options.home-manager.sharedModules = lib.mkOption {
+                    type = lib.types.listOf lib.types.raw;
+                    default = [ ];
+                  };
+                  config = {
+                    nixpkgs.hostPlatform = pkgs.stdenv.hostPlatform.system;
+                    boot.loader.grub.enable = false;
+                    fileSystems."/" = {
+                      device = "nodev";
+                      fsType = "tmpfs";
+                    };
+                    system.stateVersion = "25.11";
+                  };
+                }
+                extra
+              ];
+            }).config;
+          niriLoft = self.packages.${pkgs.stdenv.hostPlatform.system}.niri-loft;
+          on = eval {
+            programs.niri.enable = true;
+            programs.niri.package = niriLoft;
+          };
+          off = eval { };
+          shared = on.home-manager.sharedModules;
+        in
+        assert lib.length shared == 1;
+        assert (lib.head shared).programs.loft.niriPackage.content == niriLoft;
+        assert off.home-manager.sharedModules == [ ];
+        pkgs.runCommand "niri-follows-system" { } "touch $out";
 
       checks.greeter-vm = pkgs.testers.runNixOSTest {
         name = "loft-greeter";
@@ -131,6 +176,7 @@
     {
       config,
       lib,
+      options,
       pkgs,
       ...
     }:
@@ -141,6 +187,9 @@
       helper = lib.getExe sp.loft-greeter-install;
     in
     {
+      # programs.loft.fanControl (nix/modules/fans.nix).
+      imports = [ self.nixosModules.fanControl ];
+
       options.programs.loft.greeter = {
         enable = lib.mkEnableOption "the Loft login screen (SDDM theme `loft`), showing the lock design you sync to it";
 
@@ -167,57 +216,69 @@
         };
       };
 
-      config = lib.mkIf cfg.enable {
-        services.displayManager.sddm = {
-          # Above mkDefault and the mkOverride 900 a desktop module may use
-          # for its own theme, below a plain definition in the host config.
-          theme = lib.mkOverride 800 "loft";
-          extraPackages = [
-            pkgs.kdePackages.qt5compat
-            pkgs.kdePackages.qtmultimedia
-            pkgs.kdePackages.qtsvg
+      config = lib.mkMerge [
+        # Every home-manager user's programs.loft.niriPackage follows the
+        # system's niri: on a host running niri-loft, users who don't set it
+        # still get its per-workspace wallpapers and title bars, and nobody's
+        # Loft fragment includes KDL the running niri would reject (or leaves
+        # out what it supports). A user's own setting still wins.
+        (lib.optionalAttrs (options ? home-manager.sharedModules) {
+          home-manager.sharedModules = lib.mkIf config.programs.niri.enable [
+            { programs.loft.niriPackage = lib.mkDefault config.programs.niri.package; }
           ];
-          # sddm.nix sets this for its kwin greeter compositor; settings
-          # replace it, so keep that value alongside ours.
-          settings.General.GreeterEnvironment = lib.concatStringsSep "," (
-            lib.optional (
-              sddm.wayland.enable && sddm.wayland.compositor == "kwin"
-            ) "QT_WAYLAND_SHELL_INTEGRATION=layer-shell"
-            ++ [ "QML_XHR_ALLOW_FILE_READ=1" ]
-          );
-        };
+        })
+        (lib.mkIf cfg.enable {
+          services.displayManager.sddm = {
+            # Above mkDefault and the mkOverride 900 a desktop module may use
+            # for its own theme, below a plain definition in the host config.
+            theme = lib.mkOverride 800 "loft";
+            extraPackages = [
+              pkgs.kdePackages.qt5compat
+              pkgs.kdePackages.qtmultimedia
+              pkgs.kdePackages.qtsvg
+            ];
+            # sddm.nix sets this for its kwin greeter compositor; settings
+            # replace it, so keep that value alongside ours.
+            settings.General.GreeterEnvironment = lib.concatStringsSep "," (
+              lib.optional (
+                sddm.wayland.enable && sddm.wayland.compositor == "kwin"
+              ) "QT_WAYLAND_SHELL_INTEGRATION=layer-shell"
+              ++ [ "QML_XHR_ALLOW_FILE_READ=1" ]
+            );
+          };
 
-        environment.systemPackages = [
-          sp.loft-sddm-theme
-          sp.loft-greeter-install
-        ];
+          environment.systemPackages = [
+            sp.loft-sddm-theme
+            sp.loft-greeter-install
+          ];
 
-        environment.etc."loft/greeter.json".text = builtins.toJSON {
-          inherit helper;
-          inherit (cfg) followLock group;
-          maxBytes = cfg.maxSize * 1024 * 1024;
-        };
+          environment.etc."loft/greeter.json".text = builtins.toJSON {
+            inherit helper;
+            inherit (cfg) followLock group;
+            maxBytes = cfg.maxSize * 1024 * 1024;
+          };
 
-        systemd.tmpfiles.rules = [
-          "d /var/lib/loft 0755 root root -"
-          "d /var/lib/loft/themes 0755 root root -"
-        ];
+          systemd.tmpfiles.rules = [
+            "d /var/lib/loft 0755 root root -"
+            "d /var/lib/loft/themes 0755 root root -"
+          ];
 
-        security.polkit.enable = true;
-        # `loft greeter sync` runs the helper through pkexec, whose setuid
-        # wrapper NixOS no longer installs by default.
-        security.polkit.enablePkexecWrapper = lib.mkDefault true;
-        security.polkit.extraConfig = ''
-          // Loft: `loft greeter sync` installs the login screen's design.
-          polkit.addRule(function (action, subject) {
-            if (action.id == "org.freedesktop.policykit.exec" &&
-                action.lookup("program") == "${helper}" &&
-                subject.local && subject.active &&
-                subject.isInGroup("${cfg.group}")) {
-              return polkit.Result.YES;
-            }
-          });
-        '';
-      };
+          security.polkit.enable = true;
+          # `loft greeter sync` runs the helper through pkexec, whose setuid
+          # wrapper NixOS no longer installs by default.
+          security.polkit.enablePkexecWrapper = lib.mkDefault true;
+          security.polkit.extraConfig = ''
+            // Loft: `loft greeter sync` installs the login screen's design.
+            polkit.addRule(function (action, subject) {
+              if (action.id == "org.freedesktop.policykit.exec" &&
+                  action.lookup("program") == "${helper}" &&
+                  subject.local && subject.active &&
+                  subject.isInGroup("${cfg.group}")) {
+                return polkit.Result.YES;
+              }
+            });
+          '';
+        })
+      ];
     };
 }

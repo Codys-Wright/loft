@@ -141,13 +141,15 @@ RowLayout {
                 }
                 Column {
                     spacing: -2
+                    // A count, not an array of the rates: a new array every
+                    // tick rebuilt both labels each time.
                     Repeater {
-                        model: [["↑", SystemStats.netTx], ["↓", SystemStats.netRx]]
+                        model: 2
                         delegate: Text {
-                            required property var modelData
+                            required property int index
                             width: netMetrics.advanceWidth
                             horizontalAlignment: Text.AlignRight
-                            text: `${modelData[0]} ${SystemStats.formatRateShort(modelData[1])}`
+                            text: index === 0 ? `↑ ${SystemStats.formatRateShort(SystemStats.netTx)}` : `↓ ${SystemStats.formatRateShort(SystemStats.netRx)}`
                             color: root.textColor
                             font.family: Theme.fontUi
                             font.pixelSize: 9

@@ -1,0 +1,48 @@
+# `nix flake check` on every push to main and every PR: nix/checks.nix is the
+# whole gate. It already covers the Rust crates: loft-niri, loft-appmenu,
+# loft-sleep and loft-input are buildRustPackage derivations that run their
+# `cargo test` in checkPhase, each with a `-clippy` sibling (-D warnings).
+#
+# Hosted runner + Nix cache: Codys-Wright/loft is a personal repo, so the
+# fleet's org-level self-hosted runners can't pick it up. Magic Nix Cache keeps
+# what cache.nixos.org doesn't have (niri-loft, loft-elephant, the crates'
+# vendored deps) in the GitHub Actions cache, so only changed derivations build.
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  flake-check:
+    name: nix flake check
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      # niri-loft builds niri and runs its test suite; a cold build needs more
+      # than the ~14 GB the hosted image leaves free.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          use-flakehub: false
+
+      # --no-update-lock-file: a flake.lock that doesn't match flake.nix fails.
+      - name: nix flake check
+        run: nix flake check --no-update-lock-file --keep-going --print-build-logs

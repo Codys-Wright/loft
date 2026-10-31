@@ -21,7 +21,12 @@
         ./nix/checks.nix
         ./nix/modules/home.nix
         ./nix/modules/nixos.nix
+        ./nix/modules/fans.nix
         ./nix/lock.nix
       ];
+      # The macOS keyboard parity table (docs/PLAN.md §5): Loft generates
+      # its niri binds and xremap group from it; voyager's nix-darwin config
+      # (fleet repo) reads the same data.
+      flake.lib.keyboardParity = builtins.fromJSON (builtins.readFile ./cli/loft/keymap/parity.json);
     };
 }
