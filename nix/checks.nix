@@ -20,7 +20,8 @@
 #                   tests/test_resolve.py also checks imported packs through the v1 adapter
 #                   against the frozen v1 renderer, tests/v1_reference.py, and
 #                   tests/test_render_units.py the per-unit cache keys and hook diffing)
-#   niri-config     base.kdl + each rendered niri.kdl passes `niri validate`, including
+#   niri-config     base.kdl + each rendered niri.kdl, and base.kdl + shell-binds (the
+#                   macOS parity binds, PLAN §5), pass `niri validate`, including
 #                   one with motion (speed, niri animations, minimal) and shape (gaps,
 #                   focus ring, border) customized
 #   niri-workspace-layers  niri/workspace-wallpapers.kdl (the place-within-workspace layer
@@ -153,6 +154,11 @@
             echo "niri validate: base.kdl + $t/niri.kdl"
             niri validate -c config.kdl
           done
+          # The shell's binds (with the macOS parity block, PLAN §5) on top.
+          sed 's|@IPC@|"qs" "ipc" "call"|g' ${../niri/shell-binds.kdl.in} > shell-binds.kdl
+          printf 'include "%s"\ninclude "%s"\n' ${../niri}/base.kdl "$PWD/shell-binds.kdl" > config.kdl
+          echo "niri validate: base.kdl + shell-binds.kdl"
+          niri validate -c config.kdl
           touch $out
         '';
 

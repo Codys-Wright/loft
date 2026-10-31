@@ -12,6 +12,10 @@ import qs.services
 // app's most recent window) and Escape cancels. Like niri's own switcher the
 // panel shows only after `showDelay`: a quick tap goes back to the previous
 // app without flashing it. ⌥Tab and ⌘` are niri's window switcher.
+//
+// `switcher windows` (⌃↓, macOS App Exposé) opens it on the focused app's
+// windows instead, one entry per window, and leaves it open (no modifier to
+// let go of): ←→ / hover pick, Return / click focuses, Escape closes.
 PanelWindow {
     id: root
 
@@ -23,7 +27,10 @@ PanelWindow {
     readonly property int showDelay: 120
     property int selected: 0
     // One entry per app, most recently focused first: { appId, windows[] }.
+    // In the windows mode, one entry per window of the focused app.
     property var apps: []
+    // The windows mode (App Exposé): stays open until a pick or Escape.
+    property bool windowsMode: false
 
     readonly property bool onThisScreen: (Niri.focusedWorkspace?.output ?? modelData.name) === modelData.name
 
@@ -43,8 +50,11 @@ PanelWindow {
         radius: panel.radius
     }
 
+    function stamp(w) {
+        return w.focus_timestamp ? w.focus_timestamp.secs * 1e9 + w.focus_timestamp.nanos : 0;
+    }
+
     function snapshot() {
-        const stamp = w => w.focus_timestamp ? w.focus_timestamp.secs * 1e9 + w.focus_timestamp.nanos : 0;
         const byApp = {};
         for (const w of Niri.windows.slice().sort((a, b) => stamp(b) - stamp(a))) {
             const id = w.app_id || "unknown";
@@ -53,6 +63,29 @@ PanelWindow {
             byApp[id].windows.push(w);
         }
         return Object.values(byApp);
+    }
+
+    // App Exposé: the focused app's windows, most recent first (the focused
+    // one selected). A second ⌃↓ closes it, like macOS.
+    function showWindows() {
+        if (!onThisScreen)
+            return;
+        if (open) {
+            open = false;
+            return;
+        }
+        const appId = Niri.focusedWindow?.app_id;
+        if (!appId)
+            return;
+        apps = Niri.windows.filter(w => w.app_id === appId).sort((a, b) => stamp(b) - stamp(a)).map(w => ({
+                    appId: appId,
+                    windows: [w]
+                }));
+        selected = 0;
+        windowsMode = true;
+        open = true;
+        showTimer.stop();
+        panel.opacity = 1;
     }
 
     function step(delta) {
@@ -81,6 +114,7 @@ PanelWindow {
     }
 
     onOpenChanged: if (!open) {
+        windowsMode = false;
         showTimer.stop();
         panel.opacity = 0;
     }
@@ -103,6 +137,8 @@ PanelWindow {
                 root.commit();
             else if (cmd === "cancel")
                 root.open = false;
+            else if (cmd === "windows")
+                root.showWindows();
         }
     }
 
@@ -117,7 +153,9 @@ PanelWindow {
         Keys.onReleased: event => {
             // ⌘ let go → commit. ⌘ is Super, the Level3 key (AltGr /
             // Mode_switch) with lv3:lwin_switch, or Alt when niri is nested.
-            if ([Qt.Key_Alt, Qt.Key_AltGr, Qt.Key_Mode_switch, Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_Meta].includes(event.key))
+            // Not in the windows mode: ⌃↓ arrives with a Mod that xremap
+            // lets go of at once.
+            if (!root.windowsMode && [Qt.Key_Alt, Qt.Key_AltGr, Qt.Key_Mode_switch, Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_Meta].includes(event.key))
                 root.commit();
         }
         Keys.onPressed: event => {

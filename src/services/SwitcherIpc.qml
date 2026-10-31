@@ -4,7 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// The app switcher's IPC (`qs ipc call switcher next|prev|commit|cancel`),
+// The app switcher's IPC (`qs ipc call switcher next|prev|commit|cancel|windows`),
 // registered once for all screens (a handler per Switcher left all but the
 // first unregistered). Each Switcher acts only on its own screen.
 Singleton {
@@ -26,6 +26,10 @@ Singleton {
         }
         function cancel(): void {
             root.command("cancel");
+        }
+        // The focused app's windows (⌃↓, macOS App Exposé); again closes.
+        function windows(): void {
+            root.command("windows");
         }
     }
 }

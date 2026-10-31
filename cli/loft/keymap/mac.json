@@ -136,6 +136,29 @@
       }
     },
     {
+      "id": "mac-parity",
+      "name": "macOS system shortcuts → Loft (⌃←/→/↑/↓, ⌃⌘…, ⌘H/M)",
+      "section": "keymap",
+      "description": "⌃←/→ spaces, ⌃↑ Mission Control, ⌃↓ App Exposé reach niri as Mod+⌃+arrow (plain ⌃+arrows, which ⌥←/→ word navigation sends, stay the app's); ⌃⌘ shortcuts pass through to niri instead of becoming Ctrl+key; ⌘H / ⌘M hide on Right Super (generated from keymap/parity.json)",
+      "exact_match": true,
+      "remap": {
+        "Ctrl-Down": "Ctrl-Alt_R-Down",
+        "Ctrl-Left": "Ctrl-Alt_R-Left",
+        "Ctrl-Right": "Ctrl-Alt_R-Right",
+        "Ctrl-Super_L-Space": "Ctrl-Super_L-Space",
+        "Ctrl-Super_L-a": "Ctrl-Super_L-a",
+        "Ctrl-Super_L-f": "Ctrl-Super_L-f",
+        "Ctrl-Super_L-q": "Ctrl-Super_L-q",
+        "Ctrl-Super_L-s": "Ctrl-Super_L-s",
+        "Ctrl-Super_L-v": "Ctrl-Super_L-v",
+        "Ctrl-Up": "Ctrl-Alt_R-Up",
+        "Super_L-Alt-Esc": "Super_L-Alt-Esc",
+        "Super_L-Space": "Super_L-Space",
+        "Super_L-h": "Super_R-h",
+        "Super_L-m": "Super_R-m"
+      }
+    },
+    {
       "id": "cmd",
       "name": "Cmd shortcuts (non-terminal)",
       "section": "keymap",

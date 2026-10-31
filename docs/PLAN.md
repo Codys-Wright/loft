@@ -418,45 +418,87 @@ src/
 
 ---
 
-## 5. Keyboard: macOS parity (decision needed)
+## 5. Keyboard: macOS parity (decided: Option A)
 
 The constraint is that **the same physical keys do the same thing on
 THEBATTLESHIP and voyager.**
 
-What exists on Linux today:
-
-| Physical key | Linux today | macOS native |
+| Physical key | Linux (Loft) | macOS native |
 |---|---|---|
-| Super (Cmd position) | **Cmd**: app shortcuts via xremap (copy, paste, tabs, …) | Cmd |
-| Caps (hold), Esc (hold), Right Ctrl | **niri Mod** (Mod5) | — |
-| Ctrl | Ctrl (terminal signals) | Ctrl (terminal, Emacs text nav, **Ctrl+←/→ Spaces, Ctrl+↑ Mission Control**) |
+| Super (Cmd position) | **Cmd**: app shortcuts via xremap (copy, paste, tabs, …); niri Mod too where `lv3:lwin_switch` is set (the fleet) | Cmd |
+| Caps (hold), Esc (hold), Right Alt, Right Ctrl (hold, `right-ctrl-mod`) | **niri Mod** (ISO_Level3_Shift) | — (voyager: Caps-hold → Hyper) |
+| Left Ctrl | Ctrl (terminal signals, readline) **+ ⌃←/→/↑/↓ aliases below** | Ctrl (terminal, Emacs text nav, Ctrl+←/→ Spaces, Ctrl+↑ Mission Control, Ctrl+↓ App Exposé) |
 | Alt | Option (word navigation) | Option |
 
-**Option A, recommended: Caps-hold = WM key on both machines, plus mac-native Ctrl aliases.**
-- Keep Linux as it is. On voyager, map Caps-hold → Hyper with kanata or
-  Karabiner, managed from nix-darwin, and bind the WM (OmniWM per
-  `desktop-design.md`) on Hyper. The whole WM layer is then identical.
-- Add macOS's *own* WM-ish shortcuts on Linux too: Ctrl+←/→ = workspace
-  left/right, Ctrl+↑ = niri overview (Mission Control), Ctrl+↓ = app windows.
-  Muscle memory from stock macOS then works on niri as well.
-- Ctrl+letters stay untouched (terminals, readline, Emacs-style text editing).
+**Option A (decided 2026-10-31): Caps-hold = WM key on both machines, plus
+macOS's own Ctrl aliases on Linux.** Option B (Ctrl as the WM key) was
+rejected: Ctrl+letters collide with terminal signals (C, D, R, W, L, Z) and
+with Emacs text navigation in every macOS text field (A, E, K, N, P).
 
-**Option B: Ctrl as the WM key (Cody's suggestion).** It mirrors macOS
-Spaces for the arrows, but Ctrl+letters collide with terminal signals (C, D,
-R, W, L, Z) and with Emacs text navigation in every macOS text field (A, E, K,
-N, P). It needs per-app exceptions on both OSes.
+- The WM layer stays on Caps-hold (niri Mod). voyager maps Caps-hold → Hyper
+  with kanata from nix-darwin and binds its WM on Hyper (fleet repo).
+- macOS's own WM-ish shortcuts work on Linux too, Ctrl+letters untouched:
 
-Either way, add a **shortcut audit** against the macOS list and fill gaps in
-`_mac-keybindings.nix` / niri binds:
+  | macOS | Loft | niri bind |
+  |---|---|---|
+  | ⌃← / ⌃→ (move a space) | previous / next **Loft space** (`spaces prev/next`; a space spans every display like a macOS Space). With Settings → Features → Spaces off, niri's workspace up / down instead (niri's workspaces are vertical, so ← = up) | Mod+Ctrl+Left / Right |
+  | ⌃↑ Mission Control | niri overview | Mod+Ctrl+Up |
+  | ⌃↓ App Exposé | Loft's switcher on the focused app's windows (`switcher windows`: one entry per window, stays open; ←→ / hover, Return / click, Esc; ⌃↓ again closes). niri's own per-app switcher (⌘`) can't be opened from IPC and closes on the modifier release | Mod+Ctrl+Down |
 
-- Cmd+Space Spotlight · Cmd+Tab / Cmd+` app switcher and same-app windows
-- Cmd+Q quit app vs Cmd+W close window · Cmd+H hide · Cmd+M minimize
-- Cmd+Shift+3/4/5 screenshots · Ctrl+Cmd+Q lock · Cmd+Opt+Esc force quit
-- Cmd+, settings · Cmd+Ctrl+F fullscreen
+**The conflict, and how it is avoided.** xremap sends apps Ctrl+←/→/↑/↓ for
+⌥←/→/↑/↓ (word / paragraph navigation) and Ctrl+Home/End for ⌘↑/↓. Its
+output is a virtual keyboard that niri reads like any other, so a niri bind
+on Ctrl+← would swallow word navigation. So **niri never binds a plain
+Ctrl+arrow.** xremap's `mac-parity` group takes the *physical* ⌃+arrow and
+re-sends it with Right Alt added (Right Alt is niri's Mod through
+`lv3:ralt_switch`): ⌃← reaches niri as Mod+Ctrl+Left, the same bind the
+Caps-hold WM key uses. xremap never re-reads its own output, so the
+Ctrl+Left it sends for ⌥← is not touched. The group is `exact_match`, so
+⌃⇧← (select by word on Linux) and ⌃⌘← stay what they were.
+`tests/test_parity.py` checks that no key any xremap group sends apps is a
+niri bind. Without the keyboard layer (xremap off, or an app in *Apps to
+leave alone*) ⌃←/→ are plain Ctrl+arrows for the app: no alias, nothing
+broken. Right Ctrl with `right-ctrl-mod` on is the WM key, so the aliases
+are on Left Ctrl.
 
-Keep the bind table as **shared Nix data**, generating both niri `binds.kdl`
-fragments and the voyager WM/kanata config. That answers the open question in
-`desktop-design.md`.
+**The bind table is data:** `cli/loft/keymap/parity.json` (flake output
+`lib.keyboardParity`). `python3 -m loft.parity --write` generates the
+parity block of `niri/shell-binds.kdl.in` and the `mac-parity` xremap
+group in `cli/loft/keymap/mac.json` from it; `tests/test_parity.py` fails
+when either drifts. Each entry has the macOS keys, the niri bind, how xremap
+gets the physical keys there (`via`: `ctrl` adds Right Alt, `cmd` passes
+⌃⌘/⌘ combos through with exact match plus a Super twin bind for setups
+without `lwin_switch`, `super` re-sends ⌘H/⌘M on Right Super) and, for
+voyager, the `com.apple.symbolichotkeys` id of the native shortcut.
+
+**Left for voyager (fleet repo, nix-darwin):** kanata Caps-hold → Hyper;
+the WM (OmniWM or AeroSpace, §8.5) bound on Hyper from Loft's Mod binds
+(base.kdl / shell-binds); and making sure the native shortcuts in the table
+are on (`system.defaults.CustomUserPreferences."com.apple.symbolichotkeys"`
+with the `macHotkey` ids: 79/81 spaces, 32 Mission Control, 33 App Exposé,
+64 Spotlight) by reading `inputs.loft.lib.keyboardParity`. The WM layer
+itself isn't in the table yet: that comes with the voyager WM choice.
+
+### Shortcut audit (checked 2026-10-31)
+
+Physical keys on a Mac-layout keyboard, Loft's xremap layer on.
+
+| macOS | Linux (Loft) | Status |
+|---|---|---|
+| ⌘Space Spotlight | Mod+Space (⌘ = Mod with lwin_switch) / Super+Space (without) → Spotlight | ✓ (Super+Space added) |
+| ⌘Tab / ⌘⇧Tab | Mod/Super+Tab → Loft's app switcher | ✓ |
+| ⌘\` | xremap → Alt+grave → niri recent-windows, this app's windows | ✓ |
+| ⌘Q quit app | xremap → Alt+F4 → quit guard (hold to quit protected apps) | ✓ |
+| ⌘W close window | xremap → Ctrl+W (terminals Ctrl+Shift+W), the app closes the tab / window | ✓ |
+| ⌘H hide | was Ctrl+H to the app; now Super+H (Right Super) → `appmenu hide`: the app's windows park like the menu's Hide | ✓ (filled) |
+| ⌘M minimize | was unbound (Mod+M leaked to the app); now Super+M → `appmenu minimize`: the focused window parks (niri has no minimize) | ✓ (filled) |
+| ⌘⇧3 / 4 / 5 | Super+Shift+3/4/5 → capture screen / area / toolbar (with lwin_switch via the `mac-screenshots` group) | ✓ |
+| ⌃⌘Q lock | Mod/Super+Ctrl+Q → lock. Before: xremap's ⌘Q → Alt+F4 also took ⌃⌘Q (extra modifiers match unless exact) and sent Ctrl+Alt+F4 — a VT switch | ✓ (fixed) |
+| ⌘⌥Esc force quit | Mod/Super+Alt+Escape → System Monitor → Processes (Quit / Force Quit) | ✓ (filled) |
+| ⌘, settings | xremap → Ctrl+comma: the app's own settings, like macOS. Loft Settings: Mod+Comma (Caps+,) | ✓ |
+| ⌃⌘F full screen | Mod/Super+Ctrl+F → fullscreen-window (was Ctrl+F to the app: find) | ✓ (filled) |
+| ⌃⌘V / ⌃⌘Space / ⌃⌘A / ⌃⌘S (Loft's own) | Quick Panel / Radial Menu / Arrange / Space Switcher: same fix as ⌃⌘Q, the ⌘→Ctrl groups no longer turn them into Ctrl+V / A / S | ✓ (fixed) |
+| ⌃←/→, ⌃↑, ⌃↓ | Spaces, overview, App Exposé (above) | ✓ (new) |
 
 ---
 
@@ -683,7 +725,8 @@ changes both the lock screen and the login screen with no rebuild.
 - Replace Noctalia in `startup.kdl`/aspects. Delete `noctalia` bits and
   `wlr-which-key` if the shell takes it over.
 - Keyboard decision (§5) implemented on both machines from shared bind data.
-  voyager gets kanata/Karabiner + WM config in nix-darwin.
+  *Linux side done (Option A, `cli/loft/keymap/parity.json`).* voyager gets
+  kanata + WM config in nix-darwin (fleet repo), reading `lib.keyboardParity`.
 
 ### Phase 7+: Grow the system (the vorssaint-utils feature list) *(mostly shipped)*
 Our own shell's backlog, with vorssaint-utils as the reference for "what a
@@ -748,8 +791,7 @@ den.hosts.x86_64-linux.THEBATTLESHIP.settings.desktop = {
 
 ## 8. Open decisions
 
-1. **Keyboard:** Option A (Caps-hold WM key on both + mac Ctrl aliases) or
-   Option B (Ctrl as WM key)? *Recommend A.*
+1. ~~**Keyboard:** Option A or Option B?~~ Decided: A (below).
 2. ~~Pack palette mapping for imports~~ — decided, see below.
 3. ~~Theme index home~~ — decided, see below.
 4. **Shell name** (placeholder: `loft-shell`).
@@ -757,6 +799,12 @@ den.hosts.x86_64-linux.THEBATTLESHIP.settings.desktop = {
    AeroSpace, which has a richer config, for the parity layer?
 
 ### Decided
+- **Keyboard (§5): Option A.** Caps-hold stays the WM key (niri Mod) on both
+  machines; macOS's own Ctrl aliases work on Linux (⌃←/→ spaces, ⌃↑
+  overview, ⌃↓ the app's windows), reaching niri as Mod+Ctrl+arrow through
+  xremap so plain Ctrl+arrows (⌥←/→ word navigation) stay the apps'.
+  Ctrl+letters untouched. The bind table is `cli/loft/keymap/parity.json`
+  (`lib.keyboardParity`); voyager's side lives in the fleet repo.
 - **Theme index home (§8.3, #5):** the separate public **loft-themes** repo
   (`Codys-Wright/loft-themes`) holds `index.json` (generated), `catalog.json`
   (curated data) and our shareable packs; Loft reads it by URL

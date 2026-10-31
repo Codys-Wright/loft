@@ -6,7 +6,6 @@
 // press (and ⌘Q would do nothing).
 binds {
     Mod+Shift+R hotkey-overlay-title="Reload shell" { spawn "timeout" "-k" "1" "5" @IPC@ "shell" "reload"; }
-    Mod+Space hotkey-overlay-title="Spotlight" { spawn "loft-launcher" "open"; }
     Mod+Period hotkey-overlay-title="Emoji & Symbols" { spawn "loft-launcher" "emoji"; }
     Mod+A hotkey-overlay-title="Control Center" { spawn "timeout" "-k" "1" "5" @IPC@ "controlcenter" "toggle"; }
     Mod+I hotkey-overlay-title="Island" { spawn "timeout" "-k" "1" "5" @IPC@ "island" "toggle"; }
@@ -23,18 +22,10 @@ binds {
     Super+Shift+5 hotkey-overlay-title="Capture" { spawn "timeout" "-k" "1" "5" @IPC@ "capture" "toggle"; }
     Super+Shift+4 hotkey-overlay-title="Capture Area" { spawn "timeout" "-k" "1" "5" @IPC@ "capture" "area"; }
     Super+Shift+3 hotkey-overlay-title="Capture Screen" { spawn "timeout" "-k" "1" "5" @IPC@ "capture" "screen"; }
-    // macOS Ctrl+Cmd+Q.
-    Mod+Ctrl+Q hotkey-overlay-title="Lock Screen" { spawn "timeout" "-k" "1" "5" @IPC@ "lock" "lock"; }
     Mod+Shift+V hotkey-overlay-title="Clipboard History" { spawn "timeout" "-k" "1" "5" @IPC@ "clipboard" "toggle"; }
     Mod+Shift+Alt+V hotkey-overlay-title="Paste as Plain Text" { spawn "timeout" "-k" "1" "5" @IPC@ "clipboard" "pastePlain"; }
     Mod+Shift+Period hotkey-overlay-title="Snippets" { spawn "timeout" "-k" "1" "5" @IPC@ "snippets" "toggle"; }
     Mod+Shift+N hotkey-overlay-title="Scratchpad" { spawn "timeout" "-k" "1" "5" @IPC@ "scratchpad" "toggle"; }
-    // macOS ⌃⌘V / hold ⌃⌘Space. Physical ⌘ is Mod (lv3:lwin_switch), and
-    // xremap only rewrites ⌘+key without Ctrl, so these reach niri. The
-    // wheel takes the keyboard: releasing ⌃ or ⌘ picks the slice under
-    // the pointer (a tap leaves it open to click).
-    Mod+Ctrl+V hotkey-overlay-title="Quick Panel" { spawn "timeout" "-k" "1" "5" @IPC@ "quickpanel" "toggle"; }
-    Mod+Ctrl+Space repeat=false hotkey-overlay-title="Radial Menu" { spawn "timeout" "-k" "1" "5" @IPC@ "radial" "hold"; }
     Mod+Shift+O hotkey-overlay-title="Next Audio Output" { spawn "timeout" "-k" "1" "5" @IPC@ "audio" "nextOutput"; }
     Mod+Shift+M hotkey-overlay-title="Mute Microphones" { spawn "timeout" "-k" "1" "5" @IPC@ "mic" "toggleMute"; }
     // ⌘Q through the shell (src/everyday/QuitGuard.qml): apps with quit
@@ -46,16 +37,6 @@ binds {
     // cooldown-ms throttles the held key's repeats.
     Mod+Q cooldown-ms=100 hotkey-overlay-title="Close Window (hold to quit protected apps)" { spawn "sh" "-c" "timeout -k 0.2 0.6 \"$@\" quit keyAt \"$(date +%s%3N)\" || niri msg action close-window" "loft-quit" @IPC@; }
     Alt+F4 cooldown-ms=100 hotkey-overlay-title=null { spawn "sh" "-c" "timeout -k 0.2 0.6 \"$@\" quit keyAt \"$(date +%s%3N)\" || niri msg action close-window" "loft-quit" @IPC@; }
-    Mod+Ctrl+A hotkey-overlay-title="Arrange Window" { spawn "timeout" "-k" "1" "5" @IPC@ "arrange" "open"; }
-    // Spaces (docs/SPACES.md §6.2): the switcher, and previous / next space
-    // (macOS Ctrl+←/→). next / prev go straight to loft-niri (one pipelined
-    // IPC connection, ~5 ms); the shell sees the switch in niri's events and
-    // shows the island banner. The generated spaces.kdl (included later)
-    // binds Mod+1…9, Mod+Shift+1…9 and these two again, identically.
-    // Through the shell, so they do nothing while Settings → Features → Spaces is off.
-    Mod+Ctrl+S hotkey-overlay-title="Space Switcher" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "switcher"; }
-    Mod+Ctrl+Left hotkey-overlay-title="Previous Space" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "prev"; }
-    Mod+Ctrl+Right hotkey-overlay-title="Next Space" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "next"; }
     // Launchpad (src/launchpad/LaunchpadWindow.qml); XF86LaunchA is the Launchpad
     // key on Apple keyboards (F4).
     Mod+Shift+A hotkey-overlay-title="Launchpad" { spawn "timeout" "-k" "1" "5" @IPC@ "launchpad" "toggle"; }
@@ -67,6 +48,55 @@ binds {
     Mod+Shift+Tab hotkey-overlay-title="Switch Apps Backwards" { spawn "timeout" "-k" "1" "5" @IPC@ "switcher" "prev"; }
     Super+Tab hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "switcher" "next"; }
     Super+Shift+Tab hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "switcher" "prev"; }
+    // macOS system shortcuts (docs/PLAN.md §5, Option A). The physical keys
+    // get here through xremap's `mac-parity` group (cli/loft/keymap/mac.json):
+    // ⌃←/→/↑/↓ arrive as Mod+⌃+arrow — niri never binds a plain Ctrl+arrow,
+    // which is what xremap sends apps for ⌥←/→ word navigation — and the ⌃⌘
+    // ones pass through unchanged (Mod: physical ⌘ with lv3:lwin_switch;
+    // Super: without). The Caps-hold WM key reaches the Mod binds directly.
+    // Spaces (docs/SPACES.md §6.2): spaces.kdl (included later) rebinds
+    // Mod+Ctrl+Left/Right to loft-niri, identically; through the shell they
+    // step niri's workspaces while Settings → Features → Spaces is off.
+    // The Radial Menu wheel takes the keyboard: releasing ⌃ or ⌘ picks the
+    // slice under the pointer (a tap leaves it open to click).
+    // BEGIN parity — generated from cli/loft/keymap/parity.json (python3 -m loft.parity --write)
+    // Ctrl+Left: Move left a space
+    Mod+Ctrl+Left hotkey-overlay-title="Previous Space" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "prev"; }
+    // Ctrl+Right: Move right a space
+    Mod+Ctrl+Right hotkey-overlay-title="Next Space" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "next"; }
+    // Ctrl+Up: Mission Control
+    Mod+Ctrl+Up hotkey-overlay-title="Overview (Mission Control)" { toggle-overview; }
+    // Ctrl+Down: Application windows (App Exposé)
+    Mod+Ctrl+Down hotkey-overlay-title="App Windows (App Exposé)" { spawn "timeout" "-k" "1" "5" @IPC@ "switcher" "windows"; }
+    // Cmd+Space: Spotlight
+    Mod+Space hotkey-overlay-title="Spotlight" { spawn "loft-launcher" "open"; }
+    Super+Space hotkey-overlay-title=null { spawn "loft-launcher" "open"; }
+    // Ctrl+Cmd+Q: Lock Screen
+    Mod+Ctrl+Q hotkey-overlay-title="Lock Screen" { spawn "timeout" "-k" "1" "5" @IPC@ "lock" "lock"; }
+    Super+Ctrl+Q hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "lock" "lock"; }
+    // Ctrl+Cmd+F: Enter / Exit Full Screen
+    Mod+Ctrl+F hotkey-overlay-title="Full Screen" { fullscreen-window; }
+    Super+Ctrl+F hotkey-overlay-title=null { fullscreen-window; }
+    // Cmd+Opt+Escape: Force Quit Applications
+    Mod+Alt+Escape hotkey-overlay-title="Force Quit…" { spawn "timeout" "-k" "1" "5" @IPC@ "monitor" "processes"; }
+    Super+Alt+Escape hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "monitor" "processes"; }
+    // Cmd+H: Hide the app
+    Super+H hotkey-overlay-title="Hide App" { spawn "timeout" "-k" "1" "5" @IPC@ "appmenu" "hide"; }
+    // Cmd+M: Minimize the window
+    Super+M hotkey-overlay-title="Minimize Window (Hide)" { spawn "timeout" "-k" "1" "5" @IPC@ "appmenu" "minimize"; }
+    // Ctrl+Cmd+V: Loft: Quick Panel
+    Mod+Ctrl+V hotkey-overlay-title="Quick Panel" { spawn "timeout" "-k" "1" "5" @IPC@ "quickpanel" "toggle"; }
+    Super+Ctrl+V hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "quickpanel" "toggle"; }
+    // Ctrl+Cmd+Space: Loft: Radial Menu (hold)
+    Mod+Ctrl+Space repeat=false hotkey-overlay-title="Radial Menu" { spawn "timeout" "-k" "1" "5" @IPC@ "radial" "hold"; }
+    Super+Ctrl+Space repeat=false hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "radial" "hold"; }
+    // Ctrl+Cmd+A: Loft: Arrange Window
+    Mod+Ctrl+A hotkey-overlay-title="Arrange Window" { spawn "timeout" "-k" "1" "5" @IPC@ "arrange" "open"; }
+    Super+Ctrl+A hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "arrange" "open"; }
+    // Ctrl+Cmd+S: Loft: Space Switcher
+    Mod+Ctrl+S hotkey-overlay-title="Space Switcher" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "switcher"; }
+    Super+Ctrl+S hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "switcher"; }
+    // END parity
 }
 
 // ⌥Tab: niri's recent-windows switcher, one live preview per window. ⌘`

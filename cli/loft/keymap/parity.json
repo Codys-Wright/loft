@@ -1,0 +1,141 @@
+{
+  "$comment": "macOS keyboard parity (docs/PLAN.md §5, Option A): the macOS system shortcuts that Loft answers in niri, as data. `python3 -m loft.parity --write` (PYTHONPATH=cli) regenerates the block between the parity markers in niri/shell-binds.kdl.in and the `mac-parity` group in keymap/mac.json; tests/test_parity.py fails when they drift. The flake exposes this file as `lib.keyboardParity`, so voyager's nix-darwin config (fleet repo) can read the same table. `mac`: the keys as pressed on a Mac (Cmd, Opt, Ctrl, Shift). `niri`: the bind niri gets. `via` says how the physical keys reach that bind through xremap: `ctrl` — a plain Ctrl shortcut, re-sent with Right Alt added (Right Alt is niri's Mod via lv3:ralt_switch), so niri never binds a plain Ctrl+key and the Ctrl+arrows that xremap sends for ⌥←/→ (word navigation) still reach apps; `cmd` — passed through unchanged with exact match, so the ⌘→Ctrl app groups can't rewrite it, and bound twice (Mod: physical ⌘ with lv3:lwin_switch; Super: without); `super` — re-sent on Right Super, which stays plain Super, and bound as Super+key (so ⌘ isn't the WM key's Mod+key). `macHotkey`: the com.apple.symbolichotkeys id on voyager (where macOS itself does the shortcut).",
+  "wmKey": {
+    "linux": "Caps Lock or Esc held (xremap dual-role → Right Alt), Right Alt, Right Ctrl held (right-ctrl-mod): niri Mod = ISO_Level3_Shift",
+    "voyager": "Caps Lock held → Hyper (kanata from nix-darwin), the WM (OmniWM or AeroSpace, PLAN §8.5) bound on Hyper"
+  },
+  "binds": [
+    {
+      "id": "space-left",
+      "mac": "Ctrl+Left",
+      "macName": "Move left a space",
+      "macHotkey": 79,
+      "niri": "Mod+Ctrl+Left",
+      "via": "ctrl",
+      "title": "Previous Space",
+      "run": { "ipc": ["spaces", "prev"] }
+    },
+    {
+      "id": "space-right",
+      "mac": "Ctrl+Right",
+      "macName": "Move right a space",
+      "macHotkey": 81,
+      "niri": "Mod+Ctrl+Right",
+      "via": "ctrl",
+      "title": "Next Space",
+      "run": { "ipc": ["spaces", "next"] }
+    },
+    {
+      "id": "mission-control",
+      "mac": "Ctrl+Up",
+      "macName": "Mission Control",
+      "macHotkey": 32,
+      "niri": "Mod+Ctrl+Up",
+      "via": "ctrl",
+      "title": "Overview (Mission Control)",
+      "run": { "niri": "toggle-overview" }
+    },
+    {
+      "id": "app-windows",
+      "mac": "Ctrl+Down",
+      "macName": "Application windows (App Exposé)",
+      "macHotkey": 33,
+      "niri": "Mod+Ctrl+Down",
+      "via": "ctrl",
+      "title": "App Windows (App Exposé)",
+      "run": { "ipc": ["switcher", "windows"] }
+    },
+    {
+      "id": "spotlight",
+      "mac": "Cmd+Space",
+      "macName": "Spotlight",
+      "macHotkey": 64,
+      "niri": "Mod+Space",
+      "via": "cmd",
+      "title": "Spotlight",
+      "run": { "spawn": ["loft-launcher", "open"] }
+    },
+    {
+      "id": "lock",
+      "mac": "Ctrl+Cmd+Q",
+      "macName": "Lock Screen",
+      "niri": "Mod+Ctrl+Q",
+      "via": "cmd",
+      "title": "Lock Screen",
+      "run": { "ipc": ["lock", "lock"] }
+    },
+    {
+      "id": "fullscreen",
+      "mac": "Ctrl+Cmd+F",
+      "macName": "Enter / Exit Full Screen",
+      "niri": "Mod+Ctrl+F",
+      "via": "cmd",
+      "title": "Full Screen",
+      "run": { "niri": "fullscreen-window" }
+    },
+    {
+      "id": "force-quit",
+      "mac": "Cmd+Opt+Escape",
+      "macName": "Force Quit Applications",
+      "niri": "Mod+Alt+Escape",
+      "via": "cmd",
+      "title": "Force Quit…",
+      "run": { "ipc": ["monitor", "processes"] }
+    },
+    {
+      "id": "hide",
+      "mac": "Cmd+H",
+      "macName": "Hide the app",
+      "niri": "Super+H",
+      "via": "super",
+      "title": "Hide App",
+      "run": { "ipc": ["appmenu", "hide"] }
+    },
+    {
+      "id": "minimize",
+      "mac": "Cmd+M",
+      "macName": "Minimize the window",
+      "niri": "Super+M",
+      "via": "super",
+      "title": "Minimize Window (Hide)",
+      "run": { "ipc": ["appmenu", "minimize"] }
+    },
+    {
+      "id": "quick-panel",
+      "mac": "Ctrl+Cmd+V",
+      "macName": "Loft: Quick Panel",
+      "niri": "Mod+Ctrl+V",
+      "via": "cmd",
+      "title": "Quick Panel",
+      "run": { "ipc": ["quickpanel", "toggle"] }
+    },
+    {
+      "id": "radial",
+      "mac": "Ctrl+Cmd+Space",
+      "macName": "Loft: Radial Menu (hold)",
+      "niri": "Mod+Ctrl+Space",
+      "via": "cmd",
+      "title": "Radial Menu",
+      "repeat": false,
+      "run": { "ipc": ["radial", "hold"] }
+    },
+    {
+      "id": "arrange",
+      "mac": "Ctrl+Cmd+A",
+      "macName": "Loft: Arrange Window",
+      "niri": "Mod+Ctrl+A",
+      "via": "cmd",
+      "title": "Arrange Window",
+      "run": { "ipc": ["arrange", "open"] }
+    },
+    {
+      "id": "space-switcher",
+      "mac": "Ctrl+Cmd+S",
+      "macName": "Loft: Space Switcher",
+      "niri": "Mod+Ctrl+S",
+      "via": "cmd",
+      "title": "Space Switcher",
+      "run": { "ipc": ["spaces", "switcher"] }
+    }
+  ]
+}
