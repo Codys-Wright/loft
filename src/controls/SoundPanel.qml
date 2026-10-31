@@ -96,17 +96,30 @@ ColumnLayout {
         text: "Output"
     }
 
+    component OutputRow: PanelRow {
+        required property var modelData
+        text: Sound.label(modelData)
+        detail: root.details ? (modelData.name ?? "") : ""
+        glyph: Sound.outputIcon(modelData)
+        glyphActive: modelData.id === root.sink?.id
+        trailing: root.btBattery(modelData)
+        onClicked: Sound.setDefaultSink(modelData)
+    }
+
     Repeater {
-        model: Sound.sinks
-        delegate: PanelRow {
-            required property var modelData
-            text: Sound.label(modelData)
-            detail: root.details ? (modelData.name ?? "") : ""
-            glyph: Sound.outputIcon(modelData)
-            glyphActive: modelData.id === root.sink?.id
-            trailing: root.btBattery(modelData)
-            onClicked: Sound.setDefaultSink(modelData)
-        }
+        model: Sound.deviceSinks
+        delegate: OutputRow {}
+    }
+
+    // Null sinks, loopbacks, filters: switching to one sends sound into the
+    // routing, not to a device (Sound.isHardware).
+    PanelSection {
+        visible: Sound.routingSinks.length > 0
+        text: "Routing"
+    }
+    Repeater {
+        model: Sound.routingSinks
+        delegate: OutputRow {}
     }
 
     // ── ⌥: inputs + level ────────────────────────────────────────────────
