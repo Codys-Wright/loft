@@ -9,7 +9,7 @@ const fs = require("fs");
 const assert = require("assert");
 
 const src = fs.readFileSync(process.argv[2], "utf8").replace(/^\.pragma library.*$/m, "");
-const P = new Function(`${src}; return { parseLine, command, bootstrap, normalizeNumber, threadKeyFor, initialState, apply, replay, device, deviceName, batteryPercent, signalBars, carrier, linkState, statusLine, detailLine, threadTitle, unreadCount, ringingCall, activeCall, callerName, callElapsed, formatDuration, callStateLabel, shortTime, batteryGlyph, signalGlyph };`)();
+const P = new Function(`${src}; return { parseLine, command, bootstrap, normalizeNumber, threadKeyFor, initialState, apply, replay, device, deviceName, batteryPercent, batteryInfo, batteryText, phoneAddress, awayLock, awayLockChoices, graceLabel, signalBars, carrier, linkState, statusLine, detailLine, threadTitle, unreadCount, ringingCall, activeCall, callerName, callElapsed, formatDuration, callStateLabel, shortTime, batteryGlyph, signalGlyph };`)();
 const lines = fs.readFileSync(process.argv[3], "utf8").split("\n");
 
 const NOW = 1760000030000; // 30 s after the newest message
@@ -129,6 +129,36 @@ assert.strictEqual(P.linkState(link({ classic_connected: true }), true), "linkin
 assert.strictEqual(P.linkState(link({ classic_connected: true, map_open: true }), true), "connected");
 assert.strictEqual(P.statusLine(link({ classic_connected: true, map_open: true }), true), "Connected"); // no HFP: no battery
 assert.strictEqual(P.batteryPercent(link({ calls: { available: false, battery: 5 } })), -1);
+
+// ── Battery precision ───────────────────────────────────────────────────
+// 0.2.35 with Hands-Free only: coarse.
+assert.deepStrictEqual(P.batteryInfo(state), { percent: 80, exact: false, source: "hfp" });
+assert.strictEqual(P.batteryText(P.batteryInfo(state)), "About 80%");
+// BlueZ's Battery1 for the phone (the LE Battery Service) wins, exact.
+assert.deepStrictEqual(P.batteryInfo(state, 87), { percent: 87, exact: true, source: "ble" });
+assert.strictEqual(P.batteryText(P.batteryInfo(state, 87)), "87%");
+assert.strictEqual(P.statusLine(state, true, 87), "87%");
+assert.deepStrictEqual(P.batteryInfo(state, -1), P.batteryInfo(state)); // BlueZ has none
+// tether ≥ 0.3.0: top-level `battery` is Battery1, else HFP × 20, else null.
+const hfp4 = { available: true, battery: 4, signal: 3 };
+assert.deepStrictEqual(P.batteryInfo(link({ classic_connected: true, map_open: true, battery: 63, calls: hfp4 })), { percent: 63, exact: true, source: "ble" });
+assert.deepStrictEqual(P.batteryInfo(link({ classic_connected: true, map_open: true, battery: 63, calls: null })), { percent: 63, exact: true, source: "ble" });
+assert.deepStrictEqual(P.batteryInfo(link({ classic_connected: true, map_open: true, battery: 80, calls: hfp4 })), { percent: 80, exact: false, source: "hfp" }); // just HFP again
+assert.deepStrictEqual(P.batteryInfo(link({ classic_connected: true, map_open: true, battery: null, calls: null })), { percent: -1, exact: false, source: "" });
+assert.strictEqual(P.batteryText(P.batteryInfo(P.initialState())), "");
+// The phone's address: the supervised one, upper case.
+assert.strictEqual(P.phoneAddress(state), state.status.device_address.toUpperCase());
+assert.strictEqual(P.phoneAddress(P.initialState()), "");
+
+// ── Away lock (tetherd's bt_set_lock_on_away) ───────────────────────────
+assert.deepStrictEqual(P.awayLock(P.initialState()), { supported: false, enabled: false, seconds: 30 });
+const st = o => P.apply(P.initialState(), Object.assign({ command: "bt_status", device_address: "aa:bb:cc:dd:ee:ff" }, o), NOW).state;
+assert.deepStrictEqual(P.awayLock(st({ lock_on_away: false, lock_away_seconds: 30 })), { supported: true, enabled: false, seconds: 30 });
+assert.deepStrictEqual(P.awayLock(st({ lock_on_away: true, lock_away_seconds: 120 })), { supported: true, enabled: true, seconds: 120 });
+assert.deepStrictEqual(P.awayLock(st({})), { supported: false, enabled: false, seconds: 30 }); // an older tetherd
+assert.strictEqual(P.phoneAddress(st({})), "AA:BB:CC:DD:EE:FF");
+assert.strictEqual(P.command("bt_set_lock_on_away", { enabled: true, grace_seconds: 60 }), '{"command":"bt_set_lock_on_away","enabled":true,"grace_seconds":60}\n');
+assert.deepStrictEqual(P.awayLockChoices().map(P.graceLabel), ["10 s", "30 s", "1 min", "2 min", "5 min"]);
 
 // ── Formatting ──────────────────────────────────────────────────────────
 assert.strictEqual(P.formatDuration(0), "0:00");

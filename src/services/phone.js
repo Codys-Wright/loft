@@ -315,11 +315,83 @@ function telephony(state) {
     return t && typeof t === "object" ? t : null;
 }
 
-function batteryPercent(state) {
+// HFP's battery as a percent (BattChg × 20), -1 without Hands-Free.
+function hfpBattery(state) {
     const t = telephony(state);
     if (!t || !t.available || typeof t.battery !== "number")
         return -1;
     return Math.max(0, Math.min(100, Math.round(t.battery * 20)));
+}
+
+// The phone's battery and how precise it is: { percent, exact, source }.
+//   source "ble": the iPhone's LE Battery Service (GATT 0x180F), which BlueZ
+//                 reads over the LE link ANCS keeps up and exposes as
+//                 org.bluez.Battery1 — exact. `bluez` is that Percentage for
+//                 the phone's address (Phone.qml reads it through
+//                 Quickshell.Bluetooth; -1 / undefined when BlueZ has none).
+//                 tether ≥ 0.3.0 also reports it as bt_connection_changed's
+//                 top-level `battery` (Battery1, else HFP × 20, else null).
+//   source "hfp": HFP's 0–5 level × 20 — coarse (80 means 70–89 %).
+//   percent -1:   nothing reports one.
+function batteryInfo(state, bluez) {
+    const clamp = n => Math.max(0, Math.min(100, Math.round(n)));
+    if (typeof bluez === "number" && bluez >= 0)
+        return { percent: clamp(bluez), exact: true, source: "ble" };
+    const hfp = hfpBattery(state);
+    const top = state.link ? state.link.battery : null;
+    // tether 0.3's own pick: exact unless it is just HFP's value again.
+    if (typeof top === "number" && top >= 0 && !(hfp >= 0 && clamp(top) === hfp))
+        return { percent: clamp(top), exact: true, source: "ble" };
+    if (hfp >= 0)
+        return { percent: hfp, exact: false, source: "hfp" };
+    return { percent: -1, exact: false, source: "" };
+}
+
+function batteryPercent(state, bluez) {
+    return batteryInfo(state, bluez).percent;
+}
+
+// "87%" exact, "About 80%" from HFP's steps, "" for none.
+function batteryText(info) {
+    if (!info || info.percent < 0)
+        return "";
+    return info.exact ? `${info.percent}%` : `About ${info.percent}%`;
+}
+
+// The supervised iPhone's Bluetooth address, upper case ("" when none is
+// known), for finding it among BlueZ's devices.
+function phoneAddress(state) {
+    const addr = state.status ? state.status.device_address : "";
+    if (addr)
+        return String(addr).toUpperCase();
+    const d = device(state);
+    return d && d.address ? String(d.address).toUpperCase() : "";
+}
+
+// tetherd's away lock: bt_status `lock_on_away` / `lock_away_seconds`, set with
+// `bt_set_lock_on_away {enabled, grace_seconds}` and persisted by tetherd in
+// ~/.config/tether/bluetooth.json. tetherd locks by itself — logind's
+// Session.Lock, or its config's `lock_command` — once the phone has been gone
+// for the grace period after a supervision timeout (out of range; Bluetooth
+// switched off on the phone or a clean disconnect doesn't count), once per
+// absence. `supported` is false for a tetherd that doesn't report it.
+function awayLock(state) {
+    const st = state.status;
+    const supported = !!st && typeof st.lock_on_away === "boolean";
+    return {
+        supported: supported,
+        enabled: supported && st.lock_on_away,
+        seconds: supported && typeof st.lock_away_seconds === "number" ? st.lock_away_seconds : 30
+    };
+}
+
+// The grace periods Settings offers (tetherd takes any whole number ≥ 1).
+function awayLockChoices() {
+    return [10, 30, 60, 120, 300];
+}
+
+function graceLabel(sec) {
+    return sec < 60 ? `${sec} s` : `${Math.round(sec / 60)} min`;
 }
 
 function signalBars(state) {
@@ -349,8 +421,8 @@ function linkState(state, socketUp) {
     return "connected";
 }
 
-// One short line for tiles and the menu bar.
-function statusLine(state, socketUp) {
+// One short line for tiles and the menu bar. `bluez`: see batteryInfo.
+function statusLine(state, socketUp, bluez) {
     switch (linkState(state, socketUp)) {
     case "offline":
         return "Not connected";
@@ -361,7 +433,7 @@ function statusLine(state, socketUp) {
     case "linking":
         return "Connecting…";
     }
-    const b = batteryPercent(state);
+    const b = batteryPercent(state, bluez);
     return b >= 0 ? `${b}%` : "Connected";
 }
 

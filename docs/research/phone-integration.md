@@ -162,7 +162,7 @@ Related: [tether-web](https://github.com/napisani/tether-web) is a headless web 
 | **Bluetooth PBAP** | Contacts, recents/favourites, call history | "Sync Contacts" toggle | Encrypted cache in tether and BlueFerry |
 | **BLE ANCS** | Every app's notifications (title/subtitle/body, app id), positive/negative actions | Dual-mode bond with LE half, BlueZ bearer API, iOS 26+ in tether/BlueFerry | [Apple ANCS spec](https://developer.apple.com/library/archive/documentation/CoreBluetooth/Reference/AppleNotificationCenterServiceSpecification/Specification/Specification.html). No deep links, no inline reply |
 | **BLE AMS** (Apple Media Service) | Now playing + remote play/pause/skip/volume of the iPhone's player | Same LE link as ANCS | Implemented by [BlueFerry media control](https://github.com/erikwb/blueferry/blob/main/docs/en/user/media-control.md), not by tether |
-| **BLE Battery Service** | Exact phone battery % | LE link | [BlueFerry phone status](https://github.com/erikwb/blueferry/blob/main/docs/en/user/phone-status.md). tether gets 20 %-step battery from HFP |
+| **BLE Battery Service** | Exact phone battery % | LE link | [BlueFerry phone status](https://github.com/erikwb/blueferry/blob/main/docs/en/user/phone-status.md). BlueZ exposes it as `org.bluez.Battery1` (Loft reads that); tether ≥ 0.3.0 reports it too, older tether only HFP's 20 % steps |
 | **HFP** (Linux = HF) | Ring, caller ID, answer/decline/dial/DTMF; optional call audio | BlueZ `Telephony1` or oFono or PipeWire telephony | See §1 Calls |
 | **A2DP sink** | Phone audio played on the desktop | PipeWire `a2dp_sink` role | Usually *unwanted* here (it steals the phone's audio) |
 | **USB / Wi-Fi sync (lockdownd, usbmuxd)** | Device info, **battery**, AFC filesystem (DCIM photos), iTunes-style backups, syslog, screenshots (dev image) | Trust pairing over USB once, then Wi-Fi sync | [libimobiledevice README](https://github.com/libimobiledevice/libimobiledevice#readme) |
@@ -582,6 +582,60 @@ iPhone ──BT (MAP/PBAP/ANCS/HFP)──┐
    Protection on?
 7. **Blueman.** OK to drop blueman's agent (Loft's planned Bluetooth extra replaces it)?
 8. **AirPods.** Keep `librepods`, or move AirPods handling to tether?
+
+### AMS media control: what tetherd lacks
+
+Checked against tether's source at v0.2.35 (what nixpkgs ships and the fleet runs) and at
+v0.3.2 (2026-10-31, `main`): **tetherd has no Apple Media Service client.** It notes the AMS
+service in the GATT tree (BLUETOOTH.md, "Apple Media Service `89d3502b-…` is also present") and
+does nothing with it. `tether::MediaControl` is something else: MPRIS on *this* machine, used to
+pause local players for calls and AirPods. Loft therefore has nothing to drive, and does not
+fake a now-playing for the phone. (Away lock and exact battery are done: Settings → Phone,
+FEATURES.md.)
+
+AMS itself ([Apple's spec](https://developer.apple.com/library/archive/documentation/CoreBluetooth/Reference/AppleMediaService_Reference/Introduction/Introduction.html))
+lives on the same LE link and bond as ANCS, which tetherd already keeps up:
+
+| Characteristic | UUID | Use |
+|---|---|---|
+| Service | `89D3502B-0F36-433A-8EF4-C502AD55F8DC` | |
+| Remote Command | `9B3C81D8-57B1-4A8A-B8DF-0E56F7CA51C2` | write one byte: Play 0, Pause 1, TogglePlayPause 2, NextTrack 3, PreviousTrack 4, VolumeUp 5, VolumeDown 6, AdvanceRepeatMode 7, AdvanceShuffleMode 8, SkipForward 9, SkipBackward 10, Like 11, Dislike 12, Bookmark 13. Notify: the commands the current player supports |
+| Entity Update | `2F7CABCE-808D-411F-9A0C-BB92BA96C102` | write `[EntityID, AttributeID…]` to subscribe (Player 0: Name 0, PlaybackInfo 1 = "state,rate,elapsed", Volume 2; Queue 1; Track 2: Artist 0, Album 1, Title 2, Duration 3). Notify: `[EntityID, AttributeID, Flags, UTF-8 value]`, Flags bit 0 = truncated |
+| Entity Attribute | `C6B2F38C-23AB-46D8-A6AB-A3A870BBD5D7` | write `[EntityID, AttributeID]`, then read the full value of a truncated one |
+
+What tetherd would need (a change to [zackb/tether](https://github.com/zackb/tether), not
+made from here; the shape mirrors its ANCS client in `src/core/src/bluetooth/ancs/`):
+
+1. **An AMS GATT client** next to `ancs::Client`: once `ServicesResolved` on the LE bearer and
+   the bond is encrypted, find the service's three characteristics under the device's BlueZ
+   object, `StartNotify` on Remote Command and Entity Update, write the Entity Update
+   subscriptions above (one write per entity; iOS rejects writes before the bond is
+   encrypted, retry like the ANCS `StartNotify` race), and follow truncated values with the
+   Entity Attribute write + read. Rebuild it whenever the ANCS link is rebuilt.
+2. **State**: player name, state (paused / playing / rewinding / fast-forwarding), rate,
+   elapsed + the monotonic time it was reported (iOS only re-sends on changes), volume
+   0–1, artist / album / title / duration, queue index / count / shuffle / repeat, and the
+   supported command list.
+3. **Socket protocol** (docs/PROTOCOL.md): a broadcast event
+   `{"command":"bt_media","available":true,"player":"Music","state":"playing","rate":1.0,"elapsed":12.4,"elapsed_at":<unix ms>,"volume":0.6,"title":"…","artist":"…","album":"…","duration":215.0,"commands":["play","pause","toggle","next","previous","volume_up","volume_down","skip_forward","skip_backward"]}`
+   on every change (and `available:false` when the LE link goes), `bt_media` in reply to a new
+   `bt_get_media`, a command `bt_media_command {"action":"toggle"|"play"|"pause"|"next"|"previous"|"volume_up"|"volume_down"|"skip_forward"|"skip_backward"}` answered by
+   `bt_media_result {success, action, message}`, a `media` entry in `protocol_info.capabilities`, and a
+   `bt_set_media {enabled}` switch persisted like `bt_set_ancs` (AMS wakes the phone's media
+   stack on every track change).
+4. **Better still for every desktop, and zero Loft code**: export it as an MPRIS player on the
+   session bus (`org.mpris.MediaPlayer2.tether_iphone`: `PlaybackStatus`, `Metadata`
+   `xesam:title/artist/album`, `mpris:length`, `Position` from elapsed + rate, `Volume`,
+   `CanGoNext/Previous/Play/Pause` from the supported commands; `PlayPause` / `Next` / … write
+   Remote Command; `Seeked` is not possible, AMS has no seek). Loft's Now Playing, media keys
+   and the island already follow MPRIS, so the phone would just appear as one more player. Its
+   own `MediaControl` must then skip that player when pausing local media for calls.
+
+With (3) Loft would add a `phone.js` reducer for `bt_media` and buttons in the phone panel;
+with (4) nothing. BlueFerry already implements AMS (its `Media1` D-Bus interface,
+[media-control.md](https://github.com/erikwb/blueferry/blob/main/docs/en/user/media-control.md))
+and is the reference for the ordering quirks; running it next to tetherd is not an option,
+since both would hold the same bond's ANCS link.
 
 ---
 

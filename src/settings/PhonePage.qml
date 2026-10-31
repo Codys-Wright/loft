@@ -5,7 +5,8 @@ import qs.components
 import qs.services
 
 // Settings → Phone: the iPhone through tetherd (Phone.qml, PhoneConfig):
-// its status, a pairing guide, what Loft shows, and tetherd's call control.
+// its status and battery, what Loft shows, tetherd's call control and away
+// lock, and a pairing guide.
 // Pairing itself is tetherd's (`tether bt pair`); Loft never pairs.
 ColumnLayout {
     id: page
@@ -159,6 +160,54 @@ ColumnLayout {
                 const yes = b => b ? "on" : "off";
                 return `Messages (MAP) ${yes(l.map_open)} · Contacts (PBAP) ${yes(l.pbap_open)} · Notifications (ANCS) ${yes(l.ancs_ready)} · Calls (HFP) ${yes(l.calls?.available)}`;
             }
+        }
+        SettingsRow {
+            visible: Phone.connected
+            label: "Battery"
+            hint: {
+                switch (Phone.batteryInfo.source) {
+                case "ble":
+                    return `${Phone.batteryText}, exact (the iPhone's Bluetooth LE Battery Service)`;
+                case "hfp":
+                    return `${Phone.batteryText}: Hands-Free reports it in 20 % steps. Exact once BlueZ reads the iPhone's LE Battery Service (it shows as the phone's battery under Bluetooth)`;
+                }
+                return "Not reported: needs the LE link (notifications) for the exact level, or call control for Hands-Free's 20 % steps";
+            }
+        }
+    }
+
+    // ── Away lock (tetherd) ─────────────────────────────────────────────
+    SettingsCard {
+        visible: Phone.up && Phone.link !== "unpaired"
+        PageHeader {
+            title: "Lock when away"
+        }
+        SettingsRow {
+            label: "Lock when the iPhone is out of range"
+            hint: Phone.awayLock.supported ? `When the iPhone's Bluetooth link times out and it stays gone for ${Phone.graceLabel(Phone.awayLock.seconds)}, the screen locks (once per absence; it never unlocks by itself). Switching Bluetooth off on the phone doesn't count. tetherd does the watching and remembers this.` : "This tetherd doesn't report an away lock (it came in tether 0.2.29); update tether."
+            SettingsSwitch {
+                enabled: Phone.awayLock.supported
+                checked: Phone.awayLock.enabled
+                onToggled: on => Phone.setAwayLock(on)
+            }
+        }
+        SettingsRow {
+            visible: Phone.awayLock.supported
+            label: "After"
+            hint: "Grace period after the link drops (the link itself takes a few seconds to time out)"
+            SettingsSegmented {
+                enabled: Phone.awayLock.enabled
+                options: Phone.awayLockChoices.map(s => ({
+                            value: s,
+                            label: Phone.graceLabel(s)
+                        }))
+                current: Phone.awayLock.seconds
+                onActivated: v => Phone.setAwayLock(true, v)
+            }
+        }
+        Hint {
+            visible: Phone.awayLock.supported
+            text: "tetherd locks through systemd-logind (loginctl lock-session); programs.loft's swayidle passes that to Loft's lock screen. Without swayidle (or with tetherd's lock_command set) it locks some other way or not at all."
         }
     }
 

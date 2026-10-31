@@ -13,6 +13,7 @@ without a phone, and tests/test_phone_fake.py checks it against the fixture.
     fake_tetherd.py serve [--socket PATH] [--state away|unpaired|connected] [--notify]
     fake_tetherd.py inject KIND [--socket PATH] [--text TEXT]
         KIND: message | notification | call | outgoing | answer | hangup | away | back | otp
+              | battery (--text 87: an exact LE Battery Service level, tether 0.3's shape)
 
 --notify also raises the freedesktop notifications tetherd itself raises
 (libnotify, app "Tether", hints desktop-entry=tether-gtk, x-kde-origin-name=iPhone,
@@ -49,6 +50,12 @@ class Phone:
         self.now = now or time.time
         self.link = link
         self.calls_enabled = True
+        # tetherd's away lock (bt_set_lock_on_away); the fake never locks.
+        self.lock_on_away = False
+        self.lock_away_seconds = 30
+        # The LE Battery Service's exact %, as tether >= 0.3.0 reports it in
+        # bt_connection_changed's top-level "battery"; None = 0.2.35's shape.
+        self.exact_battery = None
         self.call_seq = 0
         self.handle_seq = 200
         self.uid_seq = 40
@@ -102,7 +109,11 @@ class Phone:
                 "address": PHONE, "calls": len(self.calls), "backend": "bluez", "indicators": True, "audio": "",
                 "reason": "Calls are controlled here; the audio plays on the iPhone.",
             }
+        extra = {}
+        if self.exact_battery is not None:
+            extra["battery"] = self.exact_battery if up else None
         return {
+            **extra,
             "command": "bt_connection_changed",
             "device_present": paired, "device_paired": paired, "classic_connected": up,
             "le_available": up, "le_connected": up, "map_open": up, "pbap_open": up,
@@ -119,8 +130,8 @@ class Phone:
             "ancs_enabled": True, "adapter": "", "ancs_content_enabled": True,
             "calls_enabled": self.calls_enabled, "enabled": True, "retention": "encrypted",
             "retention_ready": True, "desktop_popups_enabled": True, "airpods_enabled": False,
-            "airpods_pause": "never", "airpods_handoff": False, "lock_on_away": False,
-            "lock_away_seconds": 30, "version": "0.2.35-fake",
+            "airpods_pause": "never", "airpods_handoff": False, "lock_on_away": self.lock_on_away,
+            "lock_away_seconds": self.lock_away_seconds, "version": "0.2.35-fake",
             "capability": {"mode": "full", "bearer_api": True, "powered": True, "le_central": True,
                            "le_peripheral": True, "advertising": True, "class_ok": True, "reasons": []},
             "adapters": [], "apple_device_id": False,
@@ -297,6 +308,13 @@ class Daemon:
             self.send(conn, "OK")
             self.broadcast(p.status())
             return self.broadcast(p.connection())
+        if cmd == "bt_set_lock_on_away":
+            # net.cpp: enabled defaults to false, grace_seconds to 30, min 1;
+            # the new bt_status is broadcast, then the "OK".
+            p.lock_on_away = bool(m.get("enabled", False))
+            p.lock_away_seconds = max(1, int(m.get("grace_seconds", 30)))
+            self.broadcast(p.status())
+            return self.send(conn, "OK")
         if cmd == "bt_notification_action" and "uid" in m:
             self.send(conn, "OK")
             p.notifications = [n for n in p.notifications if n["uid"] != m["uid"]]
@@ -363,6 +381,10 @@ class Daemon:
         elif kind == "hangup":
             p.calls = []
             self.broadcast({"command": "bt_calls", "calls": p.calls})
+        elif kind == "battery":
+            # The LE Battery Service's exact level (tether >= 0.3.0 shape).
+            p.exact_battery = int(text or 87)
+            self.broadcast(p.connection())
         elif kind in ("away", "back"):
             p.link = "away" if kind == "away" else "connected"
             self.broadcast(p.connection())

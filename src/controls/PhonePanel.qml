@@ -2,7 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import qs.services
 
-// iPhone (feature "phone"): the phone tetherd is linked to, its battery,
+// iPhone (feature "phone"): the phone tetherd is linked to, its battery
+// (exact from the LE Battery Service, else "About 80%" from Hands-Free),
 // signal and carrier (from Hands-Free), the call on the line, the latest
 // conversations, and Messages… — the Control Center tile and the optional
 // menu bar extra.
@@ -50,7 +51,7 @@ ColumnLayout {
         visible: Phone.connected && (Phone.battery >= 0 || Phone.signal >= 0)
         interactive: false
         text: "Battery"
-        trailing: Phone.battery >= 0 ? `${Phone.battery}%` : "—"
+        trailing: Phone.battery >= 0 ? Phone.batteryText : "—"
         trailingGlyph: Phone.batteryGlyph()
     }
     PanelRow {

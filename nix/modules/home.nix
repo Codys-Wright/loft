@@ -752,6 +752,9 @@
               command = "${lib.getExe cfg.niriPackage} msg action power-off-monitors";
             };
           events.before-sleep = lockCmd;
+          # logind's Lock signal (`loginctl lock-session`): how tetherd's away
+          # lock (Settings → Phone) and other session tools reach the shell.
+          events.lock = lockCmd;
         };
 
         # The iPhone bridge (programs.loft.phone): upstream's tetherd.service,
