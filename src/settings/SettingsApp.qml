@@ -282,6 +282,27 @@ Scope {
                         }
 
                         Row_ {
+                            label: "Appearance"
+                            hint: ThemeManager.hasModes ? "Light or dark for the shell, niri, terminals and apps" : `${ThemeManager.label || "This theme"} has only a ${Theme.dark ? "dark" : "light"} look`
+                            enabled: ThemeManager.hasModes && !ThemeManager.applying
+                            SettingsSegmented {
+                                options: [
+                                    {
+                                        value: "light",
+                                        label: "Prefer Light"
+                                    },
+                                    {
+                                        value: "dark",
+                                        label: "Prefer Dark"
+                                    }
+                                ]
+                                current: Theme.dark ? "dark" : "light"
+                                enabled: ThemeManager.hasModes && !ThemeManager.applying
+                                onActivated: v => ThemeManager.setMode(v)
+                            }
+                        }
+
+                        Row_ {
                             label: "Theme"
                             hint: ThemeManager.applying ? "Applying…" : ThemeManager.error || "Recolors the shell, niri, terminals, GTK and the launcher"
                         }

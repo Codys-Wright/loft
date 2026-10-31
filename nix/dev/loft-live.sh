@@ -141,8 +141,10 @@ start() {
   [ ${#unit_env[@]} -gt 0 ] || unit_env=("LOFT_STATE_DIR=$state")
 
   # `loft` for the shell: the checkout's CLI (its renderers and templates).
+  # Without LOFT_DEV: this is the real desktop, so a theme applied from
+  # Settings runs every hook (GTK's color scheme, Qt apps), as installed.
   mkdir -p "$live/bin"
-  printf '#!/bin/sh\nexec %s -B "%s" "$@"\n' "@PYTHON@" "$root/cli/loft" > "$live/bin/loft"
+  printf '#!/bin/sh\nexec env -u LOFT_DEV %s -B "%s" "$@"\n' "@PYTHON@" "$root/cli/loft" > "$live/bin/loft"
   chmod +x "$live/bin/loft"
   path="$live/bin:$PATH"
   [ -d "$root/target/debug" ] && path="$root/target/debug:$path"
