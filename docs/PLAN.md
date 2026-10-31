@@ -460,7 +460,12 @@ fragments and the voyager WM/kanata config. That answers the open question in
 Each phase ends with something runnable in the nested dev session (Phase 0),
 and nothing replaces the working Noctalia session until Phase 6.
 
-### Phase 0: Repo + dev loop *(do first)*
+**Status (2026-10-31):** Phases 0–5 and 1c are done, Phase 7's backlog is
+mostly shipped, and Phase 6 (cut-over) is open. Per-feature status lives in
+[FEATURES.md](FEATURES.md), the source of truth; the notes below only say
+what each phase still lacks.
+
+### Phase 0: Repo + dev loop *(done)*
 - Create `Codys-Wright/loft` (flake-parts) and
   `Codys-Wright/loft-themes`. Credit javiiervm in `CREDITS.md`.
 - `nix run` / `nix run .#dev`: niri **nested as a window** (inside KDE
@@ -478,9 +483,12 @@ and nothing replaces the working Noctalia session until Phase 6.
 
 **Done when:** `nix run github:Codys-Wright/loft` opens a nested niri
 window with a glass bar from any machine, and in a checkout `nix run .#dev`
-updates live when KDL or QML is edited.
+updates live when KDL or QML is edited. *(Met; `loft-dev` also runs headless
+test sessions, and `loft-live` runs a checkout on the real desktop.)*
+nirimod was not packaged: Settings → Displays / Keyboard Shortcuts / Layout &
+Motion cover its ground (Phase 7).
 
-### Phase 1: Theme spine *(engine done — branch `phase1-theme-engine`)*
+### Phase 1: Theme spine *(done; fleet-side Stylix narrowing open)*
 
 > **Status:** pack format (`docs/THEME-FORMAT.md`, `themes/schema.json`), the
 > runtime renderer + `loft theme list|current|apply|render|validate`, the
@@ -488,8 +496,10 @@ updates live when KDL or QML is edited.
 > Ghostty, GTK color-scheme), consumers niri/kitty/Ghostty/GTK/walker/Noctalia,
 > `pkgs.loft-themes-builtin` rendered by the same CLI, and checks (schema,
 > unit, golden, `niri validate`, `ghostty +validate-config`) are in.
-> **Not yet:** the `overrides/` directory (lands with the settings UI /
-> `loft save`, §4.1) and the fleet-side Stylix narrowing.
+> **Since:** the `overrides/` directory landed with the settings UI and
+> `loft-niri` (§4.1), and the facet model replaced v1 packs
+> (THEME-ARCHITECTURE.md). **Open:** the fleet-side Stylix narrowing
+> (nix-config, with Phase 6).
 >
 > **Design notes / deviations:**
 > - The CLI is Python (stdlib + `jsonschema`), replacing `cli/loft.sh`: JSON,
@@ -554,13 +564,11 @@ works on a machine whose build contains none of them. *(Met.)*
 > wallpapers are per theme (`overrides/shell.json` `perTheme`); "Preview
 > lock" locks with the chosen design. See THEME-FORMAT.md, "Vibes".
 
-**Open:** qylock designs need `SddmComponents`, `Qt5Compat.GraphicalEffects`
-and `QtMultimedia` on the shell's QML import path; the packaged
-`loft-shell` doesn't add them yet (they load in a session whose
-environment already has them, e.g. a KDE session with SDDM installed).
-Videos are not played as desktop wallpapers (the still is shown).
+**Since:** the packaged shell puts qylock's QML modules on its import path
+(`lockQmlPath` in nix/packages.nix), and videos play as desktop wallpapers
+(FEATURES.md, "Live (video) wallpapers").
 
-### Phase 2: Shell skeleton
+### Phase 2: Shell skeleton *(done)*
 - `src/` skeleton, `loft-shell` package, HM systemd user service, dev/installed split.
 - Services: `Niri` adapter (event-stream), `Theme`, `Settings` (defaults ⊕
   overrides).
@@ -570,20 +578,21 @@ Videos are not played as desktop wallpapers (the still is shown).
 **Done when:** in nested niri, the bar tracks workspaces and focus, recolors
 on `loft theme apply`, and a setting changed in `overrides/` applies live.
 
-### Phase 3: Core shell features
+### Phase 3: Core shell features *(done)*
 - Dock, Control Center, notifications (Quickshell server), OSD, media,
   Dynamic Island, Cmd+Tab switcher, theme selector, wallpaper picker.
 - Settings app (writes overrides and marks values that differ from the
   default).
 
-### Phase 4: Launcher + save-back
+### Phase 4: Launcher + save-back *(done)*
 - walker/elephant service, Spotlight theme wired to the theme bundle, binds.
 - `loft diff|save|save --as-theme`.
 
 **Done when:** a theme tweaked in the selector can be saved as a new theme
 JSON in the repo, and it is the default after the next `just switch`.
+*(Met through the facet model: `loft theme diff`, `save-variant`, `save-as`.)*
 
-### Phase 5: Lock + greeter
+### Phase 5: Lock + greeter *(done; fleet greeter switch open)*
 - Loader SDDM theme + loader Quickshell lock + vendored qylock shim. Default
   mac-style design, palette-driven.
 - Lock wired to swayidle and Ctrl+Cmd+Q. The loader replaces MacTahoe-Dark.
@@ -639,8 +648,9 @@ changes both the lock screen and the login screen with no rebuild.
   `greeter-preview` (qylock-wuwa with its video background, and the built-in
   design over the desktop wallpaper). `followLock`: `loft theme apply`
   re-syncs in the background when the greeter's key changes.
-- **Not done yet:** swayidle wiring (documented in the README only) and
-  enabling `programs.loft.greeter` in the fleet (dropping MacTahoe-Dark).
+- **Since:** idle locking is wired (`programs.loft.idle`). **Not done yet:**
+  enabling `programs.loft.greeter` in the fleet (dropping MacTahoe-Dark),
+  with Phase 6.
 
 **Known issues:**
 - Quickshell 0.3.2 can't hot-reload while locked. `WlSessionLock`'s reload
@@ -657,7 +667,7 @@ changes both the lock screen and the login screen with no rebuild.
 - Keyboard decision (§5) implemented on both machines from shared bind data.
   voyager gets kanata/Karabiner + WM config in nix-darwin.
 
-### Phase 7+: Grow the system (the vorssaint-utils feature list)
+### Phase 7+: Grow the system (the vorssaint-utils feature list) *(mostly shipped)*
 Our own shell's backlog, with vorssaint-utils as the reference for "what a
 complete menu-bar system does":
 
@@ -668,6 +678,11 @@ complete menu-bar system does":
 - Plus a settings UI that covers nirimod's ground (monitor arrangement, bind
   conflicts, animation curves) inside our shell. That replaces nirimod once it
   exists.
+
+Shipped (FEATURES.md has each): mixer, system monitor, snapping, clipboard
+history + snippets, shelf, Command Bar, radial menu, capture/recording,
+keep-awake, the nirimod-style Settings pages. Partial or open: fan control
+(#7), window thumbnails in the switcher and dock previews (#8).
 
 ---
 
