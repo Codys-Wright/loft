@@ -29,6 +29,16 @@ Singleton {
         queue = queue.slice(1);
     }
 
+    // How long a banner stays (hovering holds it): 3 s, and 1.5 s for
+    // passing confirmations, transient ones and niri's "Screenshot
+    // captured" (niri only notifies after encoding the PNG, a couple of
+    // seconds after the shutter, so a 3 s banner on top lasted ages).
+    function duration(n) {
+        if (!n)
+            return 3000;
+        return n.transient === true || n.appName === "niri" ? 1500 : 3000;
+    }
+
     // ── From the iPhone ─────────────────────────────────────────────────
     // tetherd (Phone.qml) raises the phone's app notifications itself, as
     // libnotify app "Tether" with desktop-entry=tether-gtk and KDE's
@@ -93,6 +103,14 @@ Singleton {
         persistenceSupported: true
 
         onNotification: n => {
+            // keepOnReload hands every tracked notification over again
+            // after a reload (Quickshell marks them lastGeneration): back
+            // into the history, not the banner queue — else each reload
+            // bannered the whole history, one after another for minutes.
+            if (n.lastGeneration) {
+                n.tracked = true;
+                return;
+            }
             if (root.isPhone(n) && Features.on("phone")) {
                 // Settings → Phone → Notifications off: the phone's are dropped.
                 if (!PhoneConfig.notifications) {

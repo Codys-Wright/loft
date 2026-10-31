@@ -22,7 +22,7 @@ import "paging.js" as Paging
 // brightness, sound announcements — the pill widens to an icon, a level bar
 // and the value, or an icon and a line, for 1.5 / 2.2 s; Settings → Dynamic
 // Island → Show changes in the Dynamic Island, else Osd.qml shows it), a
-// notification banner (3 s; hovering holds
+// notification banner (3 s, screenshots 1.5 s; hovering holds
 // it so its buttons can be clicked), a live activity (screen recording,
 // focus timer, timers, downloads — scroll to cycle when several run), the
 // next calendar event when it's close, now playing (art + equalizer), the
@@ -871,8 +871,8 @@ PanelWindow {
                 }
             }
 
-            // Each banner shows for 3 s (hovering holds it, so its buttons
-            // can be clicked). Repeating, and restarted per banner: a one-shot
+            // Each banner shows for Notifications.duration (3 s; 1.5 s for
+            // screenshots; hovering holds it, so its buttons can be clicked). Repeating, and restarted per banner: a one-shot
             // Timer stops itself after firing while `bannering` stays true for
             // the next banner in the queue, so the binding never ran again and
             // every banner after the first stayed up until the pointer passed.
@@ -880,7 +880,7 @@ PanelWindow {
                 id: bannerTimer
                 running: root.bannering && !hover.hovered
                 repeat: true
-                interval: 3000
+                interval: Notifications.duration(root.banner)
                 onTriggered: Notifications.next()
             }
             Connections {
