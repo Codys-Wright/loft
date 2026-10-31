@@ -25,22 +25,25 @@
 //         title-bar { height 34; }
 //         traffic-lights { off; }
 //     }
+// Thin: 20 px, with 10 px beads and an 11 px title. The colors here are a
+// fallback; the theme writes its own into <state>/current/niri-loft.kdl
+// (templates/render/niri-loft.kdl), which sessions include after this file.
 layout {
     title-bar {
         on
-        height 30
+        height 20
         active-color "#2c2c30"
         inactive-color "#222226"
         active-text-color "#e6e6ea"
         inactive-text-color "#8a8a90"
-        font "sans 13px"
+        font "sans 11px"
     }
-    // The buttons inside the bar: 12 px beads 8 px apart, 12 px in from its
+    // The buttons inside the bar: 10 px beads 6 px apart, 8 px in from its
     // left edge, centered vertically.
     traffic-lights {
-        size 12
-        spacing 8
-        offset x=12 y=0
+        size 10
+        spacing 6
+        offset x=8 y=0
     }
 }
 

@@ -685,6 +685,7 @@
         ''
         + lib.optionalString titleBar ''
           include "${self}/niri/title-bar.kdl"
+          include optional=true "${stateDir}/current/niri-loft.kdl"
         ''
         # `loft-live` (nix/dev/loft-live.sh): a checkout's fragments over these
         # while it runs the desktop; the file only exists then.

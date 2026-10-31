@@ -205,6 +205,7 @@
             include optional=true "$state/overrides/niri.kdl"
             include "${../niri/workspace-wallpapers.kdl}"
             include "${../niri/title-bar.kdl}"
+            include optional=true "$state/current/niri-loft.kdl"
             spawn-at-startup "${lib.getExe self'.packages.loft-shell}"
             spawn-at-startup "${lib.getExe self'.packages.loft-launcher}" "service"
             EOF

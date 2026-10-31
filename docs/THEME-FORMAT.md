@@ -241,6 +241,7 @@ and `manifest.json`'s `name` is the v1 name: the pack's, or the alias of a facet
 | `wallpapers.json` | the shell's wallpaper layer and pickers (phase E) | the resolved Wallpapers facet: collection (absolute paths), default, gradient, sets, behavior, related, the user's arrangement | `quickshell ipc … call vibes refresh` |
 | `manifest.json` | the theme selector, lock loader, pickers | normalized manifest + `wallpapers` / `locks` / `defaults` with absolute paths (own, then curated) | — |
 | `niri.kdl` | niri | `include optional=true "<state>/current/niri.kdl"` after `base.kdl` | niri watches the include (by canonical path); `niri msg action load-config-file` makes it immediate |
+| `niri-loft.kdl` | niri-loft (Loft's niri) | `include optional=true "<state>/current/niri-loft.kdl"` after `niri/title-bar.kdl`, only where niri-loft runs (stock niri rejects it) | the title bar's colors; reloads with niri.kdl |
 | `kitty.conf` | kitty | `include ~/.local/state/loft/current/kitty.conf` | `SIGUSR1` |
 | `ghostty.conf` | Ghostty | `config-file = ?~/.local/state/loft/current/ghostty.conf` | `SIGUSR2` |
 | `gtk.css` | GTK 3/4, libadwaita | `@import url("file://…/current/gtk.css");` from `~/.config/gtk-{3,4}.0/gtk.css`. Palette + accent, the window radius, traffic-light window buttons (put them on the left with `gtk-decoration-layout=close,minimize,maximize:` in `settings.ini`) | `gsettings … color-scheme prefer-dark/light` |

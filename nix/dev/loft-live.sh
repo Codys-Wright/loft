@@ -187,6 +187,8 @@ start() {
     fi
     if niri_has title-bar && [ -f "$root/niri/title-bar.kdl" ]; then
       echo "include \"$root/niri/title-bar.kdl\""
+      # The theme's bar colors over the checkout's fallback.
+      echo "include optional=true \"$state/current/niri-loft.kdl\""
     fi
     [ -f "$root/niri/dev-local.kdl" ] && echo "include \"$root/niri/dev-local.kdl\""
   } > "$dev/niri.kdl"

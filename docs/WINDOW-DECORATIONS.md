@@ -43,17 +43,17 @@ whatever the app drew there, so the strip replaced them.)
 layout {
     title-bar {
         on
-        height 30                      // logical px, rounded to whole pixels
+        height 20                      // logical px, rounded to whole pixels
         active-color "#2c2c30"         // the focused window's bar
         inactive-color "#222226"
         active-text-color "#e6e6ea"
         inactive-text-color "#8a8a90"
-        font "sans 13px"               // a Pango font description
+        font "sans 11px"               // a Pango font description
     }
     traffic-lights {                   // the buttons in the bar
-        size 12
-        spacing 8
-        offset x=12 y=0                // x: inset from the bar's left edge
+        size 10
+        spacing 6
+        offset x=8 y=0                 // x: inset from the bar's left edge
         // close-color, minimize-color, zoom-color, inactive-color, glyph-color
     }
 }
@@ -63,7 +63,8 @@ window-rule { match app-id=r"^org\.kde\.dolphin$"; title-bar { height 34; } }
 window-rule { match app-id="^foot$"; traffic-lights { off; } }        // a bar without buttons
 ```
 
-`title-bar` is off in stock niri's defaults; `niri/title-bar.kdl` turns it on.
+`title-bar` is off in stock niri's defaults; `niri/title-bar.kdl` turns it on,
+thin (20 px, 10 px beads, an 11 px title), and the theme colors it (Looks).
 Window rules take every key of the layout block plus `on` / `off`.
 
 `traffic-lights` now styles the buttons inside the bar; they never show without
@@ -113,20 +114,24 @@ the window:
 
 ## Looks
 
-- Background: `active-color` / `inactive-color`, top corners rounded with the
-  window radius.
+- Colors: the theme's, as GTK header bars get them from gtk.css, so a
+  terminal's bar matches a GTK app's: `surface` focused, `bg` unfocused, `text`
+  / `subtext` for the title, the unfocused beads `text` at 22 %. The niri unit
+  renders them into `<state>/current/niri-loft.kdl`
+  (`templates/render/niri-loft.kdl`), a fragment of what only niri-loft parses:
+  stock niri rejects it, so only sessions running niri-loft include it, right
+  after `niri/title-bar.kdl` (whose colors are the fallback). A theme change
+  reloads niri's config, so open windows recolor at once.
+- Background: top corners rounded with the window radius.
 - Title: centered on the whole bar (not the space right of the buttons, so it
   lines up with the window), kept clear of the buttons on both sides, ellipsized
   at the end. Drawn with Pango/cairo like niri's MRU titles; the texture is
   cached per title, color and scale, and redrawn ellipsized only when it doesn't
   fit. Windows blocked out from screencasts keep the bar but not the title.
-- Buttons: three 12 px beads, 8 px apart: close `#ff5f57`, hide `#febc2e`,
+- Buttons: three 10 px beads, 6 px apart: close `#ff5f57`, hide `#febc2e`,
   zoom `#28c840` — same as `Theme.traffic*` and the GTK template, with the Aqua
   specular dot of `TrafficLights.qml`. Grey when the window is unfocused;
   hovering the group lights all three and shows the glyphs (×, −, ⤢).
-- The Loft theme doesn't write the bar's colors yet: `niri/title-bar.kdl`
-  sets a dark neutral. A theme renderer would write a `title-bar { … }` block
-  into a fragment only niri-loft sessions include (stock niri rejects it).
 
 ## Behaviour
 

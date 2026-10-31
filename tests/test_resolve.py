@@ -105,6 +105,7 @@ def without_additions(d: Path, into: Path) -> Path:
     (into / "wallpapers.json").unlink()
     for f in ("kde.colors", "kvantum.kvconfig", "kvantum.svg", "dolphin.qss"):  # unit `qt`
         (into / f).unlink()
+    (into / "niri-loft.kdl").unlink()  # unit `niri`: the title bar's colors
     t = json.loads((into / "theme.json").read_text())
     for k in ("motion", "type", "icons", "a11y", "windows", "transparency"):
         t.pop(k)

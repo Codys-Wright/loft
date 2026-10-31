@@ -161,6 +161,12 @@
           printf 'include "%s"\ninclude "%s"\ninclude "%s"\n' ${../niri}/base.kdl ${../niri/workspace-wallpapers.kdl} ${../niri/title-bar.kdl} > config.kdl
           echo "niri-loft validate: base.kdl + workspace-wallpapers.kdl + title-bar.kdl"
           ${lib.getExe self'.packages.niri-loft} validate -c config.kdl
+          # …and each theme's title bar colors after them, as the sessions do.
+          for t in ${builtin}/tokyonight ${builtin}/latte; do
+            printf 'include "%s"\ninclude "%s"\n' "$PWD/config.kdl" "$t/niri-loft.kdl" > themed.kdl
+            echo "niri-loft validate: … + $t/niri-loft.kdl"
+            ${lib.getExe self'.packages.niri-loft} validate -c themed.kdl
+          done
           if ${lib.getExe pkgs.niri} validate -c config.kdl 2>/dev/null; then
             echo "stock niri accepted place-within-workspace: the session gate is stale" >&2
             exit 1

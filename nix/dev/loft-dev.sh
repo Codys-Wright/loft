@@ -429,7 +429,8 @@ ws_env=""
 if [ "$ws_layers" = 1 ]; then
   # niri-loft's title bar too (nix/niri/title-bar.patch).
   ws_kdl="include \"$root/niri/workspace-wallpapers.kdl\"
-include \"$root/niri/title-bar.kdl\""
+include \"$root/niri/title-bar.kdl\"
+include optional=true \"$dir/current/niri-loft.kdl\""
   ws_env='"LOFT_NIRI_WORKSPACE_LAYERS=1" '
 fi
 
