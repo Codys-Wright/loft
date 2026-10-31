@@ -229,7 +229,8 @@ PanelWindow {
             any = true;
         }
         if (banner !== null && !expanded) {
-            Notifications.next();
+            // The whole backlog, not just the banner on screen.
+            Notifications.clearQueue();
             any = true;
         }
         if (expanded) {
@@ -872,7 +873,8 @@ PanelWindow {
             }
 
             // Each banner shows for Notifications.duration (3 s; 1.5 s for
-            // screenshots; hovering holds it, so its buttons can be clicked). Repeating, and restarted per banner: a one-shot
+            // screenshots and while more wait; hovering holds it, so its
+            // buttons can be clicked). Repeating, and restarted per banner: a one-shot
             // Timer stops itself after firing while `bannering` stays true for
             // the next banner in the queue, so the binding never ran again and
             // every banner after the first stayed up until the pointer passed.
@@ -881,7 +883,7 @@ PanelWindow {
                 running: root.bannering && !hover.hovered
                 repeat: true
                 interval: Notifications.duration(root.banner)
-                onTriggered: Notifications.next()
+                onTriggered: Notifications.next(root.banner)
             }
             Connections {
                 target: root

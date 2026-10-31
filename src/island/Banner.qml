@@ -203,7 +203,7 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             modelData.invoke();
-                            Notifications.next();
+                            Notifications.next(root.notification);
                         }
                     }
                 }
