@@ -1,4 +1,5 @@
 # NixOS module: programs.loft.greeter — the login screen follows the lock screen.
+# (Also brings programs.loft.fanControl, nix/modules/fans.nix.)
 #
 #   imports = [ inputs.loft.nixosModules.default ];
 #   programs.loft.greeter.enable = true;
@@ -141,6 +142,9 @@
       helper = lib.getExe sp.loft-greeter-install;
     in
     {
+      # programs.loft.fanControl (nix/modules/fans.nix).
+      imports = [ self.nixosModules.fanControl ];
+
       options.programs.loft.greeter = {
         enable = lib.mkEnableOption "the Loft login screen (SDDM theme `loft`), showing the lock design you sync to it";
 

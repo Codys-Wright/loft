@@ -21,6 +21,7 @@
         ./nix/checks.nix
         ./nix/modules/home.nix
         ./nix/modules/nixos.nix
+        ./nix/modules/fans.nix
         ./nix/lock.nix
       ];
     };
