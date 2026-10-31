@@ -6,6 +6,9 @@
 #   loft-session           niri-loft + Loft's base config + the shell, all from the store
 #   niri-loft              niri + nix/niri/workspace-layers.patch (per-workspace
 #                          wallpapers: the `place-within-workspace` layer rule)
+#                          + title-bar.patch + toplevel-export.patch
+#                          (hyprland-toplevel-export-v1: window thumbnails in the
+#                          app switcher and the dock preview)
 #   loft-dev               the same session, loading niri fragments, QML, templates
 #                          and themes from a checkout so everything hot-reloads
 #   loft-niri              niri settings backend (crates/loft-niri): live outputs,
@@ -271,13 +274,15 @@
           patches = (old.patches or [ ]) ++ [
             ./niri/workspace-layers.patch
             ./niri/title-bar.patch
+            ./niri/toplevel-export.patch
           ];
           env = (old.env or { }) // {
-            NIRI_BUILD_COMMIT = "Nixpkgs, loft: workspace-layers, title-bar";
+            NIRI_BUILD_COMMIT = "Nixpkgs, loft: workspace-layers, title-bar, toplevel-export";
           };
           passthru = (old.passthru or { }) // {
             loftWorkspaceLayers = true;
             loftTitleBar = true;
+            loftToplevelExport = true;
           };
         });
 

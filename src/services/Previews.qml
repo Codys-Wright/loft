@@ -2,28 +2,23 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
-import Quickshell.Io
 
 // The dock's window preview (feature dockPreview): which one is open, and
 // the window thumbnails it shows.
 //
-// Thumbnails: niri 26.04 has no per-window capture a client can use — no
-// ext-image-copy-capture / toplevel capture source and no
-// hyprland-toplevel-export (what Quickshell's ScreencopyView needs for a
-// Toplevel), and its screenshot-window action always fills the clipboard.
-// What it does have is wlr-screencopy of a whole display, so a window is
-// cropped out of a still of its display (dock/WindowThumbs.qml) when niri
-// says where it is on screen: floating windows (tile_pos_in_workspace_view)
-// and fullscreen ones, on a workspace that is showing. Tiled windows get no
-// position in niri's IPC, so they show their app icon unless an earlier
-// snapshot is cached. Snapshots are kept per window (in memory) until it
-// closes, so a window shows its last-seen picture from anywhere.
-//
-// Capture is only attempted when `loft dock capture` says it's safe:
-// Quickshell's buffer code asks zwp_linux_dmabuf_v1 for default feedback
-// (v4+) unconditionally, and on a v3-only compositor (niri on a software
-// renderer: headless test sessions, VMs) that protocol error ends the whole
-// shell. There, every card shows its app icon.
+// Thumbnails, best first:
+// - niri-loft (nix/niri/toplevel-export.patch): each card captures its own
+//   window, wherever it is — tiled, on another workspace, hidden — live
+//   while the popover is open (components/WindowThumb.qml, WindowCapture).
+// - Elsewhere (stock niri: wlr-screencopy of whole displays only), a window
+//   is cropped out of a still of its display (dock/WindowThumbs.qml) when
+//   niri says where it is on screen: floating windows
+//   (tile_pos_in_workspace_view) and fullscreen ones, on a workspace that is
+//   showing. Tiled windows get no position in niri's IPC, so they show their
+//   app icon unless an earlier snapshot is cached. Snapshots are kept per
+//   window (in memory) until it closes.
+// Capture is only attempted where `loft dock capture` says it's safe
+// (WindowCapture); elsewhere every card shows its app icon.
 Singleton {
     id: root
 
@@ -31,30 +26,16 @@ Singleton {
     // "hover" (after `delay` ms) or "click" (an app with several windows).
     readonly property string mode: Settings.dock.preview === "click" ? "click" : "hover"
     readonly property int delay: Math.max(0, Settings.dock.previewDelay)
-    readonly property bool thumbnails: Settings.dock.previewThumbnails && (canCapture || stillPath !== "")
+    readonly property bool thumbnails: Settings.dock.previewThumbnails && (WindowCapture.canWindows || canCapture || stillPath !== "")
+    // Cards capture their own windows (niri-loft).
+    readonly property bool windowThumbs: Settings.dock.previewThumbnails && WindowCapture.canWindows
 
-    // `loft dock capture`: { screencopy, toplevel, protocols, dmabuf, reason }.
-    property var support: null
-    readonly property bool canCapture: support?.screencopy === true
+    readonly property var support: WindowCapture.support
+    readonly property bool canCapture: WindowCapture.canScreens
     // Test sessions only (LOFT_DEV): a PNG of the whole session standing in
     // for the display capture, so cropping and the cards can be checked
     // where ScreencopyView can't run (see above).
     readonly property string stillPath: Quickshell.env("LOFT_DEV") === "1" ? (Quickshell.env("LOFT_DEV_PREVIEW_STILL") ?? "") : ""
-
-    Process {
-        id: probe
-        command: ["loft", "dock", "capture"]
-        running: root.enabled
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    root.support = JSON.parse(text);
-                } catch (e) {
-                    root.support = { screencopy: false, reason: "probe failed" };
-                }
-            }
-        }
-    }
 
     // The open preview: { screen, appId, x, y, edge } (x, y: the icon's
     // outward edge in screen coordinates), or null.

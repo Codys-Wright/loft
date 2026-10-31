@@ -8,8 +8,9 @@ import qs.menubar
 
 // The dock's window preview (macOS / vorssaint "Dock Preview"): a Liquid
 // Glass popover beside a running app's icon with a card per window — a
-// snapshot where one exists (Previews / WindowThumbs), else the app icon in
-// the window's shape — its title, and where it is (desktop, display, or
+// live capture of the window (niri-loft: WindowThumb), else a snapshot
+// where one exists (Previews / WindowThumbs), else the app icon in the
+// window's shape — its title, and where it is (desktop, display, or
 // hidden on the parking workspace). Click a card to focus that window
 // anywhere (a hidden one comes back first), × closes it, ⋯ or a right-click
 // gives Move to Desktop ▸ / Display ▸ / Hide; middle-click closes too.
@@ -229,6 +230,10 @@ PanelWindow {
         readonly property var win: Niri.windowMap[modelData] ?? null
         readonly property bool parked: win ? Previews.isParked(win) : false
         readonly property string thumb: Previews.thumb(modelData)
+        // A picture to show: the live capture, else the cached snapshot.
+        readonly property bool pictured: live.ready || thumb !== ""
+        readonly property real picW: live.ready ? live.paintedWidth : shot.paintedWidth
+        readonly property real picH: live.ready ? live.paintedHeight : shot.paintedHeight
         readonly property bool hot: cardMouse.containsMouse || closeMouse.containsMouse || moreMouse.containsMouse
         // The window's shape, fitted into the thumbnail box.
         readonly property var size: win?.layout?.window_size ?? [16, 10]
@@ -277,13 +282,13 @@ PanelWindow {
             Item {
                 id: frame
                 anchors.centerIn: parent
-                width: card.thumb !== "" ? root.thumbW : Math.max(72, card.size[0] * card.fit)
-                height: card.thumb !== "" ? root.thumbH : Math.max(48, card.size[1] * card.fit)
+                width: card.pictured ? root.thumbW : Math.max(72, card.size[0] * card.fit)
+                height: card.pictured ? root.thumbH : Math.max(48, card.size[1] * card.fit)
                 opacity: card.parked ? 0.55 : 1
 
                 Rectangle {
                     anchors.fill: parent
-                    visible: card.thumb === ""
+                    visible: !card.pictured
                     radius: 10
                     color: Theme.withAlpha(Theme.text, 0.08)
                     border.width: 1
@@ -317,7 +322,7 @@ PanelWindow {
                     layer.enabled: true
                 }
                 MultiEffect {
-                    visible: card.thumb !== "" && shot.status === Image.Ready
+                    visible: !live.ready && card.thumb !== "" && shot.status === Image.Ready
                     source: shot
                     anchors.fill: shot
                     maskEnabled: true
@@ -325,12 +330,19 @@ PanelWindow {
                     maskThresholdMin: 0.5
                     maskSpreadAtMin: 1
                 }
+                // The window itself, captured while the popover is open.
+                WindowThumb {
+                    id: live
+                    anchors.fill: parent
+                    windowId: card.modelData
+                    active: root.shown && Previews.windowThumbs
+                }
                 // Focused window: an accent ring.
                 Rectangle {
                     visible: card.win?.is_focused ?? false
                     anchors.centerIn: parent
-                    width: (card.thumb !== "" ? shot.paintedWidth : parent.width) + 6
-                    height: (card.thumb !== "" ? shot.paintedHeight : parent.height) + 6
+                    width: (card.pictured ? card.picW : parent.width) + 6
+                    height: (card.pictured ? card.picH : parent.height) + 6
                     radius: 11
                     color: "transparent"
                     border.width: 2

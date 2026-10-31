@@ -1,0 +1,665 @@
+diff -ruN a/resources/hyprland-toplevel-export-v1.xml b/resources/hyprland-toplevel-export-v1.xml
+--- a/resources/hyprland-toplevel-export-v1.xml
++++ b/resources/hyprland-toplevel-export-v1.xml
+@@ -0,0 +1,228 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<protocol name="hyprland_toplevel_export_v1">
++  <copyright>
++    Copyright © 2022 Vaxry
++    All rights reserved.
++
++    Redistribution and use in source and binary forms, with or without
++    modification, are permitted provided that the following conditions are met:
++
++    1. Redistributions of source code must retain the above copyright notice, this
++       list of conditions and the following disclaimer.
++
++    2. Redistributions in binary form must reproduce the above copyright notice,
++       this list of conditions and the following disclaimer in the documentation
++       and/or other materials provided with the distribution.
++
++    3. Neither the name of the copyright holder nor the names of its
++       contributors may be used to endorse or promote products derived from
++       this software without specific prior written permission.
++
++    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++    DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
++    FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++    DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
++    SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
++    CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
++    OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
++    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++  </copyright>
++
++  <description summary="capturing the contents of toplevel windows">
++    This protocol allows clients to ask for exporting another toplevel's
++    surface(s) to a buffer.
++
++    Particularly useful for sharing a single window.
++  </description>
++
++  <interface name="hyprland_toplevel_export_manager_v1" version="2">
++    <description summary="manager to inform clients and begin capturing">
++      This object is a manager which offers requests to start capturing from a
++      source.
++    </description>
++
++    <request name="capture_toplevel">
++      <description summary="capture a toplevel">
++        Capture the next frame of a toplevel. (window)
++
++        The captured frame will not contain any server-side decorations and will
++        ignore the compositor-set geometry, like e.g. rounded corners.
++
++        It will contain all the subsurfaces and popups, however the latter will be clipped
++        to the geometry of the base surface.
++
++        The handle parameter refers to the address of the window as seen in `hyprctl clients`.
++        For example, for d161e7b0 it would be 3512854448.
++      </description>
++      <arg name="frame" type="new_id" interface="hyprland_toplevel_export_frame_v1"/>
++      <arg name="overlay_cursor" type="int"
++        summary="composite cursor onto the frame"/>
++      <arg name="handle" type="uint" summary="the handle of the toplevel (window) to be captured"/>
++    </request>
++
++    <request name="destroy" type="destructor">
++      <description summary="destroy the manager">
++        All objects created by the manager will still remain valid, until their
++        appropriate destroy request has been called.
++      </description>
++    </request>
++
++    <!-- Version 2 -->
++    <request name="capture_toplevel_with_wlr_toplevel_handle" since="2">
++      <description summary="capture a toplevel">
++        Same as capture_toplevel, but with a zwlr_foreign_toplevel_handle_v1 handle.
++      </description>
++      <arg name="frame" type="new_id" interface="hyprland_toplevel_export_frame_v1"/>
++      <arg name="overlay_cursor" type="int"
++        summary="composite cursor onto the frame"/>
++      <arg name="handle" type="object" interface="zwlr_foreign_toplevel_handle_v1" allow-null="false" summary="the zwlr_foreign_toplevel_handle_v1 handle of the toplevel to be captured"/>
++    </request>
++    <!-- End Version 2 -->
++  </interface>
++
++  <interface name="hyprland_toplevel_export_frame_v1" version="2">
++    <description summary="a frame ready for copy">
++      This object represents a single frame.
++
++      When created, a series of buffer events will be sent, each representing a
++      supported buffer type. The "buffer_done" event is sent afterwards to
++      indicate that all supported buffer types have been enumerated. The client
++      will then be able to send a "copy" request. If the capture is successful,
++      the compositor will send a "flags" followed by a "ready" event.
++
++      wl_shm buffers are always supported, ie. the "buffer" event is guaranteed to be sent.
++
++      If the capture failed, the "failed" event is sent. This can happen anytime
++      before the "ready" event.
++
++      Once either a "ready" or a "failed" event is received, the client should
++      destroy the frame.
++    </description>
++
++    <event name="buffer">
++      <description summary="wl_shm buffer information">
++        Provides information about wl_shm buffer parameters that need to be
++        used for this frame. This event is sent once after the frame is created
++        if wl_shm buffers are supported.
++      </description>
++      <arg name="format" type="uint" enum="wl_shm.format" summary="buffer format"/>
++      <arg name="width" type="uint" summary="buffer width"/>
++      <arg name="height" type="uint" summary="buffer height"/>
++      <arg name="stride" type="uint" summary="buffer stride"/>
++    </event>
++
++    <request name="copy">
++      <description summary="copy the frame">
++        Copy the frame to the supplied buffer. The buffer must have the
++        correct size, see hyprland_toplevel_export_frame_v1.buffer and
++        hyprland_toplevel_export_frame_v1.linux_dmabuf. The buffer needs to have a
++        supported format.
++
++        If the frame is successfully copied, a "flags" and a "ready" event is
++        sent. Otherwise, a "failed" event is sent.
++
++        This event will wait for appropriate damage to be copied, unless the ignore_damage
++        arg is set to a non-zero value.
++      </description>
++      <arg name="buffer" type="object" interface="wl_buffer"/>
++      <arg name="ignore_damage" type="int"/>
++    </request>
++
++    <event name="damage">
++      <description summary="carries the coordinates of the damaged region">
++        This event is sent right before the ready event when ignore_damage was
++        not set. It may be generated multiple times for each copy
++        request.
++
++        The arguments describe a box around an area that has changed since the
++        last copy request that was derived from the current screencopy manager
++        instance.
++
++        The union of all regions received between the call to copy
++        and a ready event is the total damage since the prior ready event.
++      </description>
++      <arg name="x" type="uint" summary="damaged x coordinates"/>
++      <arg name="y" type="uint" summary="damaged y coordinates"/>
++      <arg name="width" type="uint" summary="current width"/>
++      <arg name="height" type="uint" summary="current height"/>
++    </event>
++
++    <enum name="error">
++      <entry name="already_used" value="0"
++        summary="the object has already been used to copy a wl_buffer"/>
++      <entry name="invalid_buffer" value="1"
++        summary="buffer attributes are invalid"/>
++    </enum>
++
++    <enum name="flags" bitfield="true">
++      <entry name="y_invert" value="1" summary="contents are y-inverted"/>
++    </enum>
++
++    <event name="flags">
++      <description summary="frame flags">
++        Provides flags about the frame. This event is sent once before the
++        "ready" event.
++      </description>
++      <arg name="flags" type="uint" enum="flags" summary="frame flags"/>
++    </event>
++
++    <event name="ready">
++      <description summary="indicates frame is available for reading">
++        Called as soon as the frame is copied, indicating it is available
++        for reading. This event includes the time at which presentation happened
++        at.
++
++        The timestamp is expressed as tv_sec_hi, tv_sec_lo, tv_nsec triples,
++        each component being an unsigned 32-bit value. Whole seconds are in
++        tv_sec which is a 64-bit value combined from tv_sec_hi and tv_sec_lo,
++        and the additional fractional part in tv_nsec as nanoseconds. Hence,
++        for valid timestamps tv_nsec must be in [0, 999999999]. The seconds part
++        may have an arbitrary offset at start.
++
++        After receiving this event, the client should destroy the object.
++      </description>
++      <arg name="tv_sec_hi" type="uint"
++           summary="high 32 bits of the seconds part of the timestamp"/>
++      <arg name="tv_sec_lo" type="uint"
++           summary="low 32 bits of the seconds part of the timestamp"/>
++      <arg name="tv_nsec" type="uint"
++           summary="nanoseconds part of the timestamp"/>
++    </event>
++
++    <event name="failed">
++      <description summary="frame copy failed">
++        This event indicates that the attempted frame copy has failed.
++
++        After receiving this event, the client should destroy the object.
++      </description>
++    </event>
++
++    <request name="destroy" type="destructor">
++      <description summary="delete this object, used or not">
++        Destroys the frame. This request can be sent at any time by the client.
++      </description>
++    </request>
++
++    <event name="linux_dmabuf">
++      <description summary="linux-dmabuf buffer information">
++        Provides information about linux-dmabuf buffer parameters that need to
++        be used for this frame. This event is sent once after the frame is
++        created if linux-dmabuf buffers are supported.
++      </description>
++      <arg name="format" type="uint" summary="fourcc pixel format"/>
++      <arg name="width" type="uint" summary="buffer width"/>
++      <arg name="height" type="uint" summary="buffer height"/>
++    </event>
++
++    <event name="buffer_done">
++      <description summary="all buffer types reported">
++        This event is sent once after all buffer events have been sent.
++
++        The client should proceed to create a buffer of one of the supported
++        types, and send a "copy" request.
++      </description>
++    </event>
++  </interface>
++</protocol>
+diff -ruN a/src/niri.rs b/src/niri.rs
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -151,6 +151,7 @@
+ use crate::protocols::mutter_x11_interop::MutterX11InteropManagerState;
+ use crate::protocols::output_management::OutputManagementManagerState;
+ use crate::protocols::screencopy::{Screencopy, ScreencopyBuffer, ScreencopyManagerState};
++use crate::protocols::toplevel_export;
+ use crate::protocols::virtual_pointer::VirtualPointerManagerState;
+ use crate::render_helpers::blur::BlurOptions;
+ use crate::render_helpers::debug::push_opaque_regions;
+@@ -2395,6 +2396,8 @@
+ 
+         let mutter_x11_interop_state =
+             MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
++        // niri-loft: hyprland-toplevel-export-v1 (window thumbnails in Loft).
++        toplevel_export::init(&display_handle, client_is_unrestricted);
+ 
+         #[cfg(test)]
+         let single_pixel_buffer_state = SinglePixelBufferState::new::<State>(&display_handle);
+diff -ruN a/src/protocols/foreign_toplevel.rs b/src/protocols/foreign_toplevel.rs
+--- a/src/protocols/foreign_toplevel.rs
++++ b/src/protocols/foreign_toplevel.rs
+@@ -92,6 +92,16 @@
+     }
+ }
+ 
++impl ForeignToplevelManagerState {
++    /// niri-loft: the window a wlr-foreign-toplevel handle stands for.
++    pub fn wlr_handle_surface(&self, handle: &ZwlrForeignToplevelHandleV1) -> Option<WlSurface> {
++        self.toplevels
++            .iter()
++            .find(|(_, data)| data.wlr_management_instances.contains_key(handle))
++            .map(|(surface, _)| surface.clone())
++    }
++}
++
+ pub fn refresh(state: &mut State) {
+     let _span = tracy_client::span!("foreign_toplevel::refresh");
+ 
+@@ -508,7 +518,12 @@
+ 
+         let state = state.foreign_toplevel_manager_state();
+ 
+-        for data in state.toplevels.values_mut() {
++        // niri-loft: announce existing windows oldest first (by window id), so a
++        // client's handles are in the same order as niri's window ids, as they
++        // are for windows that open later.
++        let mut toplevels: Vec<_> = state.toplevels.values_mut().collect();
++        toplevels.sort_by_key(|data| data.identifier.get());
++        for data in toplevels {
+             data.add_wlr_instance::<D>(handle, client, &manager);
+         }
+ 
+diff -ruN a/src/protocols/mod.rs b/src/protocols/mod.rs
+--- a/src/protocols/mod.rs
++++ b/src/protocols/mod.rs
+@@ -4,6 +4,7 @@
+ pub mod mutter_x11_interop;
+ pub mod output_management;
+ pub mod screencopy;
++pub mod toplevel_export;
+ pub mod virtual_pointer;
+ 
+ pub mod raw;
+diff -ruN a/src/protocols/raw.rs b/src/protocols/raw.rs
+--- a/src/protocols/raw.rs
++++ b/src/protocols/raw.rs
+@@ -23,3 +23,32 @@
+         }
+     }
+ }
++
++// niri-loft: hyprland-toplevel-export-v1 (see protocols/toplevel_export.rs).
++pub mod hyprland_toplevel_export {
++    pub mod v1 {
++        pub use self::generated::server;
++
++        mod generated {
++            pub mod server {
++                #![allow(dead_code, non_camel_case_types, unused_unsafe, unused_variables)]
++                #![allow(non_upper_case_globals, non_snake_case, unused_imports)]
++                #![allow(missing_docs, clippy::all)]
++
++                use smithay::reexports::wayland_protocols_wlr::foreign_toplevel::v1::server::*;
++                use smithay::reexports::wayland_server;
++                use wayland_server::protocol::*;
++
++                pub mod __interfaces {
++                    use smithay::reexports::wayland_protocols_wlr::foreign_toplevel::v1::server::__interfaces::*;
++                    use smithay::reexports::wayland_server;
++                    use wayland_server::protocol::__interfaces::*;
++                    wayland_scanner::generate_interfaces!("resources/hyprland-toplevel-export-v1.xml");
++                }
++                use self::__interfaces::*;
++
++                wayland_scanner::generate_server_code!("resources/hyprland-toplevel-export-v1.xml");
++            }
++        }
++    }
++}
+diff -ruN a/src/protocols/toplevel_export.rs b/src/protocols/toplevel_export.rs
+--- a/src/protocols/toplevel_export.rs
++++ b/src/protocols/toplevel_export.rs
+@@ -0,0 +1,328 @@
++//! niri-loft: hyprland-toplevel-export-v1, a copy of one window's contents into a client's
++//! buffer.
++//!
++//! Quickshell's ScreencopyView captures a window (a wlr-foreign-toplevel handle) through this
++//! protocol; Loft's app switcher and dock previews use it for window thumbnails. A window is
++//! captured on any workspace, whether or not it is on screen, with its subsurfaces but without
++//! popups, borders, shadows or the traffic lights.
++//!
++//! Each copy renders the window right away. There is no damage tracking: a copy that asks to
++//! wait for damage gets full damage, so clients pace their own captures.
++
++use std::sync::atomic::{AtomicBool, Ordering};
++use std::time::Duration;
++
++use anyhow::Context as _;
++use calloop::generic::Generic;
++use calloop::{Interest, Mode, PostAction};
++use smithay::backend::allocator::dmabuf::Dmabuf;
++use smithay::backend::allocator::{Buffer, Fourcc};
++use smithay::backend::renderer::damage::OutputDamageTracker;
++use smithay::backend::renderer::gles::GlesRenderer;
++use smithay::backend::renderer::sync::SyncPoint;
++use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
++use smithay::reexports::wayland_server::protocol::wl_shm::Format;
++use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
++use smithay::reexports::wayland_server::{
++    Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
++};
++use smithay::utils::{Physical, Point, Scale, Size, Transform};
++use smithay::wayland::{dmabuf, shm};
++
++use super::raw::hyprland_toplevel_export::v1::server::{
++    hyprland_toplevel_export_frame_v1, hyprland_toplevel_export_manager_v1,
++};
++use crate::layout::LayoutElement as _;
++use crate::niri::{Niri, State};
++use crate::render_helpers::{render_to_dmabuf, render_to_shm, RenderCtx, RenderTarget};
++use crate::utils::get_monotonic_time;
++use hyprland_toplevel_export_frame_v1::{Flags, HyprlandToplevelExportFrameV1};
++use hyprland_toplevel_export_manager_v1::HyprlandToplevelExportManagerV1;
++
++const VERSION: u32 = 2;
++
++pub struct ToplevelExportGlobalData {
++    filter: Box<dyn for<'c> Fn(&'c Client) -> bool + Send + Sync>,
++}
++
++pub fn init(display: &DisplayHandle, filter: impl Fn(&Client) -> bool + Send + Sync + 'static) {
++    let global_data = ToplevelExportGlobalData {
++        filter: Box::new(filter),
++    };
++    display.create_global::<State, HyprlandToplevelExportManagerV1, _>(VERSION, global_data);
++}
++
++/// The window a frame captures, and its buffer size (fixed when the frame is created).
++#[derive(Clone)]
++struct Target {
++    surface: WlSurface,
++    size: Size<i32, Physical>,
++    scale: f64,
++}
++
++pub struct FrameData {
++    /// None: the window wasn't found, and the frame has failed.
++    target: Option<Target>,
++    copied: AtomicBool,
++}
++
++enum Destination {
++    Dmabuf(Dmabuf),
++    Shm(WlBuffer),
++}
++
++impl GlobalDispatch<HyprlandToplevelExportManagerV1, ToplevelExportGlobalData> for State {
++    fn bind(
++        _state: &mut Self,
++        _handle: &DisplayHandle,
++        _client: &Client,
++        resource: New<HyprlandToplevelExportManagerV1>,
++        _global_data: &ToplevelExportGlobalData,
++        data_init: &mut DataInit<'_, Self>,
++    ) {
++        data_init.init(resource, ());
++    }
++
++    fn can_view(client: Client, global_data: &ToplevelExportGlobalData) -> bool {
++        (global_data.filter)(&client)
++    }
++}
++
++impl Dispatch<HyprlandToplevelExportManagerV1, ()> for State {
++    fn request(
++        state: &mut Self,
++        _client: &Client,
++        _manager: &HyprlandToplevelExportManagerV1,
++        request: hyprland_toplevel_export_manager_v1::Request,
++        _data: &(),
++        _dhandle: &DisplayHandle,
++        data_init: &mut DataInit<'_, Self>,
++    ) {
++        let (frame, surface) = match request {
++            // The handle is niri's window id here (Hyprland's is a window address).
++            hyprland_toplevel_export_manager_v1::Request::CaptureToplevel {
++                frame, handle, ..
++            } => {
++                let surface = state
++                    .niri
++                    .layout
++                    .windows()
++                    .find(|(_, mapped)| mapped.id().get() == u64::from(handle))
++                    .map(|(_, mapped)| mapped.toplevel().wl_surface().clone());
++                (frame, surface)
++            }
++            hyprland_toplevel_export_manager_v1::Request::CaptureToplevelWithWlrToplevelHandle {
++                frame,
++                handle,
++                ..
++            } => {
++                let surface = state
++                    .niri
++                    .foreign_toplevel_state
++                    .wlr_handle_surface(&handle);
++                (frame, surface)
++            }
++            hyprland_toplevel_export_manager_v1::Request::Destroy => return,
++        };
++
++        let target = surface.and_then(|surface| target(&state.niri, surface));
++        let Some(target) = target else {
++            trace!("toplevel export: no such window");
++            let frame = data_init.init(
++                frame,
++                FrameData {
++                    target: None,
++                    copied: AtomicBool::new(true),
++                },
++            );
++            frame.failed();
++            return;
++        };
++
++        let size = target.size;
++        let frame = data_init.init(
++            frame,
++            FrameData {
++                target: Some(target),
++                copied: AtomicBool::new(false),
++            },
++        );
++
++        frame.buffer(
++            Format::Xrgb8888,
++            size.w as u32,
++            size.h as u32,
++            size.w as u32 * 4,
++        );
++        // With alpha: rounded window corners stay transparent.
++        frame.linux_dmabuf(Fourcc::Argb8888 as u32, size.w as u32, size.h as u32);
++        frame.buffer_done();
++    }
++}
++
++impl Dispatch<HyprlandToplevelExportFrameV1, FrameData> for State {
++    fn request(
++        state: &mut Self,
++        _client: &Client,
++        frame: &HyprlandToplevelExportFrameV1,
++        request: hyprland_toplevel_export_frame_v1::Request,
++        data: &FrameData,
++        _dhandle: &DisplayHandle,
++        _data_init: &mut DataInit<'_, Self>,
++    ) {
++        let hyprland_toplevel_export_frame_v1::Request::Copy {
++            buffer,
++            ignore_damage,
++        } = request
++        else {
++            return;
++        };
++        let Some(target) = &data.target else {
++            return;
++        };
++
++        if data.copied.swap(true, Ordering::SeqCst) {
++            frame.post_error(
++                hyprland_toplevel_export_frame_v1::Error::AlreadyUsed,
++                "copy was already requested",
++            );
++            return;
++        }
++
++        let size = target.size;
++        let destination = if let Ok(dmabuf) = dmabuf::get_dmabuf(&buffer) {
++            if matches!(dmabuf.format().code, Fourcc::Argb8888 | Fourcc::Xrgb8888)
++                && dmabuf.width() == size.w as u32
++                && dmabuf.height() == size.h as u32
++            {
++                Destination::Dmabuf(dmabuf.clone())
++            } else {
++                frame.post_error(
++                    hyprland_toplevel_export_frame_v1::Error::InvalidBuffer,
++                    "invalid dmabuf parameters",
++                );
++                return;
++            }
++        } else if shm::with_buffer_contents(&buffer, |_, shm_len, buffer_data| {
++            buffer_data.format == Format::Xrgb8888
++                && buffer_data.width == size.w
++                && buffer_data.height == size.h
++                && buffer_data.stride == size.w * 4
++                && shm_len == buffer_data.stride as usize * buffer_data.height as usize
++        })
++        .unwrap_or(false)
++        {
++            Destination::Shm(buffer)
++        } else {
++            frame.post_error(
++                hyprland_toplevel_export_frame_v1::Error::InvalidBuffer,
++                "invalid buffer",
++            );
++            return;
++        };
++
++        let niri = &state.niri;
++        let res = state
++            .backend
++            .with_primary_renderer(|renderer| render(niri, renderer, target, &destination));
++
++        match res {
++            Some(Ok(sync)) => {
++                if ignore_damage == 0 {
++                    frame.damage(0, 0, size.w as u32, size.h as u32);
++                }
++                submit_after_sync(frame.clone(), sync, niri);
++            }
++            Some(Err(err)) => {
++                debug!("toplevel export: error rendering: {err:?}");
++                frame.failed();
++            }
++            None => frame.failed(),
++        }
++    }
++}
++
++/// The window behind `surface`, sized in physical px of the display it's on.
++fn target(niri: &Niri, surface: WlSurface) -> Option<Target> {
++    let (mapped, output) = niri.layout.find_window_and_output(&surface)?;
++    let scale = output.map_or(1., |output| output.current_scale().fractional_scale());
++    let size: Size<i32, Physical> = mapped.size().to_f64().to_physical_precise_round(scale);
++    if size.w <= 0 || size.h <= 0 {
++        return None;
++    }
++    Some(Target {
++        surface,
++        size,
++        scale,
++    })
++}
++
++fn render(
++    niri: &Niri,
++    renderer: &mut GlesRenderer,
++    target: &Target,
++    destination: &Destination,
++) -> anyhow::Result<Option<SyncPoint>> {
++    let (mapped, _) = niri
++        .layout
++        .find_window_and_output(&target.surface)
++        .context("window is gone")?;
++
++    let scale = Scale::from(target.scale);
++    let mut elements = Vec::new();
++    mapped.render_normal(
++        RenderCtx {
++            renderer,
++            target: RenderTarget::ScreenCapture,
++            xray: None,
++        },
++        Point::from((0., 0.)),
++        scale,
++        1.,
++        &mut |elem| elements.push(elem),
++    );
++
++    let mut damage_tracker = OutputDamageTracker::new(target.size, scale, Transform::Normal);
++    let (_, states) = damage_tracker
++        .damage_output(1, &elements)
++        .context("error computing damage")?;
++
++    match destination {
++        Destination::Dmabuf(dmabuf) => render_to_dmabuf(
++            renderer,
++            &mut damage_tracker,
++            dmabuf.clone(),
++            &elements,
++            states,
++        )
++        .map(Some),
++        Destination::Shm(buffer) => {
++            render_to_shm(renderer, &mut damage_tracker, buffer, &elements, states).map(|()| None)
++        }
++    }
++}
++
++fn submit(frame: &HyprlandToplevelExportFrameV1, timestamp: Duration) {
++    frame.flags(Flags::empty());
++    let tv_sec_hi = (timestamp.as_secs() >> 32) as u32;
++    let tv_sec_lo = (timestamp.as_secs() & 0xFFFFFFFF) as u32;
++    frame.ready(tv_sec_hi, tv_sec_lo, timestamp.subsec_nanos());
++}
++
++fn submit_after_sync(frame: HyprlandToplevelExportFrameV1, sync: Option<SyncPoint>, niri: &Niri) {
++    let timestamp = get_monotonic_time();
++    match sync.and_then(|s| s.export()) {
++        None => submit(&frame, timestamp),
++        Some(sync_fd) => {
++            let source = Generic::new(sync_fd, Interest::READ, Mode::OneShot);
++            niri.event_loop
++                .insert_source(source, move |_, _, _| {
++                    if frame.is_alive() {
++                        submit(&frame, timestamp);
++                    }
++                    Ok(PostAction::Remove)
++                })
++                .unwrap();
++        }
++    }
++}

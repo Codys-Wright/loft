@@ -3,7 +3,8 @@ import Quickshell
 import Quickshell.Wayland
 import qs.services
 
-// Snapshots for the dock preview (see services/Previews.qml for why): one
+// Snapshots for the dock preview where niri can't capture single windows
+// (stock niri; see services/Previews.qml): one
 // still of each display an app's window is showing on (wlr-screencopy,
 // through ScreencopyView), cropped to the window and kept as an image
 // (Previews.setThumb). The dock starts this when the pointer reaches an
@@ -24,7 +25,8 @@ Item {
     readonly property int maxSide: 440
 
     function capture(appId) {
-        if (!Previews.enabled || !Previews.thumbnails || jobs.length > 0)
+        // Not needed where each card captures its own window (niri-loft).
+        if (!Previews.enabled || !Previews.thumbnails || Previews.windowThumbs || jobs.length > 0)
             return;
         const js = [];
         for (const w of DockData.windowsOf(appId)) {

@@ -248,7 +248,13 @@ class CaptureTest(unittest.TestCase):
         soft = dock.capture_support({"zwlr_screencopy_manager_v1": 3, "zwp_linux_dmabuf_v1": 3})
         self.assertFalse(soft["screencopy"])
         self.assertIn("v3", soft["reason"])
-        self.assertTrue(dock.capture_support({"hyprland_toplevel_export_manager_v1": 1})["toplevel"])
+        # A window: hyprland-toplevel-export v2 on wlr-foreign-toplevel handles
+        # (niri-loft), and only where Quickshell's buffers are safe.
+        loft = {"hyprland_toplevel_export_manager_v1": 2, "zwlr_foreign_toplevel_manager_v1": 3, "zwp_linux_dmabuf_v1": 5}
+        self.assertTrue(dock.capture_support(loft)["toplevel"])
+        self.assertFalse(dock.capture_support({**loft, "zwp_linux_dmabuf_v1": 3})["toplevel"])
+        self.assertFalse(dock.capture_support({**loft, "hyprland_toplevel_export_manager_v1": 1})["toplevel"])
+        self.assertFalse(dock.capture_support({"hyprland_toplevel_export_manager_v1": 2})["toplevel"])
         self.assertFalse(dock.capture_support({})["screencopy"])
 
 

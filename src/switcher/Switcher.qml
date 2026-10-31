@@ -16,6 +16,10 @@ import qs.services
 // `switcher windows` (⌃↓, macOS App Exposé) opens it on the focused app's
 // windows instead, one entry per window, and leaves it open (no modifier to
 // let go of): ←→ / hover pick, Return / click focuses, Escape closes.
+//
+// Where niri can capture single windows (niri-loft, WindowCapture), each
+// app shows its latest window, refreshed every second while the switcher is
+// open, with the app icon on it; elsewhere, just the icon.
 PanelWindow {
     id: root
 
@@ -34,13 +38,18 @@ PanelWindow {
 
     readonly property bool onThisScreen: (Niri.focusedWorkspace?.output ?? modelData.name) === modelData.name
 
+    // Window thumbnails, sized so every app fits on the display.
+    readonly property bool thumbs: WindowCapture.canWindows
+    readonly property int cellW: thumbs ? Math.max(120, Math.min(220, Math.floor((modelData.width - 100) / Math.max(1, apps.length)) - 14)) : 96
+    readonly property int cellH: thumbs ? Math.round(cellW * 0.72) : 96
+
     visible: open
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "loft:switcher"
     WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: Math.max(240, row.implicitWidth + 40)
-    implicitHeight: 170
+    implicitHeight: cellH + 74
     color: "transparent"
 
     BackgroundEffect.blurRegion: blur
@@ -187,17 +196,33 @@ PanelWindow {
                         required property int index
                         readonly property bool current: index === root.selected
 
-                        Layout.preferredWidth: 96
-                        Layout.preferredHeight: 96
-                        radius: 22
+                        Layout.preferredWidth: root.cellW
+                        Layout.preferredHeight: root.cellH
+                        radius: root.thumbs ? 18 : 22
                         color: current ? Theme.withAlpha(Theme.text, 0.18) : "transparent"
                         border.width: current ? 1 : 0
                         border.color: Theme.glassBorder
 
+                        // The app's latest window, captured while the switcher is open
+                        // (from the first press, so it's there when the panel shows).
+                        WindowThumb {
+                            id: thumb
+                            anchors {
+                                fill: parent
+                                margins: 8
+                                bottomMargin: 14
+                            }
+                            windowId: cell.modelData.windows[0].id
+                            active: root.thumbs && root.open
+                        }
+
+                        // The icon: alone, or on the thumbnail's lower edge.
                         AppIcon {
-                            anchors.centerIn: parent
-                            width: 72
-                            height: 72
+                            readonly property int side: thumb.ready ? 44 : 72
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: thumb.ready ? parent.height - side - 2 : (parent.height - side) / 2
+                            width: side
+                            height: side
                             appId: cell.modelData.appId
                         }
 
