@@ -204,7 +204,7 @@
             include optional=true "$state/overrides/spaces.kdl"
             include optional=true "$state/overrides/niri.kdl"
             include "${../niri/workspace-wallpapers.kdl}"
-            include "${../niri/traffic-lights.kdl}"
+            include "${../niri/title-bar.kdl}"
             spawn-at-startup "${lib.getExe self'.packages.loft-shell}"
             spawn-at-startup "${lib.getExe self'.packages.loft-launcher}" "service"
             EOF
@@ -260,17 +260,23 @@
           patches = (old.patches or [ ]) ++ [ ./qt/nvidia-vaapi-driver-no-hang.patch ];
         });
 
+        # …+ nix/niri/title-bar.patch: a KWin-style server-side title bar (traffic
+        # lights, centered title) above every window that lets niri decorate it;
+        # the tile reserves its height. `layout { title-bar { … } }` and the
+        # window rule of the same name (niri/title-bar.kdl,
+        # docs/WINDOW-DECORATIONS.md). The version string carries "title-bar"
+        # and `passthru.loftTitleBar` gates the fragment like the layer rule.
         niri-loft = pkgs.niri.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [
             ./niri/workspace-layers.patch
-            ./niri/traffic-lights.patch
+            ./niri/title-bar.patch
           ];
           env = (old.env or { }) // {
-            NIRI_BUILD_COMMIT = "Nixpkgs, loft: workspace-layers, traffic-lights";
+            NIRI_BUILD_COMMIT = "Nixpkgs, loft: workspace-layers, title-bar";
           };
           passthru = (old.passthru or { }) // {
             loftWorkspaceLayers = true;
-            loftTrafficLights = true;
+            loftTitleBar = true;
           };
         });
 

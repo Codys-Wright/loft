@@ -427,9 +427,9 @@ shell_env="$shell_env$video_env"
 ws_kdl=""
 ws_env=""
 if [ "$ws_layers" = 1 ]; then
-  # niri-loft's traffic lights too (nix/niri/traffic-lights.patch).
+  # niri-loft's title bar too (nix/niri/title-bar.patch).
   ws_kdl="include \"$root/niri/workspace-wallpapers.kdl\"
-include \"$root/niri/traffic-lights.kdl\""
+include \"$root/niri/title-bar.kdl\""
   ws_env='"LOFT_NIRI_WORKSPACE_LAYERS=1" '
 fi
 

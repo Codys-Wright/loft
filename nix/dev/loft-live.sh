@@ -17,7 +17,7 @@
 # the session ends), so a reboot or a new login is always the installed Loft.
 #
 # What hot-reloads: QML (src/), the checkout's niri fragments (shell binds,
-# traffic-lights.kdl, workspace-wallpapers.kdl — through the optional include
+# title-bar.kdl, workspace-wallpapers.kdl — through the optional include
 # of <state>/dev/niri.kdl in loft/niri.kdl), themes/templates (`loft` is the
 # checkout's CLI for the shell), launcher theme. The compositor itself can't
 # be swapped under a running session: --niri builds the checkout's niri-loft
@@ -60,7 +60,8 @@ env_get() { sed -n "s/^$1=//p" "$live/active" 2>/dev/null | head -n1; }
 is_active() { [ -f "$live/active" ]; }
 
 # The running compositor's features, from its version string ("…, loft:
-# workspace-layers, traffic-lights").
+# workspace-layers, title-bar"). Builds from before the title bar say
+# "traffic-lights" and reject title-bar.kdl.
 niri_has() { niri msg version 2>/dev/null | grep -q "loft:.*$1"; }
 
 build_niri() {
@@ -184,13 +185,13 @@ start() {
     if niri_has workspace-layers && [ -f "$root/niri/workspace-wallpapers.kdl" ]; then
       echo "include \"$root/niri/workspace-wallpapers.kdl\""
     fi
-    if niri_has traffic-lights && [ -f "$root/niri/traffic-lights.kdl" ]; then
-      echo "include \"$root/niri/traffic-lights.kdl\""
+    if niri_has title-bar && [ -f "$root/niri/title-bar.kdl" ]; then
+      echo "include \"$root/niri/title-bar.kdl\""
     fi
     [ -f "$root/niri/dev-local.kdl" ] && echo "include \"$root/niri/dev-local.kdl\""
   } > "$dev/niri.kdl"
-  if [ -f "$root/niri/traffic-lights.kdl" ] && ! niri_has traffic-lights; then
-    say "the running niri has no traffic lights; \`loft-live --niri\` builds one for the next login"
+  if [ -f "$root/niri/title-bar.kdl" ] && ! niri_has title-bar; then
+    say "the running niri has no title bar; \`loft-live --niri\` builds one for the next login"
   fi
 
   setenv=()

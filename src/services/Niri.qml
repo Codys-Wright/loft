@@ -32,11 +32,11 @@ Singleton {
     signal screenshotTaken(string path)
     // niri (re)loaded its config files; failed = it kept the previous config.
     signal configLoaded(bool failed)
-    // niri-loft (nix/niri/traffic-lights.patch): a window's yellow traffic
+    // niri-loft (nix/niri/title-bar.patch): a window's yellow traffic
     // light, or its own minimize button — niri has no minimize, the shell hides.
     signal windowMinimizeRequested(int id)
-    // …its green traffic light pressed and held: a window menu at x, y (logical,
-    // within output).
+    // …its green traffic light pressed and held, or its title bar
+    // right-clicked: a window menu at x, y (logical, within output).
     signal windowActionsMenuRequested(int id, string output, real x, real y)
     // The set of outputs carrying workspaces changed (hotplug, enable/disable).
     // niri 26.04 has no output events, so this is the closest live signal.

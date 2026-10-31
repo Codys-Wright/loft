@@ -112,8 +112,8 @@
 
       # The consumer runs a niri that parses `place-within-workspace`.
       workspaceLayers = cfg.niriPackage.passthru.loftWorkspaceLayers or false;
-      # …and `traffic-lights` (nix/niri/traffic-lights.patch).
-      trafficLights = cfg.niriPackage.passthru.loftTrafficLights or false;
+      # …and `title-bar` (nix/niri/title-bar.patch).
+      titleBar = cfg.niriPackage.passthru.loftTitleBar or false;
 
       # programs.loft.keyboard: the seed `loft keys` layers runtime changes on.
       keyboardSeed = {
@@ -683,8 +683,8 @@
         + lib.optionalString workspaceLayers ''
           include "${self}/niri/workspace-wallpapers.kdl"
         ''
-        + lib.optionalString trafficLights ''
-          include "${self}/niri/traffic-lights.kdl"
+        + lib.optionalString titleBar ''
+          include "${self}/niri/title-bar.kdl"
         ''
         # `loft-live` (nix/dev/loft-live.sh): a checkout's fragments over these
         # while it runs the desktop; the file only exists then.
