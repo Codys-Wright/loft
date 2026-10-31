@@ -155,7 +155,7 @@ Singleton {
         const p = n?.properties ?? {};
         const named = p["application.icon_name"];
         if (named) {
-            const path = Quickshell.iconPath(named, true);
+            const path = Apps.themed(named);
             if (path)
                 return path;
         }

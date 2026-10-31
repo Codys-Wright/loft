@@ -124,7 +124,8 @@ def cmd_perf(ctx, a) -> None:
     v = s.get("videos", {})
     print(f"shell        pid {pid}, up {s.get('uptime', 0) // 60} min, {s.get('reloads', 0)} reload(s)")
     print(f"cpu          {s.get('cpu', 0)}% now, {s.get('cpuAvg', 0)}% over {s.get('window', 30)} s · rss {s.get('rssMB', 0)} MB")
-    print(f"main thread  lag p50 {lag.get('p50', 0)} ms · p99 {lag.get('p99', 0)} ms · max {lag.get('max', 0)} ms · stalls>50ms {lag.get('stalls', 0)}")
+    print(f"main thread  lag p50 {lag.get('p50', 0)} ms · p99 {lag.get('p99', 0)} ms · max {lag.get('max', 0)} ms · stalls>50ms {lag.get('stalls', 0)}"
+          + ("" if s.get("settled", True) else " · just (re)loaded: lag counts after 20 s"))
     print(f"videos       {v.get('playing', 0)} playing / {v.get('loaded', 0)} loaded · decode: {v.get('decode', '?')}"
           + (f" · held: {v['held']}" if v.get("held") else "")
           + (f" · copy-back seen {copyback}×" if copyback > 0 else ""))

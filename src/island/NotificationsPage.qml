@@ -74,8 +74,8 @@ Item {
 
                     Item {
                         readonly property string icon: row.modelData.appIcon ?? ""
-                        readonly property string themed: icon.startsWith("/") ? "file://" + icon : icon.startsWith("file:") ? icon : icon !== "" ? Quickshell.iconPath(icon, true) : ""
-                        readonly property string source: row.modelData.image || themed || Quickshell.iconPath("dialog-information", true)
+                        readonly property string themed: icon.startsWith("/") ? "file://" + icon : icon.startsWith("file:") ? icon : icon !== "" ? Apps.themed(icon) : ""
+                        readonly property string source: row.modelData.image || themed || Apps.themed("dialog-information")
                         implicitWidth: 28
                         implicitHeight: 28
 
@@ -83,6 +83,7 @@ Item {
                             anchors.fill: parent
                             visible: parent.source !== ""
                             source: parent.source
+                            asynchronous: true
                         }
                         // No icon in the theme: a bell, not Qt's "missing" pattern.
                         Icon {

@@ -21,7 +21,7 @@ Item {
         const icon = notification?.appIcon ?? "";
         if (icon.startsWith("/") || icon.startsWith("file:"))
             return icon.startsWith("/") ? "file://" + icon : icon;
-        return (icon !== "" ? Quickshell.iconPath(icon, true) : "") || Quickshell.iconPath("dialog-information", true);
+        return (icon !== "" ? Apps.themed(icon) : "") || Apps.themed("dialog-information");
     }
     readonly property string file: notification?.file ?? ""
     // From the iPhone (tetherd, or Loft's own message banners): tagged, and a
@@ -29,7 +29,7 @@ Item {
     readonly property bool phone: Notifications.isPhone(notification)
     readonly property bool themedIcon: {
         const icon = notification?.appIcon ?? "";
-        return icon !== "" && (icon.startsWith("/") || icon.startsWith("file:") || Quickshell.iconPath(icon, true) !== "");
+        return icon !== "" && (icon.startsWith("/") || icon.startsWith("file:") || Apps.themed(icon) !== "");
     }
     readonly property string glyph: notification?.glyph ?? (phone && !themedIcon && imageSource === "" ? "󰄜" : "")
     // Named actions; an internal banner may list its default action too.
@@ -81,6 +81,7 @@ Item {
                 visible: root.imageSource === "" && root.glyph === "" && root.iconSource !== ""
                 implicitSize: 36
                 source: root.iconSource
+                asynchronous: true
             }
 
             // Loft's own banners can bring a glyph (no icon theme needed);

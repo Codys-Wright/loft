@@ -32,18 +32,25 @@ Singleton {
     // shell has settled: Apps.iconSources (icon theme, heuristic desktop
     // entry) is synchronous and cached, and doing it for a screenful of
     // apps held the first opening back by over a second.
+    // At most ~8 ms of lookups per tick (at least one app): a themed name
+    // that misses walks every theme directory (20–90 ms), and 8 apps per
+    // tick held the GUI thread up to 270 ms at a time when most names
+    // missed (#16).
     property int warmed: 0
     Timer {
-        interval: root.warmed === 0 ? 5000 : 30
+        interval: root.warmed === 0 ? 5000 : 50
         running: root.warmed < Apps.entries.length
         repeat: true
         onTriggered: {
             const all = Apps.entries;
-            const end = Math.min(all.length, root.warmed + 8);
-            for (let i = root.warmed; i < end; i++)
+            const t0 = Date.now();
+            let i = root.warmed;
+            while (i < all.length && Date.now() - t0 < 8) {
                 if (all[i]?.id)
                     Apps.iconSources(all[i].id);
-            root.warmed = end;
+                i++;
+            }
+            root.warmed = i;
         }
     }
     Connections {

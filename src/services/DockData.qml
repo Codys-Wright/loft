@@ -437,7 +437,7 @@ Singleton {
         if (thumbs !== false && item.thumb)
             out.push("file://" + item.thumb);
         for (const n of [item.icon, item.generic, item.dir ? "folder" : "text-x-generic", "unknown"]) {
-            const p = n ? Quickshell.iconPath(n, true) : "";
+            const p = n ? Apps.themed(n) : "";
             if (p && !out.includes(p))
                 out.push(p);
         }
@@ -450,7 +450,7 @@ Singleton {
         const special = { "xdg:DOWNLOAD": "folder-download", "xdg:DOCUMENTS": "folder-documents", "xdg:PICTURES": "folder-pictures", "xdg:MUSIC": "folder-music", "xdg:VIDEOS": "folder-videos", "xdg:DESKTOP": "user-desktop" };
         const out = [];
         for (const n of [special[spec], "folder"]) {
-            const p = n ? Quickshell.iconPath(n, true) : "";
+            const p = n ? Apps.themed(n) : "";
             if (p && !out.includes(p))
                 out.push(p);
         }
