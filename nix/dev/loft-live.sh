@@ -62,7 +62,10 @@ is_active() { [ -f "$live/active" ]; }
 # The running compositor's features, from its version string ("…, loft:
 # workspace-layers, title-bar"). Builds from before the title bar say
 # "traffic-lights" and reject title-bar.kdl.
-niri_has() { niri msg version 2>/dev/null | grep -q "loft:.*$1"; }
+# The compositor's line only: the CLI on PATH (this package's niri-loft) can
+# be newer than the running niri, and its line made a niri without the
+# title bar include title-bar.kdl and reject the whole config.
+niri_has() { niri msg version 2>/dev/null | grep "^Compositor" | grep -q "loft:.*$1"; }
 
 build_niri() {
   [ -n "$root" ] || root="$(env_get CHECKOUT)"
