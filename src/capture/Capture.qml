@@ -252,6 +252,7 @@ Singleton {
     function shootScreen() {
         const out = newShotPath();
         const name = screenFocused?.name ?? "";
+        Niri.shutter();
         exec(["sh", "-c", 'mkdir -p "$(dirname "$2")" && exec grim ${3:+-c} ${1:+-o "$1"} "$2"', "sh", name, out, cfg.showPointer ? "1" : ""], (code, _out, err) => code === 0 ? shotDone(out) : failed("Screenshot failed", err));
     }
 
@@ -262,6 +263,7 @@ Singleton {
             return;
         }
         const out = newShotPath();
+        Niri.shutter();
         // niri writes the file and copies it; ScreenshotCaptured(path) follows.
         exec(["mkdir", "-p", screenshotDir], () => Niri.action("ScreenshotWindow", {
                 id: w.id,
@@ -336,6 +338,7 @@ Singleton {
             crop(src, px, out, () => recognize(out));
         } else {
             const out = newShotPath();
+            Niri.shutter();
             crop(src, px, out, () => root.shotDone(out));
         }
         frozen = {};

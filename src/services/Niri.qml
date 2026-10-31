@@ -29,7 +29,11 @@ Singleton {
     property var keyboardLayouts: ({ names: [], current_idx: 0 })
 
     // A screenshot was taken (niri's screenshot UI or actions); path may be "".
+    // niri only says so once the PNG is encoded, seconds later on big outputs.
     signal screenshotTaken(string path)
+    // The moment Loft's own capture takes the picture (before encoding): the
+    // island's shutter flashes then, not when screenshotTaken follows.
+    signal shutter()
     // niri (re)loaded its config files; failed = it kept the previous config.
     signal configLoaded(bool failed)
     // niri-loft (nix/niri/title-bar.patch): a window's yellow traffic

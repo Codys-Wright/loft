@@ -1124,10 +1124,19 @@ PanelWindow {
         }
     }
 
+    // The flash comes with the picture: Loft's own captures say so at once
+    // (shutter); niri's own screenshots only once their PNG is encoded
+    // (screenshotTaken), which for ours comes after the flash already ran.
+    property real shutterAt: 0
     Connections {
         target: Niri
-        function onScreenshotTaken() {
+        function onShutter() {
+            root.shutterAt = Date.now();
             shutter.restart();
+        }
+        function onScreenshotTaken() {
+            if (Date.now() - root.shutterAt > 10000)
+                shutter.restart();
         }
     }
 
