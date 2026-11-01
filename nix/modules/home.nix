@@ -171,11 +171,24 @@
         chmod 644 ${lib.escapeShellArg keymapConfig}
       '';
 
+      # Loft runs inside niri only. Started by niri's session unit, not
+      # graphical-session.target: other desktops (Plasma, GNOME) reach that
+      # target too, and must not get a second bar. Requisite (not BindsTo,
+      # which would start niri) keeps a crash restart from landing in
+      # whatever desktop came next; niri.service's ExecStopPost
+      # (loftSessionUnits below) stops the units when niri dies.
       service = description: exec: {
         Unit = {
           Description = description;
-          PartOf = [ "graphical-session.target" ];
-          After = [ "graphical-session.target" ];
+          PartOf = [
+            "graphical-session.target"
+            "niri.service"
+          ];
+          After = [
+            "graphical-session.target"
+            "niri.service"
+          ];
+          Requisite = [ "niri.service" ];
         };
         Service = {
           ExecStart = exec;
@@ -183,11 +196,15 @@
           Restart = "on-failure";
           RestartSec = 2;
         };
-        # Started by niri's session unit, not graphical-session.target — other
-        # desktops (Plasma, GNOME) reach that target too, and must not get
-        # a second bar.
         Install.WantedBy = [ "niri.service" ];
       };
+
+      loftSessionUnits = [
+        "loft-shell.service"
+        "loft-launcher.service"
+      ]
+      ++ lib.optional cfg.keyboard.enable "loft-keys.service"
+      ++ lib.optional cfg.sleepWatcher "loft-sleep.service";
     in
     {
       # programs.loft.spotify (./spotify.nix), then studio-linux (Loft's old
@@ -730,10 +747,6 @@
           lib.recursiveUpdate
             (service "Loft keyboard layer (xremap)" "${lib.getExe cfg.keyboard.package} --mouse --watch=config,device ${keymapConfig}")
             {
-              Unit.After = [
-                "graphical-session.target"
-                "niri.service"
-              ];
               Service.ExecStartPre = [
                 "${findNiriSocket}"
                 "${keymapStart}"
@@ -741,9 +754,19 @@
             }
         );
 
+        # niri can end without a stop job (a killed session, a crash), and
+        # PartOf only follows stop jobs: then the shell and xremap would live
+        # on into the next desktop. ExecStopPost runs however niri ended.
+        xdg.configFile."systemd/user/niri.service.d/50-loft.conf".text = ''
+          [Service]
+          ExecStopPost=-${pkgs.systemd}/bin/systemctl --user --no-block stop ${lib.concatStringsSep " " loftSessionUnits}
+        '';
+
         # Idle: lock through the shell (its WlSessionLock) and blank the screens.
         services.swayidle = {
           enable = true;
+          # Its lock and blanking go through Loft and niri.
+          systemdTarget = lib.mkDefault "niri.service";
           timeouts =
             lib.optional (cfg.idle.lockAfter != null) {
               timeout = cfg.idle.lockAfter;
