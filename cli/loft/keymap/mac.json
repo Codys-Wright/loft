@@ -95,7 +95,8 @@
       "id": "dual-role",
       "name": "Esc / Caps Lock: tap = Escape, hold = window-manager key",
       "section": "modmap",
-      "description": "Hold emits Right Alt, which XKB lv3:ralt_switch makes niri's mod key (ISO_Level3_Shift).",
+      "wmKey": true,
+      "description": "Hold is the window-manager key. niri: Right Alt, which XKB lv3:ralt_switch makes niri's Mod (ISO_Level3_Shift). Plasma: a key apps never see that sends Meta with the next key, so Caps Lock + T reaches KWin as Meta+T.",
       "remap": {
         "Esc": {
           "tap": "Esc",
@@ -115,6 +116,7 @@
       "id": "right-ctrl-mod",
       "name": "Right Ctrl = window-manager key",
       "section": "modmap",
+      "wmKey": true,
       "on": false,
       "remap": {
         "Ctrl_R": {
@@ -139,6 +141,7 @@
       "id": "mac-parity",
       "name": "macOS system shortcuts → Loft (⌃←/→/↑/↓, ⌃⌘…, ⌘H/M)",
       "section": "keymap",
+      "wmKey": true,
       "description": "⌃←/→ spaces, ⌃↑ Mission Control, ⌃↓ App Exposé reach niri as Mod+⌃+arrow (plain ⌃+arrows, which ⌥←/→ word navigation sends, stay the app's); ⌃⌘ shortcuts pass through to niri instead of becoming Ctrl+key; ⌘H / ⌘M hide on Right Super (generated from keymap/parity.json)",
       "exact_match": true,
       "remap": {

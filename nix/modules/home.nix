@@ -127,16 +127,18 @@
       };
       keymapConfig = "${stateDir}/xremap/config.json";
       # The keymap as this seed renders it, for when `loft keys xremap` fails
-      # at start: a Loft failure never costs the remaps.
+      # at start: a Loft failure never costs the remaps. One per
+      # window-manager key (cli/loft/keys.py): ralt in niri, meta in Plasma.
       keymapFallback =
-        pkgs.runCommand "loft-keymap-fallback.json"
+        wmKey:
+        pkgs.runCommand "loft-keymap-fallback-${wmKey}.json"
           {
             seed = builtins.toJSON keyboardSeed;
             passAsFile = [ "seed" ];
           }
           ''
             HOME=$TMPDIR LOFT_STATE_DIR=$TMPDIR/state LOFT_KEYMAP_SEED=$seedPath \
-              ${lib.getExe sp.loft} keys render --out $out
+              ${lib.getExe sp.loft} keys render --wm-key ${wmKey} --out $out
           '';
       # xremap's per-app remaps need NIRI_SOCKET, which niri doesn't put in
       # the systemd user environment. More than one niri can be running (a
@@ -167,7 +169,10 @@
         ${lib.getExe sp.loft} keys xremap && exit 0
         echo "loft keys xremap failed; using the keymap as Nix configured it" >&2
         mkdir -p "$(dirname ${lib.escapeShellArg keymapConfig})"
-        cp ${keymapFallback} ${lib.escapeShellArg keymapConfig}
+        case "''${LOFT_WM_KEY:-}" in
+          meta) cp ${keymapFallback "meta"} ${lib.escapeShellArg keymapConfig} ;;
+          *) cp ${keymapFallback "ralt"} ${lib.escapeShellArg keymapConfig} ;;
+        esac
         chmod 644 ${lib.escapeShellArg keymapConfig}
       '';
 
@@ -192,7 +197,9 @@
         };
         Service = {
           ExecStart = exec;
-          Environment = env;
+          # The window-manager key (cli/loft/keys.py): niri's Mod is Right
+          # Alt, so `loft keys …` run by these units renders it that way.
+          Environment = env ++ [ "LOFT_WM_KEY=ralt" ];
           Restart = "on-failure";
           RestartSec = 2;
         };
@@ -335,7 +342,10 @@
         Service = {
           ExecCondition = "${lib.getExe loftPlasma} check loft";
           ExecStart = exec;
-          Environment = env;
+          # KWin's shortcuts take Meta, not niri's Right Alt Mod: holding Caps
+          # Lock / Esc renders as a private key that sends Meta
+          # (cli/loft/keys.py, docs/KWIN.md §4).
+          Environment = env ++ [ "LOFT_WM_KEY=meta" ];
           Restart = "on-failure";
           RestartSec = 2;
         };
@@ -1028,7 +1038,10 @@
               # cgroup. Quickshell's own crash restart re-executes in place, and
               # the crashed image's helpers (nmcli / udisksctl monitors,
               # watchers) live on next to the new ones, then as zombies.
-              Service.Environment = env ++ [ "QS_DISABLE_CRASH_HANDLER=1" ];
+              Service.Environment = env ++ [
+                "QS_DISABLE_CRASH_HANDLER=1"
+                "LOFT_WM_KEY=ralt"
+              ];
               # Stands down while `loft-live` runs a checkout's shell: a
               # switch or a crash restart can't start this one underneath.
               Unit.ConditionPathExists = "!%t/loft-live/active";
@@ -1139,7 +1152,10 @@
         # started from the "Loft" entry (see loftPlasma above).
         systemd.user.services.loft-plasma-shell = lib.mkIf cfg.plasma.enable (
           lib.recursiveUpdate (plasmaService "Loft shell in Plasma (Quickshell)" (lib.getExe sp.loft-shell)) {
-            Service.Environment = env ++ [ "QS_DISABLE_CRASH_HANDLER=1" ];
+            Service.Environment = env ++ [
+              "QS_DISABLE_CRASH_HANDLER=1"
+              "LOFT_WM_KEY=meta"
+            ];
             # The same first-start theme as on niri.
             Service.ExecStartPre = config.systemd.user.services.loft-shell.Service.ExecStartPre;
             # While Loft runs: Loft's title bars and Loft's shortcuts; when it
@@ -1188,7 +1204,10 @@
             (plasmaService "Loft keyboard layer in Plasma (xremap, KDE)" "${lib.getExe cfg.keyboard.plasmaPackage} --mouse --watch=config,device ${keymapConfig}")
             {
               Unit.Conflicts = [ "loft-keys.service" ];
-              Service.Environment = env ++ [ "KDE_SESSION_VERSION=6" ];
+              Service.Environment = env ++ [
+                "KDE_SESSION_VERSION=6"
+                "LOFT_WM_KEY=meta"
+              ];
               Service.ExecStartPre = [ "${keymapStart}" ];
               # xremap's focus script ("xremap") outlives xremap in KWin.
               Service.ExecStopPost = "-${qdbus} org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript xremap";

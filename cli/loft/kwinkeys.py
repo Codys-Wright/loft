@@ -20,7 +20,9 @@ keeps nothing of Loft's.
   loft keys kwin release                     give them back
 
 Mod and Super are both Meta here: the KWin session has no ISO_Level3_Shift
-window-manager key (niri/base.kdl `mod-key`).
+window-manager key (niri/base.kdl `mod-key`). The keyboard layer makes the
+WM key (Caps Lock / Esc / Right Ctrl held) send Meta in Plasma instead
+(keys.py, LOFT_WM_KEY=meta), so the same physical keys reach these shortcuts.
 """
 
 from __future__ import annotations

@@ -426,7 +426,7 @@ THEBATTLESHIP and voyager.**
 | Physical key | Linux (Loft) | macOS native |
 |---|---|---|
 | Super (Cmd position) | **Cmd**: app shortcuts via xremap (copy, paste, tabs, …); niri Mod too where `lv3:lwin_switch` is set (the fleet) | Cmd |
-| Caps (hold), Esc (hold), Right Alt, Right Ctrl (hold, `right-ctrl-mod`) | **niri Mod** (ISO_Level3_Shift) | — (voyager: Caps-hold → Hyper) |
+| Caps (hold), Esc (hold), Right Alt, Right Ctrl (hold, `right-ctrl-mod`) | **niri Mod** (ISO_Level3_Shift). In a Plasma session the holds are a private xremap key that sends **Meta** + the next key (KWIN.md §4.5) | — (voyager: Caps-hold → Hyper) |
 | Left Ctrl | Ctrl (terminal signals, readline) **+ ⌃←/→/↑/↓ aliases below** | Ctrl (terminal, Emacs text nav, Ctrl+←/→ Spaces, Ctrl+↑ Mission Control, Ctrl+↓ App Exposé) |
 | Alt | Option (word navigation) | Option |
 
@@ -460,6 +460,14 @@ niri bind. Without the keyboard layer (xremap off, or an app in *Apps to
 leave alone*) ⌃←/→ are plain Ctrl+arrows for the app: no alias, nothing
 broken. Right Ctrl with `right-ctrl-mod` on is the WM key, so the aliases
 are on Left Ctrl.
+
+**In a Plasma session** (KWin, KWIN.md §4.5) there is no ISO_Level3_Shift:
+KWin's shortcuts, and the ones Loft registers from niri's Mod binds, are
+Meta. `loft keys` renders the same groups for that (`LOFT_WM_KEY=meta`,
+`cli/loft/keys.py`): the Caps / Esc / Right Ctrl hold is a private xremap
+virtual modifier (F24, never sent) and WM key + any key reaches KWin as
+Meta + key, modifiers kept; `mac-parity` adds Meta instead of Right Alt
+(⌃← → Meta+Ctrl+Left). niri's rendering is unchanged.
 
 **The bind table is data:** `cli/loft/keymap/parity.json` (flake output
 `lib.keyboardParity`). `python3 -m loft.parity --write` generates the
