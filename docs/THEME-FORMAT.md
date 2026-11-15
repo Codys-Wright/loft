@@ -248,6 +248,7 @@ and `manifest.json`'s `name` is the v1 name: the pack's, or the alias of a facet
 | `kde.colors`, `kvantum.kvconfig`, `kvantum.svg`, `dolphin.qss` | Dolphin (Qt/KDE; `programs.loft.qt`) | the `qt` hook links them as the KDE color scheme `Loft` and the Kvantum theme `Loft`, assigned to Dolphin only (`cli/loft/qtapps.py`); `dolphin.qss` is passed by the `dolphin` launcher (`-stylesheet`) | none: Qt apps read them at start (restart Dolphin) |
 | `walker.css` | walker | Loft's walker theme `@import`s it as `colors.css` | walker re-reads CSS on every open |
 | `noctalia.json` | Noctalia (transition only) | its `colors.json` | its own watcher |
+| `kdecoration.ini` | Loft's KWin decoration (`dev.loft.decoration`, docs/KWIN.md §4.4) | read from `<state>/current/kdecoration.ini`; `[Colors]` (`#rrggbb[aa]`) and `[Metrics]` (px) | the plugin watches the file and the `current` link, open windows repaint |
 | `spicetify.ini` | Spotify (Spicetify, spicetify-themes' `text` theme; `programs.loft.spotify`) | color.ini sections `loft spotify` merges after the text theme's own schemes; the **first** is the theme's scheme (generated: `[loft]`) | the `spotify` hook writes the scheme into the patched Spotify's `xpui/colors.css`; Loft's `loft-live.js` extension swaps it in while Spotify runs |
 
 ### `spicetify.ini`

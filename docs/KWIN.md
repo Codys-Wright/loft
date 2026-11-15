@@ -1,6 +1,6 @@
 # Loft on KWin: running the shell in a Plasma session
 
-Status: **plan**. Step 1 (this doc) and step 2 (the `Compositor` seam, §2) are done.
+Status: **plan**. Step 1 (this doc), step 2 (the `Compositor` seam, §2) and step 7 (the decoration, §4.4) are done.
 The KWin backend itself is not written yet. The niri session is unchanged and stays
 the default.
 
@@ -258,20 +258,47 @@ Plasma **shell package**, picked by `PLASMA_DEFAULT_SHELL` (default
 
 ### 4.4 Loft's KWin decoration
 
-A KDecoration3 plugin (`libkdecorations3`, 6.8.2 here), in C++, built in the flake
-against the system's kdecoration. Call it `dev.loft.decoration`.
+**Done** (`kdecoration/`, package `loft-kdecoration`). A KDecoration3 plugin in C++,
+id **`dev.loft.decoration`**, installed at `lib/qt-6/plugins/org.kde.kdecoration3/`.
+`programs.loft.plasma` (NixOS) puts it in `environment.systemPackages`, so KWin finds it
+on `QT_PLUGIN_PATH`.
 
-- **Look:** macOS-style traffic lights (close, minimize, maximize), a centered title,
-  the corner radius and colors from Loft's theme. The theme engine gets a `kdecoration`
-  render unit that writes a small INI the plugin watches (reload on change, as
-  ghostty.conf works today). Focused/unfocused states, with glyphs on hover.
-- **Behavior is KWin's:** minimize is real (= Hide, §4.1), green = maximize, or
-  fullscreen with a modifier. Long-press green or right-click the title opens a menu.
-  First KWin's window menu; later Loft's (the plugin calls `dev.loft.KWinBridge`,
-  which forwards to `windowActionsMenuRequested`).
-- **Selected at runtime only while Loft runs** (§5). Under plasmashell, Breeze comes
-  back.
-- Fallback until it exists: an Aurorae theme with the same buttons.
+- **Look:** macOS traffic lights at the left (close `#ff5f57`, minimize `#febc2e`,
+  maximize `#28c840`), grey when the window is in the background. Hovering any bead
+  lights all three (also in the background) and shows the glyphs (×, −, ⤢). The title is
+  centered on the whole bar, kept clear of the beads, elided. The bar's top corners
+  and the window's bottom corners take the theme's window radius (square when
+  maximized). A soft shadow in the theme's shadow colors, deeper on the focused window.
+  No side or bottom borders: a 4 px invisible resize margin, as windows have on macOS.
+- **Theme:** the `kdecoration` render unit (`cli/loft/render/kdecoration.py`,
+  `templates/render/kdecoration.ini`) writes `<state>/current/kdecoration.ini`: the bar
+  colors niri-loft's bar gets (surface / bg, text / subtext), the bead colors, the
+  unfocused grey (text at 22 %), the glyph, the shadows, the window radius, and the
+  metrics (bar 24 px, beads 12 px, 8 px apart, 10 px inset, 11 px title). The plugin
+  reads it from `$LOFT_STATE_DIR`, else `$XDG_STATE_HOME/loft`, else
+  `~/.local/state/loft`, watches the file, `current/` and the state dir (the theme
+  engine swaps the `current` link), and repaints open windows on change. Without the
+  file it uses built-in defaults (niri/title-bar.kdl's colors). Colors are `#rrggbb`
+  or `#rrggbbaa` (Loft's order, not Qt's).
+- **Behavior is KWin's:** the buttons are KDecoration's own Close / Minimize / Maximize
+  (minimize is real, = Hide, §4.1; green toggles maximize, middle-click vertical,
+  right-click horizontal). Right-click on the bar opens KWin's window menu at the
+  pointer. Double-click, drag and the other title-bar actions are KWin's settings.
+  Not done: fullscreen on a modifier+green, long-press green, and Loft's own window
+  menu through `dev.loft.KWinBridge`.
+- **Selected only while Loft runs** (§5): `loft-kwin-decoration apply` (the
+  `ExecStartPost` of `loft-plasma-shell.service`) records the user's own kwinrc
+  `[org.kde.kdecoration2] library` / `theme` in `<state>/kwin-decoration.prev` (a key
+  only set in `/etc/xdg` is recorded as unset), selects Loft's and calls
+  `org.kde.KWin.reconfigure`. `revert` (`ExecStopPost`, so a crash reverts too) puts
+  the recorded values back, deleting keys that weren't set, unless the user picked
+  another decoration meanwhile. `apply` does nothing when the plugin isn't installed.
+  KWin 6.8 still reads the group `org.kde.kdecoration2` (the plugins' namespace is
+  `org.kde.kdecoration3`).
+- **Tested** nested (§6, plugin on `QT_PLUGIN_PATH`, scratch HOME): two foot windows,
+  focus / unfocus, hover glyphs, the window menu, maximize / restore, minimize, close,
+  a live theme swap (tokyonight → latte) and metric edits, and apply / revert with the
+  user's Breeze and with no key set.
 
 ## 5. One Plasma session, two shells: switching and backing out
 
@@ -317,7 +344,7 @@ when Loft stops:
 | Loft changes | How it's undone |
 |---|---|
 | loft-bridge.js (state, actions, Loft shortcuts, window rules) | loft-kwin unloads it on exit (`ExecStopPost` too, in case it crashed). Its shortcuts and rules disappear with it |
-| the decoration (`[org.kde.kdecoration2] library/theme` in kwinrc) | `loft-kwin apply` records the previous value in Loft's state dir and sets Loft's. `loft-kwin revert` (on stop) puts it back. Both run `org.kde.KWin.reconfigure` |
+| the decoration (`[org.kde.kdecoration2] library/theme` in kwinrc) | `loft-kwin-decoration apply` (loft-plasma-shell's `ExecStartPost`) records the previous value in Loft's state dir and sets Loft's. `loft-kwin-decoration revert` (`ExecStopPost`) puts it back. Both run `org.kde.KWin.reconfigure` (§4.4) |
 | any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |
 | the lock screen | `PLASMA_DEFAULT_SHELL` only on KWin's unit, set by the session option. Lock and unlock stay Plasma's either way |
 | activities created for Spaces | kept (harmless). `loft spaces prune` removes them |
@@ -408,7 +435,7 @@ loft-dev --session NAME --compositor kwin [--shell loft|plasma] [CHECKOUT]
 6. Shell switching (§5): units, `loft shell use`, the SDDM "Plasma (Loft)" entry, the
    fallback unit, `loft-kwin apply/revert`. This comes **before** daily use, so
    backing out works from day one.
-7. Decoration plugin (§4.4), with the Aurorae stand-in until it lands.
+7. ✅ Decoration plugin (§4.4): `dev.loft.decoration`, `loft-kwin-decoration apply|revert`.
 8. Lock screen shell package (§4.3).
 9. Keybinds, display settings, capture through ScreenShot2.
 10. Spaces on Activities (§4.2).
@@ -427,6 +454,10 @@ loft-dev --session NAME --compositor kwin [--shell loft|plasma] [CHECKOUT]
   to be in the system profile (`environment.systemPackages`) for the greeter and KWin
   to find them. Check before relying on home-manager's profile.
 - xremap: `pkgs.xremap.kde` (or both features) on hosts that boot into Plasma.
+- `loft-kdecoration` links against the kdecoration / Qt of Loft's nixpkgs input. Let
+  that input follow the fleet's nixpkgs so it matches the system's KWin. (A plugin
+  built against kdecoration 6.7.5 / Qt 6.11 loaded and worked in KWin 6.8.2 / Qt 6.12
+  in the nested test, but KDecoration doesn't promise ABI across Plasma releases.)
 - Leave kwinrc to the user. Loft applies its keys at runtime and reverts them (§5).
   The flake shouldn't bake the Loft decoration into kwinrc, or plain Plasma would get
   it too.
