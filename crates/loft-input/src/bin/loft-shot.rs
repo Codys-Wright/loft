@@ -8,11 +8,11 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use niri_ipc::Action;
-use serde_json::json;
 use loft_input::niri::{Niri, Rect, bounding, find_output, find_window, window_rect};
 use loft_input::session::{self, Fallback, Target};
 use loft_input::shot::{self, Frame, auto_step, draw_grid, draw_mark, parse_point};
+use niri_ipc::Action;
+use serde_json::json;
 
 const AFTER_HELP: &str = "\
 Coordinates are global logical pixels — the same ones `loft-input` clicks.
@@ -161,15 +161,23 @@ fn render_window(niri: &Niri, id: u64, cursor: bool) -> Result<image::RgbaImage>
 
 fn run(cli: Cli) -> Result<()> {
     let target = session::resolve(cli.session.as_deref(), cli.live, Fallback::DefaultSession)?;
-    let sock = target
-        .niri_socket
-        .clone()
-        .context("the target has no niri socket")?;
-    let niri = Niri::new(&sock);
+    // KDE sessions have no niri: outputs from session.env, no windows/layers.
+    let niri = || -> Result<Niri> {
+        if target.is_kwin() {
+            bail!(
+                "--window / --layer need niri; a KDE session has outputs only (--output WL-0, --region)"
+            );
+        }
+        let sock = target
+            .niri_socket
+            .clone()
+            .context("the target has no niri socket")?;
+        Ok(Niri::new(&sock))
+    };
     if cli.delay > 0 {
         std::thread::sleep(Duration::from_millis(cli.delay));
     }
-    let outputs = niri.outputs()?;
+    let outputs = target.outputs()?;
     let bounds = bounding(&outputs);
     let mut notes: Vec<String> = Vec::new();
 
@@ -181,6 +189,7 @@ fn run(cli: Cli) -> Result<()> {
     } else if let Some(r) = cli.region.as_deref().or(cli.zoom.as_deref()) {
         rect = Rect::parse(r)?;
     } else if let Some(q) = &cli.window {
+        let niri = niri()?;
         let wins = niri.windows()?;
         let w = find_window(&wins, q)?;
         let geo = window_rect(w, &niri.workspaces()?, &outputs);
@@ -216,7 +225,7 @@ fn run(cli: Cli) -> Result<()> {
             })?;
         }
     } else if let Some(ns) = &cli.layer {
-        let layers = niri.layers()?;
+        let layers = niri()?.layers()?;
         let l = layers
             .iter()
             .find(|l| l.namespace == *ns)
