@@ -351,6 +351,26 @@
 
       qdbus = "${pkgs.kdePackages.qttools}/bin/qdbus";
 
+      # programs.loft.plasma.kwinPackage: plasma-kwin_wayland.service starts
+      # this instead of the system's kwin_wayland_wrapper (same arguments).
+      # The wrapper starts `kwin_wayland` from PATH, which in the session is
+      # NixOS's /run/wrappers/bin/kwin_wayland (the system's KWin with
+      # CAP_SYS_NICE): so a directory with this package's kwin_wayland goes
+      # first, pointing at /run/wrappers/bin/loft-kwin_wayland when Loft's
+      # NixOS module made that capability wrapper, else at the package.
+      kwinPackage = cfg.plasma.kwinPackage;
+      kwinLauncher = pkgs.writeShellScript "loft-kwin_wayland_wrapper" ''
+        bin="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}/loft/kwin-bin"
+        ${pkgs.coreutils}/bin/mkdir -p "$bin"
+        kwin=${kwinPackage}/bin/kwin_wayland
+        [ -x /run/wrappers/bin/loft-kwin_wayland ] && kwin=/run/wrappers/bin/loft-kwin_wayland
+        ${pkgs.coreutils}/bin/ln -sfn "$kwin" "$bin/kwin_wayland"
+        PATH="$bin:$PATH" exec ${kwinPackage}/bin/kwin_wayland_wrapper "$@"
+      '';
+      # The tile modifier is set while Loft's shell runs, only with a KWin
+      # that reads it.
+      tileModifierOn = cfg.plasma.kwinPackage != null && cfg.plasma.tileModifier != null;
+
       # Loft's shortcuts in a Plasma session (cli/loft/kwinkeys.py, docs/KWIN.md
       # §5): the shell binds (+ Settings → Keyboard Shortcuts) as a KWin script
       # of kglobalaccel shortcuts, loaded while loft-plasma-shell runs.
@@ -493,6 +513,48 @@
           `loft-plasma use plasma|loft` switches a running session, and
           Plasma's shell takes over if Loft's keeps crashing. On a NixOS host
           with Loft's `programs.loft.plasma.enable`, this defaults to on'';
+
+        plasma.kwinPackage = lib.mkOption {
+          type = lib.types.nullOr lib.types.package;
+          default = null;
+          example = lib.literalExpression "inputs.loft.packages.\${system}.loft-kwin-patched";
+          description = ''
+            A KWin to run in Plasma sessions instead of the system's, e.g.
+            Loft's `loft-kwin-patched` (KWin with a kwinrc key for the
+            tile-while-dragging modifier, see `plasma.tileModifier`). Loft's
+            drop-in for plasma-kwin_wayland.service starts its
+            kwin_wayland_wrapper; plain "Plasma" logins run it too (it behaves
+            like stock KWin until the key is set). With Loft's NixOS option
+            `programs.loft.plasma.kwinPackage` it keeps CAP_SYS_NICE (realtime
+            scheduling) through /run/wrappers/bin/loft-kwin_wayland; set
+            only here, KWin runs without it. null: the system's KWin
+            (docs/KWIN.md §4.6).
+          '';
+        };
+
+        plasma.tileModifier = lib.mkOption {
+          type = lib.types.nullOr (
+            lib.types.enum [
+              "Shift"
+              "Alt"
+              "Ctrl"
+              "Meta"
+            ]
+          );
+          default = "Alt";
+          description = ''
+            The key that, held while dragging a window, shows KWin's tile
+            zones and drops the window into one: Alt (Option) as on macOS.
+            Set in kwinrc ([Windows] TileWhileMovingModifier) only while
+            Loft's shell runs, and put back after. Needs a KWin that reads
+            the key (`plasma.kwinPackage = loft-kwin-patched`); without one
+            it is left alone. null: never touch it. Alt-drag stays free as
+            long as Plasma's window-action modifier (System Settings → Window
+            Management → Window Actions, kwinrc [MouseBindings] CommandAllKey)
+            is Meta, its default; set to Alt, Alt+drag anywhere in a window
+            moves it, and then tiles too.
+          '';
+        };
 
         agentSkills = {
           enable = lib.mkEnableOption ''
@@ -1087,10 +1149,15 @@
             Service.ExecStartPost = [
               "-${lib.getExe sp.loft-kwin-decoration} apply"
               "-${plasmaShortcuts} load"
-            ];
+            ]
+            # Option-drag tiles (docs/KWIN.md §4.6).
+            ++ lib.optional tileModifierOn "-${lib.getExe sp.loft-kwin-tile-modifier} apply ${cfg.plasma.tileModifier}";
+            # revert always: a no-op without a record, and it cleans up after
+            # the option is turned off.
             Service.ExecStopPost = [
               "-${lib.getExe sp.loft-kwin-decoration} revert"
               "-${plasmaShortcuts} unload"
+              "-${lib.getExe sp.loft-kwin-tile-modifier} revert"
             ];
             Unit.ConditionPathExists = "!%t/loft-live/active";
             # Three crashes in a minute: Plasma's shell takes over, so a
@@ -1168,6 +1235,13 @@
             ExecStartPre=-${lib.getExe loftPlasma} lock-env
             EnvironmentFile=-%t/loft/plasma-lock.env
             ExecStopPost=-${pkgs.systemd}/bin/systemctl --user --no-block stop ${plasmaUnits}
+          ''
+          # programs.loft.plasma.kwinPackage: that KWin, with the stock unit's
+          # arguments (plasma-workspace's plasma-kwin_wayland.service:
+          # `kwin_wayland_wrapper --xwayland`). For every Plasma login.
+          + lib.optionalString (kwinPackage != null) ''
+            ExecStart=
+            ExecStart=${kwinLauncher} --xwayland
           '';
         };
 

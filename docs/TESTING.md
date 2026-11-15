@@ -109,6 +109,9 @@ loft-dev --session k1 --compositor kwin "$PWD"                  # Loft's shell o
 loft-dev --session k2 --compositor kwin --shell plasma          # stock plasmashell, to compare
 loft-dev --session k3 --compositor kwin --size 1280x800 --output-count 2
 loft-dev --stop k1
+# another KWin, e.g. the patched one (docs/KWIN.md §4.6): a kwin_wayland or a package dir
+LOFT_DEV_KWIN=$(nix build .#loft-kwin-patched --print-out-paths) \
+  loft-dev --session k4 --compositor kwin --shell plasma
 ```
 
 A whole KDE session nested in the headless host: the system's KWin 6

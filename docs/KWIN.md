@@ -389,6 +389,81 @@ Radial Menu's hold (KWin shortcuts have no repeat/release semantics like niri's
 `repeat=false`), and conflicts with plasmashell's own shortcuts (Meta+Q
 activities etc.: same mechanism, not present in the scratch session).
 
+### 4.6 Option-drag tiles, like macOS
+
+On macOS (Sequoia and later), holding **Option** while dragging a window shows the tile
+zones and drops the window into one. KWin does the same with **Shift**, and the key is
+hard-coded (KWin 6.8.2, `src/window.cpp`):
+
+- `Window::updateInteractiveMoveResize`: while moving, `modifiers & Qt::ShiftModifier`
+  shows the outline of the custom tile under the pointer (`quickTileGeometry(Custom)`) and
+  turns the screen-edge maximize/tile zones off; without it, the edge zones apply.
+- `Window::finishInteractiveMoveResize`: on release, `wasMove && (modifiers &
+  Qt::ShiftModifier)` tiles the window (`setQuickTileMode(QuickTileFlag::Custom, anchor)`).
+- The modifiers come from the last pointer motion, or from a key **press** during the move
+  (`MoveResizeFilter::keyboardKey` in `src/input.cpp`). Releasing the key mid-drag takes
+  effect at the next pointer motion. The patch keeps all of that.
+
+**The patch** (`nix/kwin/tile-while-moving-modifier.patch`, ~30 lines, upstreamable):
+a kcfg entry `[Windows] TileWhileMovingModifier` = `Shift` (default) | `Alt` | `Ctrl` |
+`Meta`, read in `Options::syncFromKcfgc()` next to `ElectricBorderTiling` into
+`Options::tileWhileMovingModifier()`, and the two `Qt::ShiftModifier` checks use it.
+The new member sits at the end of `Options` so plugins built against stock headers keep
+the same field offsets. The patch applies to 6.7.5 and 6.8.2. Unset, KWin behaves like
+stock. `Workspace::slotReconfigure` re-reads it (`options->updateSettings()`), so
+`qdbus org.kde.KWin /KWin reconfigure` applies it live.
+
+**Packages and wiring:**
+
+- `loft-kwin-patched` = `kdePackages.kwin.overrideAttrs` + the patch. Nothing else in
+  Plasma depends on it, so only KWin builds (~2000 objects).
+- home-manager `programs.loft.plasma.kwinPackage` (default `null` = stock): Loft's drop-in
+  for `plasma-kwin_wayland.service` replaces `ExecStart` with that package's
+  `kwin_wayland_wrapper --xwayland` (the stock unit's arguments). This applies to every
+  Plasma login, plain "Plasma" too. That's safe because the default is Shift.
+  `kwin_wayland_wrapper` starts `kwin_wayland` **from `PATH`**, which in the session finds
+  NixOS's `/run/wrappers/bin/kwin_wayland`, the **stock** KWin. So the launcher puts a
+  directory first (`$XDG_RUNTIME_DIR/loft/kwin-bin`) whose `kwin_wayland` points at the
+  patched one.
+- **CAP_SYS_NICE.** NixOS runs `kwin_wayland` through a capability wrapper
+  (`cap_sys_nice+ep`) so KWin can give its main, DRM commit and libinput threads realtime
+  (`SCHED_RR`) priority (`gainRealTime()`, `src/utils/realtime.cpp`) and ask for
+  high-priority EGL contexts. Without it KWin still runs (it logs "Failed to gain real
+  time thread priority"), but frames and the pointer can stutter when the CPU is busy. Loft's NixOS option `programs.loft.plasma.kwinPackage`
+  gives the patched KWin the same capability, through `/run/wrappers/bin/loft-kwin_wayland`,
+  and sets the home-manager option for every user. The launcher uses that wrapper when it
+  exists, else the package's binary.
+- Plugins and effects: the package's `kwin_wayland` (a Qt wrapper) puts its own
+  `lib/qt-6/plugins` and `qml` first on `QT_PLUGIN_PATH`/`NIXPKGS_QT6_QML_IMPORT_PATH`. So
+  the patched KWin loads its own effects, not the system KWin's (KPluginMetaData keeps the
+  first plugin found for each id). System Settings' KCMs stay the system's. They don't know
+  the new key, and nothing else needs them to.
+- `programs.loft.plasma.tileModifier` (default `"Alt"`, `null` = never touch it):
+  `loft-kwin-tile-modifier apply Alt` (loft-plasma-shell's `ExecStartPost`, only when
+  `kwinPackage` is set) records the previous value in `<state>/kwin-tile-modifier.prev`,
+  sets the key and reconfigures KWin. `revert` (`ExecStopPost`) restores the old value,
+  unless the key was changed by hand meanwhile. So in plain Plasma, Shift tiles as usual.
+
+**Alt must be free.** Plasma's window-action modifier (System Settings → Window Management →
+Window Actions → Modifier key; kwinrc `[MouseBindings] CommandAllKey`) defaults to **Meta**.
+On Cody's desktop it's unset, so Meta, and Alt+click/drag goes to the window as usual:
+Option+drag on a **title bar** moves and tiles. If `CommandAllKey` is Alt, Alt+drag
+**anywhere** in a window moves it (`CommandAll1=Move`) and, with Alt as the tile modifier,
+tiles it too. Nothing breaks, but apps no longer see Alt+click.
+Loft's keyboard layer (xremap) doesn't remap Left Alt. Holding Caps Lock / Esc or Right
+Ctrl produces Right Alt, so those keys tile too.
+
+**A wart of Alt in particular:** during a move, KWin's `MoveResizeFilter` swallows every
+key event, releases included. If you let go of Alt **before** the mouse button, the app
+under the drag never sees the release. Qt apps (e.g. KWrite) then keep showing their
+underlined menu mnemonics until Alt is pressed and released again (seen in the nested
+test). Stock KWin does this with Shift too; Shift just has nothing to show. Releasing the
+button first and then Alt, as on macOS, leaves nothing behind.
+
+Testing: `LOFT_DEV_KWIN=Testing: `LOFT_DEV_KWIN=$(nix build .#loft-kwin-patched --print-out-paths) loft-dev
+--session NAME --compositor kwin --shell plasma`, then set the key in the session's
+scratch kwinrc and reconfigure (TESTING.md).
+
 ## 5. One Plasma session, two shells: switching and backing out
 
 Requirements: both shells work in the same Plasma session, never run at once, can be
@@ -435,6 +510,7 @@ when Loft stops:
 | loft-bridge.js (state, actions, Loft shortcuts, window rules) | loft-kwin unloads it on exit (`ExecStopPost` too, in case it crashed). Its shortcuts and rules disappear with it |
 | the decoration (`[org.kde.kdecoration2] library/theme` in kwinrc) | `loft-kwin-decoration apply` (loft-plasma-shell's `ExecStartPost`) records the previous value in Loft's state dir and sets Loft's. `loft-kwin-decoration revert` (`ExecStopPost`) puts it back. Both run `org.kde.KWin.reconfigure` (§4.4) |
 | Loft's shortcuts (`loft-keys.js`, §4.5) and the keys taken from other shortcuts | `loft-plasma-shortcuts unload` (`ExecStopPost` of loft-plasma-shell): script unloaded, Loft's actions unregistered, taken keys given back from `<state>/kwin-shortcuts-taken.json` (plasmashell's start does the last part too) |
+| the tile-while-dragging modifier (`[Windows] TileWhileMovingModifier`, §4.6) | `loft-kwin-tile-modifier apply` / `revert`, recorded in `<state>/kwin-tile-modifier.prev` like the decoration. Only set with `programs.loft.plasma.kwinPackage` |
 | any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |
 | the lock screen | `PLASMA_DEFAULT_SHELL` only in KWin's environment, and only when the login is Loft's (`loft-plasma lock-env`, §4.3). Lock and unlock stay Plasma's either way |
 | activities created for Spaces | kept (harmless). `loft spaces prune` removes them |

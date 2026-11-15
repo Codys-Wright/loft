@@ -85,6 +85,9 @@ loft-dev-kwin-NAME; `loft-dev --stop NAME` stops all of it.
   --output-count N         kwin: N outputs of --size side by side (WL-0, WL-1, …)
   --keep-home              kwin: keep the scratch HOME from the last run
                            (default: a fresh one each start)
+  LOFT_DEV_KWIN=PATH       kwin: run this kwin_wayland (or package dir with
+                           bin/kwin_wayland) instead of the system's, e.g.
+                           $(nix build .#loft-kwin-patched --print-out-paths)
 EOF
   exit 2
 }
@@ -262,8 +265,12 @@ run_kwin() {
   if ! [[ "$size" =~ ^[0-9]+x[0-9]+$ ]]; then echo "loft-dev: --size wants WxH, e.g. 1600x1000" >&2; exit 2; fi
   local w="${size%x*}" h="${size#*x}"
   local kwin_bin plasma_bin kamd=""
-  kwin_bin="$(command -v kwin_wayland || true)"
+  # LOFT_DEV_KWIN: another KWin for this session (a kwin_wayland binary, or
+  # a package such as `nix build .#loft-kwin-patched`'s result).
+  kwin_bin="${LOFT_DEV_KWIN:-$(command -v kwin_wayland || true)}"
+  [ ! -d "$kwin_bin" ] || kwin_bin="$kwin_bin/bin/kwin_wayland"
   [ -n "$kwin_bin" ] || { echo "loft-dev: kwin_wayland not found (needs KDE Plasma 6 installed)" >&2; exit 1; }
+  [ -x "$kwin_bin" ] || { echo "loft-dev: LOFT_DEV_KWIN=$kwin_bin is not an executable kwin_wayland" >&2; exit 1; }
   if [ "$kshell" = plasma ]; then
     plasma_bin="$(command -v plasmashell || true)"
     [ -n "$plasma_bin" ] || { echo "loft-dev: plasmashell not found" >&2; exit 1; }

@@ -113,7 +113,8 @@
       # installed system-wide.
       checks.plasma-session-module =
         let
-          c =
+          eval =
+            extra:
             (self.inputs.nixpkgs.lib.nixosSystem {
               modules = [
                 self.nixosModules.default
@@ -136,12 +137,24 @@
                     services.displayManager.defaultSession = "loft";
                   };
                 }
+                extra
               ];
             }).config;
+          c = eval { };
+          # kwinPackage: a stand-in package, so the check builds no KWin.
+          kwin = pkgs.hello;
+          ck = eval { programs.loft.plasma.kwinPackage = kwin; };
           sessions = c.services.displayManager.sessionData.desktops;
           shared = c.home-manager.sharedModules;
+          hasKwin = lib.any (m: (m.programs.loft.plasma.kwinPackage.content or null) == kwin);
         in
         assert lib.any (m: (m.programs.loft.plasma.enable.content or null) == true) shared;
+        # kwinPackage: off by default; set, it reaches home-manager and gets
+        # the capability wrapper NixOS gives the stock kwin_wayland.
+        assert !(c.security.wrappers ? loft-kwin_wayland) && !(hasKwin shared);
+        assert hasKwin ck.home-manager.sharedModules;
+        assert ck.security.wrappers.loft-kwin_wayland.source == "${kwin}/bin/kwin_wayland";
+        assert ck.security.wrappers.loft-kwin_wayland.capabilities == "cap_sys_nice+ep";
         # KWin finds Loft's decoration in the system profile.
         assert lib.elem self.packages.${pkgs.stdenv.hostPlatform.system}.loft-kdecoration c.environment.systemPackages;
         pkgs.runCommand "plasma-session-module" { } ''
@@ -293,6 +306,22 @@
           defaultText = lib.literalExpression "pkgs.kdePackages.plasma-workspace";
           description = "The plasma-workspace whose startplasma-wayland the session runs (the system's Plasma).";
         };
+
+        kwinPackage = lib.mkOption {
+          type = lib.types.nullOr lib.types.package;
+          default = null;
+          example = lib.literalExpression "inputs.loft.packages.\${pkgs.stdenv.hostPlatform.system}.loft-kwin-patched";
+          description = ''
+            A KWin for Plasma sessions instead of the system's, e.g. Loft's
+            `loft-kwin-patched` (Option-drag tiles while Loft runs; see the
+            home-manager option `programs.loft.plasma.tileModifier`). Gives
+            it the CAP_SYS_NICE that NixOS gives the system's KWin
+            (/run/wrappers/bin/loft-kwin_wayland: realtime scheduling for
+            the compositor), and makes it every home-manager user's
+            `programs.loft.plasma.kwinPackage`, which starts it. Only KWin
+            is rebuilt; the rest of Plasma stays the system's.
+          '';
+        };
       };
 
       options.programs.loft.greeter = {
@@ -355,6 +384,20 @@
             }
             (lib.optionalAttrs (options ? home-manager.sharedModules) {
               home-manager.sharedModules = [ { programs.loft.plasma.enable = lib.mkDefault true; } ];
+            })
+            # The same capability NixOS's Plasma module gives kwin_wayland.
+            (lib.mkIf (plasmaCfg.kwinPackage != null) {
+              security.wrappers.loft-kwin_wayland = {
+                owner = "root";
+                group = "root";
+                capabilities = "cap_sys_nice+ep";
+                source = "${lib.getBin plasmaCfg.kwinPackage}/bin/kwin_wayland";
+              };
+            })
+            (lib.optionalAttrs (options ? home-manager.sharedModules) {
+              home-manager.sharedModules = lib.mkIf (plasmaCfg.kwinPackage != null) [
+                { programs.loft.plasma.kwinPackage = lib.mkDefault plasmaCfg.kwinPackage; }
+              ];
             })
           ]
         ))

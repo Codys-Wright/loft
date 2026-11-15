@@ -24,6 +24,9 @@
 #                          pointer motion + wheel notches over the capture area
 #   loft-kdecoration       Loft's KWin decoration plugin (kdecoration/, dev.loft.decoration)
 #   loft-kwin-decoration   selects it in kwinrc while Loft runs in Plasma, reverts after
+#   loft-kwin-patched      KWin + nix/kwin/tile-while-moving-modifier.patch (kwinrc
+#                          [Windows] TileWhileMovingModifier: Option-drag tiles)
+#   loft-kwin-tile-modifier  sets that key while Loft runs in Plasma, reverts after
 #
 # Both sessions include <state>/overrides/spaces.kdl once, after the theme
 # (`loft-niri space render`: the spaces' workspaces, rules and binds).
@@ -789,6 +792,32 @@
             description = "Loft's KWin window decoration (dev.loft.decoration)";
             platforms = lib.platforms.linux;
           };
+        };
+
+        # KWin + nix/kwin/tile-while-moving-modifier.patch: a kwinrc key
+        # [Windows] TileWhileMovingModifier=Shift|Alt|Ctrl|Meta for the key
+        # that, held while dragging a window, tiles it (stock: Shift, hard-
+        # coded). Default Shift, so it behaves like stock until the key is set.
+        # Only KWin rebuilds: nothing in Plasma depends on this package, the
+        # session runs it through programs.loft.plasma.kwinPackage
+        # (docs/KWIN.md §4.6).
+        loft-kwin-patched = pkgs.kdePackages.kwin.overrideAttrs (old: {
+          pname = "loft-kwin-patched";
+          patches = (old.patches or [ ]) ++ [ ./kwin/tile-while-moving-modifier.patch ];
+        });
+
+        # Sets [Windows] TileWhileMovingModifier while Loft runs (Option-drag
+        # tiles, like macOS) and restores the previous value after
+        # (nix/kwin-tile-modifier.sh; docs/KWIN.md §4.6).
+        loft-kwin-tile-modifier = pkgs.writeShellApplication {
+          name = "loft-kwin-tile-modifier";
+          runtimeInputs = [
+            pkgs.coreutils
+            pkgs.dbus
+            pkgs.gnused
+            pkgs.kdePackages.kconfig
+          ];
+          text = builtins.readFile ./kwin-tile-modifier.sh;
         };
 
         # Selects Loft's decoration in kwinrc while Loft runs, and puts the
