@@ -354,6 +354,7 @@
             self'.packages.loft
             self'.packages.loft-niri
             self'.packages.loft-appmenu
+            self'.packages.loft-kwin # the KWin backend, on Plasma
             pkgs.nix
           ];
           text =

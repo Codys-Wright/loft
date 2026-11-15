@@ -225,6 +225,9 @@ start() {
     "LOFT_THEME_PATH=${XDG_DATA_HOME:-$HOME/.local/share}/loft/themes:$root/themes"
     "LOFT_SHELL_PATH=$root/src"
     "LOFT_SHELL_SRC=$root/src"
+    # The active theme, as the installed loft-shell wrapper sets it (niri's
+    # session environment happened to carry it; Plasma's doesn't).
+    "LOFT_THEME_FILE=${LOFT_THEME_FILE:-$state/current/theme.json}"
   )
 
   # A previous live run first (stopping its shell removes the marker), then
