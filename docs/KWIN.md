@@ -191,6 +191,7 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | Spaces (named niri workspaces per output) | **KDE Activities** (§4.2) |
 | idle (swayidle on niri.service) | PowerDevil (Plasma's own idle and DPMS) |
 | xremap per-app remaps (`xremap.niri`) | **done**: `loft-plasma-keys.service` runs `xremap.kde` (its KWin script reports the focused window's `resourceClass`, the Wayland app id) on the same config (§4.5) |
+| WM key (Caps / Esc / Right Ctrl held → Right Alt = niri Mod) | **done**: the hold is a private xremap virtual modifier (F24) that sends **Meta** + the next key, so KWin's and Loft's Meta shortcuts are reachable (§4.5, `LOFT_WM_KEY=meta`) |
 
 **Off under KWin** (hidden with `Compositor.capabilities`): scrolling-column ops
 (Maximize Column, column-width presets, consume/expel, center visible), niri's motion
@@ -361,7 +362,7 @@ kglobalshortcutsrc for good and only picked up when kglobalaccel loads them;
 in KF6); `StartTransientUnit` needs `a(sv)` arguments that `callDBus` can't build.
 
 **Key names.** Mod and Super are both Meta (no ISO_Level3_Shift WM key under
-KWin), so `Mod+X` and `Super+X` twins become one shortcut. niri keysyms map to
+KWin; the keyboard layer's WM key sends Meta instead, below), so `Mod+X` and `Super+X` twins become one shortcut. niri keysyms map to
 QKeySequence names (`Period` → `.`, `Escape` → `Esc`, `XF86LaunchA` →
 `Launch (A)`, …). KWin matches Shift+digit/symbol by the shifted symbol without
 Shift: Mod+Shift+5 must be registered as `Meta+%`, Mod+Shift+Period as `Meta+>`
@@ -375,6 +376,25 @@ and `plasma.enable`; a Plasma-session unit, so only in Loft sessions) runs
 `<state>/xremap/config.json` that `loft keys` renders. `Conflicts=loft-keys.service`
 keeps it to one xremap. xremap loads its own KWin script (`xremap`) for the
 focused window; the unit unloads it on stop.
+
+**The window-manager key.** niri's Mod is Right Alt (`lv3:ralt_switch` makes it
+ISO_Level3_Shift); KWin has no such key and Qt shortcuts take only
+Meta/Ctrl/Alt/Shift, so Caps+T would reach KWin as Alt+T. In Plasma `loft keys`
+renders the WM key differently (`LOFT_WM_KEY=meta`, set by the Plasma units;
+`cli/loft/keys.py`): the `wmKey` groups' hold (Caps Lock / Esc, `dual-role`; Right
+Ctrl, `right-ctrl-mod`) is `F24`, an xremap **virtual modifier** that is never
+sent, and a generated first keymap entry sends WM key + X as **Meta + X** for
+every key (letters, digits, punctuation, arrows, F1–F23, Space, Tab, Enter,
+Backspace, Esc, Delete/Insert, Home/End/PgUp/PgDn, Print). It isn't exact, so a
+held Shift / Ctrl / Alt stays held (Caps+Shift+← → Meta+Shift+←), and it comes
+before every other entry, so the ⌘ groups can't take the key (xremap never
+re-reads its own output, so its Super_L isn't ⌘). The `mac-parity` group sends
+Meta where niri gets Right Alt (⌃↑ → Meta+Ctrl+Up). Taps stay Escape, ⌘ stays
+Cmd, Right ⌘ stays the symbols layer. Every `loft keys` write records the key in
+`<state>/xremap/wm-key`, so a `loft keys …` from a terminal renders for the
+xremap that runs (then `XDG_CURRENT_DESKTOP` with KDE → meta). `loft keys show`
+says which. Not covered: WM key + mouse (KWin's Meta+drag) and a WM-key hold
+alone (Cleaning Mode's "hold Esc" — the timer still ends it).
 
 **Verified** in a nested KWin 6.8.2 (private bus, scratch HOME; a stand-in for
 systemd's `StartUnit` on the private bus that runs the real `loft-plasma-key`

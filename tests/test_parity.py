@@ -12,7 +12,7 @@ import re
 import unittest
 from pathlib import Path
 
-from loft import keys, parity
+from loft import keys, kwinkeys, parity
 
 REPO = Path(__file__).resolve().parents[1]
 NIRI_FILES = [REPO / "niri" / "base.kdl", REPO / "niri" / "shell-binds.kdl.in"]
@@ -142,6 +142,30 @@ class WordNavigation(unittest.TestCase):
         self.assertEqual(groups["text-editing"]["remap"]["Alt-Right"], "Ctrl-Right")
         # …and physical ⌥← isn't a key the parity group takes.
         self.assertNotIn("Alt-Left", groups[parity.GROUP_ID]["remap"])
+
+
+
+def as_qt(combo: str) -> str:
+    """An xremap combination as the KWin shortcut it fires (Qt portable text)."""
+    xmods = {"ctrl": "Ctrl", "alt": "Alt", "shift": "Shift", "super_l": "Meta", "super_r": "Meta", "alt_r": "Alt"}
+    *mods, key = combo.split("-")
+    q = {xmods[m.lower()] for m in mods}
+    return "+".join([m for m in kwinkeys.QT_MOD_ORDER if m in q] + [key.upper() if len(key) == 1 else key])
+
+
+class Plasma(unittest.TestCase):
+    """In a Plasma session the WM key and the `via ctrl` aliases send Meta,
+    which is what kwinkeys registers niri's Mod binds as."""
+
+    def test_every_remap_lands_on_a_kwin_shortcut(self):
+        group = keys.for_wm_key(parity.xremap_group(parity.load()), keys.WM_META)
+        for b in parity.load()["binds"]:
+            src, _ = parity.xremap_pair(b)
+            self.assertEqual(as_qt(group["remap"][src]), kwinkeys.qt_keys(b["niri"]), b["id"])
+
+    def test_niri_is_unchanged(self):
+        group = parity.xremap_group(parity.load())
+        self.assertIs(keys.for_wm_key(group, keys.WM_RALT), group)
 
 
 if __name__ == "__main__":
