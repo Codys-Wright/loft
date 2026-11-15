@@ -8,6 +8,18 @@ Goal: a KDE Plasma session (KWin as compositor, plus the KDE services) where Lof
 bar, dock, launcher and switcher replace plasmashell. Hosts that run niri, and Cody
 until this is ready, keep the niri session.
 
+### Decisions (Cody, 2026-11-15)
+
+| Question | Decision |
+|---|---|
+| Hide under KWin | KWin **minimize**, not parking on a hidden workspace |
+| Spaces under KWin | **KDE Activities**: one Activity per Space (§4.2) |
+| Lock screen | Plasma's locker (KWin has no `ext-session-lock`), **with Loft's lock design** as a shell package (§4.3) |
+| Title bars | a **custom KWin decoration plugin** (KDecoration3, §4.4) |
+| Wallpapers | one per screen, swapped with the desktop/activity. No per-workspace surfaces |
+| Backing out | Loft and plasmashell must be **switchable**, live and at login, without leaving traces in each other (§5) |
+| Window thumbnails | **icons first**. Thumbnails later through `ScreenShot2` |
+
 ## 1. What's already portable, and what isn't
 
 These were checked against KWin 6.8.2 (the battleship's) and Quickshell 0.3.2 (the
@@ -75,14 +87,14 @@ niri. Nothing reads it yet. The KWin step gates menu items on it (e.g. MenuState
 | Area (files) | Uses | Under KWin |
 |---|---|---|
 | Bar: `bar/Workspaces`, `StatusItems`, `menubar/MenuBarTitles`, `components/WindowChrome` | workspaces per output, focused window title, layouts, overview | port: desktops, focused title, `org.kde.keyboard` |
-| Menu bar + app menu: `menubar/MenuState`, `services/AppMenu`, `Arrange` | focused window, pid groups, close/float/fullscreen/move, hide = park on a `hidden-*` workspace | port. **Hide** becomes KWin minimize, not parking. Column items off. Floating presets map to `frameGeometry` |
+| Menu bar + app menu: `menubar/MenuState`, `services/AppMenu`, `Arrange` | focused window, pid groups, close/float/fullscreen/move, hide = park on a `hidden-*` workspace | port. **Hide** becomes KWin minimize (decided): `hideApp`/`hideOthers`/`showAll` and the dock's unhide go through a `Compositor.setMinimized(id, bool)` the KWin backend adds, and the `hidden-*` parking stays niri-only. Column items off. Floating presets map to `frameGeometry` |
 | Dock: `dock/*`, `services/DockData`, `Previews`, `WindowCapture` | windows by app, move/close, workspace names, thumbnails | port windows and actions. Thumbnails fall back to icons (the path stock niri uses) until §4 capture exists |
 | Switchers: `switcher/Switcher`, `SpaceSwitcher`, `palette/*` | window list by `focus_timestamp`, focus | port. The bridge stamps `focus_timestamp` on activation |
 | Launchpad, Spotlight, panels' "which screen": `Launchpad`, `Panels`, `Hud`, `Sound`, `clipboard/*`, … (~20 files) | `focusedWorkspace.output` | port: needs the focused window's output, or the cursor's |
 | Everyday / QuitGuard / QuitOnClose / KeepAwake / KeyRemaps / WindowRules (running check) | windows by pid / app_id, close | port |
 | Capture: `capture/Capture`, `island/Island` | `screenshotWindow`, `screenshotTaken`, `shutter` | screen/area capture goes through grim today, which needs screencopy (KWin has none): switch to `org.kde.KWin.ScreenShot2` (§4) |
 | Wallpapers: `WorkspaceWallpapers`, `VideoWallpapers`, `Vibes` | active workspace per output, overview | per-workspace wallpaper **surfaces** off (they need niri-loft's patch). The "one wallpaper per screen, swapped on switch" fallback works |
-| Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **off at first.** A Space later maps onto a KWin virtual desktop, which already spans every display (a better fit than niri, §4) |
+| Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **KDE Activities** (decided, §4.2). Off until that lands |
 | Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | KWin-native: `kscreen-doctor -j` / KScreen D-Bus |
 | Title-bar events (`windowMinimizeRequested`, `windowActionsMenuRequested`) | niri-loft's traffic lights | not needed: KWin decorations minimize and open the window menu themselves |
 | `configLoaded` (NiriSettings, WindowRules) | niri reloaded its KDL | `org.kde.KWin.reloadConfig` after writing kwinrc / kwinrulesrc |
@@ -167,55 +179,156 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 
 | niri / niri-loft | Under KWin |
 |---|---|
-| traffic-light title bars (`title-bar.patch`) | a KWin decoration: an Aurorae theme with macOS-style buttons is enough at first. Its minimize / window menu are native |
-| per-workspace wallpaper surfaces (`workspace-layers.patch`) | off. One wallpaper per screen swapped on desktop change (the existing stock-niri path) under KWin's slide effect |
-| window thumbnails (`toplevel-export.patch`) | icons first. Later stills via `ScreenShot2.CaptureWindow` (restricted: loft-kwin's .desktop needs `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2`) |
+| traffic-light title bars (`title-bar.patch`) | **Loft's own KDecoration3 plugin** (§4.4) |
+| per-workspace wallpaper surfaces (`workspace-layers.patch`) | off (decided). One wallpaper per screen, swapped on desktop/activity change (the existing stock-niri path), under KWin's slide effect |
+| window thumbnails (`toplevel-export.patch`) | **icons** (decided, the existing stock-niri fallback). Later stills via `ScreenShot2.CaptureWindow` (restricted: loft-kwin's .desktop needs `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2`) |
 | screen/area capture via grim | `ScreenShot2.CaptureScreen/CaptureArea`, or spectacle `-b -n` |
-| keybinds (loft-niri → niri KDL binds) | kglobalaccel. Loft's own actions become KWin script `registerShortcut`s that run `quickshell ipc …`, or `.desktop` shortcuts in `kglobalshortcutsrc` |
-| window rules (loft-niri window_rules.rs) | `kwinrulesrc`, written by a loft-kwin renderer, then `reconfigure` |
+| keybinds (loft-niri → niri KDL binds) | kglobalaccel. Loft's own actions are `registerShortcut`s in loft-bridge.js that run `quickshell ipc …`, so they exist only while Loft runs (§5) |
+| window rules (loft-niri window_rules.rs) | applied by loft-bridge.js at `windowAdded` while Loft runs, not written to `kwinrulesrc` (§5) |
 | outputs / Displays page | `kscreen-doctor` (or KScreen D-Bus). Identities from its JSON |
 | overview (`toggle-overview`) | KWin's Overview effect |
-| lock screen (`WlSessionLock`) | kscreenlocker (`loginctl lock-session`). KWin has no `ext-session-lock`, so Loft's lock UI is off |
-| Spaces (named niri workspaces per output) | later: one virtual desktop per Space, with its wallpapers and dock. Desktops already span all displays, which is what a Space is |
+| lock screen (`WlSessionLock`) | Plasma's locker with **Loft's lock design** (§4.3) |
+| Spaces (named niri workspaces per output) | **KDE Activities** (§4.2) |
 | idle (swayidle on niri.service) | PowerDevil (Plasma's own idle and DPMS) |
 | xremap per-app remaps (`xremap.niri`) | `xremap` built with its `kde` feature (it ships a KWin script for the focused app) |
 
 **Off under KWin** (hidden with `Compositor.capabilities`): scrolling-column ops
 (Maximize Column, column-width presets, consume/expel, center visible), niri's motion
 and shape settings (KWin has its own animations), the niri sections of Settings
-(keybinds-as-KDL, window-rule KDL preview), workspace-layer wallpapers, Loft's lock
-screen, and Spaces until they're rebuilt on desktops.
+(keybinds-as-KDL, window-rule KDL preview), and workspace-layer wallpapers.
 
-## 5. A Plasma session with Loft instead of plasmashell
+### 4.1 Hide = minimize
 
-Plasma 6 starts through systemd: `plasma-workspace.target` wants
-`plasma-kwin_wayland.service`, `plasma-plasmashell.service`, kded, polkit agent,
-powerdevil and so on.
+KWin has real minimize, so MenuState's "park on a `hidden-*` workspace" trick stays
+niri-only. Under KWin, `hideApp`/`hideOthers` set `minimized` on the windows, `showAll`
+and the dock's unhide clear it, and `MenuState.hidden` is derived from `w.minimized`.
+The window record gains an `is_minimized` field (always false under niri). The
+decoration's minimize button and Loft's Hide then mean the same thing.
 
-- **Mask plasmashell** for the user: link
-  `~/.config/systemd/user/plasma-plasmashell.service` to `/dev/null`. In home-manager:
-  `xdg.configFile."systemd/user/plasma-plasmashell.service".source = config.lib.file.mkOutOfStoreSymlink "/dev/null"`.
-  That only affects Plasma sessions, because niri never starts it. What plasmashell
-  carries that Loft must replace or leave alone:
-  - notifications (`org.freedesktop.Notifications`): Loft's own, already there
-  - the OSD service (`org.kde.osdService`): Loft's OSDs, already there
-  - Klipper: Loft's clipboard
-  - the system tray host: Loft's bar (the SNI watcher is in kded, which stays)
-  - desktop icons and wallpaper: Loft's wallpaper layer
-- **Bind Loft's units to KWin**, generalizing today's niri-only wiring in
-  `nix/modules/home.nix` (`service`, `loftSessionUnits`, the `niri.service.d` drop-in):
-  `PartOf`/`After`/`Requisite` and `WantedBy` on the *compositor unit*, which is
-  `niri.service` or `plasma-kwin_wayland.service`. Requisite still keeps Loft out of
-  any other desktop. The `ExecStopPost` drop-in goes on whichever unit applies. A new
-  option such as `programs.loft.compositors = [ "niri" "kwin" ]` lists them. The
-  shell picks its backend at runtime (`Compositor.session`), so one store path serves
-  both sessions.
-- **`findNiriSocket`** (the ExecStartPre that exports `NIRI_SOCKET`) must be a
-  no-op when there's no niri. It already exits 0.
-- **loft-appmenu vs Plasma's appmenu kded module:** both want
-  `com.canonical.AppMenu.Registrar`. loft-appmenu already steps aside when another
-  registrar owns it, and then it should read menus from the kded one. Check this.
-- **swayidle** is wired to `niri.service`. Under Plasma, leave idle to PowerDevil.
+### 4.2 Spaces = KDE Activities
+
+An Activity is a set of windows (plus its own desktops, wallpaper and settings) that
+switches as one across **every** display. That is what a Space is (SPACES.md §1),
+without having to activate several per-output workspaces together.
+
+- **API:** `org.kde.ActivityManager /ActivityManager/Activities`: `ListActivities`,
+  `ListActivitiesWithInformation`, `AddActivity`, `RemoveActivity`, `SetActivityName`,
+  `SetCurrentActivity`, `CurrentActivity`, signals `CurrentActivityChanged`,
+  `ActivityAdded/Removed`, `ActivityNameChanged` (checked on this machine). In the KWin
+  script: `workspace.activities`, `workspace.currentActivity`, `window.activities`
+  (settable), `workspace.currentActivityChanged`.
+- **Mapping:** a Space (singleton or template instance) gets one Activity. loft-kwin
+  keeps a `space id ↔ activity uuid` map in Loft's state dir. `Spaces.focus` becomes
+  `SetCurrentActivity`. A spin-up launches the Space's apps and the bridge tags them
+  with `window.activities = [uuid]`. Display **roles** (main/left/right…) become
+  per-window placement (`sendClientToScreen`) at `windowAdded`, from the same role
+  resolution loft-niri does today (shared Rust code).
+- **Per-Space look:** wallpaper, dock set and theme key off the current activity
+  instead of named workspaces. The wallpaper path is the per-screen swap above.
+- **The shell's model:** `Compositor` gains `activities` / `currentActivity` and
+  windows gain `activities: [uuid]`. Under niri it reports no activities, and Spaces
+  keeps using loft-niri. `Spaces.qml` picks its engine from `Compositor.backend`.
+- **Backing out (§5):** activities Loft created stay in Plasma and are harmless there
+  (plasmashell shows them in its Activities switcher). `loft spaces prune` removes them.
+
+### 4.3 Loft's lock design in Plasma's locker
+
+KWin can't host Loft's `WlSessionLock`, but Plasma 6's greeter is themeable.
+`kscreenlocker_greet` (6.8.2) loads `contents/lockscreen/LockScreen.qml` from a
+Plasma **shell package**, picked by `PLASMA_DEFAULT_SHELL` (default
+`org.kde.plasma.desktop`, whose lockscreen dir is `LockScreen.qml`, `LockScreenUi.qml`,
+`MainBlock.qml`, …). It also has `--testing --theme <package>` for previews.
+
+- Ship **`dev.loft.desktop`**, a shell package that contains only `lockscreen/` and
+  falls back to `org.kde.plasma.desktop` for everything else (KPackage fallback). Its
+  `LockScreen.qml` wraps `src/lock/design`, the same way `nix/lock.nix` already builds
+  the SDDM theme from it (`qs.*` imports rewritten, a stand-in `Theme.qml`). It talks to
+  the greeter's `authenticator` instead of PAM directly. The theme colors come from
+  Loft's rendered theme, as for SDDM.
+- Set `PLASMA_DEFAULT_SHELL=dev.loft.desktop` **only on `plasma-kwin_wayland.service`**
+  (a drop-in). The greeter is a child of KWin, so the lock screen changes and
+  plasmashell's own shell choice doesn't.
+- Lock, unlock, idle and sleep all stay Plasma's (kscreenlocker + PowerDevil), so a
+  broken Loft can never leave the session unlockable: if the package fails to load,
+  the greeter falls back to Breeze's.
+- Preview: `kscreenlocker_greet --testing --theme dev.loft.desktop`, as
+  `nix run .#greeter-preview` does for SDDM.
+- To check: whether the greeter honors a user-installed package from
+  `~/.local/share/plasma/shells`, or it has to be in the system profile's `share/`.
+
+### 4.4 Loft's KWin decoration
+
+A KDecoration3 plugin (`libkdecorations3`, 6.8.2 here), in C++, built in the flake
+against the system's kdecoration. Call it `dev.loft.decoration`.
+
+- **Look:** macOS-style traffic lights (close, minimize, maximize), a centered title,
+  the corner radius and colors from Loft's theme. The theme engine gets a `kdecoration`
+  render unit that writes a small INI the plugin watches (reload on change, as
+  ghostty.conf works today). Focused/unfocused states, with glyphs on hover.
+- **Behavior is KWin's:** minimize is real (= Hide, §4.1), green = maximize, or
+  fullscreen with a modifier. Long-press green or right-click the title opens a menu.
+  First KWin's window menu; later Loft's (the plugin calls `dev.loft.KWinBridge`,
+  which forwards to `windowActionsMenuRequested`).
+- **Selected at runtime only while Loft runs** (§5). Under plasmashell, Breeze comes
+  back.
+- Fallback until it exists: an Aurorae theme with the same buttons.
+
+## 5. One Plasma session, two shells: switching and backing out
+
+Requirements: both shells work in the same Plasma session, never run at once, can be
+switched live, and Loft leaves nothing behind that changes how plain Plasma behaves.
+
+**Units.** Don't mask plasmashell. Instead:
+
+- `loft-shell.service` (+ `loft-launcher.service`): `WantedBy`, `PartOf` and `After`
+  `plasma-workspace.target`, `Requisite=plasma-kwin_wayland.service` (Loft stays out
+  of other desktops, as with niri today), and **`Conflicts=plasma-plasmashell.service`**.
+- A drop-in for `plasma-plasmashell.service`: `Conflicts=loft-shell.service`, and an
+  `ExecCondition` that skips it when the choice is `loft`.
+- `loft-shell.service` gets the mirrored `ExecCondition` (skip when the choice is
+  `plasma`). Starting either shell stops the other.
+
+**The choice**, highest priority first:
+
+1. The login session. SDDM offers **"Plasma (Loft)"** next to plain **"Plasma"**. The
+   Loft entry runs `startplasma-wayland` with `LOFT_PLASMA_SHELL=loft`, which Plasma
+   imports into the user manager's environment, where the `ExecCondition`s read it.
+   Plain "Plasma" sets nothing.
+2. Otherwise, `~/.local/state/loft/plasma-shell` (`loft` | `plasma`), written by the
+   switch command. A missing file means `plasma`, so stock Plasma is the safe default.
+
+**Switching live:** `loft shell use plasma|loft` writes the choice and runs
+`systemctl --user start` on the chosen unit (`Conflicts` stops the other). Also:
+
+- Settings → General → "Switch to Plasma's desktop".
+- A kglobalaccel shortcut that belongs to neither shell (a `.desktop` with
+  `X-KDE-Shortcuts`, e.g. Meta+Ctrl+Alt+Backspace). kglobalaccel lives in KWin, so it
+  works with no shell running at all.
+- From a TTY or SSH: `systemctl --user start plasma-plasmashell` works by hand.
+
+**Automatic back-out.** `loft-shell.service` has `OnFailure=loft-shell-fallback.service`.
+After the restart limit (e.g. 3 crashes in 30 s), that unit starts plasmashell and
+sends a notification. A broken Loft lands you in plain Plasma, never on an empty
+screen.
+
+**No traces in Plasma.** Everything Loft changes in KWin is runtime-only and undone
+when Loft stops:
+
+| Loft changes | How it's undone |
+|---|---|
+| loft-bridge.js (state, actions, Loft shortcuts, window rules) | loft-kwin unloads it on exit (`ExecStopPost` too, in case it crashed). Its shortcuts and rules disappear with it |
+| the decoration (`[org.kde.kdecoration2] library/theme` in kwinrc) | `loft-kwin apply` records the previous value in Loft's state dir and sets Loft's. `loft-kwin revert` (on stop) puts it back. Both run `org.kde.KWin.reconfigure` |
+| any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |
+| the lock screen | `PLASMA_DEFAULT_SHELL` only on KWin's unit, set by the session option. Lock and unlock stay Plasma's either way |
+| activities created for Spaces | kept (harmless). `loft spaces prune` removes them |
+
+Loft never writes `plasma-org.kde.plasma.desktop-appletsrc`, `plasmashellrc` or
+`kwinrulesrc`, so plasmashell comes back with your panels as you left them.
+
+**Also in the module:** `findNiriSocket` is already a no-op without niri. swayidle
+stays bound to `niri.service`, and Plasma uses PowerDevil. loft-appmenu already steps
+aside when Plasma's appmenu kded module owns `com.canonical.AppMenu.Registrar`.
+Whether menus then still reach Loft's bar needs checking.
 
 ## 6. Testing against KWin with loft-dev
 
@@ -248,20 +361,30 @@ kwin_wayland --wayland-display "$host" --socket wayland-1 --width W --height H \
 2. ✅ `Compositor.qml` in front of `Niri.qml`, every consumer moved, behavior under niri
    unchanged.
 3. `crates/loft-kwin` + `loft-bridge.js` + `services/KWin.qml`: state only (windows,
-   desktops, focus). Test with `loft-dev --compositor kwin`.
+   desktops, focus, minimized). Test with `loft-dev --compositor kwin`.
 4. Actions + `capabilities` gating in menus. Hide → minimize.
-5. Session wiring (§5) in the home-manager module, behind an option.
-6. KWin-native replacements (§4) one at a time: decoration, keybinds, rules, displays,
-   capture.
-7. Spaces on virtual desktops.
+5. Shell switching (§5): units, `loft shell use`, the SDDM "Plasma (Loft)" entry, the
+   fallback unit, `loft-kwin apply/revert`. This comes **before** daily use, so
+   backing out works from day one.
+6. Decoration plugin (§4.4), with the Aurorae stand-in until it lands.
+7. Lock screen shell package (§4.3).
+8. Keybinds, display settings, capture through ScreenShot2.
+9. Spaces on Activities (§4.2).
+10. Window thumbnails through ScreenShot2.
 
 ## 8. Notes for the fleet flake (~/.flake, out of scope here)
 
 - `settings.desktop.session = "kde"` needs Plasma 6 enabled *and* niri kept, so SDDM
-  offers both sessions.
-- A Loft-on-Plasma variant of `fleet.desktop._.loft` sets the new compositor option
-  (§5), masks plasmashell, and must not enable `programs.niri`-only bits (swayidle on
-  `niri.service`, `niri-loft-live`) for that session.
+  offers niri, "Plasma" and "Plasma (Loft)" (§5).
+- A Loft-on-Plasma variant of `fleet.desktop._.loft` turns on the module's Plasma
+  option (units, plasmashell drop-in, the SDDM session entry, the switch shortcut).
+  It must **not** mask plasmashell (§5 relies on it being startable), and must not
+  enable `programs.niri`-only bits (swayidle on `niri.service`, `niri-loft-live`) for
+  that session.
+- The lock-screen shell package (§4.3) and the decoration plugin (§4.4) probably have
+  to be in the system profile (`environment.systemPackages`) for the greeter and KWin
+  to find them. Check before relying on home-manager's profile.
 - xremap: `pkgs.xremap.kde` (or both features) on hosts that boot into Plasma.
-- kwinrc defaults Loft wants: blur on, the Loft decoration theme, desktop count/names
-  (or let loft-kwin manage them), Overview on a key, edge actions off.
+- Leave kwinrc to the user. Loft applies its keys at runtime and reverts them (§5).
+  The flake shouldn't bake the Loft decoration into kwinrc, or plain Plasma would get
+  it too.
