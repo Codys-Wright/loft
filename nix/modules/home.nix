@@ -205,6 +205,136 @@
       ]
       ++ lib.optional cfg.keyboard.enable "loft-keys.service"
       ++ lib.optional cfg.sleepWatcher "loft-sleep.service";
+
+      # ── Loft as the shell of a Plasma session (programs.loft.plasma) ─────
+      # The "Loft" login entry (Loft's NixOS module) records the PID of the
+      # startplasma-wayland it execs in $XDG_RUNTIME_DIR/loft/plasma-session.
+      # A Plasma session is Loft's while that process lives and no
+      # `use plasma` override names it; anything else (the plain "Plasma"
+      # entry, a stale marker from an earlier login, which lingering keeps
+      # around) is plain Plasma. When in doubt, plasmashell runs.
+      loftPlasma = pkgs.writeShellApplication {
+        name = "loft-plasma";
+        runtimeInputs = [
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.procps
+          pkgs.systemd
+          pkgs.libnotify
+        ];
+        text = ''
+          rt="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/loft"
+          marker="$rt/plasma-session"
+
+          # The process itself (its executable, not its arguments) is Plasma's
+          # session leader: the login wrapper execs plasma-dbus-run-session-
+          # if-needed, which execs startplasma-wayland (Nix: .…-wrapped), or
+          # dbus-run-session when there was no session bus yet.
+          alive() {
+            local exe
+            [ -n "$1" ] || return 1
+            exe="$(readlink "/proc/$1/exe" 2>/dev/null)" || return 1
+            case "''${exe##*/}" in
+              startplasma-wayland | .startplasma-wayland-wrapped | dbus-run-session) return 0 ;;
+            esac
+            return 1
+          }
+          session_pid() { cat "$marker" 2>/dev/null || true; }
+          is_loft() {
+            local pid
+            pid="$(session_pid)"
+            alive "$pid" || return 1
+            [ "$(cat "$marker.plasma" 2>/dev/null || true)" != "$pid" ]
+          }
+          # This login's startplasma, for `use` in a session that wasn't
+          # started from the Loft entry.
+          running_plasma() {
+            local pid
+            pid="$(session_pid)"
+            if alive "$pid"; then echo "$pid"; return; fi
+            for pid in $(pgrep -u "$(id -u)" || true); do
+              case "$(readlink "/proc/$pid/exe" 2>/dev/null)" in
+                */startplasma-wayland | */.startplasma-wayland-wrapped) echo "$pid"; return ;;
+              esac
+            done
+          }
+
+          case "''${1:-}" in
+            check)
+              # ExecCondition: exit 0 runs the unit, 1 skips it.
+              case "''${2:-}" in
+                loft) is_loft ;;
+                plasma) ! is_loft ;;
+                *) echo "usage: loft-plasma check loft|plasma" >&2; exit 2 ;;
+              esac
+              ;;
+            status)
+              if is_loft; then echo loft; else echo plasma; fi
+              ;;
+            use)
+              pid="$(running_plasma)"
+              if [ -z "$pid" ]; then
+                echo "loft-plasma: no Plasma session is running" >&2
+                exit 1
+              fi
+              mkdir -p "$rt"
+              echo "$pid" > "$marker"
+              case "''${2:-}" in
+                plasma)
+                  echo "$pid" > "$marker.plasma"
+                  systemctl --user stop loft-plasma-shell.service loft-plasma-launcher.service || true
+                  systemctl --user reset-failed loft-plasma-shell.service loft-plasma-launcher.service 2>/dev/null || true
+                  systemctl --user start plasma-plasmashell.service
+                  ;;
+                loft)
+                  rm -f "$marker.plasma"
+                  systemctl --user stop plasma-plasmashell.service || true
+                  systemctl --user reset-failed loft-plasma-shell.service loft-plasma-launcher.service 2>/dev/null || true
+                  systemctl --user start loft-plasma-shell.service loft-plasma-launcher.service
+                  ;;
+                *) echo "usage: loft-plasma use loft|plasma" >&2; exit 2 ;;
+              esac
+              ;;
+            fallback)
+              # loft-plasma-shell kept crashing (OnFailure): Plasma's shell takes over.
+              "$0" use plasma
+              notify-send -a Loft "Loft stopped" "Loft's shell kept crashing, so Plasma's shell took over. Run 'loft-plasma use loft' to try again." || true
+              ;;
+            *)
+              echo "usage: loft-plasma status | use loft|plasma | check loft|plasma" >&2
+              exit 2
+              ;;
+          esac
+        '';
+      };
+
+      # A Loft unit in a Plasma session: started with Plasma's workspace,
+      # skipped unless this session is Loft's, and Requisite on KWin (like
+      # niri.service above) so a crash restart never lands in another desktop.
+      plasmaService = description: exec: {
+        Unit = {
+          Description = description;
+          PartOf = [ "graphical-session.target" ];
+          After = [
+            "plasma-kwin_wayland.service"
+            "plasma-ksmserver.service"
+          ];
+          Requisite = [ "plasma-kwin_wayland.service" ];
+        };
+        Service = {
+          ExecCondition = "${lib.getExe loftPlasma} check loft";
+          ExecStart = exec;
+          Environment = env;
+          Restart = "on-failure";
+          RestartSec = 2;
+        };
+        Install.WantedBy = [ "plasma-workspace.target" ];
+      };
+
+      plasmaSessionUnits = [
+        "loft-plasma-shell.service"
+        "loft-plasma-launcher.service"
+      ];
     in
     {
       # programs.loft.spotify (./spotify.nix), then studio-linux (Loft's old
@@ -270,6 +400,15 @@
             `programs.niri.package` instead.
           '';
         };
+
+        plasma.enable = lib.mkEnableOption ''
+          Loft as the shell of a KDE Plasma session. The "Loft" login entry
+          (Loft's NixOS module, `programs.loft.plasma.enable`) starts Plasma
+          with KWin and the KDE services, and Loft's shell and launcher run
+          in place of plasmashell; the plain "Plasma" entry keeps plasmashell.
+          `loft-plasma use plasma|loft` switches a running session, and
+          Plasma's shell takes over if Loft's keeps crashing. On a NixOS host
+          with Loft's `programs.loft.plasma.enable`, this defaults to on'';
 
         agentSkills = {
           enable = lib.mkEnableOption ''
@@ -619,6 +758,7 @@
           sp.loft-launcher
         ]
         ++ lib.optional cfg.phone.enable cfg.phone.package
+        ++ lib.optional cfg.plasma.enable loftPlasma
         ++ lib.optional cfg.qt.enable cfg.qt.kvantumPackage
         ++ lib.optional (cfg.qt.enable && cfg.qt.dolphinLauncher) dolphinLauncher;
 
@@ -833,6 +973,54 @@
             }
         );
 
+        # programs.loft.plasma: the shell and launcher in a Plasma session
+        # started from the "Loft" entry (see loftPlasma above).
+        systemd.user.services.loft-plasma-shell = lib.mkIf cfg.plasma.enable (
+          lib.recursiveUpdate (plasmaService "Loft shell in Plasma (Quickshell)" (lib.getExe sp.loft-shell)) {
+            Service.Environment = env ++ [ "QS_DISABLE_CRASH_HANDLER=1" ];
+            # The same first-start theme as on niri.
+            Service.ExecStartPre = config.systemd.user.services.loft-shell.Service.ExecStartPre;
+            Unit.ConditionPathExists = "!%t/loft-live/active";
+            # Three crashes in a minute: Plasma's shell takes over, so a
+            # broken Loft never leaves the session without a desktop.
+            Unit.StartLimitIntervalSec = 60;
+            Unit.StartLimitBurst = 3;
+            Unit.OnFailure = [ "loft-plasma-fallback.service" ];
+          }
+        );
+        systemd.user.services.loft-plasma-launcher = lib.mkIf cfg.plasma.enable (
+          lib.recursiveUpdate
+            (plasmaService "Loft launcher in Plasma (walker + elephant)" "${lib.getExe sp.loft-launcher} service")
+            {
+              Service.MemorySwapMax = 0;
+              Service.MemoryMin = "512M";
+              Unit.ConditionPathExists = "!%t/loft-live/active";
+            }
+        );
+        systemd.user.services.loft-plasma-fallback = lib.mkIf cfg.plasma.enable {
+          Unit.Description = "Hand the Plasma session from Loft's shell to plasmashell";
+          Service = {
+            Type = "oneshot";
+            ExecStart = "${lib.getExe loftPlasma} fallback";
+          };
+        };
+
+        # plasmashell skips itself in a Loft session (and runs otherwise).
+        xdg.configFile."systemd/user/plasma-plasmashell.service.d/50-loft.conf" = lib.mkIf cfg.plasma.enable {
+          text = ''
+            [Service]
+            ExecCondition=${lib.getExe loftPlasma} check plasma
+          '';
+        };
+        # As with niri: KWin can end without a stop job, and PartOf only
+        # follows stop jobs.
+        xdg.configFile."systemd/user/plasma-kwin_wayland.service.d/50-loft.conf" = lib.mkIf cfg.plasma.enable {
+          text = ''
+            [Service]
+            ExecStopPost=-${pkgs.systemd}/bin/systemctl --user --no-block stop ${lib.concatStringsSep " " plasmaSessionUnits}
+          '';
+        };
+
         # programs.loft.spaces.documents → the library, once (never
         # overwritten: Settings → Spaces edits them there).
         home.activation.loftSpaces = lib.mkIf (cfg.spaces.documents != { } && spacesDir != null) (
@@ -898,7 +1086,7 @@
                 started="$started''${pair#*:} "
               fi
             done
-            for unit in loft-shell loft-launcher loft-keys; do
+            for unit in loft-shell loft-launcher loft-keys${lib.optionalString cfg.plasma.enable " loft-plasma-shell loft-plasma-launcher"}; do
               new="$( { ${pkgs.systemd}/bin/systemctl --user cat "$unit.service" 2>/dev/null || true; } | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
               old="$(cat "$state/$unit.unit-hash" 2>/dev/null || true)"
               if [ "$new" != "$old" ]; then

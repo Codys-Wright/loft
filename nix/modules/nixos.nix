@@ -106,6 +106,55 @@
         assert off.home-manager.sharedModules == [ ];
         pkgs.runCommand "niri-follows-system" { } "touch $out";
 
+      # programs.loft.plasma: SDDM offers a "Loft" session that can be the
+      # default (NixOS checks defaultSession against the provided sessions),
+      # it runs Plasma's startup through the marker script, and home-manager
+      # users get programs.loft.plasma.enable.
+      checks.plasma-session-module =
+        let
+          c =
+            (self.inputs.nixpkgs.lib.nixosSystem {
+              modules = [
+                self.nixosModules.default
+                {
+                  options.home-manager.sharedModules = lib.mkOption {
+                    type = lib.types.listOf lib.types.raw;
+                    default = [ ];
+                  };
+                  config = {
+                    nixpkgs.hostPlatform = pkgs.stdenv.hostPlatform.system;
+                    boot.loader.grub.enable = false;
+                    fileSystems."/" = {
+                      device = "nodev";
+                      fsType = "tmpfs";
+                    };
+                    system.stateVersion = "25.11";
+                    services.displayManager.sddm.enable = true;
+                    services.desktopManager.plasma6.enable = true;
+                    programs.loft.plasma.enable = true;
+                    services.displayManager.defaultSession = "loft";
+                  };
+                }
+              ];
+            }).config;
+          sessions = c.services.displayManager.sessionData.desktops;
+          shared = c.home-manager.sharedModules;
+        in
+        assert lib.any (m: (m.programs.loft.plasma.enable.content or null) == true) shared;
+        pkgs.runCommand "plasma-session-module" { } ''
+          f=${sessions}/share/wayland-sessions/loft.desktop
+          grep -qx 'Name=Loft' "$f"
+          grep -qx 'DesktopNames=KDE' "$f"
+          exec=$(sed -n 's/^Exec=//p' "$f")
+          grep -q 'plasma-session"$' "$exec"
+          grep -q 'startplasma-wayland$' "$exec"
+          # The plain Plasma entry is still there.
+          ls ${sessions}/share/wayland-sessions/ | grep -q '^plasma'
+          grep -q 'DefaultSession=loft.desktop' ${c.environment.etc."sddm.conf.d/00-nixos.conf".source} \
+            || grep -q 'Session=loft' ${c.environment.etc."sddm.conf.d/00-nixos.conf".source}
+          touch $out
+        '';
+
       checks.greeter-vm = pkgs.testers.runNixOSTest {
         name = "loft-greeter";
         nodes.machine = {
@@ -182,6 +231,40 @@
     }:
     let
       cfg = config.programs.loft.greeter;
+      plasmaCfg = config.programs.loft.plasma;
+      plasmaWorkspace = config.programs.loft.plasma.workspacePackage;
+
+      # The "Loft" login entry: Plasma's own startup (KWin + the KDE
+      # services, the same command as NixOS's "Plasma" entry), recorded so
+      # the user units know this session is Loft's (loft-plasma in
+      # nix/modules/home.nix). exec keeps the PID: the marker names the
+      # startplasma-wayland process for as long as the session runs.
+      loftPlasmaStart = pkgs.writeShellScript "loft-plasma-session" ''
+        rt="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}/loft"
+        ${pkgs.coreutils}/bin/mkdir -p "$rt"
+        echo "$$" > "$rt/plasma-session"
+        ${pkgs.coreutils}/bin/rm -f "$rt/plasma-session.plasma"
+        exec ${plasmaWorkspace}/libexec/plasma-dbus-run-session-if-needed ${plasmaWorkspace}/bin/startplasma-wayland
+      '';
+      loftPlasmaSession =
+        pkgs.runCommand "loft-plasma-session"
+          {
+            passthru.providedSessions = [ "loft" ];
+            desktop = ''
+              [Desktop Entry]
+              Type=Application
+              Name=Loft
+              Comment=KDE Plasma with the Loft shell
+              Exec=${loftPlasmaStart}
+              TryExec=${plasmaWorkspace}/bin/startplasma-wayland
+              DesktopNames=KDE
+            '';
+            passAsFile = [ "desktop" ];
+          }
+          ''
+            mkdir -p $out/share/wayland-sessions
+            cp $desktopPath $out/share/wayland-sessions/loft.desktop
+          '';
       sddm = config.services.displayManager.sddm;
       sp = self.packages.${pkgs.stdenv.hostPlatform.system};
       helper = lib.getExe sp.loft-greeter-install;
@@ -189,6 +272,22 @@
     {
       # programs.loft.fanControl (nix/modules/fans.nix).
       imports = [ self.nixosModules.fanControl ];
+
+      options.programs.loft.plasma = {
+        enable = lib.mkEnableOption ''
+          a "Loft" login session: KDE Plasma (KWin and the KDE services) with
+          Loft's shell in place of plasmashell, next to the plain "Plasma"
+          one. Every home-manager user gets `programs.loft.plasma.enable` by
+          default. Make it the default with
+          `services.displayManager.defaultSession = "loft"`'';
+
+        workspacePackage = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.kdePackages.plasma-workspace;
+          defaultText = lib.literalExpression "pkgs.kdePackages.plasma-workspace";
+          description = "The plasma-workspace whose startplasma-wayland the session runs (the system's Plasma).";
+        };
+      };
 
       options.programs.loft.greeter = {
         enable = lib.mkEnableOption "the Loft login screen (SDDM theme `loft`), showing the lock design you sync to it";
@@ -227,6 +326,22 @@
             { programs.loft.niriPackage = lib.mkDefault config.programs.niri.package; }
           ];
         })
+        (lib.mkIf plasmaCfg.enable (
+          lib.mkMerge [
+            {
+              assertions = [
+                {
+                  assertion = config.services.desktopManager.plasma6.enable;
+                  message = "programs.loft.plasma needs KDE Plasma 6 (services.desktopManager.plasma6.enable).";
+                }
+              ];
+              services.displayManager.sessionPackages = [ loftPlasmaSession ];
+            }
+            (lib.optionalAttrs (options ? home-manager.sharedModules) {
+              home-manager.sharedModules = [ { programs.loft.plasma.enable = lib.mkDefault true; } ];
+            })
+          ]
+        ))
         (lib.mkIf cfg.enable {
           services.displayManager.sddm = {
             # Above mkDefault and the mkOverride 900 a desktop module may use
