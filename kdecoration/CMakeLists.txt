@@ -1,5 +1,5 @@
-# Loft's KWin decoration (dev.loft.decoration): macOS traffic lights and a
-# centered title, colored by Loft's theme (<state>/current/kdecoration.ini).
+# Loft's KWin decoration (dev.loft.decoration): macOS Tahoe's title bar,
+# light or dark with Loft's theme (<state>/current/kdecoration.ini).
 # Built by the flake (nix/packages.nix: loft-kdecoration); docs/KWIN.md §4.4.
 cmake_minimum_required(VERSION 3.22)
 project(loft-kdecoration LANGUAGES CXX)

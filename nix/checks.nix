@@ -46,7 +46,8 @@
 #                   sleep lock: off before sleep, back on after, only what was on)
 #   loft-sleep-clippy  the same clippy gate for it
 #   loft-kdecoration  Loft's KWin decoration plugin builds against KDecoration3 and its
-#                   ctest passes (kdecoration.ini parsing: #rrggbbaa, clamps, defaults)
+#                   ctest passes (kdecoration.ini parsing: appearance, Tahoe defaults,
+#                   #rrggbbaa overrides, clamps)
 #   spicetify-live  Spotify's live recolor extension (spicetify/loft-live.js): colors.css
 #                   re-read cache-busted and swapped in at the same cascade slot
 #   loft-input      the test driver builds and its tests pass (keymaps, combos,

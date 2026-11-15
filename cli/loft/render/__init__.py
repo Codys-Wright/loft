@@ -19,7 +19,7 @@ the same name.
     walker      walker.css             colors material launcher                  —
     noctalia    noctalia.json          colors                                    —
     spotify     spicetify.ini          colors                                    spotify
-    kdecoration kdecoration.ini        colors shape                              — (the plugin watches it)
+    kdecoration kdecoration.ini        colors                                    — (the plugin watches it)
 
 `loft theme render` writes them flat into a directory; `loft theme apply` and
 `preview` go through the composition cache (render/compose.py).

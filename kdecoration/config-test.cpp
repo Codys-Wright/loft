@@ -21,30 +21,39 @@ int main()
     CHECK(!parseColor(QStringLiteral("red")).isValid());
     CHECK(!parseColor(QStringLiteral("#12345")).isValid());
 
-    const Look defaults;
+    // No file, or no appearance: Tahoe dark.
+    const Look dark = tahoeLook(true);
+    const Look light = tahoeLook(false);
+    CHECK(parseLook(QString()) == dark);
+    CHECK(dark.titleBarActive == QColor(0x33, 0x33, 0x33)); // MacTahoe-Dark decoration.svg
+    CHECK(light.titleBarActive == QColor(0xff, 0xff, 0xff));
+    CHECK(light.textInactive == QColor(177, 177, 177)); // MacTahoe-Lightrc InactiveTextColor
+    CHECK(dark.cornerRadius == 24 && dark.titleBarHeight == 34 && dark.fontSize == 13);
+
+    // The appearance applies wherever it is in the file, overrides on top.
     const Look l = parseLook(QStringLiteral("; comment\n"
                                             "[Colors]\n"
                                             "TitleBarActive=#e6e9ef\n"
-                                            "ButtonInactive = #4c4f6938\n"
-                                            "Close=nonsense\n"
-                                            "Unknown=#000000\n"
+                                            "TextInactive=nonsense\n"
+                                            "Close=#000000\n" // traffic lights are fixed
                                             "[Metrics]\n"
                                             "CornerRadius=0\n"
-                                            "TitleBarHeight=30\n"
-                                            "ButtonSize=50\n"
+                                            "TitleBarHeight=12\n"
                                             "FontSize=-3\n"
                                             "[Other]\n"
-                                            "TextActive=#000000\n"));
+                                            "TextActive=#000000\n"
+                                            "[General]\n"
+                                            "Appearance = Light\n"));
+    CHECK(!l.dark);
     CHECK(l.titleBarActive == QColor(0xe6, 0xe9, 0xef));
-    CHECK(l.buttonInactive == QColor(0x4c, 0x4f, 0x69, 0x38));
-    CHECK(l.close == defaults.close); // a bad value keeps the default
-    CHECK(l.textActive == defaults.textActive); // only [Colors] sets colors
+    CHECK(l.titleBarInactive == light.titleBarInactive);
+    CHECK(l.textInactive == light.textInactive); // a bad value keeps Tahoe's
+    CHECK(l.textActive == light.textActive); // only [Colors] sets colors
     CHECK(l.cornerRadius == 0);
-    CHECK(l.titleBarHeight == 30);
-    CHECK(l.buttonSize == 30); // clamped to the bar
-    CHECK(l.fontSize == defaults.fontSize); // negative ignored
-
-    CHECK(parseLook(QString()) == defaults);
+    CHECK(l.titleBarHeight == 26); // clamped: the beads fit
+    CHECK(l.fontSize == light.fontSize); // negative ignored
+    CHECK(parseLook(QStringLiteral("[General]\nAppearance=dark\n")) == dark);
+    CHECK(parseLook(QStringLiteral("[General]\nAppearance=sepia\n")) == dark);
 
     qputenv("LOFT_STATE_DIR", "/s");
     CHECK(lookPath() == QStringLiteral("/s/current/kdecoration.ini"));

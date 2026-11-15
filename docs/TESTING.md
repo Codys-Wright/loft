@@ -139,6 +139,13 @@ What differs from niri sessions:
   (`set -a; . session.env`) to run KDE tools against the session (`qdbus org.kde.KWin …`,
   `kscreen-doctor -o`).
 - `--output-count N`: N KWin outputs (`WL-0`, `WL-1`, …) of `--size`, side by side.
+- `--kwin-scale S`: fractional scaling (1.25, 1.5 …). The host output is scaled and KWin
+  follows it (kscreen-doctor still reports 1); `--size` stays device pixels, so the
+  session is `--size / S` logical. loft-shot's image is then larger than the output: the
+  top-left `--size` pixels are the session.
+- `--kwin-env NAME=VALUE` (repeatable): extra environment for the whole session, e.g. a
+  plugin build first on `QT_PLUGIN_PATH` (the first match wins), or `LOFT_STATE_DIR` for
+  KWin's plugins to read the session's theme.
 
 Driving it:
 

@@ -1,8 +1,10 @@
 #include "config.h"
+#include "tahoe.h"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QTimer>
 
 namespace Loft
@@ -25,13 +27,31 @@ QColor parseColor(const QString &text)
     return QColor((v >> 24) & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff);
 }
 
-Look parseLook(const QString &ini, Look look)
+Look tahoeLook(bool dark)
 {
+    const Tahoe::Palette &p = Tahoe::palette(dark);
+    Look look;
+    look.dark = dark;
+    look.titleBarActive = p.bar;
+    look.titleBarInactive = p.barInactive;
+    look.textActive = p.text;
+    look.textInactive = p.textInactive;
+    look.cornerRadius = Tahoe::CornerRadius;
+    look.titleBarHeight = Tahoe::TitleBarHeight;
+    look.fontSize = Tahoe::TitleFontSize;
+    return look;
+}
+
+Look parseLook(const QString &ini)
+{
+    // Collect first: the appearance decides the defaults the other keys
+    // override, wherever it appears in the file.
+    QHash<QString, QString> values; // "Section/Key" → value
     QString section;
     const auto lines = ini.split(QLatin1Char('\n'));
     for (const QString &raw : lines) {
         const QString line = raw.trimmed();
-        if (line.isEmpty() || line.startsWith(QLatin1Char(';'))) {
+        if (line.isEmpty() || line.startsWith(QLatin1Char(';')) || line.startsWith(QLatin1Char('#'))) {
             continue;
         }
         if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
@@ -42,55 +62,38 @@ Look parseLook(const QString &ini, Look look)
         if (eq <= 0) {
             continue;
         }
-        const QString key = line.left(eq).trimmed();
-        const QString value = line.mid(eq + 1).trimmed();
-        if (section == QLatin1String("Colors")) {
-            const QColor c = parseColor(value);
-            if (!c.isValid()) {
-                continue;
-            }
-            static const QList<std::pair<const char *, QColor Look::*>> colors = {
-                {"TitleBarActive", &Look::titleBarActive},
-                {"TitleBarInactive", &Look::titleBarInactive},
-                {"TextActive", &Look::textActive},
-                {"TextInactive", &Look::textInactive},
-                {"Close", &Look::close},
-                {"Minimize", &Look::minimize},
-                {"Maximize", &Look::maximize},
-                {"ButtonInactive", &Look::buttonInactive},
-                {"Glyph", &Look::glyph},
-                {"ShadowActive", &Look::shadowActive},
-                {"ShadowInactive", &Look::shadowInactive},
-            };
-            for (const auto &[name, member] : colors) {
-                if (key == QLatin1String(name)) {
-                    look.*member = c;
-                }
-            }
-        } else if (section == QLatin1String("Metrics")) {
-            bool ok = false;
-            const qreal n = value.toDouble(&ok);
-            if (!ok || n < 0 || n > 200) {
-                continue;
-            }
-            static const QList<std::pair<const char *, qreal Look::*>> metrics = {
-                {"CornerRadius", &Look::cornerRadius},
-                {"TitleBarHeight", &Look::titleBarHeight},
-                {"ButtonSize", &Look::buttonSize},
-                {"ButtonSpacing", &Look::buttonSpacing},
-                {"ButtonInset", &Look::buttonInset},
-                {"FontSize", &Look::fontSize},
-            };
-            for (const auto &[name, member] : metrics) {
-                if (key == QLatin1String(name)) {
-                    look.*member = n;
-                }
-            }
+        values.insert(section + QLatin1Char('/') + line.left(eq).trimmed(), line.mid(eq + 1).trimmed());
+    }
+
+    const QString appearance = values.value(QStringLiteral("General/Appearance")).toLower();
+    Look look = tahoeLook(appearance != QLatin1String("light"));
+
+    static const QList<std::pair<const char *, QColor Look::*>> colors = {
+        {"TitleBarActive", &Look::titleBarActive},
+        {"TitleBarInactive", &Look::titleBarInactive},
+        {"TextActive", &Look::textActive},
+        {"TextInactive", &Look::textInactive},
+    };
+    for (const auto &[name, member] : colors) {
+        const QColor c = parseColor(values.value(QLatin1String("Colors/") + QLatin1String(name)));
+        if (c.isValid()) {
+            look.*member = c;
+        }
+    }
+    static const QList<std::pair<const char *, qreal Look::*>> metrics = {
+        {"CornerRadius", &Look::cornerRadius},
+        {"TitleBarHeight", &Look::titleBarHeight},
+        {"FontSize", &Look::fontSize},
+    };
+    for (const auto &[name, member] : metrics) {
+        bool ok = false;
+        const qreal n = values.value(QLatin1String("Metrics/") + QLatin1String(name)).toDouble(&ok);
+        if (ok && n >= 0 && n <= 200) {
+            look.*member = n;
         }
     }
     // Keep the beads inside the bar, and the title readable.
-    look.titleBarHeight = std::max<qreal>(look.titleBarHeight, 8);
-    look.buttonSize = std::min(look.buttonSize, look.titleBarHeight);
+    look.titleBarHeight = std::max<qreal>(look.titleBarHeight, Tahoe::ButtonTop + Tahoe::ButtonCell);
     look.fontSize = std::max<qreal>(look.fontSize, 6);
     return look;
 }
@@ -135,7 +138,7 @@ Config::Config()
 
 void Config::reload()
 {
-    Look look;
+    Look look = tahoeLook(true);
     QFile f(m_path);
     if (f.open(QIODevice::ReadOnly)) {
         look = parseLook(QString::fromUtf8(f.readAll()));

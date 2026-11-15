@@ -759,8 +759,8 @@
           };
         });
 
-        # Loft's KWin decoration (kdecoration/, docs/KWIN.md §4.4): traffic
-        # lights and a centered title in the theme's colors (kdecoration.ini).
+        # Loft's KWin decoration (kdecoration/, docs/KWIN.md §4.4): macOS
+        # Tahoe's title bar, light or dark with the theme (kdecoration.ini).
         # KWin finds it on QT_PLUGIN_PATH (the NixOS module puts it in the
         # system profile); loft-kwin-decoration selects it while Loft runs.
         loft-kdecoration = pkgs.stdenv.mkDerivation {
