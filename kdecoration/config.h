@@ -1,6 +1,7 @@
-// Loft's decoration look: built-in defaults, overridden by the theme's
-// <state>/current/kdecoration.ini (cli/loft/render/kdecoration.py), which is
-// watched so a theme change repaints open windows.
+// Loft's decoration look: macOS Tahoe's title bar (tahoe.h) in the theme's
+// appearance, light or dark, from <state>/current/kdecoration.ini
+// (cli/loft/render/kdecoration.py), which is watched so a theme change
+// repaints open windows.
 #pragma once
 
 #include <QColor>
@@ -12,33 +13,34 @@ namespace Loft
 {
 
 struct Look {
-    QColor titleBarActive{0x2c, 0x2c, 0x30};
-    QColor titleBarInactive{0x22, 0x22, 0x26};
-    QColor textActive{0xe6, 0xe6, 0xea};
-    QColor textInactive{0x8a, 0x8a, 0x90};
-    QColor close{0xff, 0x5f, 0x57};
-    QColor minimize{0xfe, 0xbc, 0x2e};
-    QColor maximize{0x28, 0xc8, 0x40};
-    QColor buttonInactive{0xe6, 0xe6, 0xea, 0x38};
-    QColor glyph{0, 0, 0, 0x8c};
-    QColor shadowActive{0, 0, 0, 0x66};
-    QColor shadowInactive{0, 0, 0, 0x29};
-    qreal cornerRadius = 12;
-    qreal titleBarHeight = 24;
-    qreal buttonSize = 12;
-    qreal buttonSpacing = 8;
-    qreal buttonInset = 10;
-    qreal fontSize = 11; // px
+    // [General] Appearance=light|dark. Picks Tahoe's light or dark bar,
+    // text, grey beads, outline and shadow; the traffic lights' colors are
+    // fixed per appearance (tahoe.h), as on macOS.
+    bool dark = true;
+    // Tahoe's values for the appearance, unless the INI overrides them
+    // ([Colors], [Metrics]).
+    QColor titleBarActive;
+    QColor titleBarInactive;
+    QColor textActive;
+    QColor textInactive;
+    qreal cornerRadius = 0;
+    qreal titleBarHeight = 0;
+    qreal fontSize = 0; // px
 
     bool operator==(const Look &) const = default;
 };
 
-// #rrggbb or #rrggbbaa (CSS / Loft order, not Qt's #aarrggbb); invalid → nullopt-ish (invalid QColor).
+// Tahoe's look for an appearance, nothing overridden.
+Look tahoeLook(bool dark);
+
+// #rrggbb or #rrggbbaa (CSS / Loft order, not Qt's #aarrggbb); anything else → an invalid QColor.
 QColor parseColor(const QString &text);
 
-// Applies an INI document's [Colors] / [Metrics] keys over `base`. Unknown
-// keys and bad values are ignored (they keep base's value).
-Look parseLook(const QString &ini, Look base = Look{});
+// An INI document → a look: [General] Appearance (light | dark, default
+// dark), then [Colors] TitleBarActive / TitleBarInactive / TextActive /
+// TextInactive and [Metrics] CornerRadius / TitleBarHeight / FontSize over
+// that appearance's Tahoe values. Unknown keys and bad values are ignored.
+Look parseLook(const QString &ini);
 
 // $LOFT_STATE_DIR, else $XDG_STATE_HOME/loft, else ~/.local/state/loft; + current/kdecoration.ini.
 QString lookPath();
@@ -62,7 +64,7 @@ private:
     void rewatch();
 
     QString m_path;
-    Look m_look;
+    Look m_look = tahoeLook(true);
     QFileSystemWatcher m_watcher;
 };
 

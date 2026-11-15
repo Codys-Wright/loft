@@ -287,27 +287,36 @@ id **`dev.loft.decoration`**, installed at `lib/qt-6/plugins/org.kde.kdecoration
 `programs.loft.plasma` (NixOS) puts it in `environment.systemPackages`, so KWin finds it
 on `QT_PLUGIN_PATH`.
 
-- **Look:** macOS traffic lights at the left (close `#ff5f57`, minimize `#febc2e`,
-  maximize `#28c840`), grey when the window is in the background. Hovering any bead
-  lights all three (also in the background) and shows the glyphs (×, −, ⤢). The title is
-  centered on the whole bar, kept clear of the beads, elided. The bar's top corners
-  and the window's bottom corners take the theme's window radius (square when
-  maximized). A soft shadow in the theme's shadow colors, deeper on the focused window.
-  No side or bottom borders: a 4 px invisible resize margin, as windows have on macOS.
+- **Look: macOS 26 Tahoe's title bar**, numbers taken from the MacTahoe KDE theme's
+  Aurorae decoration (a careful copy of Tahoe's) and cited in `kdecoration/tahoe.h`: a
+  34 px bar (what Aurorae draws for MacTahoe's rc: 8 + 16 + 2 button margin + 8), 14 px
+  beads 26 px apart (centres at x 24/50/76, y 18), the beads' exact light / dark fills and
+  rims, grey when the window is in the background, 24 px corners (top and bottom), a 1 px
+  frame with Tahoe's white highlight (dark: all around), a 1 px black outline outside
+  the frame (KWin's border outline, crisp at any scale), and Tahoe's shadow (fitted to
+  MacTahoe's rendered shadow: strength · (1 − d / reach)^1.5 per side, reaches = the rc's
+  shadow paddings). Glyphs are MacTahoe's SVG paths (×, −, the two-triangle zoom glyph,
+  inward triangles when maximized). Where Aurorae can't do what macOS does, it follows
+  macOS: pointing at the button group (gaps included) shows all three glyphs and lights
+  the beads of a background window too; the title is centred on the window, 13 px
+  semibold in the KDE title font's family; bottom corners are rounded. Not done: the
+  Option-key "+" on green (KWin gives decorations no modifier state, input.cpp builds
+  their hover events without it).
 - **Theme:** the `kdecoration` render unit (`cli/loft/render/kdecoration.py`,
-  `templates/render/kdecoration.ini`) writes `<state>/current/kdecoration.ini`: the bar
-  colors niri-loft's bar gets (surface / bg, text / subtext), the bead colors, the
-  unfocused grey (text at 22 %), the glyph, the shadows, the window radius, and the
-  metrics (bar 24 px, beads 12 px, 8 px apart, 10 px inset, 11 px title). The plugin
-  reads it from `$LOFT_STATE_DIR`, else `$XDG_STATE_HOME/loft`, else
-  `~/.local/state/loft`, watches the file, `current/` and the state dir (the theme
-  engine swaps the `current` link), and repaints open windows on change. Without the
-  file it uses built-in defaults (niri/title-bar.kdl's colors). Colors are `#rrggbb`
-  or `#rrggbbaa` (Loft's order, not Qt's).
+  `templates/render/kdecoration.ini`) writes `<state>/current/kdecoration.ini` with only
+  `[General] Appearance=light|dark` (the colors' polarity): the traffic lights are fixed
+  colors, as on macOS, and the bar, text and grey beads are Tahoe's for that appearance.
+  A hand-written file may still override `[Colors]` TitleBarActive / TitleBarInactive /
+  TextActive / TextInactive (`#rrggbb[aa]`, Loft's order) and `[Metrics]` CornerRadius /
+  TitleBarHeight / FontSize. The plugin reads it from `$LOFT_STATE_DIR`, else
+  `$XDG_STATE_HOME/loft`, else `~/.local/state/loft`, watches the file, `current/` and the
+  state dir (the theme engine swaps the `current` link), and repaints open windows on
+  change. Without the file it is Tahoe dark.
 - **Behavior is KWin's:** the buttons are KDecoration's own Close / Minimize / Maximize
   (minimize is real, = Hide, §4.1; green toggles maximize, middle-click vertical,
   right-click horizontal). Right-click on the bar opens KWin's window menu at the
-  pointer. Double-click, drag and the other title-bar actions are KWin's settings.
+  pointer. Double-click on the bar zooms (maximizes) whatever KWin's title-bar action is,
+  as on macOS; drag and the other title-bar actions are KWin's settings.
   Not done: fullscreen on a modifier+green, long-press green, and Loft's own window
   menu through `dev.loft.KWinBridge`.
 - **Selected only while Loft runs** (§5): `loft-kwin-decoration apply` (the
@@ -319,6 +328,11 @@ on `QT_PLUGIN_PATH`.
   another decoration meanwhile. `apply` does nothing when the plugin isn't installed.
   KWin 6.8 still reads the group `org.kde.kdecoration2` (the plugins' namespace is
   `org.kde.kdecoration3`).
+- **Compared** pixel by pixel with MacTahoe-Light/Dark (Aurorae, border size Tiny) in a
+  nested session: same kwrite windows, focused / background / hovered, light and dark,
+  1x / 1.25x / 1.5x (`loft-dev --kwin-scale`). Build the plugin against the system's
+  nixpkgs (`--override-input nixpkgs nixpkgs`) or KWin won't load it, and pass it with
+  `--kwin-env QT_PLUGIN_PATH=<build>/lib/qt-6/plugins:$QT_PLUGIN_PATH` (first wins).
 - **Tested** nested (§6, plugin on `QT_PLUGIN_PATH`, scratch HOME): two foot windows,
   focus / unfocus, hover glyphs, the window menu, maximize / restore, minimize, close,
   a live theme swap (tokyonight → latte) and metric edits, and apply / revert with the

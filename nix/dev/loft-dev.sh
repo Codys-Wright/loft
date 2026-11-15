@@ -33,7 +33,7 @@ usage: loft-dev [--session NAME] [--size WxH | --outputs WxH[+X+Y],…] [--headl
                 [--isolated | --shared | --private-bus | --private-runtime]
                 [--share-audio] [--stock-wallpapers] [CHECKOUT]
        loft-dev --session NAME --compositor kwin [--shell loft|plasma] [--size WxH]
-                [--output-count N] [--keep-home] [CHECKOUT]
+                [--output-count N] [--keep-home] [--kwin-scale S] [--kwin-env NAME=VALUE]… [CHECKOUT]
        loft-dev --list
        loft-dev --stop NAME
 
@@ -85,6 +85,12 @@ loft-dev-kwin-NAME; `loft-dev --stop NAME` stops all of it.
   --output-count N         kwin: N outputs of --size side by side (WL-0, WL-1, …)
   --keep-home              kwin: keep the scratch HOME from the last run
                            (default: a fresh one each start)
+  --kwin-scale S           kwin: the outputs' scale (e.g. 1.25, 1.5), for
+                           fractional-scaling tests: the host output is
+                           scaled, KWin follows it; --size stays device px
+  --kwin-env NAME=VALUE    kwin: extra environment for the whole session
+                           (repeatable), e.g. a build's plugins first:
+                           QT_PLUGIN_PATH=$PWD/result/lib/qt-6/plugins:$QT_PLUGIN_PATH
   LOFT_DEV_KWIN=PATH       kwin: run this kwin_wayland (or package dir with
                            bin/kwin_wayland) instead of the system's, e.g.
                            $(nix build .#loft-kwin-patched --print-out-paths)
@@ -114,6 +120,8 @@ compositor=niri
 kshell=loft
 output_count=1
 keep_home=0
+kwin_env=()
+kwin_scale=1
 action=run
 stop_name=""
 orig_args=("$@")
@@ -137,6 +145,11 @@ while [ $# -gt 0 ]; do
     --shell) [ $# -ge 2 ] || usage; kshell="$2"; shift 2 ;;
     --output-count) [ $# -ge 2 ] || usage; output_count="$2"; shift 2 ;;
     --keep-home) keep_home=1; shift ;;
+    --kwin-scale) [ $# -ge 2 ] || usage; kwin_scale="$2"; shift 2 ;;
+    --kwin-env)
+      [ $# -ge 2 ] || usage
+      [[ "$2" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || { echo "loft-dev: --kwin-env wants NAME=VALUE" >&2; exit 2; }
+      kwin_env+=("--setenv=$2"); shift 2 ;;
     --list) action=list; shift ;;
     --stop) [ $# -ge 2 ] || usage; action=stop; stop_name="$2"; shift 2 ;;
     -h|--help) usage ;;
@@ -261,6 +274,7 @@ run_kwin() {
   if [ -n "$outputs" ]; then echo "loft-dev: --compositor kwin takes --size and --output-count, not --outputs" >&2; exit 2; fi
   if [ "$headless" = 0 ]; then echo "loft-dev: --compositor kwin is headless only" >&2; exit 2; fi
   if ! [[ "$output_count" =~ ^[1-8]$ ]]; then echo "loft-dev: --output-count wants 1-8" >&2; exit 2; fi
+  if ! [[ "$kwin_scale" =~ ^[1-4](\.[0-9]+)?$ ]]; then echo "loft-dev: --kwin-scale wants a number from 1 to 4, e.g. 1.25" >&2; exit 2; fi
   size="${size:-1600x1000}"
   if ! [[ "$size" =~ ^[0-9]+x[0-9]+$ ]]; then echo "loft-dev: --size wants WxH, e.g. 1600x1000" >&2; exit 2; fi
   local w="${size%x*}" h="${size#*x}"
@@ -339,7 +353,9 @@ run_kwin() {
   chmod 700 "$hrt" "$dir/run"
   rm -f "$hrt"/wayland-* "$hrt"/sway-ipc.*
   {
-    echo "output HEADLESS-1 resolution $((output_count * w))x$h position 0,0 bg #000000 solid_color"
+    # --kwin-scale: KWin's wayland backend takes its outputs' scale from the
+    # host surface's preferred scale (its own --scale is ignored there).
+    echo "output HEADLESS-1 resolution $((output_count * w))x$h position 0,0 scale $kwin_scale bg #000000 solid_color"
     for ((i = 0; i < output_count; i++)); do
       if [ "$output_count" = 1 ]; then
         echo "for_window [title=\"^KDE Wayland Compositor WL-0 \"] move container to output HEADLESS-1, focus, fullscreen enable"
@@ -428,6 +444,7 @@ EOF
     --setenv=LOFT_THEME_PATH="${XDG_DATA_HOME:-$HOME/.local/share}/loft/themes:$root/themes" \
     --setenv=LOFT_UI_FONT=@UI_FONT@ --setenv=LOFT_ICON_FONT=@ICON_FONT@ \
     --setenv=QT_FFMPEG_DECODING_HW_DEVICE_TYPES=vaapi \
+    "${kwin_env[@]}" \
     bash "$dir/kwin-run.sh"
   trap 'systemctl --user stop "$unit" 2>/dev/null || true; exit 130' INT TERM
 
