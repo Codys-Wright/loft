@@ -295,13 +295,24 @@
                 *) echo "usage: loft-plasma use loft|plasma" >&2; exit 2 ;;
               esac
               ;;
+            lock-env)
+              # ExecStartPre of KWin's unit: Plasma's locker (kscreenlocker_greet,
+              # a child of KWin that inherits its environment) shows Loft's
+              # design only in Loft sessions. The unit reads this file with
+              # EnvironmentFile= right after; a plain "Plasma" login empties it.
+              mkdir -p "$rt"
+              rm -f "$rt/plasma-lock.env"
+              if is_loft; then
+                printf '%s\n' PLASMA_DEFAULT_SHELL=dev.loft.desktop QML_XHR_ALLOW_FILE_READ=1 > "$rt/plasma-lock.env"
+              fi
+              ;;
             fallback)
               # loft-plasma-shell kept crashing (OnFailure): Plasma's shell takes over.
               "$0" use plasma
               notify-send -a Loft "Loft stopped" "Loft's shell kept crashing, so Plasma's shell took over. Run 'loft-plasma use loft' to try again." || true
               ;;
             *)
-              echo "usage: loft-plasma status | use loft|plasma | check loft|plasma" >&2
+              echo "usage: loft-plasma status | use loft|plasma | check loft|plasma | lock-env" >&2
               exit 2
               ;;
           esac
@@ -758,7 +769,12 @@
           sp.loft-launcher
         ]
         ++ lib.optional cfg.phone.enable cfg.phone.package
-        ++ lib.optional cfg.plasma.enable loftPlasma
+        ++ lib.optionals cfg.plasma.enable [
+          loftPlasma
+          # The lock screen's shell package, also for hosts without Loft's
+          # NixOS module (which installs it system-wide).
+          sp.loft-plasma-lockscreen
+        ]
         ++ lib.optional cfg.qt.enable cfg.qt.kvantumPackage
         ++ lib.optional (cfg.qt.enable && cfg.qt.dolphinLauncher) dolphinLauncher;
 
@@ -1014,9 +1030,17 @@
         };
         # As with niri: KWin can end without a stop job, and PartOf only
         # follows stop jobs.
+        # Lock screen (docs/KWIN.md §4.3): in a Loft session KWin starts with
+        # PLASMA_DEFAULT_SHELL=dev.loft.desktop, so Plasma's locker draws Loft's
+        # design (the shell package from Loft's NixOS module / home.packages).
+        # Only KWin's environment: plasmashell and the user manager don't see
+        # it, and plain "Plasma" logins keep Breeze's lock screen. Both lines
+        # are `-`: no file, or a failing check, just means the stock locker.
         xdg.configFile."systemd/user/plasma-kwin_wayland.service.d/50-loft.conf" = lib.mkIf cfg.plasma.enable {
           text = ''
             [Service]
+            ExecStartPre=-${lib.getExe loftPlasma} lock-env
+            EnvironmentFile=-%t/loft/plasma-lock.env
             ExecStopPost=-${pkgs.systemd}/bin/systemctl --user --no-block stop ${lib.concatStringsSep " " plasmaSessionUnits}
           '';
         };

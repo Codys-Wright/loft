@@ -233,28 +233,51 @@ without having to activate several per-output workspaces together.
 
 ### 4.3 Loft's lock design in Plasma's locker
 
+**Done** (step 8): `lock/plasma/` → package `loft-plasma-lockscreen` (`nix/lock.nix`).
+
 KWin can't host Loft's `WlSessionLock`, but Plasma 6's greeter is themeable.
 `kscreenlocker_greet` (6.8.2) loads `contents/lockscreen/LockScreen.qml` from a
 Plasma **shell package**, picked by `PLASMA_DEFAULT_SHELL` (default
-`org.kde.plasma.desktop`, whose lockscreen dir is `LockScreen.qml`, `LockScreenUi.qml`,
-`MainBlock.qml`, …). It also has `--testing --theme <package>` for previews.
+`org.kde.plasma.desktop`), unless `plasmashellrc [Shell] ShellPackage` is set.
 
-- Ship **`dev.loft.desktop`**, a shell package that contains only `lockscreen/` and
-  falls back to `org.kde.plasma.desktop` for everything else (KPackage fallback). Its
-  `LockScreen.qml` wraps `src/lock/design`, the same way `nix/lock.nix` already builds
-  the SDDM theme from it (`qs.*` imports rewritten, a stand-in `Theme.qml`). It talks to
-  the greeter's `authenticator` instead of PAM directly. The theme colors come from
-  Loft's rendered theme, as for SDDM.
-- Set `PLASMA_DEFAULT_SHELL=dev.loft.desktop` **only on `plasma-kwin_wayland.service`**
-  (a drop-in). The greeter is a child of KWin, so the lock screen changes and
-  plasmashell's own shell choice doesn't.
-- Lock, unlock, idle and sleep all stay Plasma's (kscreenlocker + PowerDevil), so a
-  broken Loft can never leave the session unlockable: if the package fails to load,
-  the greeter falls back to Breeze's.
-- Preview: `kscreenlocker_greet --testing --theme dev.loft.desktop`, as
-  `nix run .#greeter-preview` does for SDDM.
-- To check: whether the greeter honors a user-installed package from
-  `~/.local/share/plasma/shells`, or it has to be in the system profile's `share/`.
+- **`dev.loft.desktop`** holds only `metadata.json` + `contents/lockscreen/`. KPackage's
+  Plasma/Shell structure gives every non-default shell a fallback package
+  (`X-Plasma-FallbackPackage`, default `org.kde.plasma.desktop`), so everything else
+  (and the lock screen's `config.xml`) comes from Plasma's own. It installs to
+  `share/plasma/shells/dev.loft.desktop`: system-wide from the NixOS module
+  (`programs.loft.plasma`), and in `home.packages` from the home-manager module.
+  A copy in `~/.local/share/plasma/shells` works too, and **wins** over the system
+  one (XDG_DATA_HOME comes first), so don't leave stale copies there.
+- `LockScreen.qml` is the host: it imports only QtQuick and `org.kde.kscreenlocker`,
+  runs PAM through the greeter's `authenticator` (`startAuthenticating()` every second
+  while locked, `respond()`, waits out `inPasswordDelay`, `failed(0)` → "Incorrect
+  password" + shake, `succeeded` → `stopAuthenticating()` + `Qt.quit()`), and picks
+  the screen that shows the card. `LoftLock.qml` feeds `MacLock` (src/lock/design,
+  copied in with `qs.*` rewritten, as for SDDM) with the user's rendered theme and
+  wallpaper: `$XDG_STATE_HOME/loft/current/{theme.json,wallpapers.json}`, read at
+  every lock, so it follows `loft theme apply` without a rebuild.
+- Never unlockable: if `LockScreen.qml` fails to load, the greeter uses its built-in
+  fallback locker. If the design fails, `LockScreen.qml` shows a plain password field.
+  The card fails open: when the greeter can't tell which screen is active, every
+  screen shows it. Lock, unlock, idle and sleep stay Plasma's (kscreenlocker +
+  PowerDevil).
+- **Only Loft sessions.** KWin spawns the greeter with its own environment, so the
+  variable goes on `plasma-kwin_wayland.service` only, never the user manager (a
+  `set-environment` would leak into plasmashell and every later unit). The
+  home-manager drop-in adds `ExecStartPre=-loft-plasma lock-env`, which writes
+  `$XDG_RUNTIME_DIR/loft/plasma-lock.env` (`PLASMA_DEFAULT_SHELL=dev.loft.desktop`,
+  `QML_XHR_ALLOW_FILE_READ=1` for the theme files) when `loft-plasma check loft`
+  passes and removes it otherwise, and `EnvironmentFile=-` reads it (systemd reads
+  env files right before each command, so after the ExecStartPre). The login wrapper
+  writes the session marker before `startplasma-wayland`, which starts KWin, so the
+  check sees this login. A plain "Plasma" login keeps Breeze's lock screen.
+- `loft-plasma use plasma|loft` switches the shell live, but not the lock screen:
+  KWin's environment is fixed at start, so the lock follows the login entry until
+  the next login.
+- Preview: `kscreenlocker_greet --testing --shell <id or path>` (the option is
+  `--shell`, not `--theme`). With `PLASMA_DEFAULT_SHELL` and the package on
+  `XDG_DATA_DIRS`, no option is needed. Run it in the nested KWin of §6, never on the
+  live session. Testing mode still authenticates through real PAM (the `kde` service).
 
 ### 4.4 Loft's KWin decoration
 
@@ -319,7 +342,7 @@ when Loft stops:
 | loft-bridge.js (state, actions, Loft shortcuts, window rules) | loft-kwin unloads it on exit (`ExecStopPost` too, in case it crashed). Its shortcuts and rules disappear with it |
 | the decoration (`[org.kde.kdecoration2] library/theme` in kwinrc) | `loft-kwin apply` records the previous value in Loft's state dir and sets Loft's. `loft-kwin revert` (on stop) puts it back. Both run `org.kde.KWin.reconfigure` |
 | any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |
-| the lock screen | `PLASMA_DEFAULT_SHELL` only on KWin's unit, set by the session option. Lock and unlock stay Plasma's either way |
+| the lock screen | `PLASMA_DEFAULT_SHELL` only in KWin's environment, and only when the login is Loft's (`loft-plasma lock-env`, §4.3). Lock and unlock stay Plasma's either way |
 | activities created for Spaces | kept (harmless). `loft spaces prune` removes them |
 
 Loft never writes `plasma-org.kde.plasma.desktop-appletsrc`, `plasmashellrc` or
@@ -409,7 +432,7 @@ loft-dev --session NAME --compositor kwin [--shell loft|plasma] [CHECKOUT]
    fallback unit, `loft-kwin apply/revert`. This comes **before** daily use, so
    backing out works from day one.
 7. Decoration plugin (§4.4), with the Aurorae stand-in until it lands.
-8. Lock screen shell package (§4.3).
+8. ✅ Lock screen shell package (§4.3).
 9. Keybinds, display settings, capture through ScreenShot2.
 10. Spaces on Activities (§4.2).
 11. Window thumbnails through ScreenShot2.
