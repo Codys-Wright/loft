@@ -682,3 +682,7 @@ def add_parser(top, state_dir_of) -> None:
         print(json.dumps(apps) if a.json else "\n".join(apps))
 
     s.set_defaults(fn=_list)
+
+    from . import kwinkeys
+
+    kwinkeys.add_parser(sub, state_dir_of)

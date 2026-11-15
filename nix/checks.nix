@@ -11,7 +11,9 @@
 #                   a fake loft-pointer, recording zooms, the workspace panorama's layout math
 #                   on recorded niri JSON and a run against a fake niri), Apps to leave alone
 #                   → xremap (tests/test_keys.py), spaces/templates and the instance fixtures
-#                   against schemas/space-1.json, and Spotify themed by Loft
+#                   against schemas/space-1.json, shell-binds → the Plasma session's KWin
+#                   shortcut script and the record/revert of taken keys (tests/test_kwinkeys.py),
+#                   and Spotify themed by Loft
 #                   (tests/test_spotify.py: palette → text scheme, wrapper rewriting on a fake
 #                   Spotify tree, version-change detection, setup with a fake spicetify, the
 #                   `spotify` hook) — all offline
