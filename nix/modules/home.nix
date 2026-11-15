@@ -282,15 +282,15 @@
               case "''${2:-}" in
                 plasma)
                   echo "$pid" > "$marker.plasma"
-                  systemctl --user stop loft-plasma-shell.service loft-plasma-launcher.service || true
-                  systemctl --user reset-failed loft-plasma-shell.service loft-plasma-launcher.service 2>/dev/null || true
+                  systemctl --user stop ${plasmaUnits} || true
+                  systemctl --user reset-failed ${plasmaUnits} 2>/dev/null || true
                   systemctl --user start plasma-plasmashell.service
                   ;;
                 loft)
                   rm -f "$marker.plasma"
                   systemctl --user stop plasma-plasmashell.service || true
-                  systemctl --user reset-failed loft-plasma-shell.service loft-plasma-launcher.service 2>/dev/null || true
-                  systemctl --user start loft-plasma-shell.service loft-plasma-launcher.service
+                  systemctl --user reset-failed ${plasmaUnits} 2>/dev/null || true
+                  systemctl --user start ${plasmaUnits}
                   ;;
                 *) echo "usage: loft-plasma use loft|plasma" >&2; exit 2 ;;
               esac
@@ -345,7 +345,80 @@
       plasmaSessionUnits = [
         "loft-plasma-shell.service"
         "loft-plasma-launcher.service"
-      ];
+      ]
+      ++ lib.optional cfg.keyboard.enable "loft-plasma-keys.service";
+      plasmaUnits = lib.concatStringsSep " " plasmaSessionUnits;
+
+      qdbus = "${pkgs.kdePackages.qttools}/bin/qdbus";
+
+      # Loft's shortcuts in a Plasma session (cli/loft/kwinkeys.py, docs/KWIN.md
+      # §5): the shell binds (+ Settings → Keyboard Shortcuts) as a KWin script
+      # of kglobalaccel shortcuts, loaded while loft-plasma-shell runs.
+      # kglobalaccel lets two actions share a key (and then the other one
+      # wins), so Loft also takes its keys off the shortcuts that have them
+      # (KWin's Walk Through Windows, Plasma's System Settings…), recorded in
+      # kwinShortcutsTaken. On unload the script goes, every Loft action is
+      # unregistered and the taken keys are given back: kglobalshortcutsrc
+      # ends up as it was, and plain Plasma's shortcuts with it.
+      kwinShortcutsTaken = "${stateDir}/kwin-shortcuts-taken.json";
+      releaseKwinShortcuts = pkgs.writeShellScript "loft-kwin-shortcuts-release" ''
+        [ -e ${lib.escapeShellArg kwinShortcutsTaken} ] || exit 0
+        PATH=${lib.makeBinPath [ pkgs.systemd ]}:$PATH \
+          ${lib.getExe sp.loft} keys kwin release --record ${lib.escapeShellArg kwinShortcutsTaken}
+      '';
+      plasmaShortcuts = pkgs.writeShellScript "loft-plasma-shortcuts" ''
+        set -u
+        dir="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}/loft/plasma-keys"
+        script=loft-keys
+        ${lib.concatMapStrings (e: "export ${lib.escapeShellArg e}\n") env}
+        export PATH=${lib.makeBinPath [ pkgs.systemd ]}:$PATH
+        unload() {
+          ${qdbus} org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$script" >/dev/null 2>&1 || true
+          if [ -r "$dir/names" ]; then
+            while read -r name; do
+              [ -n "$name" ] || continue
+              ${qdbus} org.kde.kglobalaccel /kglobalaccel org.kde.KGlobalAccel.unregister kwin "$name" >/dev/null 2>&1 || true
+            done < "$dir/names"
+          fi
+          ${releaseKwinShortcuts} || true
+        }
+        case "''${1:-}" in
+          load)
+            unload
+            ${lib.getExe sp.loft} keys kwin render --binds ${shellBinds} --out "$dir" || exit 1
+            id="$(${qdbus} org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$dir/$script.js" "$script")" || exit 1
+            case "$id" in
+              "" | -*) echo "loft-plasma-shortcuts: KWin didn't load $dir/$script.js" >&2; exit 1 ;;
+            esac
+            ${qdbus} org.kde.KWin "/Scripting/Script$id" org.kde.kwin.Script.run >/dev/null || exit 1
+            ${lib.getExe sp.loft} keys kwin claim --names "$dir/names" --record ${lib.escapeShellArg kwinShortcutsTaken}
+            ;;
+          unload)
+            unload
+            ${pkgs.coreutils}/bin/rm -rf "$dir"
+            ;;
+          *) echo "usage: loft-plasma-shortcuts load|unload" >&2; exit 2 ;;
+        esac
+      '';
+      # What a shortcut runs: loft-plasma-key@<id>:<n>.service (the KWin
+      # script starts a new instance per press) → <dir>/actions/<id>.
+      plasmaKeyRun = pkgs.writeShellScript "loft-plasma-key" ''
+        id="''${1%%:*}"
+        case "$id" in "" | *[!a-z0-9-]*) echo "loft-plasma-key: bad action id '$id'" >&2; exit 2 ;; esac
+        f="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}/loft/plasma-keys/actions/$id"
+        [ -r "$f" ] || { echo "loft-plasma-key: no action $id (Loft's shortcuts aren't loaded)" >&2; exit 0; }
+        export PATH="${
+          lib.makeBinPath [
+            pkgs.coreutils
+            pkgs.bash
+            pkgs.kdePackages.qttools
+            pkgs.quickshell
+            sp.loft-launcher
+            sp.loft
+          ]
+        }:$PATH"
+        exec ${pkgs.bash}/bin/sh "$f"
+      '';
     in
     {
       # programs.loft.spotify (./spotify.nix), then studio-linux (Loft's old
@@ -679,6 +752,17 @@
             description = "xremap, built with niri support (per-app remaps follow the focused niri window).";
           };
 
+          plasmaPackage = lib.mkOption {
+            type = lib.types.package;
+            default = pkgs.xremap.kde;
+            defaultText = lib.literalExpression "pkgs.xremap.kde";
+            description = ''
+              xremap for a Plasma session (programs.loft.plasma), built with KDE
+              support: it loads a KWin script that reports the focused window,
+              so per-app remaps follow it.
+            '';
+          };
+
           groups = lib.mkOption {
             type = lib.types.attrsOf lib.types.bool;
             default = { };
@@ -1007,7 +1091,38 @@
             Unit.StartLimitIntervalSec = 60;
             Unit.StartLimitBurst = 3;
             Unit.OnFailure = [ "loft-plasma-fallback.service" ];
+            # Loft's shortcuts live and die with the shell ("-": a failed
+            # load costs the shortcuts, not the shell).
+            Service.ExecStartPost = "-${plasmaShortcuts} load";
+            Service.ExecStopPost = "-${plasmaShortcuts} unload";
           }
+        );
+        # A Loft shortcut's command (see plasmaKeyRun). Instances are per
+        # key press; collected as soon as they end, failed or not.
+        systemd.user.services."loft-plasma-key@" = lib.mkIf cfg.plasma.enable {
+          Unit = {
+            Description = "Loft shortcut %i";
+            CollectMode = "inactive-or-failed";
+          };
+          Service = {
+            Type = "exec";
+            ExecStart = "${plasmaKeyRun} %i";
+            Environment = env;
+          };
+        };
+        # The keyboard layer in a Loft Plasma session: xremap with KDE
+        # support on the same config as loft-keys (which needs niri and so
+        # never runs here; Conflicts makes sure only one xremap does).
+        systemd.user.services.loft-plasma-keys = lib.mkIf (cfg.plasma.enable && cfg.keyboard.enable) (
+          lib.recursiveUpdate
+            (plasmaService "Loft keyboard layer in Plasma (xremap, KDE)" "${lib.getExe cfg.keyboard.plasmaPackage} --mouse --watch=config,device ${keymapConfig}")
+            {
+              Unit.Conflicts = [ "loft-keys.service" ];
+              Service.Environment = env ++ [ "KDE_SESSION_VERSION=6" ];
+              Service.ExecStartPre = [ "${keymapStart}" ];
+              # xremap's focus script ("xremap") outlives xremap in KWin.
+              Service.ExecStopPost = "-${qdbus} org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript xremap";
+            }
         );
         systemd.user.services.loft-plasma-launcher = lib.mkIf cfg.plasma.enable (
           lib.recursiveUpdate
@@ -1031,6 +1146,9 @@
           text = ''
             [Service]
             ExecCondition=${lib.getExe loftPlasma} check plasma
+            # Keys Loft took for its shortcuts and never gave back (the session
+            # ended without stopping Loft's shell): back to their owners.
+            ExecStartPre=-${releaseKwinShortcuts}
           '';
         };
         # As with niri: KWin can end without a stop job, and PartOf only
@@ -1046,7 +1164,7 @@
             [Service]
             ExecStartPre=-${lib.getExe loftPlasma} lock-env
             EnvironmentFile=-%t/loft/plasma-lock.env
-            ExecStopPost=-${pkgs.systemd}/bin/systemctl --user --no-block stop ${lib.concatStringsSep " " plasmaSessionUnits}
+            ExecStopPost=-${pkgs.systemd}/bin/systemctl --user --no-block stop ${plasmaUnits}
           '';
         };
 
@@ -1115,7 +1233,9 @@
                 started="$started''${pair#*:} "
               fi
             done
-            for unit in loft-shell loft-launcher loft-keys${lib.optionalString cfg.plasma.enable " loft-plasma-shell loft-plasma-launcher"}; do
+            for unit in loft-shell loft-launcher loft-keys${lib.optionalString cfg.plasma.enable " loft-plasma-shell loft-plasma-launcher"}${
+              lib.optionalString (cfg.plasma.enable && cfg.keyboard.enable) " loft-plasma-keys"
+            }; do
               new="$( { ${pkgs.systemd}/bin/systemctl --user cat "$unit.service" 2>/dev/null || true; } | ${pkgs.coreutils}/bin/sha256sum | cut -d' ' -f1)"
               old="$(cat "$state/$unit.unit-hash" 2>/dev/null || true)"
               if [ "$new" != "$old" ]; then

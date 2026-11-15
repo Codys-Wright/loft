@@ -183,14 +183,14 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | per-workspace wallpaper surfaces (`workspace-layers.patch`) | off (decided). One wallpaper per screen, swapped on desktop/activity change (the existing stock-niri path), under KWin's slide effect |
 | window thumbnails (`toplevel-export.patch`) | **icons** (decided, the existing stock-niri fallback). Later stills via `ScreenShot2.CaptureWindow` (restricted: loft-kwin's .desktop needs `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2`) |
 | screen/area capture via grim | `ScreenShot2.CaptureScreen/CaptureArea`, or spectacle `-b -n` |
-| keybinds (loft-niri → niri KDL binds) | kglobalaccel. Loft's own actions are `registerShortcut`s in loft-bridge.js that run `quickshell ipc …`, so they exist only while Loft runs (§5) |
+| keybinds (loft-niri → niri KDL binds) | kglobalaccel, **done** (§4.5): `loft-keys.js`, a KWin script of `registerShortcut`s generated from shell-binds + Settings → Keyboard Shortcuts, loaded while Loft's shell runs (§5) |
 | window rules (loft-niri window_rules.rs) | applied by loft-bridge.js at `windowAdded` while Loft runs, not written to `kwinrulesrc` (§5) |
 | outputs / Displays page | `kscreen-doctor` (or KScreen D-Bus). Identities from its JSON |
 | overview (`toggle-overview`) | KWin's Overview effect |
 | lock screen (`WlSessionLock`) | Plasma's locker with **Loft's lock design** (§4.3) |
 | Spaces (named niri workspaces per output) | **KDE Activities** (§4.2) |
 | idle (swayidle on niri.service) | PowerDevil (Plasma's own idle and DPMS) |
-| xremap per-app remaps (`xremap.niri`) | `xremap` built with its `kde` feature (it ships a KWin script for the focused app) |
+| xremap per-app remaps (`xremap.niri`) | **done**: `loft-plasma-keys.service` runs `xremap.kde` (its KWin script reports the focused window's `resourceClass`, the Wayland app id) on the same config (§4.5) |
 
 **Off under KWin** (hidden with `Compositor.capabilities`): scrolling-column ops
 (Maximize Column, column-width presets, consume/expel, center visible), niri's motion
@@ -323,6 +323,72 @@ on `QT_PLUGIN_PATH`.
   a live theme swap (tokyonight → latte) and metric edits, and apply / revert with the
   user's Breeze and with no key set.
 
+### 4.5 Shortcuts and the keyboard layer under Plasma
+
+**Shortcuts** (`cli/loft/kwinkeys.py`, `loft keys kwin render|claim|release`).
+`loft-plasma-shell.service` runs `loft-plasma-shortcuts load` after start and
+`unload` after stop:
+
+1. **render**: niri/shell-binds.kdl.in (IPC command filled in) plus
+   `<state>/overrides/niri.json` (disabled keys dropped, moved and custom
+   shortcuts added) → `$XDG_RUNTIME_DIR/loft/plasma-keys/`: `loft-keys.js`,
+   `actions/<id>` (each bind's command as a shell script), `names`.
+2. **load** `loft-keys.js` into KWin (`Scripting.loadScript … loft-keys`, run). Each
+   `registerShortcut("loft-<id>", "Loft: <title>", keys, …)` lands in
+   kglobalaccel's `kwin` component.
+3. **claim**: kglobalaccel lets two actions share a key, and then the *other*
+   one wins (seen: Meta+I opened System Settings instead of the Island). So Loft
+   takes its keys off every other action that has them (`setForeignShortcutKeys`),
+   recording what they had in `<state>/kwin-shortcuts-taken.json`. With stock
+   Plasma that is 14 actions: KWin's Walk Through Windows (Meta+Tab), Close Window
+   (Alt+F4), Switch One Desktop ← → ↑ ↓ (Meta+Ctrl+arrows), Switch Window ← →
+   (Meta+Alt+←/→), Present Windows (Meta+F10), Activate Window Demanding
+   Attention (Meta+Ctrl+A), System Settings (Meta+I), Emoji Selector (Meta+.),
+   Spectacle region recording (Meta+Shift+R).
+4. **unload**: unload the script, `unregister` every name in `names`, give the
+   recorded keys back (`release`). kglobalshortcutsrc ends up as it was before
+   (checked by diffing it in a nested session). If the session ended without a
+   stop job, the next start of Loft's shell or of plasmashell (an `ExecStartPre`
+   in its drop-in) gives them back.
+
+**Running a command.** KWin scripts can't start processes, so a callback calls
+the user's systemd: `StartUnit("loft-plasma-key@<id>:<n>.service")`, a new
+instance per press (a running instance would swallow a quick second press). The
+template runs `actions/<id>`. systemd over D-Bus was picked over the alternatives:
+kglobalaccel `.desktop` components with `X-KDE-Shortcuts` are written into
+kglobalshortcutsrc for good and only picked up when kglobalaccel loads them;
+`org.kde.krunner`/KLauncher can't run an arbitrary command line (KLauncher is gone
+in KF6); `StartTransientUnit` needs `a(sv)` arguments that `callDBus` can't build.
+
+**Key names.** Mod and Super are both Meta (no ISO_Level3_Shift WM key under
+KWin), so `Mod+X` and `Super+X` twins become one shortcut. niri keysyms map to
+QKeySequence names (`Period` → `.`, `Escape` → `Esc`, `XF86LaunchA` →
+`Launch (A)`, …). KWin matches Shift+digit/symbol by the shifted symbol without
+Shift: Mod+Shift+5 must be registered as `Meta+%`, Mod+Shift+Period as `Meta+>`
+(US layout); letters keep Shift. niri-only actions: `toggle-overview` → KWin's
+Overview, `fullscreen-window` → `fullScreen`, the quit guard's fallback → KWin's
+Window Close; the recent-windows binds (⌥Tab, ⌘\`) are left to KWin's own.
+
+**Keyboard layer.** `loft-plasma-keys.service` (with `programs.loft.keyboard.enable`
+and `plasma.enable`; a Plasma-session unit, so only in Loft sessions) runs
+`programs.loft.keyboard.plasmaPackage` (`pkgs.xremap.kde`) on the same
+`<state>/xremap/config.json` that `loft keys` renders. `Conflicts=loft-keys.service`
+keeps it to one xremap. xremap loads its own KWin script (`xremap`) for the
+focused window; the unit unloads it on stop.
+
+**Verified** in a nested KWin 6.8.2 (private bus, scratch HOME; a stand-in for
+systemd's `StartUnit` on the private bus that runs the real `loft-plasma-key`
+dispatcher): all 42 shortcuts register with the expected keys; real key presses
+(virtual keyboard into the host) open the Control Center (Meta+A), the Capture
+bar (Meta+Shift+5), the Island (Meta+I, after claim), the switcher, Spaces,
+emoji; unload leaves kglobalshortcutsrc as before. xremap-kde's KWin script
+loads and reports `org.kde.dolphin` for a Dolphin window. **Not run:** the
+systemd template itself (no user systemd on the private bus), xremap-kde against
+input devices (it would grab the real keyboard), the quit guard's hold, the
+Radial Menu's hold (KWin shortcuts have no repeat/release semantics like niri's
+`repeat=false`), and conflicts with plasmashell's own shortcuts (Meta+Q
+activities etc.: same mechanism, not present in the scratch session).
+
 ## 5. One Plasma session, two shells: switching and backing out
 
 Requirements: both shells work in the same Plasma session, never run at once, can be
@@ -368,6 +434,7 @@ when Loft stops:
 |---|---|
 | loft-bridge.js (state, actions, Loft shortcuts, window rules) | loft-kwin unloads it on exit (`ExecStopPost` too, in case it crashed). Its shortcuts and rules disappear with it |
 | the decoration (`[org.kde.kdecoration2] library/theme` in kwinrc) | `loft-kwin-decoration apply` (loft-plasma-shell's `ExecStartPost`) records the previous value in Loft's state dir and sets Loft's. `loft-kwin-decoration revert` (`ExecStopPost`) puts it back. Both run `org.kde.KWin.reconfigure` (§4.4) |
+| Loft's shortcuts (`loft-keys.js`, §4.5) and the keys taken from other shortcuts | `loft-plasma-shortcuts unload` (`ExecStopPost` of loft-plasma-shell): script unloaded, Loft's actions unregistered, taken keys given back from `<state>/kwin-shortcuts-taken.json` (plasmashell's start does the last part too) |
 | any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |
 | the lock screen | `PLASMA_DEFAULT_SHELL` only in KWin's environment, and only when the login is Loft's (`loft-plasma lock-env`, §4.3). Lock and unlock stay Plasma's either way |
 | activities created for Spaces | kept (harmless). `loft spaces prune` removes them |
