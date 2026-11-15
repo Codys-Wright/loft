@@ -669,6 +669,11 @@
             "-p"
             "loft-kwin"
           ];
+          # Display identities spell the EDID vendor out like niri does.
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          postInstall = ''
+            wrapProgram $out/bin/loft-kwin --set-default LOFT_PNP_IDS ${pkgs.hwdata}/share/hwdata/pnp.ids
+          '';
           meta.mainProgram = "loft-kwin";
         };
 

@@ -17,10 +17,31 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    // connector → niri identity, from `niri msg -j outputs`.
+    // connector → niri identity, from `niri msg -j outputs` (under KWin:
+    // loft-kwin rebuilds the same "Make Model Serial" from KWin's outputs).
     property var identities: ({})
     // connector → model name (for labels: "MPG491CX OLED").
     property var models: ({})
+
+    readonly property bool fromKWin: Compositor.backend === "kwin"
+
+    function fromKWinOutputs() {
+        const m = {}, models = {};
+        for (const o of KWin.displays) {
+            m[o.name] = o.identity;
+            models[o.name] = o.model || o.name;
+        }
+        identities = m;
+        root.models = models;
+    }
+
+    Connections {
+        target: KWin
+        enabled: root.fromKWin
+        function onDisplaysChanged() {
+            root.fromKWinOutputs();
+        }
+    }
 
     readonly property var screens: Quickshell.screens
 
@@ -84,7 +105,10 @@ Singleton {
     }
 
     function refresh() {
-        outputs.running = true;
+        if (fromKWin)
+            fromKWinOutputs();
+        else
+            outputs.running = true;
     }
 
     Component.onCompleted: refresh()

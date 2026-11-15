@@ -228,6 +228,13 @@ async fn main() -> Result<()> {
     tokio::spawn(watch_layouts(conn.clone()));
 
     let mut model = state::Model::new();
+    // Display identities spell the vendor out like niri (LOFT_PNP_IDS: set
+    // by the Nix package to hwdata's pnp.ids).
+    let pnp_path = std::env::var("LOFT_PNP_IDS").unwrap_or_else(|_| "/run/current-system/sw/share/hwdata/pnp.ids".into());
+    match std::fs::read_to_string(&pnp_path) {
+        Ok(text) => model.pnp = state::parse_pnp_ids(&text),
+        Err(e) => eprintln!("loft-kwin: no PNP ids ({pnp_path}: {e}); display vendors stay as ids"),
+    }
     let mut stdin = BufReader::new(tokio::io::stdin()).lines();
     let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
 

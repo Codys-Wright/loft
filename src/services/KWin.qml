@@ -27,6 +27,8 @@ Singleton {
     property var keyboardLayouts: ({ names: [], current_idx: 0 })
     property var activities: []
     property string currentActivity: ""
+    // [{ name, geometry, identity ("Make Model Serial", niri's), model }]
+    property var displays: []
 
     // What KWin offers, for Compositor.capabilities (menus hide the rest).
     readonly property var capabilities: ({
@@ -91,6 +93,7 @@ Singleton {
             workspaceMap = ws;
             windowMap = wins;
             activities = s.activities ?? [];
+            displays = s.outputs ?? [];
             currentActivity = s.current_activity ?? "";
             available = true;
             const key = (s.outputs ?? []).map(o => o.name).sort().join(",");

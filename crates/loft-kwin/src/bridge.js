@@ -48,7 +48,13 @@ function snapshot() {
         windows: workspace.windowList().filter(tracked).map(windowRecord),
         desktops: workspace.desktops.map(d => ({ id: d.id, name: d.name })),
         current_desktop: workspace.currentDesktop ? workspace.currentDesktop.id : "",
-        screens: workspace.screens.map(s => ({ name: s.name, geometry: rect(s.geometry) })),
+        screens: workspace.screens.map(s => ({
+            name: s.name,
+            geometry: rect(s.geometry),
+            manufacturer: s.manufacturer || "",
+            model: s.model || "",
+            serial: s.serialNumber || ""
+        })),
         active_screen: workspace.activeScreen ? workspace.activeScreen.name : "",
         active_window: tracked(active) ? "" + active.internalId : "",
         activities: workspace.activities || [],

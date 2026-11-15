@@ -78,10 +78,44 @@ pub struct KScreen {
     pub name: String,
     #[serde(default)]
     pub geometry: [f64; 4],
+    /// EDID vendor as KWin reports it: the 3-letter PNP id ("ACR").
+    #[serde(default)]
+    pub manufacturer: String,
+    /// Sometimes prefixed with the connector ("DP-2-MPG491CX OLED").
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub serial: String,
+}
+
+/// niri's display identity, "Make Model Serial" (what Loft's settings key
+/// displays by: wallpapers, roles, main display), from KWin's output info.
+/// niri spells the vendor out from the PNP id database and writes "Unknown"
+/// for a missing serial; KWin gives the PNP id, may prefix the model with
+/// the connector, and leaves the serial empty.
+pub fn identity(screen: &KScreen, pnp: &HashMap<String, String>) -> String {
+    let make = pnp
+        .get(&screen.manufacturer)
+        .cloned()
+        .unwrap_or_else(|| screen.manufacturer.clone());
+    let prefix = format!("{}-", screen.name);
+    let model = screen.model.strip_prefix(&prefix).unwrap_or(&screen.model);
+    let serial = if screen.serial.is_empty() { "Unknown" } else { &screen.serial };
+    format!("{make} {model} {serial}")
+}
+
+/// hwdata's pnp.ids: "ACR\tAcer Technologies" lines.
+pub fn parse_pnp_ids(text: &str) -> HashMap<String, String> {
+    text.lines()
+        .filter_map(|l| l.split_once('\t'))
+        .map(|(id, name)| (id.trim().to_string(), name.trim().to_string()))
+        .collect()
 }
 
 #[derive(Debug, Default)]
 pub struct Model {
+    /// PNP id → vendor name (hwdata's pnp.ids), for display identities.
+    pub pnp: HashMap<String, String>,
     window_ids: HashMap<String, u64>,
     next_window: u64,
     workspace_ids: HashMap<(String, String), u64>,
@@ -237,7 +271,12 @@ impl Model {
         json!({
             "windows": windows,
             "workspaces": workspaces,
-            "outputs": snap.screens.iter().map(|s| json!({ "name": s.name, "geometry": s.geometry })).collect::<Vec<_>>(),
+            "outputs": snap.screens.iter().map(|s| json!({
+                "name": s.name,
+                "geometry": s.geometry,
+                "identity": identity(s, &self.pnp),
+                "model": s.model.strip_prefix(&format!("{}-", s.name)).unwrap_or(&s.model),
+            })).collect::<Vec<_>>(),
             "activities": snap.activities,
             "current_activity": snap.current_activity,
         })
@@ -257,8 +296,8 @@ mod tests {
             ],
             current_desktop: "d1".into(),
             screens: vec![
-                KScreen { name: "DP-1".into(), geometry: [0.0, 0.0, 2560.0, 1440.0] },
-                KScreen { name: "DP-2".into(), geometry: [2560.0, 0.0, 1920.0, 1080.0] },
+                KScreen { name: "DP-1".into(), geometry: [0.0, 0.0, 2560.0, 1440.0], ..Default::default() },
+                KScreen { name: "DP-2".into(), geometry: [2560.0, 0.0, 1920.0, 1080.0], ..Default::default() },
             ],
             active_screen: "DP-1".into(),
             active_window: active.into(),
@@ -279,6 +318,32 @@ mod tests {
 
     fn by_id(state: &Value, key: &str, id: u64) -> Value {
         state[key].as_array().unwrap().iter().find(|x| x["id"] == id).unwrap().clone()
+    }
+
+    #[test]
+    fn display_identities_match_niri() {
+        // What KWin 6.8.2 reported for THEBATTLESHIP's displays, and the
+        // identities niri gave them (Loft's settings key by these).
+        let pnp = parse_pnp_ids("ACR\tAcer Technologies\nMSI\tMicrostep\n");
+        let msi = KScreen {
+            name: "DP-2".into(),
+            manufacturer: "MSI".into(),
+            model: "DP-2-MPG491CX OLED".into(),
+            serial: "".into(),
+            ..Default::default()
+        };
+        assert_eq!(identity(&msi, &pnp), "Microstep MPG491CX OLED Unknown");
+        let acer = KScreen {
+            name: "DP-3".into(),
+            manufacturer: "ACR".into(),
+            model: "XV271U M3".into(),
+            serial: "1321033793LAJ".into(),
+            ..Default::default()
+        };
+        assert_eq!(identity(&acer, &pnp), "Acer Technologies XV271U M3 1321033793LAJ");
+        // Unknown vendor id: kept as is.
+        let odd = KScreen { name: "HDMI-A-1".into(), manufacturer: "ZZZ".into(), model: "X".into(), serial: "1".into(), ..Default::default() };
+        assert_eq!(identity(&odd, &pnp), "ZZZ X 1");
     }
 
     #[test]
