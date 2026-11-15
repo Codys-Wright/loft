@@ -1080,21 +1080,24 @@
             Service.Environment = env ++ [ "QS_DISABLE_CRASH_HANDLER=1" ];
             # The same first-start theme as on niri.
             Service.ExecStartPre = config.systemd.user.services.loft-shell.Service.ExecStartPre;
-            # Loft's title bars while Loft runs, the previous decoration back
-            # when it stops or crashes (docs/KWIN.md §5: no traces in Plasma).
-            # `-`: a failure here never fails the shell.
-            Service.ExecStartPost = "-${lib.getExe sp.loft-kwin-decoration} apply";
-            Service.ExecStopPost = "-${lib.getExe sp.loft-kwin-decoration} revert";
+            # While Loft runs: Loft's title bars and Loft's shortcuts; when it
+            # stops or crashes, the previous decoration and the shortcuts it
+            # took come back (docs/KWIN.md §5: no traces in Plasma). `-`: a
+            # failure here costs that piece, never the shell.
+            Service.ExecStartPost = [
+              "-${lib.getExe sp.loft-kwin-decoration} apply"
+              "-${plasmaShortcuts} load"
+            ];
+            Service.ExecStopPost = [
+              "-${lib.getExe sp.loft-kwin-decoration} revert"
+              "-${plasmaShortcuts} unload"
+            ];
             Unit.ConditionPathExists = "!%t/loft-live/active";
             # Three crashes in a minute: Plasma's shell takes over, so a
             # broken Loft never leaves the session without a desktop.
             Unit.StartLimitIntervalSec = 60;
             Unit.StartLimitBurst = 3;
             Unit.OnFailure = [ "loft-plasma-fallback.service" ];
-            # Loft's shortcuts live and die with the shell ("-": a failed
-            # load costs the shortcuts, not the shell).
-            Service.ExecStartPost = "-${plasmaShortcuts} load";
-            Service.ExecStopPost = "-${plasmaShortcuts} unload";
           }
         );
         # A Loft shortcut's command (see plasmaKeyRun). Instances are per
@@ -1151,8 +1154,8 @@
             ExecStartPre=-${releaseKwinShortcuts}
           '';
         };
-        # As with niri: KWin can end without a stop job, and PartOf only
-        # follows stop jobs.
+        # KWin's drop-in. ExecStopPost, as with niri: KWin can end without a
+        # stop job, and PartOf only follows stop jobs.
         # Lock screen (docs/KWIN.md §4.3): in a Loft session KWin starts with
         # PLASMA_DEFAULT_SHELL=dev.loft.desktop, so Plasma's locker draws Loft's
         # design (the shell package from Loft's NixOS module / home.packages).
