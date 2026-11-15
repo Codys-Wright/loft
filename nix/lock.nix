@@ -1,6 +1,8 @@
 # Lock screen + login greeter (PLAN §4.5).
 #
 #   loft-sddm-theme    the `loft` SDDM theme: $out/share/sddm/themes/loft
+#   loft-plasma-lockscreen  Plasma's lock screen with the same design: the shell
+#                      package $out/share/plasma/shells/dev.loft.desktop
 #   loft-greeter-install  the privileged helper `loft greeter sync` runs through
 #                      pkexec (cli/loft/greeter_helper.py; nix/modules/nixos.nix
 #                      installs it with its polkit rule)
@@ -21,30 +23,52 @@
 
       sddm = pkgs.kdePackages.sddm;
 
-      loft-sddm-theme = pkgs.runCommand "loft-sddm-theme" { } ''
-        dir=$out/share/sddm/themes/loft
-        mkdir -p $dir/design $dir/components $dir/services $dir/fonts $dir/default
+      # The shared design into $dir: design/ + components/ (with `qs.*`
+      # imports rewritten), services/Theme.qml (the stand-in), the fonts and
+      # the bundled default theme. Fails if the design needs anything a
+      # non-Quickshell host lacks. Used by the SDDM theme and Plasma's locker.
+      shareDesign = name: dir: ''
+        mkdir -p ${dir}/design ${dir}/components ${dir}/services ${dir}/fonts ${dir}/default
+        cp ${../lock/sddm/services}/{qmldir,Theme.qml} ${dir}/services/
+        cp ${../themes/default/theme.json} ${dir}/default/theme.json
+        cp ${uiFont} ${dir}/fonts/InterVariable.ttf
+        cp ${iconFont} ${dir}/fonts/SymbolsNerdFont-Regular.ttf
 
-        cp ${../lock/sddm}/{Main.qml,metadata.desktop,theme.conf} $dir/
-        cp ${../lock/sddm/services}/{qmldir,Theme.qml} $dir/services/
-        cp ${../themes/default/theme.json} $dir/default/theme.json
-        cp ${uiFont} $dir/fonts/InterVariable.ttf
-        cp ${iconFont} $dir/fonts/SymbolsNerdFont-Regular.ttf
-
-        # qs.<dir> → "../<dir>": every file lands one level below the theme root.
+        # qs.<dir> → "../<dir>": every file lands one level below the root.
         share() { sed -E 's|^import qs\.([a-z]+)$|import "../\1"|' "$1" > "$2"; }
-        for f in ${../src/lock/design}/*.qml; do share "$f" $dir/design/"$(basename "$f")"; done
-        for c in GlassSurface Icon; do share ${../src/components}/$c.qml $dir/components/$c.qml; done
+        for f in ${../src/lock/design}/*.qml; do share "$f" ${dir}/design/"$(basename "$f")"; done
+        for c in GlassSurface Icon; do share ${../src/components}/$c.qml ${dir}/components/$c.qml; done
 
         # The design must stay host-agnostic: no Quickshell, and only the
         # modules provided above.
-        if grep -rnE '^import (Quickshell|qs\.)' $dir; then
-          echo "loft-sddm-theme: the shared lock design imports something sddm-greeter lacks" >&2
+        if grep -rnE '^import (Quickshell|qs\.)' ${dir}; then
+          echo "${name}: the shared lock design imports something the host lacks" >&2
           exit 1
         fi
-        for imp in $(grep -rhoE '^import "\.\./[a-z]+"' $dir | sort -u | sed -E 's|.*/([a-z]+)"|\1|'); do
-          [ -d $dir/$imp ] || { echo "loft-sddm-theme: missing shared module $imp" >&2; exit 1; }
+        for imp in $(grep -rhoE '^import "(\.\./)?[a-z]+"' ${dir} | sort -u | sed -E 's|.*"(\.\./)?([a-z]+)"|\2|'); do
+          [ -d ${dir}/$imp ] || { echo "${name}: missing shared module $imp" >&2; exit 1; }
         done
+      '';
+
+      loft-sddm-theme = pkgs.runCommand "loft-sddm-theme" { } ''
+        dir=$out/share/sddm/themes/loft
+        mkdir -p $dir
+        cp ${../lock/sddm}/{Main.qml,metadata.desktop,theme.conf} $dir/
+        ${shareDesign "loft-sddm-theme" "$dir"}
+      '';
+
+      # Plasma's locker with Loft's design (docs/KWIN.md §4.3): the shell
+      # package dev.loft.desktop, holding only lockscreen/ (KPackage falls
+      # back to org.kde.plasma.desktop for the rest). kscreenlocker_greet
+      # loads it when PLASMA_DEFAULT_SHELL=dev.loft.desktop (the home-manager
+      # module sets that on KWin's unit in Loft sessions).
+      loft-plasma-lockscreen = pkgs.runCommand "loft-plasma-lockscreen" { } ''
+        pkg=$out/share/plasma/shells/dev.loft.desktop
+        dir=$pkg/contents/lockscreen
+        mkdir -p $dir
+        cp ${../lock/plasma/metadata.json} $pkg/metadata.json
+        cp ${../lock/plasma/contents/lockscreen}/*.qml $dir/
+        ${shareDesign "loft-plasma-lockscreen" "$dir"}
       '';
 
       # QML modules pack designs (qylock / SDDM themes) import beyond what
@@ -93,7 +117,7 @@
     in
     {
       packages = {
-        inherit loft-sddm-theme loft-greeter-install;
+        inherit loft-sddm-theme loft-greeter-install loft-plasma-lockscreen;
         loft-greeter-preview = greeter-preview;
       };
 
@@ -104,5 +128,6 @@
       };
 
       checks.loft-sddm-theme = loft-sddm-theme;
+      checks.loft-plasma-lockscreen = loft-plasma-lockscreen;
     };
 }

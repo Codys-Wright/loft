@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Shell",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Loft"
+            }
+        ],
+        "Description": "Plasma's lock screen with Loft's lock design. Everything else comes from org.kde.plasma.desktop",
+        "Icon": "system-lock-screen",
+        "Id": "dev.loft.desktop",
+        "License": "GPL-2.0+",
+        "Name": "Loft",
+        "Version": "0.1",
+        "Website": "https://github.com/Codys-Wright/loft"
+    },
+    "X-KDE-ParentApp": "org.kde.plasmashell",
+    "X-Plasma-APIVersion": "2",
+    "X-Plasma-FallbackPackage": "org.kde.plasma.desktop"
+}

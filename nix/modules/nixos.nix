@@ -153,6 +153,9 @@
           grep -q 'startplasma-wayland$' "$exec"
           # The plain Plasma entry is still there.
           ls ${sessions}/share/wayland-sessions/ | grep -q '^plasma'
+          # The lock screen's shell package is in the system profile.
+          grep -q '"Id": "dev.loft.desktop"' ${c.system.path}/share/plasma/shells/dev.loft.desktop/metadata.json
+          test -f ${c.system.path}/share/plasma/shells/dev.loft.desktop/contents/lockscreen/LockScreen.qml
           grep -q 'DefaultSession=loft.desktop' ${c.environment.etc."sddm.conf.d/00-nixos.conf".source} \
             || grep -q 'Session=loft' ${c.environment.etc."sddm.conf.d/00-nixos.conf".source}
           touch $out
@@ -342,7 +345,13 @@
               # Loft's KWin decoration (dev.loft.decoration): in the system
               # profile, so KWin finds it on QT_PLUGIN_PATH. loft-plasma-shell
               # selects it only while Loft runs (loft-kwin-decoration).
-              environment.systemPackages = [ sp.loft-kdecoration ];
+              environment.systemPackages = [
+                sp.loft-kdecoration
+                sp.loft-plasma-lockscreen
+              ];
+              # Plasma's lock screen with Loft's design: the shell package
+              # dev.loft.desktop (docs/KWIN.md §4.3). Installed only; the
+              # home-manager module points KWin at it in Loft sessions.
             }
             (lib.optionalAttrs (options ? home-manager.sharedModules) {
               home-manager.sharedModules = [ { programs.loft.plasma.enable = lib.mkDefault true; } ];
