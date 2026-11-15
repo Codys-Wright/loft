@@ -332,25 +332,65 @@ Whether menus then still reach Loft's bar needs checking.
 
 ## 6. Testing against KWin with loft-dev
 
-Keep loft-dev's **headless sway host** and run KWin nested inside it in place of niri:
+**Verified on 2026-11-15** (KWin 6.8.2, prototype scripts, not in the repo yet): a
+whole KDE session runs nested and headless, the same way loft-dev runs niri. Both
+stock **plasmashell** (panel, tray, dock, wallpaper) and **Loft's shell** (bar,
+island, dock) drew in it and were screenshotted with grim on the host.
 
 ```sh
-kwin_wayland --wayland-display "$host" --socket wayland-1 --width W --height H \
-  --no-lockscreen --exit-with-session "quickshell --path $checkout/src"
+# 1. headless sway host, rendered on a GPU render node (as `loft-dev --gpu` does)
+XDG_RUNTIME_DIR=$dir/host WLR_BACKENDS=headless WLR_RENDERER=gles2 \
+  WLR_RENDER_DRM_DEVICE=/dev/dri/renderD129 sway -c host.conf &
+# 2. KWin nested in it: private bus, private runtime dir, scratch HOME and XDG dirs
+env HOME=$scratch XDG_CONFIG_HOME=$scratch/.config XDG_DATA_HOME=… XDG_CACHE_HOME=… \
+    XDG_STATE_HOME=… XDG_RUNTIME_DIR=$dir/run WAYLAND_DISPLAY=$dir/host/wayland-1 \
+    XDG_CURRENT_DESKTOP=KDE KDE_FULL_SESSION=true KDE_SESSION_VERSION=6 \
+  dbus-run-session -- kwin_wayland --width 1600 --height 1000 --socket kde-1 \
+    --xwayland --no-lockscreen --exit-with-session session.sh
+# session.sh: kactivitymanagerd & kded6 & then the shell under test:
+#   plasmashell                                          (stock Plasma)
+#   LOFT_SHELL_SRC=$checkout/src LOFT_DEV=1 loft-shell   (Loft, hot reload)
 ```
 
-- `loft-shot` (grim on the sway host) and `loft-input` (`zwlr_virtual_pointer` on the
-  sway host) keep working unchanged, because they act on the host and KWin is just a
-  window in it. A bare `kwin_wayland --virtual` would break both: KWin has no
-  screencopy and no wlr virtual pointer. With `--virtual`, loft-input would need
-  `org_kde_kwin_fake_input` or libei (KWin's EIS plugin) instead.
+What the prototype showed:
+
+- **The host needs a GPU renderer.** With loft-dev's default pixman host, KWin's
+  wayland backend quits ("The used windowing system requires compositing").
+  `KWIN_COMPOSE=Q` doesn't help. So `--compositor kwin` implies `--gpu`. It's still
+  headless: no monitor, no modeset.
+- **`$HOME` must be scratch, unlike niri sessions.** plasmashell, KWin, kded and
+  Akonadi write their config on startup (`kwinrc`, `plasma-…-appletsrc`,
+  `kglobalshortcutsrc`, an Akonadi MariaDB). With the real `$HOME` that would rewrite
+  your Plasma setup. With `HOME` + XDG dirs pointed at scratch, nothing outside it
+  changed. Defaults still come from the system profile (`/etc/xdg`), so the nested
+  Plasma looks like the machine's Plasma.
+- **Run it in one transient unit** (`systemd-run --user --unit=loft-dev-kwin-NAME`).
+  D-Bus activation starts many helpers (portals, gvfs FUSE mounts under the runtime
+  dir, at-spi, Akonadi). Stopping the unit stops them all and its FUSE mounts go with
+  them. Never clean up with `pkill -f`.
+- `loft-shot` works unchanged (grim on the host). `loft-input` should too (the wlr
+  virtual pointer goes to the host, and KWin is a window in it), but that isn't tried
+  yet. A bare `kwin_wayland --virtual` would break both: KWin has no screencopy and no
+  wlr virtual pointer.
+- Plasma-session services that `startplasma-wayland` normally starts, and the
+  prototype didn't: ksmserver, powerdevil, polkit agent, xdg-desktop-portal-kde
+  (D-Bus activated anyway). Add them when a test needs them.
 - `--output-count N` gives several outputs in the nested (windowed) backend, the KWin
-  counterpart of `--outputs`.
-- The session bus is already private (loft-dev's own dbus-daemon), so loading
-  `loft-bridge.js` and calling `org.kde.KWin` there never touches the live Plasma.
-- The flag becomes `loft-dev --compositor kwin`. `bind` maps to
-  `kglobalaccel invokeShortcut`.
-- Not checked yet: whether KWin's privileged-interface checks (ScreenShot2,
+  counterpart of `--outputs` (not tried yet).
+
+**Proposed loft-dev interface:**
+
+```sh
+loft-dev --session NAME --compositor kwin [--shell loft|plasma] [CHECKOUT]
+```
+
+- `--shell loft` (default) runs the checkout's shell. `--shell plasma` runs stock
+  plasmashell in the same harness, to compare with plain Plasma, or to test the §5
+  switching (`loft shell use …` inside the session).
+- session.env gains `LOFT_DEV_COMPOSITOR=kwin`, so `loft-shot` / `loft-input` /
+  `loft-dev --stop` know the session. `bind` maps to kglobalaccel's `invokeShortcut`.
+- The scratch tree lives in the session dir, and `--keep-home` keeps it between runs.
+- Still open: whether KWin's privileged-interface checks (ScreenShot2,
   plasma_window_management) can be relaxed for a dev session, or whether loft-kwin
   needs an installed .desktop file with `X-KDE-Wayland-Interfaces` /
   `X-KDE-DBUS-Restricted-Interfaces`.
@@ -360,17 +400,19 @@ kwin_wayland --wayland-display "$host" --socket wayland-1 --width W --height H \
 1. ✅ This plan.
 2. ✅ `Compositor.qml` in front of `Niri.qml`, every consumer moved, behavior under niri
    unchanged.
-3. `crates/loft-kwin` + `loft-bridge.js` + `services/KWin.qml`: state only (windows,
-   desktops, focus, minimized). Test with `loft-dev --compositor kwin`.
-4. Actions + `capabilities` gating in menus. Hide → minimize.
-5. Shell switching (§5): units, `loft shell use`, the SDDM "Plasma (Loft)" entry, the
+3. `loft-dev --compositor kwin [--shell loft|plasma]` (§6), so every later step can be
+   tested headless like niri sessions.
+4. `crates/loft-kwin` + `loft-bridge.js` + `services/KWin.qml`: state only (windows,
+   desktops, focus, minimized).
+5. Actions + `capabilities` gating in menus. Hide → minimize.
+6. Shell switching (§5): units, `loft shell use`, the SDDM "Plasma (Loft)" entry, the
    fallback unit, `loft-kwin apply/revert`. This comes **before** daily use, so
    backing out works from day one.
-6. Decoration plugin (§4.4), with the Aurorae stand-in until it lands.
-7. Lock screen shell package (§4.3).
-8. Keybinds, display settings, capture through ScreenShot2.
-9. Spaces on Activities (§4.2).
-10. Window thumbnails through ScreenShot2.
+7. Decoration plugin (§4.4), with the Aurorae stand-in until it lands.
+8. Lock screen shell package (§4.3).
+9. Keybinds, display settings, capture through ScreenShot2.
+10. Spaces on Activities (§4.2).
+11. Window thumbnails through ScreenShot2.
 
 ## 8. Notes for the fleet flake (~/.flake, out of scope here)
 
