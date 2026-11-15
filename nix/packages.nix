@@ -22,6 +22,8 @@
 #                          docs/TESTING.md
 #   loft-pointer           Auto Scroll for scrolling capture (the same crate):
 #                          pointer motion + wheel notches over the capture area
+#   loft-kdecoration       Loft's KWin decoration plugin (kdecoration/, dev.loft.decoration)
+#   loft-kwin-decoration   selects it in kwinrc while Loft runs in Plasma, reverts after
 #
 # Both sessions include <state>/overrides/spaces.kdl once, after the theme
 # (`loft-niri space render`: the spaces' workspaces, rules and binds).
@@ -755,6 +757,44 @@
             mainProgram = "loft-shot";
           };
         });
+
+        # Loft's KWin decoration (kdecoration/, docs/KWIN.md §4.4): traffic
+        # lights and a centered title in the theme's colors (kdecoration.ini).
+        # KWin finds it on QT_PLUGIN_PATH (the NixOS module puts it in the
+        # system profile); loft-kwin-decoration selects it while Loft runs.
+        loft-kdecoration = pkgs.stdenv.mkDerivation {
+          pname = "loft-kdecoration";
+          version = "0.1.0";
+          src = lib.fileset.toSource {
+            root = ../kdecoration;
+            fileset = ../kdecoration;
+          };
+          nativeBuildInputs = [ pkgs.cmake ];
+          buildInputs = with pkgs.kdePackages; [
+            qtbase
+            kcoreaddons
+            kdecoration
+          ];
+          # A plugin, not an app: nothing to wrap.
+          dontWrapQtApps = true;
+          doCheck = true; # config-test: the INI parser
+          meta = {
+            description = "Loft's KWin window decoration (dev.loft.decoration)";
+            platforms = lib.platforms.linux;
+          };
+        };
+
+        # Selects Loft's decoration in kwinrc while Loft runs, and puts the
+        # previous one back (nix/kwin-decoration.sh; docs/KWIN.md §5).
+        loft-kwin-decoration = pkgs.writeShellApplication {
+          name = "loft-kwin-decoration";
+          runtimeInputs = [
+            pkgs.coreutils
+            pkgs.dbus
+            pkgs.kdePackages.kconfig
+          ];
+          text = builtins.readFile ./kwin-decoration.sh;
+        };
 
         # The one-time move from studio-linux's paths (nix/migrate.sh), run by
         # the sessions and the home-manager activation.

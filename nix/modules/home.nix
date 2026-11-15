@@ -980,6 +980,11 @@
             Service.Environment = env ++ [ "QS_DISABLE_CRASH_HANDLER=1" ];
             # The same first-start theme as on niri.
             Service.ExecStartPre = config.systemd.user.services.loft-shell.Service.ExecStartPre;
+            # Loft's title bars while Loft runs, the previous decoration back
+            # when it stops or crashes (docs/KWIN.md §5: no traces in Plasma).
+            # `-`: a failure here never fails the shell.
+            Service.ExecStartPost = "-${lib.getExe sp.loft-kwin-decoration} apply";
+            Service.ExecStopPost = "-${lib.getExe sp.loft-kwin-decoration} revert";
             Unit.ConditionPathExists = "!%t/loft-live/active";
             # Three crashes in a minute: Plasma's shell takes over, so a
             # broken Loft never leaves the session without a desktop.

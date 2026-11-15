@@ -108,8 +108,9 @@
 
       # programs.loft.plasma: SDDM offers a "Loft" session that can be the
       # default (NixOS checks defaultSession against the provided sessions),
-      # it runs Plasma's startup through the marker script, and home-manager
-      # users get programs.loft.plasma.enable.
+      # it runs Plasma's startup through the marker script, home-manager
+      # users get programs.loft.plasma.enable, and Loft's KWin decoration is
+      # installed system-wide.
       checks.plasma-session-module =
         let
           c =
@@ -141,6 +142,8 @@
           shared = c.home-manager.sharedModules;
         in
         assert lib.any (m: (m.programs.loft.plasma.enable.content or null) == true) shared;
+        # KWin finds Loft's decoration in the system profile.
+        assert lib.elem self.packages.${pkgs.stdenv.hostPlatform.system}.loft-kdecoration c.environment.systemPackages;
         pkgs.runCommand "plasma-session-module" { } ''
           f=${sessions}/share/wayland-sessions/loft.desktop
           grep -qx 'Name=Loft' "$f"
@@ -336,6 +339,10 @@
                 }
               ];
               services.displayManager.sessionPackages = [ loftPlasmaSession ];
+              # Loft's KWin decoration (dev.loft.decoration): in the system
+              # profile, so KWin finds it on QT_PLUGIN_PATH. loft-plasma-shell
+              # selects it only while Loft runs (loft-kwin-decoration).
+              environment.systemPackages = [ sp.loft-kdecoration ];
             }
             (lib.optionalAttrs (options ? home-manager.sharedModules) {
               home-manager.sharedModules = [ { programs.loft.plasma.enable = lib.mkDefault true; } ];
