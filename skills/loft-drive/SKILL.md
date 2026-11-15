@@ -1,6 +1,6 @@
 ---
 name: loft-drive
-description: See and drive the Loft desktop in an isolated test session — start a headless session with loft-dev, screenshot it with loft-shot (grid, zoom, marks), and click/type/drag/scroll/run niri keybinds with loft-input. Use when testing or verifying shell/QML/niri changes visually, or whenever asked to interact with the desktop.
+description: See and drive the Loft desktop in an isolated test session (niri, or KDE/KWin with --compositor kwin) — start a headless session with loft-dev, screenshot it with loft-shot (grid, zoom, marks), and click/type/drag/scroll/run niri keybinds with loft-input. Use when testing or verifying shell/QML/niri changes visually, or whenever asked to interact with the desktop.
 ---
 
 # Driving a Loft test session
@@ -41,6 +41,23 @@ After each action, take a screenshot again to check the result before the next s
 
 Batch steps with `loft-input -s NAME script <<'EOF'`, one command per line, with
 `wait MS` and `shot ARGS…` lines in between.
+
+## KDE sessions (KWin)
+
+To test Loft's shell (or stock plasmashell) on KWin, start the session with
+`--compositor kwin [--shell loft|plasma]` (optionally `--size WxH --output-count N`). It
+runs in the user unit `loft-dev-kwin-NAME` with a scratch `$HOME`; `loft-dev --stop NAME`
+stops all of it. Wait for `session.env` as above, then give the shell ~10 s to draw.
+
+- `loft-shot` works as usual (`--output WL-0`, `--region`, `--grid`); `--window` / `--layer`
+  don't (no niri).
+- `loft-input click/type/drag/scroll` work. **`key` combos reach KWin itself**, so global
+  shortcuts fire with `key` (`key super+w` → Overview). `bind COMPONENT/NAME` runs a
+  kglobalaccel shortcut by name (`bind kwin/Overview`; `bind --list`).
+- `loft-input spawn kwrite` starts an app in the session. `info` lists outputs only.
+- KDE tools against the session: `env -u NIRI_SOCKET bash -c 'set -a; . "$XDG_RUNTIME_DIR/loft-dev-NAME/session.env"; set +a; qdbus org.kde.KWin …'`.
+- Plasma windows and popups can take a second or two to appear; screenshot again before
+  concluding a click missed.
 
 ## Facts that save time
 

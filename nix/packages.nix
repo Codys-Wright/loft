@@ -309,6 +309,7 @@
             self'.packages.loft-sleep
             self'.packages.loft-input # loft-input / loft-shot inside the session
             self'.packages.loft-live # `loft-dev live …`
+            self'.packages.loft-shell # the shell of --compositor kwin sessions
             pkgs.dbus # dbus-run-session: the private bus of isolated sessions
           ];
           text =

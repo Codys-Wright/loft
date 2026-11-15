@@ -14,11 +14,20 @@
 //! NIRI_PID=1234
 //! …
 //! ```
+//!
+//! KDE sessions (`loft-dev --compositor kwin`) have no niri: their
+//! session.env says `LOFT_DEV_COMPOSITOR=kwin`, `WAYLAND_DISPLAY` is KWin's
+//! socket (for clients), `LOFT_DEV_HOST_DISPLAY` the headless host KWin is a
+//! window in (where input and screenshots go), and `LOFT_DEV_OUTPUT_RECTS`
+//! the outputs' layout (`WL-0=0,0,1600x1000+WL-1=1600,0,1600x1000`; `+`, so the file
+//! still sources in a shell).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+
+use crate::niri::{Niri, OutputRect, Rect};
 
 pub const DEFAULT_SESSION: &str = "dev";
 
@@ -32,12 +41,32 @@ pub struct Target {
     pub niri_config: Option<PathBuf>,
     /// Whether niri runs nested (winit) — decides `mod-key` vs `mod-key-nested`.
     pub nested: bool,
+    /// The compositor: `niri`, or `kwin` (a KDE session from loft-dev).
+    pub compositor: String,
+    /// Fixed output layout (KDE sessions: the host's outputs).
+    pub fixed_outputs: Option<Vec<OutputRect>>,
     pub env: BTreeMap<String, String>,
 }
 
 impl Target {
     pub fn is_live(&self) -> bool {
         self.name.is_none()
+    }
+
+    pub fn is_kwin(&self) -> bool {
+        self.compositor == "kwin"
+    }
+
+    /// Enabled outputs, left to right: niri's, or the session's fixed layout.
+    pub fn outputs(&self) -> Result<Vec<OutputRect>> {
+        if let Some(o) = &self.fixed_outputs {
+            return Ok(o.clone());
+        }
+        let s = self
+            .niri_socket
+            .as_ref()
+            .with_context(|| format!("{} has no niri socket ($NIRI_SOCKET)", self.label()))?;
+        Niri::new(s).outputs()
     }
 
     pub fn label(&self) -> String {
@@ -109,6 +138,46 @@ pub fn niri_pid(env: &BTreeMap<String, String>) -> Option<String> {
     })
 }
 
+/// `NAME=X,Y,WxH+…` (LOFT_DEV_OUTPUT_RECTS), left to right.
+pub fn parse_output_rects(s: &str) -> Result<Vec<OutputRect>> {
+    let mut out = Vec::new();
+    for part in s.split(['+', ';']).filter(|p| !p.trim().is_empty()) {
+        let (name, r) = part
+            .split_once('=')
+            .with_context(|| format!("bad output `{part}` (want NAME=X,Y,WxH)"))?;
+        out.push(OutputRect {
+            name: name.trim().to_string(),
+            rect: Rect::parse(r)?,
+            scale: 1.0,
+            transform: "Normal".into(),
+        });
+    }
+    out.sort_by(|a, b| {
+        (a.rect.x, a.rect.y)
+            .partial_cmp(&(b.rect.x, b.rect.y))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    Ok(out)
+}
+
+fn is_kwin(env: &BTreeMap<String, String>) -> bool {
+    env.get("LOFT_DEV_COMPOSITOR").is_some_and(|c| c == "kwin")
+}
+
+/// Whether a session's compositor still runs (KWin and its host for KDE
+/// sessions; niri, and its socket, otherwise).
+fn alive(env: &BTreeMap<String, String>) -> bool {
+    if is_kwin(env) {
+        return ["KWIN_PID", "LOFT_DEV_HOST_PID"]
+            .iter()
+            .all(|k| env.get(*k).is_some_and(|p| pid_alive(p)));
+    }
+    niri_pid(env).is_some_and(|p| pid_alive(&p))
+        && env
+            .get("NIRI_SOCKET")
+            .is_some_and(|s| Path::new(s).exists())
+}
+
 /// Every loft-dev session dir with a session.env: (name, dir, env, alive).
 pub fn list() -> Vec<(String, PathBuf, BTreeMap<String, String>, bool)> {
     let mut out = Vec::new();
@@ -128,10 +197,7 @@ pub fn list() -> Vec<(String, PathBuf, BTreeMap<String, String>, bool)> {
             continue;
         };
         let env = parse_env(&text);
-        let alive = niri_pid(&env).is_some_and(|p| pid_alive(&p))
-            && env
-                .get("NIRI_SOCKET")
-                .is_some_and(|s| Path::new(s).exists());
+        let alive = alive(&env);
         out.push((name, e.path(), env, alive));
     }
     out.sort_by(|a, b| a.0.cmp(&b.0));
@@ -148,11 +214,27 @@ pub fn load(name: &str) -> Result<Target> {
         format!("no loft-dev session `{name}` ({} missing) — start one with `loft-dev --session {name}`", file.display())
     })?;
     let env = parse_env(&text);
+    let kwin = is_kwin(&env);
+    // KDE sessions: input and screenshots go to the host KWin runs in.
     let display = env
-        .get("WAYLAND_DISPLAY")
+        .get(if kwin {
+            "LOFT_DEV_HOST_DISPLAY"
+        } else {
+            "WAYLAND_DISPLAY"
+        })
         .cloned()
         .with_context(|| format!("{} has no WAYLAND_DISPLAY", file.display()))?;
-    if let Some(pid) = niri_pid(&env)
+    if kwin && !alive(&env) {
+        bail!(
+            "session `{name}` is not running (KWin exited); restart it with `loft-dev --session {name} --compositor kwin`"
+        );
+    }
+    let fixed_outputs = env
+        .get("LOFT_DEV_OUTPUT_RECTS")
+        .map(|s| parse_output_rects(s))
+        .transpose()?;
+    if !kwin
+        && let Some(pid) = niri_pid(&env)
         && !pid_alive(&pid)
     {
         bail!(
@@ -170,6 +252,8 @@ pub fn load(name: &str) -> Result<Target> {
         niri_config,
         // `loft-dev --outputs` runs niri on virtual outputs, not nested.
         nested: env.get("LOFT_DEV_NESTED").is_none_or(|v| v != "0"),
+        compositor: if kwin { "kwin" } else { "niri" }.into(),
+        fixed_outputs,
         env,
     })
 }
@@ -183,12 +267,15 @@ pub fn live() -> Result<Target> {
     let niri_socket = std::env::var_os("NIRI_SOCKET")
         .filter(|v| !v.is_empty())
         .map(PathBuf::from);
+    let niri_socket_set = niri_socket.is_some();
     Ok(Target {
         name: None,
         wayland_display: display,
         niri_socket,
         niri_config: loft_niri::config::entry_config(None),
         nested: false,
+        compositor: if niri_socket_set { "niri" } else { "unknown" }.into(),
+        fixed_outputs: None,
         env: BTreeMap::new(),
     })
 }
@@ -214,10 +301,7 @@ pub fn resolve(session: Option<&str>, live_flag: bool, fallback: Fallback) -> Re
     if live_flag {
         return live();
     }
-    if let Some(n) = std::env::var("LOFT_SESSION")
-        .ok()
-        .filter(|v| !v.is_empty())
-    {
+    if let Some(n) = std::env::var("LOFT_SESSION").ok().filter(|v| !v.is_empty()) {
         return load(&n);
     }
     // Running inside a session (a terminal in it, or a script it spawned).
@@ -259,6 +343,18 @@ mod tests {
         assert_eq!(env["WAYLAND_DISPLAY"], "wayland-3");
         assert_eq!(env["LOFT_THEME_PATH"], "a:b=c");
         assert_eq!(niri_pid(&env).as_deref(), Some("4242"));
+    }
+
+    #[test]
+    fn kwin_session_env() {
+        let env = parse_env(
+            "LOFT_DEV_COMPOSITOR=kwin\nKWIN_PID=999999999\nLOFT_DEV_HOST_PID=1\nLOFT_DEV_OUTPUT_RECTS=WL-1=1600,0,1280x800+WL-0=0,0,1600x1000\n",
+        );
+        assert!(is_kwin(&env));
+        assert!(!alive(&env));
+        let o = parse_output_rects(&env["LOFT_DEV_OUTPUT_RECTS"]).unwrap();
+        assert_eq!(o[0].name, "WL-0");
+        assert_eq!(o[1].rect, Rect::new(1600.0, 0.0, 1280.0, 800.0));
     }
 
     #[test]

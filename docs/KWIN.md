@@ -449,67 +449,58 @@ Whether menus then still reach Loft's bar needs checking.
 
 ## 6. Testing against KWin with loft-dev
 
-**Verified on 2026-11-15** (KWin 6.8.2, prototype scripts, not in the repo yet): a
-whole KDE session runs nested and headless, the same way loft-dev runs niri. Both
-stock **plasmashell** (panel, tray, dock, wallpaper) and **Loft's shell** (bar,
-island, dock) drew in it and were screenshotted with grim on the host.
+**Implemented** (KWin 6.8.2): `loft-dev --session NAME --compositor kwin [--shell
+loft|plasma]` runs a whole KDE session nested and headless, the way loft-dev runs niri.
+Usage is in [TESTING.md](TESTING.md#kde-sessions---compositor-kwin). Both stock
+**plasmashell** (panel, tray, dock, wallpaper) and **Loft's shell** (bar, island, dock,
+Control Center) run in it, screenshotted with `loft-shot` and driven with `loft-input`.
 
 ```sh
-# 1. headless sway host, rendered on a GPU render node (as `loft-dev --gpu` does)
-XDG_RUNTIME_DIR=$dir/host WLR_BACKENDS=headless WLR_RENDERER=gles2 \
-  WLR_RENDER_DRM_DEVICE=/dev/dri/renderD129 sway -c host.conf &
-# 2. KWin nested in it: private bus, private runtime dir, scratch HOME and XDG dirs
-env HOME=$scratch XDG_CONFIG_HOME=$scratch/.config XDG_DATA_HOME=… XDG_CACHE_HOME=… \
-    XDG_STATE_HOME=… XDG_RUNTIME_DIR=$dir/run WAYLAND_DISPLAY=$dir/host/wayland-1 \
-    XDG_CURRENT_DESKTOP=KDE KDE_FULL_SESSION=true KDE_SESSION_VERSION=6 \
-  dbus-run-session -- kwin_wayland --width 1600 --height 1000 --socket kde-1 \
-    --xwayland --no-lockscreen --exit-with-session session.sh
-# session.sh: kactivitymanagerd & kded6 & then the shell under test:
-#   plasmashell                                          (stock Plasma)
-#   LOFT_SHELL_SRC=$checkout/src LOFT_DEV=1 loft-shell   (Loft, hot reload)
+# what loft-dev does, in short (nix/dev/loft-dev.sh, run_kwin):
+# 1. headless sway host on a GPU render node (gles2), one output N×W wide
+# 2. in one user unit, loft-dev-kwin-NAME: a private bus with KWin's socket, scratch HOME
+#    and XDG dirs, the session's own XDG_RUNTIME_DIR, and only KWin on the host:
+dbus-run-session -- env WAYLAND_DISPLAY=$host kwin_wayland --width W --height H \
+  --output-count N --socket wayland-loft --xwayland --no-lockscreen --exit-with-session kde-session.sh
+# kde-session.sh: dbus-update-activation-environment, kactivitymanagerd, kded6, then
+#   loft-shell (LOFT_SHELL_SRC=$checkout/src LOFT_DEV=1) + loft-launcher, or plasmashell
 ```
 
-What the prototype showed:
+What it took:
 
-- **The host needs a GPU renderer.** With loft-dev's default pixman host, KWin's
-  wayland backend quits ("The used windowing system requires compositing").
-  `KWIN_COMPOSE=Q` doesn't help. So `--compositor kwin` implies `--gpu`. It's still
-  headless: no monitor, no modeset.
-- **`$HOME` must be scratch, unlike niri sessions.** plasmashell, KWin, kded and
-  Akonadi write their config on startup (`kwinrc`, `plasma-…-appletsrc`,
-  `kglobalshortcutsrc`, an Akonadi MariaDB). With the real `$HOME` that would rewrite
-  your Plasma setup. With `HOME` + XDG dirs pointed at scratch, nothing outside it
-  changed. Defaults still come from the system profile (`/etc/xdg`), so the nested
-  Plasma looks like the machine's Plasma.
-- **Run it in one transient unit** (`systemd-run --user --unit=loft-dev-kwin-NAME`).
-  D-Bus activation starts many helpers (portals, gvfs FUSE mounts under the runtime
-  dir, at-spi, Akonadi). Stopping the unit stops them all and its FUSE mounts go with
-  them. Never clean up with `pkill -f`.
-- `loft-shot` works unchanged (grim on the host). `loft-input` should too (the wlr
-  virtual pointer goes to the host, and KWin is a window in it), but that isn't tried
-  yet. A bare `kwin_wayland --virtual` would break both: KWin has no screencopy and no
-  wlr virtual pointer.
-- Plasma-session services that `startplasma-wayland` normally starts, and the
-  prototype didn't: ksmserver, powerdevil, polkit agent, xdg-desktop-portal-kde
-  (D-Bus activated anyway). Add them when a test needs them.
-- `--output-count N` gives several outputs in the nested (windowed) backend, the KWin
-  counterpart of `--outputs` (not tried yet).
-
-**Proposed loft-dev interface:**
-
-```sh
-loft-dev --session NAME --compositor kwin [--shell loft|plasma] [CHECKOUT]
-```
-
-- `--shell loft` (default) runs the checkout's shell. `--shell plasma` runs stock
-  plasmashell in the same harness, to compare with plain Plasma, or to test the §5
-  switching (`loft shell use …` inside the session).
-- session.env gains `LOFT_DEV_COMPOSITOR=kwin`, so `loft-shot` / `loft-input` /
-  `loft-dev --stop` know the session. `bind` maps to kglobalaccel's `invokeShortcut`.
-- The scratch tree lives in the session dir, and `--keep-home` keeps it between runs.
+- **The host needs a GPU renderer.** With loft-dev's default pixman host, KWin's wayland
+  backend quits ("The used windowing system requires compositing"). `KWIN_COMPOSE=Q`
+  doesn't help. So `--compositor kwin` implies `--gpu`. Still headless.
+- **`$HOME` must be scratch, unlike niri sessions.** plasmashell, KWin, kded and Akonadi
+  write their config on startup. With `HOME` + XDG dirs pointed at `<session dir>/home`
+  nothing outside it changes (checked: no KDE files in the real `~/.config` or
+  `~/.local/share` after a run). Defaults still come from `/etc/xdg`.
+- **One transient unit.** D-Bus activation starts portals, gvfs and the document portal (FUSE
+  mounts under the runtime dir), at-spi, ksecretd, Akonadi. Stopping the unit stops them
+  all. Their FUSE mounts can outlive the cgroup (the auto-unmount helper dies with it), so the
+  unit's `ExecStopPost` lazily unmounts them.
+- **The bus must not have the host's `WAYLAND_DISPLAY`**, or every activated service maps
+  its surfaces on the host, over KWin. The bus starts with KWin's socket. Only KWin gets the
+  host's, and the session script updates the activation environment (as startplasma does).
+- **Input needs devices held on the host.** The headless host has none, and a virtual
+  device appearing per `loft-input` run flips the seat's capabilities. KWin binds a new
+  `wl_pointer` each time, the `enter` is lost in that race, and KWin drops the buttons
+  (seen with `WAYLAND_DEBUG=client` on KWin: `button` with no `enter`/`motion`). A
+  `loft-input` script holding a pointer + keyboard for the session's lifetime (unit
+  `loft-dev-kwin-NAME-input`) fixes it, with one output or several.
+- **Several outputs:** `--output-count N` (`WL-0`, `WL-1`, …). The N nested windows sit side
+  by side on one host output; with one host output per KWin output the windows rendered, but
+  that layout was dropped while chasing the input bug above.
+- `loft-input key` reaches KWin itself, so global shortcuts fire with real combos (`key
+  super+w` → Overview). `loft-input bind COMPONENT/NAME` calls kglobalaccel's
+  `invokeShortcut` on the session's bus (`bind kwin/Overview`, verified).
+- `loft-live` runs inside such a session as a test of its Plasma path (TESTING.md).
+- Plasma-session services that `startplasma-wayland` normally starts and this doesn't:
+  ksmserver, powerdevil, the polkit agent, xdg-desktop-portal-kde (D-Bus activated anyway).
+  Add them when a test needs them.
 - Still open: whether KWin's privileged-interface checks (ScreenShot2,
-  plasma_window_management) can be relaxed for a dev session, or whether loft-kwin
-  needs an installed .desktop file with `X-KDE-Wayland-Interfaces` /
+  plasma_window_management) can be relaxed for a dev session, or whether loft-kwin needs an
+  installed .desktop file with `X-KDE-Wayland-Interfaces` /
   `X-KDE-DBUS-Restricted-Interfaces`.
 
 ## 7. Steps
