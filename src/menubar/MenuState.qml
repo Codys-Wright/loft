@@ -564,13 +564,12 @@ Singleton {
 
         if (AppMenu.pref("windowCommands")) {
             items.push(sep("s-window"));
-            items.push({ key: "float", label: w.is_floating ? "Tile Window" : "Float Window", enabled: true, shortcut: niriShortcut("toggle-window-floating"), run: () => Niri.action("ToggleWindowFloating", { id: w.id }) });
-            items.push({ key: "fullscreen", label: "Toggle Full Screen", enabled: true, shortcut: niriShortcut("fullscreen-window"), run: () => Niri.action("FullscreenWindow", { id: w.id }) });
+            items.push({ key: "float", label: w.is_floating ? "Tile Window" : "Float Window", enabled: true, shortcut: niriShortcut("toggle-window-floating"), run: () => Compositor.toggleFloating(w.id) });
+            items.push({ key: "fullscreen", label: "Toggle Full Screen", enabled: true, shortcut: niriShortcut("fullscreen-window"), run: () => Compositor.toggleFullscreen(w.id) });
             items.push({ key: "maximize", label: "Maximize Column", enabled: !w.is_floating, shortcut: niriShortcut("maximize-column"), run: () => {
-                    Niri.focusWindow(w.id);
-                    Niri.action("MaximizeColumn");
+                    Compositor.maximizeColumn(w.id);
                 } });
-            items.push({ key: "center", label: "Center", enabled: true, shortcut: niriShortcut("center-column"), run: () => Niri.action("CenterWindow", { id: w.id }) });
+            items.push({ key: "center", label: "Center", enabled: true, shortcut: niriShortcut("center-column"), run: () => Compositor.centerWindow(w.id) });
             if (Features.on("arrange"))
                 items.push({ key: "arrange", label: "Arrange", enabled: true, submenu: true, children: Arrange.items(w) });
             if (!own)
@@ -580,13 +579,13 @@ Singleton {
         if (AppMenu.pref("hideCommands")) {
             items.push(sep("s-hide"));
             items.push({ key: "hide", label: `Hide ${name}`, enabled: true, run: () => root.hideApp(w.app_id) });
-            const others = Niri.windows.filter(x => x.app_id !== w.app_id && x.workspace_id === w.workspace_id);
+            const others = Compositor.windows.filter(x => x.app_id !== w.app_id && x.workspace_id === w.workspace_id);
             items.push({ key: "hide-others", label: "Hide Others", enabled: others.length > 0, run: () => root.hideOthers(w) });
             items.push({ key: "show-all", label: "Show All", enabled: hidden.length > 0, run: () => root.showAll() });
         }
 
         items.push(sep("s-quit"));
-        items.push({ key: "close", label: "Close Window", enabled: true, shortcut: closeShortcut(), run: () => Niri.action("CloseWindow", { id: w.id }) });
+        items.push({ key: "close", label: "Close Window", enabled: true, shortcut: closeShortcut(), run: () => Compositor.closeWindow(w.id) });
         items.push({ key: "quit", label: own ? `Close ${name}` : `Quit ${name}`, enabled: true, run: () => root.quit(w) });
         return items;
     }
@@ -596,7 +595,7 @@ Singleton {
             { key: "about", label: "About loft", enabled: true, run: () => root.showAbout(null) },
             sep("s1"),
             { key: "settings", label: "Settings…", enabled: true, shortcut: [["Super", ","]], run: () => Panels.settingsOpen = true },
-            { key: "overview", label: "Overview", enabled: true, shortcut: niriShortcut("toggle-overview"), run: () => Niri.toggleOverview() },
+            { key: "overview", label: "Overview", enabled: true, shortcut: niriShortcut("toggle-overview"), run: () => Compositor.toggleOverview() },
             sep("s2"),
             { key: "show-all", label: "Show All", enabled: hidden.length > 0, run: () => root.showAll() }
         ];
@@ -654,7 +653,7 @@ Singleton {
 
     // The output the system menu / its dialogs belong on.
     function systemScreen() {
-        return open && screen !== "" ? screen : (Niri.focusedWorkspace?.output ?? "");
+        return open && screen !== "" ? screen : (Compositor.focusedWorkspace?.output ?? "");
     }
 
     // Restart / Shut Down / Log Out: the macOS dialog (countdown optional).
@@ -720,14 +719,14 @@ Singleton {
     }
 
     function workspaceItems(w) {
-        const here = Niri.workspaces.find(x => x.id === w.workspace_id);
+        const here = Compositor.workspaces.find(x => x.id === w.workspace_id);
         const out = here?.output ?? "";
-        const outputs = [...new Set(Niri.workspaces.map(x => x.output ?? ""))];
+        const outputs = [...new Set(Compositor.workspaces.map(x => x.output ?? ""))];
         const items = [];
         for (const o of outputs) {
             if (outputs.length > 1)
                 items.push({ key: `h-${o}`, label: o, enabled: false });
-            for (const ws of Niri.workspacesOn(o)) {
+            for (const ws of Compositor.workspacesOn(o)) {
                 if (isParking(ws))
                     continue;
                 items.push({
@@ -736,7 +735,7 @@ Singleton {
                     enabled: true,
                     toggle: "radio",
                     checked: ws.id === w.workspace_id,
-                    run: () => Niri.action("MoveWindowToWorkspace", { window_id: w.id, reference: { Id: ws.id }, focus: true })
+                    run: () => Compositor.moveWindowToWorkspace(w.id, ws.id, true)
                 });
             }
             if (outputs.length > 1 && o !== outputs[outputs.length - 1])
@@ -746,8 +745,8 @@ Singleton {
     }
 
     function displayItems(w) {
-        const here = Niri.workspaces.find(x => x.id === w.workspace_id)?.output ?? "";
-        const outputs = [...new Set(Niri.workspaces.map(x => x.output ?? ""))].filter(o => o !== "");
+        const here = Compositor.workspaces.find(x => x.id === w.workspace_id)?.output ?? "";
+        const outputs = [...new Set(Compositor.workspaces.map(x => x.output ?? ""))].filter(o => o !== "");
         if (outputs.length < 2)
             return [];
         return outputs.map(o => ({
@@ -756,7 +755,7 @@ Singleton {
                     enabled: o !== here,
                     toggle: "radio",
                     checked: o === here,
-                    run: () => Niri.action("MoveWindowToMonitor", { id: w.id, output: o })
+                    run: () => Compositor.moveWindowToOutput(w.id, o)
                 }));
     }
 
@@ -774,20 +773,20 @@ Singleton {
     function hideWindows(windows) {
         const moved = [];
         for (const x of windows) {
-            const ws = Niri.workspaces.find(s => s.id === x.workspace_id);
+            const ws = Compositor.workspaces.find(s => s.id === x.workspace_id);
             if (!ws || isParking(ws))
                 continue;
             const name = parkingName(ws.output ?? "");
-            let park = Niri.workspaces.find(s => s.name === name);
+            let park = Compositor.workspaces.find(s => s.name === name);
             if (!park) {
                 // niri keeps an empty workspace last on each output: claim it.
-                const last = Niri.workspacesOn(ws.output).slice(-1)[0];
+                const last = Compositor.workspacesOn(ws.output).slice(-1)[0];
                 if (!last || last.id === ws.id)
                     continue;
-                Niri.action("SetWorkspaceName", { name: name, workspace: { Id: last.id } });
+                Compositor.setWorkspaceName(last.id, name);
                 park = last;
             }
-            Niri.action("MoveWindowToWorkspace", { window_id: x.id, reference: { Id: park.id }, focus: false });
+            Compositor.moveWindowToWorkspace(x.id, park.id, false);
             moved.push({ id: x.id, workspace: x.workspace_id, appId: x.app_id });
         }
         hidden = hidden.filter(h => !moved.some(m => m.id === h.id)).concat(moved);
@@ -796,15 +795,15 @@ Singleton {
     // The traffic lights niri draws on server-side-decorated windows: yellow
     // hides (like the menu's Hide), a held green opens the window menu there.
     Connections {
-        target: Niri
+        target: Compositor
         function onWindowMinimizeRequested(id) {
-            const w = Niri.windowMap[id];
+            const w = Compositor.windowMap[id];
             if (w)
                 root.hideWindows([w]);
         }
         function onWindowActionsMenuRequested(id, output, x, y) {
-            if (Niri.windowMap[id])
-                root.openContext(output, x, y, "bottom", () => root.trafficLightItems(Niri.windowMap[id]));
+            if (Compositor.windowMap[id])
+                root.openContext(output, x, y, "bottom", () => root.trafficLightItems(Compositor.windowMap[id]));
         }
     }
 
@@ -813,13 +812,12 @@ Singleton {
         if (!w)
             return [];
         const items = [];
-        items.push({ key: "fullscreen", label: "Enter Full Screen", enabled: true, shortcut: niriShortcut("fullscreen-window"), run: () => Niri.action("FullscreenWindow", { id: w.id }) });
+        items.push({ key: "fullscreen", label: "Enter Full Screen", enabled: true, shortcut: niriShortcut("fullscreen-window"), run: () => Compositor.toggleFullscreen(w.id) });
         items.push({ key: "maximize", label: "Maximize Column", enabled: !w.is_floating, shortcut: niriShortcut("maximize-column"), run: () => {
-                Niri.focusWindow(w.id);
-                Niri.action("MaximizeColumn");
+                Compositor.maximizeColumn(w.id);
             } });
-        items.push({ key: "float", label: w.is_floating ? "Tile Window" : "Float Window", enabled: true, shortcut: niriShortcut("toggle-window-floating"), run: () => Niri.action("ToggleWindowFloating", { id: w.id }) });
-        items.push({ key: "center", label: "Center", enabled: true, shortcut: niriShortcut("center-column"), run: () => Niri.action("CenterWindow", { id: w.id }) });
+        items.push({ key: "float", label: w.is_floating ? "Tile Window" : "Float Window", enabled: true, shortcut: niriShortcut("toggle-window-floating"), run: () => Compositor.toggleFloating(w.id) });
+        items.push({ key: "center", label: "Center", enabled: true, shortcut: niriShortcut("center-column"), run: () => Compositor.centerWindow(w.id) });
         if (Features.on("arrange"))
             items.push({ key: "arrange", label: "Arrange", enabled: true, submenu: true, children: Arrange.items(w) });
         items.push(sep("s-move"));
@@ -830,34 +828,34 @@ Singleton {
     }
 
     function hideApp(appId) {
-        hideWindows(Niri.windows.filter(x => x.app_id === appId));
+        hideWindows(Compositor.windows.filter(x => x.app_id === appId));
     }
 
     function hideOthers(w) {
-        hideWindows(Niri.windows.filter(x => x.app_id !== w.app_id && x.workspace_id === w.workspace_id));
+        hideWindows(Compositor.windows.filter(x => x.app_id !== w.app_id && x.workspace_id === w.workspace_id));
     }
 
     function showAll() {
         for (const h of hidden) {
-            if (!Niri.windowMap[h.id])
+            if (!Compositor.windowMap[h.id])
                 continue;
-            const back = Niri.workspaceMap[h.workspace] ? { Id: h.workspace } : { Id: Niri.focusedWorkspace?.id ?? 0 };
-            Niri.action("MoveWindowToWorkspace", { window_id: h.id, reference: back, focus: false });
+            const back = Compositor.workspaceMap[h.workspace] ? h.workspace : (Compositor.focusedWorkspace?.id ?? 0);
+            Compositor.moveWindowToWorkspace(h.id, back, false);
         }
         hidden = [];
-        for (const ws of Niri.workspaces)
+        for (const ws of Compositor.workspaces)
             if (isParking(ws))
-                Niri.action("UnsetWorkspaceName", { reference: { Id: ws.id } });
+                Compositor.unsetWorkspaceName(ws.id);
     }
 
     // ── Quit: close every window of the process; if it outlives them,
     // SIGTERM after forceQuitDelay (only when the pid is this app's alone).
     function quit(w) {
-        const count = Niri.windows.filter(x => x.pid && x.pid === w.pid).length;
+        const count = Compositor.windows.filter(x => x.pid && x.pid === w.pid).length;
         if (count > 1 && AppMenu.pref("confirmQuit")) {
             target = w;
             pendingQuit = { window: w, count: count };
-            screen = Niri.workspaces.find(x => x.id === w.workspace_id)?.output ?? screen;
+            screen = Compositor.workspaces.find(x => x.id === w.workspace_id)?.output ?? screen;
             mode = "confirm";
             depth = 0;
             open = true;
@@ -881,13 +879,13 @@ Singleton {
     // Quit an app (the dock): every window with its app id, whichever
     // process owns it; confirms when several are open.
     function quitApp(appId) {
-        const ws = Niri.windows.filter(x => x.app_id === appId);
+        const ws = Compositor.windows.filter(x => x.app_id === appId);
         if (ws.length === 0)
             return;
         if (ws.length > 1 && AppMenu.pref("confirmQuit")) {
             target = ws[0];
             pendingQuit = { window: ws[0], count: ws.length, appId: appId };
-            screen = Niri.workspaces.find(x => x.id === ws[0].workspace_id)?.output ?? screen;
+            screen = Compositor.workspaces.find(x => x.id === ws[0].workspace_id)?.output ?? screen;
             mode = "confirm";
             depth = 0;
             open = true;
@@ -897,11 +895,11 @@ Singleton {
     }
 
     function doQuitApp(appId) {
-        const ws = Niri.windows.filter(x => x.app_id === appId);
+        const ws = Compositor.windows.filter(x => x.app_id === appId);
         const pids = [];
         for (const w of ws) {
             if (!w.pid)
-                Niri.action("CloseWindow", { id: w.id });
+                Compositor.closeWindow(w.id);
             else if (!pids.includes(w.pid)) {
                 pids.push(w.pid);
                 doQuit(w);
@@ -911,9 +909,9 @@ Singleton {
 
     function doQuit(w) {
         const own = Apps.own[w.app_id] !== undefined;
-        const windows = w.pid ? Niri.windows.filter(x => x.pid === w.pid) : [w];
+        const windows = w.pid ? Compositor.windows.filter(x => x.pid === w.pid) : [w];
         for (const x of windows)
-            Niri.action("CloseWindow", { id: x.id });
+            Compositor.closeWindow(x.id);
         const shared = windows.some(x => x.app_id !== w.app_id);
         const delay = AppMenu.pref("forceQuitDelay");
         if (own || shared || !w.pid || delay <= 0)
@@ -926,7 +924,7 @@ Singleton {
     function showAbout(w) {
         // trigger() closed the menu; reopen as the About card.
         target = w;
-        screen = (w ? Niri.workspaces.find(x => x.id === w.workspace_id)?.output : Niri.focusedWorkspace?.output) ?? screen;
+        screen = (w ? Compositor.workspaces.find(x => x.id === w.workspace_id)?.output : Compositor.focusedWorkspace?.output) ?? screen;
         mode = "about";
         depth = 0;
         open = true;
@@ -939,7 +937,7 @@ Singleton {
 
         function show(id: string, withDetails: bool): void {
             // The status area lives on one display (Displays.activeName).
-            const out = Displays.activeName || (Niri.focusedWorkspace?.output ?? "");
+            const out = Displays.activeName || (Compositor.focusedWorkspace?.output ?? "");
             root.openExtra(out, id, null, withDetails);
         }
         function wifi(): void {
@@ -1017,7 +1015,7 @@ Singleton {
         target: "systemmenu"
 
         function open(): void {
-            const out = Niri.focusedWorkspace?.output ?? "";
+            const out = Compositor.focusedWorkspace?.output ?? "";
             root.openTitle(out, root.systemTitle);
         }
         function close(): void {
@@ -1071,7 +1069,7 @@ Singleton {
 
         // Mod+F10: the app menu on the focused output.
         function toggle(): void {
-            const out = Niri.focusedWorkspace?.output ?? "";
+            const out = Compositor.focusedWorkspace?.output ?? "";
             if (root.open)
                 root.close();
             else {
@@ -1086,7 +1084,7 @@ Singleton {
         // The first global menu (File), keyboard-highlighted.
         function global(): void {
             if (AppMenu.titles.length > 0)
-                root.openTitle(Niri.focusedWorkspace?.output ?? "", 1);
+                root.openTitle(Compositor.focusedWorkspace?.output ?? "", 1);
         }
 
         function close(): void {
@@ -1097,12 +1095,12 @@ Singleton {
         // the menu's Hide. ⌘M: niri has no minimize, so the focused window
         // alone hides (the dock or Show All brings it back).
         function hide(): void {
-            const w = Niri.focusedWindow;
+            const w = Compositor.focusedWindow;
             if (w)
                 root.hideApp(w.app_id);
         }
         function minimize(): void {
-            const w = Niri.focusedWindow;
+            const w = Compositor.focusedWindow;
             if (w)
                 root.hideWindows([w]);
         }

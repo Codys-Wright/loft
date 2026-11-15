@@ -132,7 +132,7 @@ Singleton {
     property string lastImage: ""
     property string lastVideo: ""
 
-    readonly property var screenFocused: Quickshell.screens.find(s => s.name === (Niri.focusedWorkspace?.output ?? "")) ?? Quickshell.screens[0] ?? null
+    readonly property var screenFocused: Quickshell.screens.find(s => s.name === (Compositor.focusedWorkspace?.output ?? "")) ?? Quickshell.screens[0] ?? null
 
     function stamp() {
         return Qt.formatDateTime(new Date(), "yyyy-MM-dd_HH-mm-ss");
@@ -252,25 +252,20 @@ Singleton {
     function shootScreen() {
         const out = newShotPath();
         const name = screenFocused?.name ?? "";
-        Niri.shutter();
+        Compositor.shutter();
         exec(["sh", "-c", 'mkdir -p "$(dirname "$2")" && exec grim ${3:+-c} ${1:+-o "$1"} "$2"', "sh", name, out, cfg.showPointer ? "1" : ""], (code, _out, err) => code === 0 ? shotDone(out) : failed("Screenshot failed", err));
     }
 
     function shootWindow() {
-        const w = Niri.focusedWindow;
+        const w = Compositor.focusedWindow;
         if (!w) {
             failed("No window to capture", "Focus a window first");
             return;
         }
         const out = newShotPath();
-        Niri.shutter();
-        // niri writes the file and copies it; ScreenshotCaptured(path) follows.
-        exec(["mkdir", "-p", screenshotDir], () => Niri.action("ScreenshotWindow", {
-                id: w.id,
-                write_to_disk: true,
-                show_pointer: cfg.showPointer,
-                path: out
-            }));
+        Compositor.shutter();
+        // The compositor writes the file and copies it; screenshotTaken(path) follows.
+        exec(["mkdir", "-p", screenshotDir], () => Compositor.screenshotWindow(w.id, out, cfg.showPointer));
     }
 
     // A finished image capture of ours (niri's own come via screenshotTaken).
@@ -278,11 +273,11 @@ Singleton {
         if (cfg.copyToClipboard)
             exec(["sh", "-c", 'wl-copy --type image/png < "$1"', "sh", path]);
         // The island's shutter flash + our thumbnail listen to this.
-        Niri.screenshotTaken(path);
+        Compositor.screenshotTaken(path);
     }
 
     Connections {
-        target: Niri
+        target: Compositor
         function onScreenshotTaken(path) {
             if (path === "")
                 return;
@@ -338,7 +333,7 @@ Singleton {
             crop(src, px, out, () => recognize(out));
         } else {
             const out = newShotPath();
-            Niri.shutter();
+            Compositor.shutter();
             crop(src, px, out, () => root.shotDone(out));
         }
         frozen = {};

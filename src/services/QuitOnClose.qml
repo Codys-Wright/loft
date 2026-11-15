@@ -38,7 +38,7 @@ Singleton {
     property var pending: ({})
 
     Connections {
-        target: Niri
+        target: Compositor
         function onWindowMapChanged() {
             root.diff();
         }
@@ -46,7 +46,7 @@ Singleton {
 
     function diff() {
         const now = {};
-        for (const w of Niri.windows)
+        for (const w of Compositor.windows)
             now[w.id] = { app_id: w.app_id, pid: w.pid };
         if (enabled && apps.length > 0) {
             for (const id in last) {
@@ -55,7 +55,7 @@ Singleton {
                 const g = last[id];
                 if (!g.pid || !apps.includes(g.app_id) || Apps.own[g.app_id] !== undefined)
                     continue;
-                if (Niri.windows.some(w => w.pid === g.pid))
+                if (Compositor.windows.some(w => w.pid === g.pid))
                     continue;
                 const p = Object.assign({}, pending);
                 p[g.pid] = { appId: g.app_id, at: Date.now() };
@@ -78,7 +78,7 @@ Singleton {
                 const n = Number(pid);
                 delete p[pid];
                 // A window came back (a dialog closed into the main window, …).
-                if (Niri.windows.some(w => w.pid === n))
+                if (Compositor.windows.some(w => w.pid === n))
                     continue;
                 root.terminate(n);
             }

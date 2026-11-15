@@ -44,7 +44,7 @@ Singleton {
 
     // A Loft shortcut fired: ignore it when the focused app is left alone.
     function skip(what) {
-        const w = Niri.focusedWindow;
+        const w = Compositor.focusedWindow;
         if (!cfg.pauseShellShortcuts || !w || !isLeftAlone(w.app_id))
             return false;
         console.info(`Shortcuts: ${what} left alone in ${w.app_id}`);

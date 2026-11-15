@@ -410,12 +410,12 @@ Singleton {
     property string mixerScreen: ""
 
     function openMixer(screenName) {
-        mixerScreen = screenName || (Niri.focusedWorkspace?.output ?? "");
+        mixerScreen = screenName || (Compositor.focusedWorkspace?.output ?? "");
         mixerOpen = true;
     }
 
     function toggleMixer(screenName) {
-        const s = screenName || (Niri.focusedWorkspace?.output ?? "");
+        const s = screenName || (Compositor.focusedWorkspace?.output ?? "");
         if (mixerOpen && s === mixerScreen)
             mixerOpen = false;
         else

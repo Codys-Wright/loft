@@ -16,7 +16,7 @@ Singleton {
     readonly property bool open: output !== ""
 
     function focusedOutput() {
-        return Niri.focusedWorkspace?.output ?? Quickshell.screens[0]?.name ?? "";
+        return Compositor.focusedWorkspace?.output ?? Quickshell.screens[0]?.name ?? "";
     }
 
     function toggle(screenName) {

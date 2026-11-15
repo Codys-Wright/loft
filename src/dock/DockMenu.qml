@@ -64,7 +64,7 @@ Singleton {
 
     // ── Window actions ───────────────────────────────────────────────────
     function isParked(w) {
-        const ws = Niri.workspaceMap[w.workspace_id];
+        const ws = Compositor.workspaceMap[w.workspace_id];
         return ws ? MenuState.isParking(ws) : false;
     }
 
@@ -72,12 +72,12 @@ Singleton {
     function focus(w) {
         if (isParked(w)) {
             const h = MenuState.hidden.find(x => x.id === w.id);
-            const back = h && Niri.workspaceMap[h.workspace] ? h.workspace : Niri.focusedWorkspace?.id;
+            const back = h && Compositor.workspaceMap[h.workspace] ? h.workspace : Compositor.focusedWorkspace?.id;
             if (back !== undefined)
-                Niri.action("MoveWindowToWorkspace", { window_id: w.id, reference: { Id: back }, focus: false });
+                Compositor.moveWindowToWorkspace(w.id, back, false);
             MenuState.hidden = MenuState.hidden.filter(x => x.id !== w.id);
         }
-        Niri.focusWindow(w.id);
+        Compositor.focusWindow(w.id);
     }
 
     // Bring back every hidden (parked) window of the app; true if any.
@@ -85,9 +85,9 @@ Singleton {
         const parked = DockData.windowsOf(appId).filter(w => isParked(w));
         for (const w of parked) {
             const h = MenuState.hidden.find(x => x.id === w.id);
-            const back = h && Niri.workspaceMap[h.workspace] ? h.workspace : Niri.focusedWorkspace?.id;
+            const back = h && Compositor.workspaceMap[h.workspace] ? h.workspace : Compositor.focusedWorkspace?.id;
             if (back !== undefined)
-                Niri.action("MoveWindowToWorkspace", { window_id: w.id, reference: { Id: back }, focus: false });
+                Compositor.moveWindowToWorkspace(w.id, back, false);
         }
         if (parked.length > 0)
             MenuState.hidden = MenuState.hidden.filter(x => !parked.some(w => w.id === x.id));
@@ -97,24 +97,24 @@ Singleton {
     // Bring one hidden (parked) window back where it was, without focusing it.
     function unhide(w) {
         const h = MenuState.hidden.find(x => x.id === w.id);
-        const back = h && Niri.workspaceMap[h.workspace] ? h.workspace : Niri.focusedWorkspace?.id;
+        const back = h && Compositor.workspaceMap[h.workspace] ? h.workspace : Compositor.focusedWorkspace?.id;
         if (back !== undefined)
-            Niri.action("MoveWindowToWorkspace", { window_id: w.id, reference: { Id: back }, focus: false });
+            Compositor.moveWindowToWorkspace(w.id, back, false);
         MenuState.hidden = MenuState.hidden.filter(x => x.id !== w.id);
     }
 
     function moveWindow(w, wsId) {
-        Niri.action("MoveWindowToWorkspace", { window_id: w.id, reference: { Id: wsId }, focus: false });
+        Compositor.moveWindowToWorkspace(w.id, wsId, false);
         MenuState.hidden = MenuState.hidden.filter(x => x.id !== w.id);
     }
 
     function moveWindowToOutput(w, output) {
-        Niri.action("MoveWindowToMonitor", { id: w.id, output: output });
+        Compositor.moveWindowToOutput(w.id, output);
         MenuState.hidden = MenuState.hidden.filter(x => x.id !== w.id);
     }
 
     function closeWindow(w) {
-        Niri.action("CloseWindow", { id: w.id });
+        Compositor.closeWindow(w.id);
     }
 
     function newWindow(appId) {
@@ -138,14 +138,14 @@ Singleton {
         Quickshell.execDetached(["kill", "-KILL"].concat(pids.map(String)));
     }
 
-    function moveAll(appId, ref) {
+    function moveAll(appId, wsId) {
         for (const w of DockData.windowsOf(appId))
-            Niri.action("MoveWindowToWorkspace", { window_id: w.id, reference: ref, focus: false });
+            Compositor.moveWindowToWorkspace(w.id, wsId, false);
     }
 
     function moveAllToOutput(appId, output) {
         for (const w of DockData.windowsOf(appId))
-            Niri.action("MoveWindowToMonitor", { id: w.id, output: output });
+            Compositor.moveWindowToOutput(w.id, output);
     }
 
     // ── The app menu ─────────────────────────────────────────────────────
@@ -196,8 +196,8 @@ Singleton {
             items.push(sep("s-show"));
             items.push({ key: "show-windows", label: "Show All Windows", enabled: true, run: () => {
                     root.focus(windows.find(w => w.is_focused) ?? windows[0]);
-                    if (!Niri.overviewOpen)
-                        Niri.toggleOverview();
+                    if (!Compositor.overviewOpen)
+                        Compositor.toggleOverview();
                 } });
             if (Features.on("arrange")) {
                 const aw = windows.find(w => w.is_focused) ?? windows.find(w => !isParked(w)) ?? windows[0];
@@ -205,7 +205,7 @@ Singleton {
             }
             items.push({ key: "hide", label: "Hide", enabled: windows.some(w => !isParked(w)), run: () => MenuState.hideApp(appId) });
             const first = windows.find(w => !isParked(w)) ?? windows[0];
-            const others = Niri.windows.filter(x => !DockData.sameApp(x.app_id, appId) && x.workspace_id === first.workspace_id);
+            const others = Compositor.windows.filter(x => !DockData.sameApp(x.app_id, appId) && x.workspace_id === first.workspace_id);
             items.push({ key: "hide-others", label: "Hide Others", enabled: others.length > 0, run: () => MenuState.hideOthers(first) });
             if (MenuState.hidden.length > 0)
                 items.push({ key: "show-all", label: "Show All", enabled: true, run: () => MenuState.showAll() });
@@ -249,7 +249,7 @@ Singleton {
 
         // Assign To: a niri window rule (open-on-workspace).
         const assigned = DockData.assignedTo(appId);
-        const here = Niri.workspaces.find(w => w.output === screen && w.is_active && !MenuState.isParking(w)) ?? Niri.focusedWorkspace;
+        const here = Compositor.workspaces.find(w => w.output === screen && w.is_active && !MenuState.isParking(w)) ?? Compositor.focusedWorkspace;
         items.push(sep("s-assign"));
         items.push(header("h-assign", "Assign To"));
         items.push({ key: "assign-all", label: "All Desktops", enabled: false, toggle: "radio", checked: false });
@@ -262,22 +262,22 @@ Singleton {
         if (windows.length > 0) {
             items.push(sep("s-move"));
             items.push({ key: "move-ws", label: "Move to Desktop", enabled: true, submenu: true, children: moveWorkspaceItems(appId, windows) });
-            const outputs = [...new Set(Niri.workspaces.map(x => x.output ?? ""))].filter(o => o !== "");
-            items.push({ key: "move-out", label: "Move to Display", enabled: outputs.length > 1, submenu: outputs.length > 1, children: outputs.map(o => radio(`out-${o}`, o, windows.every(w => Niri.workspaceMap[w.workspace_id]?.output === o), () => root.moveAllToOutput(appId, o))) });
+            const outputs = [...new Set(Compositor.workspaces.map(x => x.output ?? ""))].filter(o => o !== "");
+            items.push({ key: "move-out", label: "Move to Display", enabled: outputs.length > 1, submenu: outputs.length > 1, children: outputs.map(o => radio(`out-${o}`, o, windows.every(w => Compositor.workspaceMap[w.workspace_id]?.output === o), () => root.moveAllToOutput(appId, o))) });
         }
         return items;
     }
 
     function moveWorkspaceItems(appId, windows) {
-        const outputs = [...new Set(Niri.workspaces.map(x => x.output ?? ""))];
+        const outputs = [...new Set(Compositor.workspaces.map(x => x.output ?? ""))];
         const items = [];
         for (const o of outputs) {
             if (outputs.length > 1)
                 items.push(header(`h-${o}`, o));
-            for (const ws of Niri.workspacesOn(o)) {
+            for (const ws of Compositor.workspacesOn(o)) {
                 if (MenuState.isParking(ws))
                     continue;
-                items.push(radio(`ws-${ws.id}`, MenuState.wsLabel(ws), windows.every(w => w.workspace_id === ws.id), () => root.moveAll(appId, { Id: ws.id })));
+                items.push(radio(`ws-${ws.id}`, MenuState.wsLabel(ws), windows.every(w => w.workspace_id === ws.id), () => root.moveAll(appId, ws.id)));
             }
             if (outputs.length > 1 && o !== outputs[outputs.length - 1])
                 items.push(sep(`s-${o}`));
@@ -291,17 +291,17 @@ Singleton {
     }
 
     function windowItems(id) {
-        const w = Niri.windowMap[id];
+        const w = Compositor.windowMap[id];
         if (!w)
             return [];
         const parked = isParked(w);
-        const outputs = [...new Set(Niri.workspaces.map(x => x.output ?? ""))].filter(o => o !== "");
-        const here = Niri.workspaceMap[w.workspace_id]?.output ?? "";
+        const outputs = [...new Set(Compositor.workspaces.map(x => x.output ?? ""))].filter(o => o !== "");
+        const here = Compositor.workspaceMap[w.workspace_id]?.output ?? "";
         const desktops = [];
         for (const o of outputs) {
             if (outputs.length > 1)
                 desktops.push(header(`h-${o}`, o));
-            for (const ws of Niri.workspacesOn(o))
+            for (const ws of Compositor.workspacesOn(o))
                 if (!MenuState.isParking(ws))
                     desktops.push(radio(`ws-${ws.id}`, MenuState.wsLabel(ws), ws.id === w.workspace_id, () => root.moveWindow(w, ws.id)));
             if (outputs.length > 1 && o !== outputs[outputs.length - 1])

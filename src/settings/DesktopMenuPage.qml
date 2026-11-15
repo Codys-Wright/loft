@@ -28,7 +28,7 @@ ColumnLayout {
             SettingsButton {
                 text: "Show Menu"
                 enabled: Features.on("desktopMenu")
-                onClicked: DesktopMenu.openCentered(Niri.focusedWorkspace?.output ?? "")
+                onClicked: DesktopMenu.openCentered(Compositor.focusedWorkspace?.output ?? "")
             }
         }
     }

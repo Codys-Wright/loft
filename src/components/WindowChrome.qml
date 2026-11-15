@@ -42,9 +42,9 @@ Item {
     readonly property bool fullscreen: hostWindow?.fullscreen ?? false
     // Active = niri's focused window is this one.
     readonly property bool active: {
-        if (!Niri.available)
+        if (!Compositor.available)
             return true;
-        const w = Niri.focusedWindow;
+        const w = Compositor.focusedWindow;
         return w !== null && w.title === (hostWindow?.title ?? "") && (w.app_id ?? "").indexOf("quickshell") >= 0;
     }
     readonly property alias surface: frame

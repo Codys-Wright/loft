@@ -135,7 +135,7 @@ Scope {
         const w = AppMenu.activeWindow;
         if (!w)
             return;
-        const out = Niri.workspaceMap[w.workspace_id]?.output ?? Niri.focusedWorkspace?.output ?? "";
+        const out = Compositor.workspaceMap[w.workspace_id]?.output ?? Compositor.focusedWorkspace?.output ?? "";
         const screen = Quickshell.screens.find(s => s.name === out);
         if (!screen)
             return;

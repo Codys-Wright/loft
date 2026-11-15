@@ -69,14 +69,14 @@ Singleton {
     // Screens whose active workspace an opaque window covers: name → reason.
     readonly property var covered: {
         const out = {};
-        if (Niri.overviewOpen)
+        if (Compositor.overviewOpen)
             return out;
         const glass = WindowRules.enabled;
         for (const s of Quickshell.screens) {
-            const ws = Niri.workspaces.find(w => w.output === s.name && w.is_active);
+            const ws = Compositor.workspaces.find(w => w.output === s.name && w.is_active);
             if (!ws)
                 continue;
-            for (const w of Niri.windows) {
+            for (const w of Compositor.windows) {
                 const size = w.layout?.window_size;
                 if (w.workspace_id !== ws.id || w.is_floating || !size)
                     continue;
@@ -95,7 +95,7 @@ Singleton {
     }
 
     // videoPlayOn "focused": only the focused display's video plays.
-    readonly property string focusedScreen: Niri.focusedWorkspace?.output ?? ""
+    readonly property string focusedScreen: Compositor.focusedWorkspace?.output ?? ""
     function holdReason(screenName) {
         if (globalReason)
             return globalReason;

@@ -36,11 +36,11 @@ Singleton {
     // focused workspace (an empty workspace does clear it).
     property var lastWindow: null
     readonly property var activeWindow: {
-        const f = Niri.focusedWindow;
+        const f = Compositor.focusedWindow;
         if (f)
             return f;
-        const l = lastWindow ? Niri.windowMap[lastWindow.id] : null;
-        return l && l.workspace_id === Niri.focusedWorkspace?.id ? l : null;
+        const l = lastWindow ? Compositor.windowMap[lastWindow.id] : null;
+        return l && l.workspace_id === Compositor.focusedWorkspace?.id ? l : null;
     }
 
     // ── Preferences ──────────────────────────────────────────────────────
@@ -91,8 +91,8 @@ Singleton {
     function focusMessage(w) {
         if (!w || !w.pid)
             return { cmd: "focus" };
-        const same = Niri.windows.filter(x => x.pid === w.pid).sort((a, b) => a.id - b.id);
-        const others = Niri.windows.filter(x => x.pid && x.pid !== w.pid).map(x => x.pid);
+        const same = Compositor.windows.filter(x => x.pid === w.pid).sort((a, b) => a.id - b.id);
+        const others = Compositor.windows.filter(x => x.pid && x.pid !== w.pid).map(x => x.pid);
         return {
             cmd: "focus",
             pid: w.pid,
@@ -158,10 +158,10 @@ Singleton {
     Component.onCompleted: proc.running = enabled
 
     Connections {
-        target: Niri
+        target: Compositor
         function onWindowMapChanged() {
-            if (Niri.focusedWindow)
-                root.lastWindow = Niri.focusedWindow;
+            if (Compositor.focusedWindow)
+                root.lastWindow = Compositor.focusedWindow;
             root.sync();
         }
         function onWorkspaceMapChanged() {

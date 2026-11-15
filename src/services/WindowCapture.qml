@@ -54,7 +54,7 @@ Singleton {
             byApp[t.appId].push(t);
         }
         const m = {};
-        for (const w of Niri.windows.slice().sort((a, b) => a.id - b.id)) {
+        for (const w of Compositor.windows.slice().sort((a, b) => a.id - b.id)) {
             const q = byApp[w.app_id ?? ""];
             if (q && q.length > 0)
                 m[w.id] = q.shift();

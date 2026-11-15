@@ -91,7 +91,7 @@ PanelWindow {
     }
 
     function isRunning(app) {
-        return Niri.windows.some(w => w.app_id && DockData.sameApp(app.id, w.app_id));
+        return Compositor.windows.some(w => w.app_id && DockData.sameApp(app.id, w.app_id));
     }
 
     function launch(app) {

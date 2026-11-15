@@ -62,12 +62,12 @@ Singleton {
     function fullscreenOn(screen) {
         if (!screen)
             return false;
-        const ws = Niri.workspaces.find(w => w.output === screen.name && w.is_active);
+        const ws = Compositor.workspaces.find(w => w.output === screen.name && w.is_active);
         if (!ws)
             return false;
-        const active = Niri.windowMap[ws.active_window_id] ?? null;
+        const active = Compositor.windowMap[ws.active_window_id] ?? null;
         const column = active && !active.is_floating ? active.layout?.pos_in_scrolling_layout?.[0] : undefined;
-        return Niri.windows.some(w => {
+        return Compositor.windows.some(w => {
             const size = w.layout?.tile_size;
             if (w.workspace_id !== ws.id || w.is_floating || !size || size[0] < screen.width - 1 || size[1] < screen.height - 1)
                 return false;
@@ -90,7 +90,7 @@ Singleton {
     Component.onCompleted: refresh()
 
     Connections {
-        target: Niri
+        target: Compositor
         function onOutputsChanged() {
             root.refresh();
         }

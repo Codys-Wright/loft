@@ -213,7 +213,7 @@ Singleton {
     // niri reports no output events (26.04): refresh when the config is
     // reloaded, the set of outputs with workspaces changes, or screens change.
     Connections {
-        target: Niri
+        target: Compositor
         function onConfigLoaded() {
             root.refresh();
             root.refreshBinds();

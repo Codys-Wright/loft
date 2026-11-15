@@ -195,7 +195,7 @@ Singleton {
         const e = entry(id);
         if (!e || !available(id))
             return;
-        const winId = ctx?.windowId ?? Niri.focusedWindow?.id ?? null;
+        const winId = ctx?.windowId ?? Compositor.focusedWindow?.id ?? null;
         if (e.control)
             return runControl(e.control);
         if (id.startsWith("app:"))
@@ -208,7 +208,7 @@ Singleton {
         }
         if (id.startsWith("ws:")) {
             if (winId !== null)
-                Niri.action("MoveWindowToWorkspace", { window_id: winId, reference: { Index: parseInt(id.slice(3)) }, focus: true });
+                Compositor.moveWindowToWorkspaceIndex(winId, parseInt(id.slice(3)), true);
             return;
         }
         switch (id) {
@@ -257,21 +257,21 @@ Singleton {
         case "timer:stop":
             return FocusTimer.stop();
         case "niri:maximize":
-            return Niri.action("MaximizeColumn");
+            return Compositor.maximizeColumn();
         case "niri:fullscreen":
-            return Niri.action("FullscreenWindow", { id: winId });
+            return Compositor.toggleFullscreen(winId);
         case "niri:float":
-            return Niri.action("ToggleWindowFloating", { id: winId });
+            return Compositor.toggleFloating(winId);
         case "niri:center":
-            return Niri.action("CenterWindow", { id: winId });
+            return Compositor.centerWindow(winId);
         case "niri:close":
-            return Niri.action("CloseWindow", { id: winId });
+            return Compositor.closeWindow(winId);
         case "niri:wsPrev":
-            return Niri.action("MoveWindowToWorkspaceUp", { focus: true });
+            return Compositor.moveFocusedWindowToWorkspaceRelative(-1, true);
         case "niri:wsNext":
-            return Niri.action("MoveWindowToWorkspaceDown", { focus: true });
+            return Compositor.moveFocusedWindowToWorkspaceRelative(1, true);
         case "niri:monitorNext":
-            return Niri.action("MoveWindowToMonitorNext");
+            return Compositor.moveFocusedWindowToNextOutput();
         case "terminal":
             return Quickshell.execDetached(["sh", "-c", 'for t in "$TERMINAL" xdg-terminal-exec ghostty kitty foot alacritty wezterm konsole gnome-terminal xterm; do [ -n "$t" ] && command -v "$t" >/dev/null 2>&1 && exec "$t"; done', "loft-terminal"]);
         case "settings":
@@ -281,7 +281,7 @@ Singleton {
             Panels.wallpaperPickerOpen = true;
             return;
         case "controlcenter":
-            return Panels.toggleControlCenter(Niri.focusedWorkspace?.output ?? "");
+            return Panels.toggleControlCenter(Compositor.focusedWorkspace?.output ?? "");
         case "monitor":
             SystemStats.monitorOpen = !SystemStats.monitorOpen;
             return;
@@ -306,7 +306,7 @@ Singleton {
         case "inputSource":
             // Panels open as their Control Center module.
             if (!Panels.controlCenterOpen)
-                Panels.toggleControlCenter(Niri.focusedWorkspace?.output ?? "");
+                Panels.toggleControlCenter(Compositor.focusedWorkspace?.output ?? "");
             Panels.ccEditing = false;
             Panels.ccExpanded = cid === "clock" ? "" : cid;
             return;

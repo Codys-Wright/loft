@@ -1129,7 +1129,7 @@ PanelWindow {
     // (screenshotTaken), which for ours comes after the flash already ran.
     property real shutterAt: 0
     Connections {
-        target: Niri
+        target: Compositor
         function onShutter() {
             root.shutterAt = Date.now();
             shutter.restart();
@@ -1206,7 +1206,7 @@ PanelWindow {
 
     // IPC (IslandIpc, one handler for all screens): the island on the
     // focused output answers (the first screen's when niri isn't known).
-    readonly property bool ipcHere: (Niri.focusedWorkspace?.output ?? Quickshell.screens[0]?.name ?? modelData.name) === modelData.name
+    readonly property bool ipcHere: (Compositor.focusedWorkspace?.output ?? Quickshell.screens[0]?.name ?? modelData.name) === modelData.name
     Connections {
         target: IslandIpc
         function onCommand(cmd) {

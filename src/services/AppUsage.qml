@@ -63,9 +63,9 @@ Singleton {
     }
 
     Connections {
-        target: Niri
+        target: Compositor
         function onWindowsChanged() {
-            root.touch(Niri.windows.map(w => w.app_id));
+            root.touch(Compositor.windows.map(w => w.app_id));
         }
     }
 
@@ -88,7 +88,7 @@ Singleton {
                 root.day = root.today();
                 root.seconds = {};
             }
-            const app = Niri.focusedWindow?.app_id;
+            const app = Compositor.focusedWindow?.app_id;
             if (!app)
                 return;
             const s = Object.assign({}, root.seconds);

@@ -313,7 +313,7 @@ ColumnLayout {
                 readonly property var rec: KeyRemaps.rule(app)
                 readonly property bool alone: KeyRemaps.leftAlone(app)
                 readonly property var badges: KeyRemaps.summary(app)
-                readonly property bool running: Niri.windows.some(w => w.app_id === app)
+                readonly property bool running: Compositor.windows.some(w => w.app_id === app)
                 Layout.fillWidth: true
                 spacing: 6
 

@@ -50,7 +50,7 @@ ColumnLayout {
         readonly property var rows: {
             const out = [];
             const byKey = {};
-            for (const w of Niri.workspaces) {
+            for (const w of Compositor.workspaces) {
                 if (!w.name || w.name.startsWith("hidden-"))
                     continue;
                 const k = WorkspaceIcons.key(w.name);

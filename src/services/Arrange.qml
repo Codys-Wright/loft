@@ -43,72 +43,63 @@ Singleton {
             twoThirds: { label: "Two Thirds", width: 200 / 3 }
         })
 
-    function prop(v) {
-        return { SetProportion: v };
-    }
-
     // Apply a preset by name to window `w` (default: the focused one).
     // Floating presets on a tiled window first float it; column presets on
     // a floating window tile it.
     function apply(name, w) {
-        w = w ?? Niri.focusedWindow;
+        w = w ?? Compositor.focusedWindow;
         if (!w)
             return false;
         const f = floatPresets[name];
         if (f) {
             if (!w.is_floating)
-                Niri.action("MoveWindowToFloating", { id: w.id });
+                Compositor.setFloating(w.id, true);
             const [x, y, width, height] = f.rect;
-            Niri.action("SetWindowWidth", { id: w.id, change: prop(width) });
-            Niri.action("SetWindowHeight", { id: w.id, change: prop(height) });
-            Niri.action("MoveFloatingWindow", { id: w.id, x: prop(x), y: prop(y) });
+            Compositor.setWindowWidthPercent(w.id, width);
+            Compositor.setWindowHeightPercent(w.id, height);
+            Compositor.moveFloatingWindowPercent(w.id, x, y);
             return true;
         }
         const c = columnPresets[name];
         if (c) {
             if (w.is_floating)
-                Niri.action("MoveWindowToTiling", { id: w.id });
-            Niri.focusWindow(w.id);
-            Niri.action("SetColumnWidth", { change: prop(c.width) });
+                Compositor.setFloating(w.id, false);
+            Compositor.setColumnWidthPercent(w.id, c.width);
             return true;
         }
         switch (name) {
         case "maximizeColumn":
-            Niri.focusWindow(w.id);
-            Niri.action("MaximizeColumn");
+            Compositor.maximizeColumn(w.id);
             return true;
         case "expandColumn":
-            Niri.focusWindow(w.id);
-            Niri.action("ExpandColumnToAvailableWidth");
+            Compositor.expandColumn(w.id);
             return true;
         case "halfHeight":
-            Niri.action("SetWindowHeight", { id: w.id, change: prop(50) });
+            Compositor.setWindowHeightPercent(w.id, 50);
             return true;
         case "resetHeight":
-            Niri.action("ResetWindowHeight", { id: w.id });
+            Compositor.resetWindowHeight(w.id);
             return true;
         case "center":
-            Niri.action("CenterWindow", { id: w.id });
+            Compositor.centerWindow(w.id);
             return true;
         case "centerVisible":
-            Niri.focusWindow(w.id);
-            Niri.action("CenterVisibleColumns");
+            Compositor.centerVisibleColumns(w.id);
             return true;
         case "consume":
-            Niri.action("ConsumeOrExpelWindowLeft", { id: w.id });
+            Compositor.consumeOrExpelWindowLeft(w.id);
             return true;
         case "expel":
-            Niri.focusWindow(w.id);
-            Niri.action("ExpelWindowFromColumn");
+            Compositor.expelWindowFromColumn(w.id);
             return true;
         case "fullscreen":
-            Niri.action("FullscreenWindow", { id: w.id });
+            Compositor.toggleFullscreen(w.id);
             return true;
         case "maximizeEdges":
-            Niri.action("MaximizeWindowToEdges", { id: w.id });
+            Compositor.maximizeToEdges(w.id);
             return true;
         case "float":
-            Niri.action("ToggleWindowFloating", { id: w.id });
+            Compositor.toggleFloating(w.id);
             return true;
         }
         return false;
@@ -166,15 +157,15 @@ Singleton {
         out.push(item("maximizeEdges", "Maximize to Edges", w, "maximizeEdges"));
         out.push(item("fullscreen", "Full Screen", w, "fullscreen"));
         out.push(item("float", w.is_floating ? "Tile Window" : "Float Window", w, "float"));
-        const here = Niri.workspaces.find(x => x.id === w.workspace_id)?.output ?? "";
-        const outputs = [...new Set(Niri.workspaces.map(x => x.output ?? ""))].filter(o => o !== "");
+        const here = Compositor.workspaces.find(x => x.id === w.workspace_id)?.output ?? "";
+        const outputs = [...new Set(Compositor.workspaces.map(x => x.output ?? ""))].filter(o => o !== "");
         if (outputs.length > 1)
             out.push({
                 key: "arr-display",
                 label: "Move to Display",
                 enabled: true,
                 submenu: true,
-                children: outputs.map(o => ({ key: `arr-out-${o}`, label: o, enabled: o !== here, toggle: "radio", checked: o === here, run: () => Niri.action("MoveWindowToMonitor", { id: w.id, output: o }) }))
+                children: outputs.map(o => ({ key: `arr-out-${o}`, label: o, enabled: o !== here, toggle: "radio", checked: o === here, run: () => Compositor.moveWindowToOutput(w.id, o) }))
             });
         return out;
     }

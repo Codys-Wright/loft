@@ -112,7 +112,7 @@ Singleton {
         const ids = new Set(Object.keys(appRules));
         for (const a of data.leaveAlone ?? [])
             ids.add(a);
-        for (const w of Niri.windows)
+        for (const w of Compositor.windows)
             if (w.app_id && Apps.own[w.app_id] === undefined)
                 ids.add(w.app_id);
         return [...ids];
@@ -320,7 +320,7 @@ Singleton {
         }
         // The focused window's app.
         function openFocused(): void {
-            const w = Niri.windows.find(x => x.is_focused);
+            const w = Compositor.windows.find(x => x.is_focused);
             root.openSettings(w?.app_id ?? "");
         }
     }

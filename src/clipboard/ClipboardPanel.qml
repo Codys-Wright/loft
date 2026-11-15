@@ -17,7 +17,7 @@ PanelWindow {
     required property ShellScreen modelData
     screen: modelData
 
-    readonly property bool onThisScreen: (Niri.focusedWorkspace?.output ?? modelData.name) === modelData.name
+    readonly property bool onThisScreen: (Compositor.focusedWorkspace?.output ?? modelData.name) === modelData.name
     readonly property bool open: Clipboard.panelOpen && onThisScreen
 
     visible: open

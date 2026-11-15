@@ -35,7 +35,7 @@ Singleton {
     // Output name → true while it shows a fullscreen window (overview closed).
     readonly property var fullscreen: {
         const out = {};
-        if (Niri.overviewOpen)
+        if (Compositor.overviewOpen)
             return out;
         for (const s of Quickshell.screens)
             if (Displays.fullscreenOn(s))

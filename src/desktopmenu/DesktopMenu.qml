@@ -684,7 +684,7 @@ Singleton {
         // Open in the middle of the focused display (a right-click opens it
         // at the pointer).
         function open(): void {
-            root.openCentered(Niri.focusedWorkspace?.output ?? "");
+            root.openCentered(Compositor.focusedWorkspace?.output ?? "");
         }
         function close(): void {
             root.close();
@@ -737,7 +737,7 @@ Singleton {
 
     function openSub(id) {
         if (!open)
-            openCentered(Niri.focusedWorkspace?.output ?? "");
+            openCentered(Compositor.focusedWorkspace?.output ?? "");
         const it = items0.find(x => x.key === id);
         if (it)
             expandFirst(0, it);

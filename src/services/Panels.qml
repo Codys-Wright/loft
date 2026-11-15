@@ -44,7 +44,7 @@ Singleton {
             controlCenterOpen = false;
             return;
         }
-        controlCenterScreen = screenName ?? (Niri.focusedWorkspace?.output ?? "");
+        controlCenterScreen = screenName ?? (Compositor.focusedWorkspace?.output ?? "");
         controlCenterOpen = true;
     }
 
@@ -52,7 +52,7 @@ Singleton {
         target: "controlcenter"
 
         function toggle(): void {
-            root.toggleControlCenter(Displays.activeName || (Niri.focusedWorkspace?.output ?? ""));
+            root.toggleControlCenter(Displays.activeName || (Compositor.focusedWorkspace?.output ?? ""));
         }
 
         function close(): void {
@@ -63,7 +63,7 @@ Singleton {
         // shortcuts and screenshots.
         function expand(panel: string): void {
             if (!root.controlCenterOpen)
-                root.toggleControlCenter(Displays.activeName || (Niri.focusedWorkspace?.output ?? ""));
+                root.toggleControlCenter(Displays.activeName || (Compositor.focusedWorkspace?.output ?? ""));
             root.ccEditing = false;
             root.ccExpanded = panel;
         }
@@ -94,7 +94,7 @@ Singleton {
         }
         function edit(): void {
             if (!root.controlCenterOpen)
-                root.toggleControlCenter(Displays.activeName || (Niri.focusedWorkspace?.output ?? ""));
+                root.toggleControlCenter(Displays.activeName || (Compositor.focusedWorkspace?.output ?? ""));
             root.ccExpanded = "";
             root.ccEditing = !root.ccEditing;
         }

@@ -73,7 +73,7 @@ Singleton {
             break;
         case "overview":
             closePanels();
-            Niri.toggleOverview();
+            Compositor.toggleOverview();
             break;
         case "displays":
             closePanels();

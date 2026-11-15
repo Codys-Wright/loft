@@ -29,7 +29,7 @@ ColumnLayout {
             SettingsButton {
                 text: "Show Quick Panel"
                 enabled: Features.on("quickPanel")
-                onClicked: QuickPanel.show(Niri.focusedWorkspace?.output ?? "")
+                onClicked: QuickPanel.show(Compositor.focusedWorkspace?.output ?? "")
             }
         }
 

@@ -41,7 +41,7 @@ Singleton {
         elapsed = 0;
         paused = false;
         const o = opts ?? {};
-        const screen = o.output ?? Niri.focusedWorkspace?.output ?? "";
+        const screen = o.output ?? Compositor.focusedWorkspace?.output ?? "";
         const args = ["wf-recorder", "-y"];
         if (o.geometry)
             args.push("-g", o.geometry);

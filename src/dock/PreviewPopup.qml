@@ -198,7 +198,7 @@ PanelWindow {
     function where(w) {
         if (Previews.isParked(w))
             return "Hidden";
-        const ws = Niri.workspaceMap[w.workspace_id];
+        const ws = Compositor.workspaceMap[w.workspace_id];
         if (!ws)
             return "";
         let s = DockData.wsName(ws);
@@ -227,7 +227,7 @@ PanelWindow {
     component Card: Item {
         id: card
         required property int modelData
-        readonly property var win: Niri.windowMap[modelData] ?? null
+        readonly property var win: Compositor.windowMap[modelData] ?? null
         readonly property bool parked: win ? Previews.isParked(win) : false
         readonly property string thumb: Previews.thumb(modelData)
         // A picture to show: the live capture, else the cached snapshot.

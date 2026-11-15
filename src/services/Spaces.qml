@@ -104,17 +104,17 @@ Singleton {
     // The space's workspaces that are on `output` right now (usually one;
     // several when a display folded into this one, §3.3).
     function workspacesOf(spaceId, output) {
-        return Niri.workspaces.filter(w => w.name && owners[w.name] === spaceId && (output === undefined || w.output === output));
+        return Compositor.workspaces.filter(w => w.name && owners[w.name] === spaceId && (output === undefined || w.output === output));
     }
 
     // Workspaces of `output` that no space owns (`hidden-*` parking excluded).
     function unownedOn(output) {
-        return Niri.workspacesOn(output).filter(w => !(w.name && owners[w.name] !== undefined) && !(w.name ?? "").startsWith("hidden-"));
+        return Compositor.workspacesOn(output).filter(w => !(w.name && owners[w.name] !== undefined) && !(w.name ?? "").startsWith("hidden-"));
     }
 
     function windowCount(spaceId) {
         const ids = workspacesOf(spaceId).map(w => w.id);
-        return Niri.windows.filter(w => ids.includes(w.workspace_id)).length;
+        return Compositor.windows.filter(w => ids.includes(w.workspace_id)).length;
     }
 
     // ── The active space ────────────────────────────────────────────────
@@ -130,8 +130,8 @@ Singleton {
         if (!loaded || settling)
             return;
         const main = Displays.mainScreen?.name ?? "";
-        const mainWs = Niri.workspaces.find(w => w.output === main && w.is_active);
-        const id = ownerOf(mainWs?.name) || ownerOf(Niri.focusedWorkspace?.name) || activeId;
+        const mainWs = Compositor.workspaces.find(w => w.output === main && w.is_active);
+        const id = ownerOf(mainWs?.name) || ownerOf(Compositor.focusedWorkspace?.name) || activeId;
         if (id === activeId || !find(id))
             return;
         const prev = active;
@@ -153,7 +153,7 @@ Singleton {
     }
 
     Connections {
-        target: Niri
+        target: Compositor
         function onWorkspaceMapChanged() {
             quiet.restart();
         }
@@ -178,7 +178,7 @@ Singleton {
     function barHiddenOn(output) {
         if (!enabled || !active?.doc?.bar?.hidden)
             return false;
-        const ws = Niri.workspaces.find(w => w.output === output && w.is_active);
+        const ws = Compositor.workspaces.find(w => w.output === output && w.is_active);
         return !!ws && ownerOf(ws.name) === active.id;
     }
 
@@ -258,7 +258,7 @@ Singleton {
     // the desktops: step those (vertical in niri, so ← is up).
     function step(delta) {
         if (!enabled) {
-            Niri.action(delta > 0 ? "FocusWorkspaceDown" : "FocusWorkspaceUp");
+            Compositor.focusWorkspaceRelative(delta);
             return;
         }
         run([delta > 0 ? "next" : "prev"]);
@@ -473,7 +473,7 @@ Singleton {
 
     // ── Outputs changed → render + ensure ──────────────────────────────
     Connections {
-        target: Niri
+        target: Compositor
         function onOutputsChanged() {
             rerender.restart();
         }
@@ -511,7 +511,7 @@ Singleton {
             return;
         }
         reload();
-        switcherOutput = output || Niri.focusedWorkspace?.output || Displays.activeName;
+        switcherOutput = output || Compositor.focusedWorkspace?.output || Displays.activeName;
     }
 
     PersistentProperties {

@@ -70,7 +70,7 @@ Singleton {
     function present() {
         if (!enabled)
             return;
-        output = Niri.focusedWorkspace?.output ?? "";
+        output = Compositor.focusedWorkspace?.output ?? "";
         shown = true;
         hide.interval = kind === "message" ? 2200 : inIsland ? 1500 : 1400;
         hide.restart();
