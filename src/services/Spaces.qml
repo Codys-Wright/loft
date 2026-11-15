@@ -51,7 +51,9 @@ Singleton {
         return lib === "none" || lib === "off" ? "" : `${lib}/Spaces`;
     }
 
-    readonly property bool enabled: Features.on("spaces")
+    // niri only for now (loft-niri); under KWin, Spaces become Activities
+    // (docs/KWIN.md §4.2).
+    readonly property bool enabled: Features.on("spaces") && Compositor.backend === "niri"
 
     // Every space, in order: { id, name, icon, order, position (1…9 or
     // null), template, archived, displays: { role: workspace | "keep" },

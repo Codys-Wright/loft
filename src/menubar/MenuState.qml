@@ -564,11 +564,15 @@ Singleton {
 
         if (AppMenu.pref("windowCommands")) {
             items.push(sep("s-window"));
-            items.push({ key: "float", label: w.is_floating ? "Tile Window" : "Float Window", enabled: true, shortcut: niriShortcut("toggle-window-floating"), run: () => Compositor.toggleFloating(w.id) });
+            if (Compositor.capabilities.floating)
+                items.push({ key: "float", label: w.is_floating ? "Tile Window" : "Float Window", enabled: true, shortcut: niriShortcut("toggle-window-floating"), run: () => Compositor.toggleFloating(w.id) });
             items.push({ key: "fullscreen", label: "Toggle Full Screen", enabled: true, shortcut: niriShortcut("fullscreen-window"), run: () => Compositor.toggleFullscreen(w.id) });
-            items.push({ key: "maximize", label: "Maximize Column", enabled: !w.is_floating, shortcut: niriShortcut("maximize-column"), run: () => {
-                    Compositor.maximizeColumn(w.id);
-                } });
+            if (Compositor.capabilities.columns)
+                items.push({ key: "maximize", label: "Maximize Column", enabled: !w.is_floating, shortcut: niriShortcut("maximize-column"), run: () => {
+                        Compositor.maximizeColumn(w.id);
+                    } });
+            else
+                items.push({ key: "maximize", label: "Zoom", enabled: true, run: () => Compositor.maximizeToEdges(w.id) });
             items.push({ key: "center", label: "Center", enabled: true, shortcut: niriShortcut("center-column"), run: () => Compositor.centerWindow(w.id) });
             if (Features.on("arrange"))
                 items.push({ key: "arrange", label: "Arrange", enabled: true, submenu: true, children: Arrange.items(w) });
@@ -772,6 +776,17 @@ Singleton {
 
     function hideWindows(windows) {
         const moved = [];
+        // KWin: real minimize (Show All / the dock bring them back).
+        if (Compositor.capabilities.minimize) {
+            for (const x of windows) {
+                if (x.is_minimized)
+                    continue;
+                Compositor.setMinimized(x.id, true);
+                moved.push({ id: x.id, workspace: x.workspace_id, appId: x.app_id });
+            }
+            hidden = hidden.filter(h => !moved.some(m => m.id === h.id)).concat(moved);
+            return;
+        }
         for (const x of windows) {
             const ws = Compositor.workspaces.find(s => s.id === x.workspace_id);
             if (!ws || isParking(ws))
@@ -813,10 +828,14 @@ Singleton {
             return [];
         const items = [];
         items.push({ key: "fullscreen", label: "Enter Full Screen", enabled: true, shortcut: niriShortcut("fullscreen-window"), run: () => Compositor.toggleFullscreen(w.id) });
-        items.push({ key: "maximize", label: "Maximize Column", enabled: !w.is_floating, shortcut: niriShortcut("maximize-column"), run: () => {
-                Compositor.maximizeColumn(w.id);
-            } });
-        items.push({ key: "float", label: w.is_floating ? "Tile Window" : "Float Window", enabled: true, shortcut: niriShortcut("toggle-window-floating"), run: () => Compositor.toggleFloating(w.id) });
+        if (Compositor.capabilities.columns)
+            items.push({ key: "maximize", label: "Maximize Column", enabled: !w.is_floating, shortcut: niriShortcut("maximize-column"), run: () => {
+                    Compositor.maximizeColumn(w.id);
+                } });
+        else
+            items.push({ key: "maximize", label: "Zoom", enabled: true, run: () => Compositor.maximizeToEdges(w.id) });
+        if (Compositor.capabilities.floating)
+            items.push({ key: "float", label: w.is_floating ? "Tile Window" : "Float Window", enabled: true, shortcut: niriShortcut("toggle-window-floating"), run: () => Compositor.toggleFloating(w.id) });
         items.push({ key: "center", label: "Center", enabled: true, shortcut: niriShortcut("center-column"), run: () => Compositor.centerWindow(w.id) });
         if (Features.on("arrange"))
             items.push({ key: "arrange", label: "Arrange", enabled: true, submenu: true, children: Arrange.items(w) });
@@ -836,6 +855,13 @@ Singleton {
     }
 
     function showAll() {
+        if (Compositor.capabilities.minimize) {
+            for (const w of Compositor.windows)
+                if (w.is_minimized)
+                    Compositor.setMinimized(w.id, false);
+            hidden = [];
+            return;
+        }
         for (const h of hidden) {
             if (!Compositor.windowMap[h.id])
                 continue;

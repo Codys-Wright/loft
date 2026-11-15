@@ -36,6 +36,10 @@
 #   loft-niri-clippy  `cargo clippy --all-targets -D warnings`
 #   loft-appmenu    the global menu daemon builds and its tests pass
 #   loft-appmenu-clippy  the same clippy gate for it
+#   loft-kwin       the KWin backend daemon builds and its tests pass (KWin snapshots →
+#                   niri-shaped windows/workspaces: stable ids, one workspace per
+#                   desktop × output, focus and timestamps)
+#   loft-kwin-clippy  the same clippy gate for it
 #   loft-sleep      the sleep watcher builds and its tests pass (fake BlueZ adapters +
 #                   sleep lock: off before sleep, back on after, only what was on)
 #   loft-sleep-clippy  the same clippy gate for it
@@ -246,6 +250,19 @@
           doCheck = false;
           buildPhase = ''
             cargo clippy --offline -p loft-appmenu --all-targets -- -D warnings
+          '';
+          installPhase = "touch $out";
+        });
+
+        loft-kwin = self'.packages.loft-kwin;
+
+        loft-kwin-clippy = self'.packages.loft-kwin.overrideAttrs (old: {
+          pname = "loft-kwin-clippy";
+          nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.clippy ];
+          dontCargoBuild = true;
+          doCheck = false;
+          buildPhase = ''
+            cargo clippy --offline -p loft-kwin --all-targets -- -D warnings
           '';
           installPhase = "touch $out";
         });

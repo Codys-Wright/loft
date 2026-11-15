@@ -510,6 +510,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "loft-kwin"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "zbus",
+]
+
+[[package]]
 name = "loft-niri"
 version = "0.1.0"
 dependencies = [

@@ -156,7 +156,8 @@ Singleton {
         out.push(sep("screen"));
         out.push(item("maximizeEdges", "Maximize to Edges", w, "maximizeEdges"));
         out.push(item("fullscreen", "Full Screen", w, "fullscreen"));
-        out.push(item("float", w.is_floating ? "Tile Window" : "Float Window", w, "float"));
+        if (Compositor.capabilities.floating)
+            out.push(item("float", w.is_floating ? "Tile Window" : "Float Window", w, "float"));
         const here = Compositor.workspaces.find(x => x.id === w.workspace_id)?.output ?? "";
         const outputs = [...new Set(Compositor.workspaces.map(x => x.output ?? ""))].filter(o => o !== "");
         if (outputs.length > 1)

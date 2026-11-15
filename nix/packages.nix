@@ -168,6 +168,7 @@
             self'.packages.loft
             self'.packages.loft-niri
             self'.packages.loft-appmenu
+            self'.packages.loft-kwin # the KWin backend (src/services/KWin.qml)
             self'.packages.loft-sleep # Settings → Everyday: `loft-sleep status`
             self'.packages.loft-pointer # scrolling capture → Auto
           ];
@@ -641,6 +642,31 @@
             "loft-appmenu"
           ];
           meta.mainProgram = "loft-appmenu";
+        };
+
+        # Loft's KWin backend (crates/loft-kwin): the shell runs it in a KWin
+        # session (src/services/KWin.qml); it loads the loft-bridge KWin script.
+        loft-kwin = pkgs.rustPlatform.buildRustPackage {
+          pname = "loft-kwin";
+          version = "0.1.0";
+          src = lib.fileset.toSource {
+            root = ../.;
+            fileset = lib.fileset.unions [
+              ../Cargo.toml
+              ../Cargo.lock
+              ../crates
+            ];
+          };
+          cargoLock.lockFile = ../Cargo.lock;
+          cargoBuildFlags = [
+            "-p"
+            "loft-kwin"
+          ];
+          cargoTestFlags = [
+            "-p"
+            "loft-kwin"
+          ];
+          meta.mainProgram = "loft-kwin";
         };
 
         # Bluetooth off during sleep (crates/loft-sleep): a user service

@@ -64,13 +64,18 @@ Singleton {
 
     // ── Window actions ───────────────────────────────────────────────────
     function isParked(w) {
+        // KWin: Hide minimizes.
+        if (Compositor.capabilities.minimize)
+            return w.is_minimized === true;
         const ws = Compositor.workspaceMap[w.workspace_id];
         return ws ? MenuState.isParking(ws) : false;
     }
 
     // Focus a window anywhere; a hidden (parked) one comes back first.
     function focus(w) {
-        if (isParked(w)) {
+        if (isParked(w) && Compositor.capabilities.minimize) {
+            MenuState.hidden = MenuState.hidden.filter(x => x.id !== w.id);
+        } else if (isParked(w)) {
             const h = MenuState.hidden.find(x => x.id === w.id);
             const back = h && Compositor.workspaceMap[h.workspace] ? h.workspace : Compositor.focusedWorkspace?.id;
             if (back !== undefined)
@@ -84,6 +89,10 @@ Singleton {
     function unhideApp(appId) {
         const parked = DockData.windowsOf(appId).filter(w => isParked(w));
         for (const w of parked) {
+            if (Compositor.capabilities.minimize) {
+                Compositor.setMinimized(w.id, false);
+                continue;
+            }
             const h = MenuState.hidden.find(x => x.id === w.id);
             const back = h && Compositor.workspaceMap[h.workspace] ? h.workspace : Compositor.focusedWorkspace?.id;
             if (back !== undefined)
@@ -96,6 +105,11 @@ Singleton {
 
     // Bring one hidden (parked) window back where it was, without focusing it.
     function unhide(w) {
+        if (Compositor.capabilities.minimize) {
+            Compositor.setMinimized(w.id, false);
+            MenuState.hidden = MenuState.hidden.filter(x => x.id !== w.id);
+            return;
+        }
         const h = MenuState.hidden.find(x => x.id === w.id);
         const back = h && Compositor.workspaceMap[h.workspace] ? h.workspace : Compositor.focusedWorkspace?.id;
         if (back !== undefined)

@@ -257,7 +257,7 @@ Singleton {
         case "timer:stop":
             return FocusTimer.stop();
         case "niri:maximize":
-            return Compositor.maximizeColumn();
+            return Compositor.capabilities.columns ? Compositor.maximizeColumn() : Compositor.maximizeToEdges(winId);
         case "niri:fullscreen":
             return Compositor.toggleFullscreen(winId);
         case "niri:float":

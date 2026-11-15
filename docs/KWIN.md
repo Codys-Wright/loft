@@ -402,9 +402,9 @@ loft-dev --session NAME --compositor kwin [--shell loft|plasma] [CHECKOUT]
    unchanged.
 3. `loft-dev --compositor kwin [--shell loft|plasma]` (§6), so every later step can be
    tested headless like niri sessions.
-4. `crates/loft-kwin` + `loft-bridge.js` + `services/KWin.qml`: state only (windows,
-   desktops, focus, minimized).
-5. Actions + `capabilities` gating in menus. Hide → minimize.
+4. ✅ `crates/loft-kwin` + its KWin script (`crates/loft-kwin/src/bridge.js`) +
+   `services/KWin.qml`: windows, desktops, focus, minimized, keyboard layouts.
+5. ✅ Actions + `capabilities` gating in menus. Hide → minimize.
 6. Shell switching (§5): units, `loft shell use`, the SDDM "Plasma (Loft)" entry, the
    fallback unit, `loft-kwin apply/revert`. This comes **before** daily use, so
    backing out works from day one.

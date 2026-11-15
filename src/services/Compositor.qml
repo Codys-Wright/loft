@@ -6,19 +6,20 @@ import Quickshell
 // The compositor, whichever one the session runs. The shell talks to this,
 // never to a backend directly (docs/KWIN.md §2).
 //
-// Backends: niri (services/Niri.qml, over $NIRI_SOCKET) is the only one so
-// far. KWin is planned (docs/KWIN.md). Until it exists, every session uses
-// the niri backend, which is inert without $NIRI_SOCKET: no windows, no
-// workspaces, and actions go nowhere.
+// Backends: niri (services/Niri.qml, over $NIRI_SOCKET) and KWin
+// (services/KWin.qml, through `loft-kwin` and its KWin script). Both expose
+// the same state, events and actions; what a backend can't do is off in
+// `capabilities`, and its action is a no-op.
 //
 // The data model is niri's (niri-ipc `Window` / `Workspace`), because every
 // consumer was written against it. Another backend produces the same shape:
 //   window    { id (int, ascending = older), title, app_id, pid, workspace_id,
 //               is_focused, is_floating, is_urgent, focus_timestamp?,
-//               layout? { window_size, tile_size, tile_pos_in_workspace_view,
-//               pos_in_scrolling_layout } }
+//               is_minimized? (KWin), layout? { window_size, tile_size,
+//               tile_pos_in_workspace_view, pos_in_scrolling_layout } }
 //   workspace { id, idx (1-based, per output), name, output, is_active,
 //               is_focused, is_urgent, active_window_id }
+// Under KWin a workspace is one virtual desktop on one output.
 Singleton {
     id: root
 
@@ -34,46 +35,42 @@ Singleton {
             return "kwin";
         return "niri";
     }
-    // The backend in use. Only niri exists yet.
-    readonly property string backend: "niri"
+    readonly property string backend: session === "kwin" ? "kwin" : "niri"
+    readonly property var impl: backend === "kwin" ? KWin : Niri
 
-    // What the backend can do. Under niri, everything. A KWin backend turns
-    // off what it can't map (docs/KWIN.md §4), and the UI hides those items.
-    readonly property var capabilities: ({
-            columns: true, // scrolling-layout column ops (Arrange's tiled presets, Maximize Column)
-            overview: true, // toggleOverview
-            windowScreenshot: true, // screenshotWindow (compositor-side)
-            workspaceNames: true, // setWorkspaceName / unsetWorkspaceName
-            perOutputWorkspaces: true, // each output has its own workspaces
-            titleBarEvents: true, // windowMinimizeRequested / windowActionsMenuRequested
-            configReload: true // configLoaded
-        })
+    // What the backend can do: { columns, floating, minimize, overview,
+    // windowScreenshot, workspaceNames, perOutputWorkspaces, titleBarEvents,
+    // configReload }. Menus hide what's off.
+    readonly property var capabilities: impl.capabilities
 
     Component.onCompleted: {
         if (session !== backend)
-            console.warn(`Compositor: no ${session} backend yet; using ${backend} (inert without its socket)`);
+            console.warn(`Compositor: no ${session} backend; using ${backend} (inert without its socket)`);
     }
 
     // ── State ─────────────────────────────────────────────────────────────
-    readonly property bool available: Niri.available
+    readonly property bool available: impl.available
     // id → workspace / window.
-    readonly property var workspaceMap: Niri.workspaceMap
-    readonly property var windowMap: Niri.windowMap
+    readonly property var workspaceMap: impl.workspaceMap
+    readonly property var windowMap: impl.windowMap
     // Sorted: workspaces by output then idx, windows by id.
-    readonly property var workspaces: Niri.workspaces
-    readonly property var windows: Niri.windows
-    readonly property var focusedWindow: Niri.focusedWindow
-    readonly property var focusedWorkspace: Niri.focusedWorkspace
-    readonly property bool overviewOpen: Niri.overviewOpen
+    readonly property var workspaces: impl.workspaces
+    readonly property var windows: impl.windows
+    readonly property var focusedWindow: impl.focusedWindow
+    readonly property var focusedWorkspace: impl.focusedWorkspace
+    readonly property bool overviewOpen: impl.overviewOpen
     // { names: [...], current_idx }
-    readonly property var keyboardLayouts: Niri.keyboardLayouts
+    readonly property var keyboardLayouts: impl.keyboardLayouts
+    // KDE Activities (KWin only; empty under niri).
+    readonly property var activities: backend === "kwin" ? KWin.activities : []
+    readonly property string currentActivity: backend === "kwin" ? KWin.currentActivity : ""
 
     function workspacesOn(output) {
-        return Niri.workspacesOn(output);
+        return impl.workspacesOn(output);
     }
 
     function windowsOn(workspaceId) {
-        return Niri.windowsOn(workspaceId);
+        return impl.windowsOn(workspaceId);
     }
 
     // ── Events ────────────────────────────────────────────────────────────
@@ -94,6 +91,7 @@ Singleton {
 
     Connections {
         target: Niri
+        enabled: root.backend === "niri"
         function onScreenshotTaken(path) {
             root.screenshotTaken(path);
         }
@@ -111,141 +109,151 @@ Singleton {
         }
     }
 
+    Connections {
+        target: KWin
+        enabled: root.backend === "kwin"
+        function onOutputsChanged() {
+            root.outputsChanged();
+        }
+    }
+
     // ── Actions: any compositor ───────────────────────────────────────────
     function spawn(command) {
-        Niri.spawn(command);
+        impl.spawn(command);
     }
 
     function focusWindow(id) {
-        Niri.focusWindow(id);
+        impl.focusWindow(id);
     }
 
     function focusWorkspace(id) {
-        Niri.focusWorkspace(id);
+        impl.focusWorkspace(id);
     }
 
     // The next (delta > 0) or previous workspace on the focused output.
     function focusWorkspaceRelative(delta) {
-        Niri.action(delta > 0 ? "FocusWorkspaceDown" : "FocusWorkspaceUp");
+        impl.focusWorkspaceRelative(delta);
     }
 
     function closeWindow(id) {
-        Niri.action("CloseWindow", { id: id });
+        impl.closeWindow(id);
     }
 
     function moveWindowToWorkspace(windowId, workspaceId, focus) {
-        Niri.action("MoveWindowToWorkspace", { window_id: windowId, reference: { Id: workspaceId }, focus: focus === true });
+        impl.moveWindowToWorkspace(windowId, workspaceId, focus);
     }
 
     // By position (1-based) on the window's output.
     function moveWindowToWorkspaceIndex(windowId, index, focus) {
-        Niri.action("MoveWindowToWorkspace", { window_id: windowId, reference: { Index: index }, focus: focus === true });
+        impl.moveWindowToWorkspaceIndex(windowId, index, focus);
     }
 
     // The focused window to the next (delta > 0) or previous workspace.
     function moveFocusedWindowToWorkspaceRelative(delta, focus) {
-        Niri.action(delta > 0 ? "MoveWindowToWorkspaceDown" : "MoveWindowToWorkspaceUp", { focus: focus === true });
+        impl.moveFocusedWindowToWorkspaceRelative(delta, focus);
     }
 
     function moveWindowToOutput(id, output) {
-        Niri.action("MoveWindowToMonitor", { id: id, output: output });
+        impl.moveWindowToOutput(id, output);
     }
 
     function moveFocusedWindowToNextOutput() {
-        Niri.action("MoveWindowToMonitorNext");
+        impl.moveFocusedWindowToNextOutput();
     }
 
+    // capabilities.floating
     function toggleFloating(id) {
-        Niri.action("ToggleWindowFloating", { id: id });
+        impl.toggleFloating(id);
     }
 
     function setFloating(id, floating) {
-        Niri.action(floating ? "MoveWindowToFloating" : "MoveWindowToTiling", { id: id });
+        impl.setFloating(id, floating);
+    }
+
+    // capabilities.minimize
+    function setMinimized(id, minimized) {
+        impl.setMinimized(id, minimized);
     }
 
     function toggleFullscreen(id) {
-        Niri.action("FullscreenWindow", { id: id });
+        impl.toggleFullscreen(id);
     }
 
     function maximizeToEdges(id) {
-        Niri.action("MaximizeWindowToEdges", { id: id });
+        impl.maximizeToEdges(id);
     }
 
     function centerWindow(id) {
-        Niri.action("CenterWindow", { id: id });
+        impl.centerWindow(id);
     }
 
     // Sizes and positions in % of the output's working area.
     function setWindowWidthPercent(id, percent) {
-        Niri.action("SetWindowWidth", { id: id, change: { SetProportion: percent } });
+        impl.setWindowWidthPercent(id, percent);
     }
 
     function setWindowHeightPercent(id, percent) {
-        Niri.action("SetWindowHeight", { id: id, change: { SetProportion: percent } });
+        impl.setWindowHeightPercent(id, percent);
     }
 
     function resetWindowHeight(id) {
-        Niri.action("ResetWindowHeight", { id: id });
+        impl.resetWindowHeight(id);
     }
 
     function moveFloatingWindowPercent(id, x, y) {
-        Niri.action("MoveFloatingWindow", { id: id, x: { SetProportion: x }, y: { SetProportion: y } });
+        impl.moveFloatingWindowPercent(id, x, y);
     }
 
     function setWorkspaceName(workspaceId, name) {
-        Niri.action("SetWorkspaceName", { name: name, workspace: { Id: workspaceId } });
+        impl.setWorkspaceName(workspaceId, name);
     }
 
     function unsetWorkspaceName(workspaceId) {
-        Niri.action("UnsetWorkspaceName", { reference: { Id: workspaceId } });
+        impl.unsetWorkspaceName(workspaceId);
     }
 
     function switchKeyboardLayout(index) {
-        Niri.action("SwitchLayout", { layout: { Index: index } });
+        impl.switchKeyboardLayout(index);
     }
 
     function toggleOverview() {
-        Niri.toggleOverview();
+        impl.toggleOverview();
     }
 
     // The compositor writes `path` (and copies it); screenshotTaken follows.
+    // capabilities.windowScreenshot
     function screenshotWindow(id, path, showPointer) {
-        Niri.action("ScreenshotWindow", { id: id, write_to_disk: true, show_pointer: showPointer, path: path });
+        impl.screenshotWindow(id, path, showPointer);
+    }
+
+    // KDE Activities (KWin).
+    function setActivity(activity) {
+        impl.setActivity(activity);
     }
 
     // ── Actions: scrolling-layout columns (capabilities.columns) ─────────
     // These act on the focused column; given a window id, it's focused first.
     function maximizeColumn(id) {
-        focusFirst(id);
-        Niri.action("MaximizeColumn");
+        impl.maximizeColumn(id);
     }
 
     function setColumnWidthPercent(id, percent) {
-        focusFirst(id);
-        Niri.action("SetColumnWidth", { change: { SetProportion: percent } });
+        impl.setColumnWidthPercent(id, percent);
     }
 
     function expandColumn(id) {
-        focusFirst(id);
-        Niri.action("ExpandColumnToAvailableWidth");
+        impl.expandColumn(id);
     }
 
     function centerVisibleColumns(id) {
-        focusFirst(id);
-        Niri.action("CenterVisibleColumns");
+        impl.centerVisibleColumns(id);
     }
 
     function expelWindowFromColumn(id) {
-        focusFirst(id);
-        Niri.action("ExpelWindowFromColumn");
+        impl.expelWindowFromColumn(id);
     }
 
     function consumeOrExpelWindowLeft(id) {
-        Niri.action("ConsumeOrExpelWindowLeft", { id: id });
-    }
-
-    function focusFirst(id) {
-        if (id !== undefined && id !== null)
-            Niri.focusWindow(id);
+        impl.consumeOrExpelWindowLeft(id);
     }
 }
