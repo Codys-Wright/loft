@@ -46,8 +46,16 @@ def check(name, cond, got):
 
 texts = lambda items: [i["text"] for i in items]
 
-# "!" — quicklinks first, in order, then favorites.
-r = query("bangs", "")
+# "!" — quicklinks first, in order, then favorites. elephant answers before
+# the provider has loaded its bang list and this test's quicklinks (a cold
+# CI runner returned other defaults, Gmail / Google Calendar): wait until it
+# has, bounded, so a real ordering bug still fails below.
+r = []
+for _ in range(50):
+    r = query("bangs", "")
+    if texts(r)[:2] == ["YouTube", "GitHub"]:
+        break
+    time.sleep(0.2)
 check("! lists quicklinks first", texts(r)[:2] == ["YouTube", "GitHub"], texts(r))
 
 # Fuzzy on trigger, name, domain.
