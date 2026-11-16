@@ -287,11 +287,23 @@ id **`dev.loft.decoration`**, installed at `lib/qt-6/plugins/org.kde.kdecoration
 `programs.loft.plasma` (NixOS) puts it in `environment.systemPackages`, so KWin finds it
 on `QT_PLUGIN_PATH`.
 
-- **Look: macOS 26 Tahoe's title bar**, numbers taken from the MacTahoe KDE theme's
-  Aurorae decoration (a careful copy of Tahoe's) and cited in `kdecoration/tahoe.h`: a
-  34 px bar (what Aurorae draws for MacTahoe's rc: 8 + 16 + 2 button margin + 8), 14 px
-  beads 26 px apart (centres at x 24/50/76, y 18), the beads' exact light / dark fills and
-  rims, grey when the window is in the background, 24 px corners (top and bottom), a 1 px
+- **Look: macOS 26 Tahoe's title bar.** The metrics are measured on real macOS 26.6
+  (2x screenshots, in points); the art comes from the MacTahoe KDE theme's Aurorae
+  decoration (a careful copy of Tahoe's). Both are cited in `kdecoration/tahoe.h`:
+
+  | | traffic lights | vertical centre | left inset (first bead's edge) | strip |
+  |---|---|---|---|---|
+  | macOS Brave (compact tab strip) | 14 pt, 23 pt centre to centre (9 pt gaps) | 20 pt | 13 pt | 40 pt |
+  | macOS Preview / Finder (unified toolbar) | 14 pt | 26 pt | 19 pt | ~52 pt |
+  | Brave on Linux (its own strip, scale 1) | | | | 40 px |
+  | MacTahoe Aurorae (what Loft matched before) | 14 px, 26 px apart | 18 px | 17 px | 34 px |
+
+  Loft draws the compact one: a 40 px bar, 14 px beads 23 px apart, centred in the
+  bar, the first one 13 px in. macOS insets the first bead from the left as much as
+  from the top, and so does Loft: `TitleBarHeight=52` in the INI gives the toolbar's
+  19 px. The title is centred vertically too. From MacTahoe: the beads' exact light /
+  dark fills and rims (its beads are 14 px too, so glyphs and rims keep their size),
+  grey when the window is in the background, 24 px corners (top and bottom), a 1 px
   frame with Tahoe's white highlight (dark: all around), a 1 px black outline outside
   the frame (KWin's border outline, crisp at any scale), and Tahoe's shadow (fitted to
   MacTahoe's rendered shadow: strength · (1 − d / reach)^1.5 per side, reaches = the rc's
@@ -308,7 +320,7 @@ on `QT_PLUGIN_PATH`.
   colors, as on macOS, and the bar, text and grey beads are Tahoe's for that appearance.
   A hand-written file may still override `[Colors]` TitleBarActive / TitleBarInactive /
   TextActive / TextInactive (`#rrggbb[aa]`, Loft's order) and `[Metrics]` CornerRadius /
-  TitleBarHeight / FontSize. The plugin reads it from `$LOFT_STATE_DIR`, else
+  TitleBarHeight (at least 18) / FontSize. The plugin reads it from `$LOFT_STATE_DIR`, else
   `$XDG_STATE_HOME/loft`, else `~/.local/state/loft`, watches the file, `current/` and the
   state dir (the theme engine swaps the `current` link), and repaints open windows on
   change. Without the file it is Tahoe dark.
@@ -328,15 +340,58 @@ on `QT_PLUGIN_PATH`.
   another decoration meanwhile. `apply` does nothing when the plugin isn't installed.
   KWin 6.8 still reads the group `org.kde.kdecoration2` (the plugins' namespace is
   `org.kde.kdecoration3`).
-- **Compared** pixel by pixel with MacTahoe-Light/Dark (Aurorae, border size Tiny) in a
-  nested session: same kwrite windows, focused / background / hovered, light and dark,
-  1x / 1.25x / 1.5x (`loft-dev --kwin-scale`). Build the plugin against the system's
-  nixpkgs (`--override-input nixpkgs nixpkgs`) or KWin won't load it, and pass it with
-  `--kwin-env QT_PLUGIN_PATH=<build>/lib/qt-6/plugins:$QT_PLUGIN_PATH` (first wins).
+- **Button order for apps that draw their own title bars.** `apply` also records
+  kwinrc `[org.kde.kdecoration2] ButtonsOnLeft` / `ButtonsOnRight` and sets macOS's
+  order, `XIA` / empty (KWin's letters: X close, I minimize, A maximize, M menu,
+  S all desktops, H help, F keep above, B keep below, L shade, N application menu;
+  Plasma's default is `MS` / `HIAX`). `revert` puts each back if it is still Loft's.
+  kded's **gtkconfig** module (kde-gtk-config 6.8, `onKWinSettingsChange`) turns them
+  into GTK's notation (`close,minimize,maximize:`; only X/I/A/M have GTK names) and
+  writes `gtk-decoration-layout` to `gtk-3.0/settings.ini` and `gtk-4.0/settings.ini`,
+  `Gtk/DecorationLayout` to xsettingsd (and its own XSETTINGS manager for Xwayland),
+  and GSettings `org.gnome.desktop.wm.preferences button-layout`. Traps, both seen:
+  - gtkconfig only reacts to KConfig's **change notification** (`kwriteconfig6
+    --notify`, i.e. `org.kde.kconfig.notify.ConfigChanged` on `/kwinrc`); a plain
+    write or `org.kde.KWin.reconfigure` changes nothing. With kded running it lands in
+    about 0.1 s; without kded nothing is copied until it starts (it applies everything
+    then). The script sends the signal itself (`gdbus emit`) so deletions notify too.
+  - `kwriteconfig6 --delete` of a key that a lower file also sets (`/etc/xdg`, or
+    `~/.config/kdedefaults/kwinrc`, which a global theme like MacTahoe fills with its
+    decoration and `XIA`) writes `key[$d]`, which hides that value: revert used to
+    leave Plasma's Breeze (and would have left `MS`/`HIAX`) instead of the user's
+    theme. The script drops the marker. KConfig also skips writing a value the lower
+    files already give, so "still Loft's" is checked on the cascaded value.
+
+  Who follows it: GTK 3 (gtk3-demo) and GTK 4 / libadwaita (gnome-text-editor), native
+  Wayland, move their buttons **live** (verified nested; they watch GSettings / the
+  settings portal). Chromium / Brave with the GTK frame and Electron apps that use
+  GTK's layout read it through GtkSettings, which also updates live, but neither was
+  in the test session, so unverified; restart them if they don't follow. Electron
+  apps with fixed custom buttons (Obsidian's own frame, VS Code's custom title bar)
+  ignore it.
+- **Compared** first with MacTahoe-Light/Dark (Aurorae, border size Tiny) pixel by
+  pixel, then re-measured against the macOS numbers above in a nested session
+  (kwrite, dark; device px ÷ scale = logical):
+
+  | scale | bar | bead | centre to centre | first bead from frame edge | bead / title centre from top |
+  |---|---|---|---|---|---|
+  | 1 | 40 | 14 | 23 | 13 | 20 / 20 |
+  | 1.25 | 50 dev = 40 | ~17.5 dev = 14 | 29 dev ≈ 23.2 | 16 dev = 12.8 (snapped) | 24.5 dev ≈ 19.6 / same |
+  | 1.5 | 60 dev = 40 | 21 dev = 14 | 34.5 dev = 23 | 20 dev ≈ 13.3 | 30.5 dev ≈ 20.3 / same |
+
+  Edges stay crisp at 1.25x / 1.5x (bar and frame on the pixel grid, beads
+  antialiased). Build the plugin against the system's nixpkgs (`--override-input
+  nixpkgs nixpkgs`) or KWin won't load it, and pass it with `--kwin-env
+  QT_PLUGIN_PATH=<build>/lib/qt-6/plugins:$QT_PLUGIN_PATH` (first wins). Run `apply`
+  once KWin is up, or call `org.kde.KWin.reconfigure` again: a reconfigure sent too
+  early is lost and windows keep the old decoration.
 - **Tested** nested (§6, plugin on `QT_PLUGIN_PATH`, scratch HOME): two foot windows,
   focus / unfocus, hover glyphs, the window menu, maximize / restore, minimize, close,
   a live theme swap (tokyonight → latte) and metric edits, and apply / revert with the
-  user's Breeze and with no key set.
+  user's Breeze and with no key set. Button order: apply / revert with an explicit
+  `MS` / `HIAX`, with the keys only in kdedefaults (MacTahoe: back to its Aurorae theme
+  and `XIA`), with the user changing the order while Loft ran (theirs kept), and over
+  a record written by the previous version (buttons added to it).
 
 ### 4.5 Shortcuts and the keyboard layer under Plasma
 
@@ -542,7 +597,7 @@ when Loft stops:
 | Loft changes | How it's undone |
 |---|---|
 | loft-bridge.js (state, actions, Loft shortcuts, window rules) | loft-kwin unloads it on exit (`ExecStopPost` too, in case it crashed). Its shortcuts and rules disappear with it |
-| the decoration (`[org.kde.kdecoration2] library/theme` in kwinrc) | `loft-kwin-decoration apply` (loft-plasma-shell's `ExecStartPost`) records the previous value in Loft's state dir and sets Loft's. `loft-kwin-decoration revert` (`ExecStopPost`) puts it back. Both run `org.kde.KWin.reconfigure` (§4.4) |
+| the decoration and button order (`[org.kde.kdecoration2] library/theme/ButtonsOnLeft/ButtonsOnRight` in kwinrc; GTK's `gtk-decoration-layout` follows via kded's gtkconfig) | `loft-kwin-decoration apply` (loft-plasma-shell's `ExecStartPost`) records the previous value in Loft's state dir and sets Loft's. `loft-kwin-decoration revert` (`ExecStopPost`) puts it back. Both run `org.kde.KWin.reconfigure` (§4.4) |
 | Loft's shortcuts (`loft-keys.js`, §4.5) and the keys taken from other shortcuts | `loft-plasma-shortcuts unload` (`ExecStopPost` of loft-plasma-shell): script unloaded, Loft's actions unregistered, taken keys given back from `<state>/kwin-shortcuts-taken.json` (plasmashell's start does the last part too) |
 | the tile-while-dragging modifier (`[Windows] TileWhileMovingModifier`, §4.6) | `loft-kwin-tile-modifier apply` / `revert`, recorded in `<state>/kwin-tile-modifier.prev` like the decoration. Only set with `programs.loft.plasma.kwinPackage` |
 | any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |

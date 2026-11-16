@@ -93,7 +93,7 @@ Look parseLook(const QString &ini)
         }
     }
     // Keep the beads inside the bar, and the title readable.
-    look.titleBarHeight = std::max<qreal>(look.titleBarHeight, Tahoe::ButtonTop + Tahoe::ButtonCell);
+    look.titleBarHeight = std::max<qreal>(look.titleBarHeight, Tahoe::MinTitleBarHeight);
     look.fontSize = std::max<qreal>(look.fontSize, 6);
     return look;
 }

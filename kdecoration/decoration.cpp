@@ -207,14 +207,15 @@ void Decoration::updateLayout()
     // KWin clips the whole window (bar, frame and client) to this.
     setBorderRadius(KDecoration3::BorderRadius(radius()));
 
-    // The beads: 16 px cells 10 px apart from x 16, y 10 (tahoe.h), moved
-    // down with the bar if the theme makes it taller, on the pixel grid.
-    const qreal top = Tahoe::ButtonTop + (l.titleBarHeight - Tahoe::TitleBarHeight) / 2;
+    // The beads: 14 px, 9 px apart, centred in the bar and inset from the
+    // left by as much as from the top (tahoe.h: macOS's 13 px in a 40 px
+    // bar), on the pixel grid.
+    const qreal inset = KDecoration3::snapToPixelGrid(Tahoe::buttonInset(h), scale);
     m_buttons->setSpacing(Tahoe::ButtonSpacing);
     for (auto *button : m_buttons->buttons()) {
         button->setGeometry(QRectF(0, 0, Tahoe::ButtonCell, Tahoe::ButtonCell));
     }
-    m_buttons->setPos(QPointF(KDecoration3::snapToPixelGrid(Tahoe::ButtonLeft, scale), KDecoration3::snapToPixelGrid(top, scale)));
+    m_buttons->setPos(QPointF(inset, inset));
 }
 
 void Decoration::updateShadow()

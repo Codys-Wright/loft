@@ -1,11 +1,19 @@
 // macOS 26 Tahoe's title bar, in numbers.
 //
-// Taken from the MacTahoe KDE theme's Aurorae decoration (a careful copy of
-// Tahoe's title bar; vinceliuice/MacTahoe-kde, share/aurorae/themes/
-// MacTahoe-{Light,Dark}/): the rc's [Layout] / [General] and the SVGs
-// (close.svg, minimize.svg, maximize.svg, restore.svg, decoration.svg).
-// Where a number comes from rendering that theme in KWin 6.8 instead of from
-// a file, the comment says "measured" (docs/KWIN.md §4.4 has the method).
+// Two sources:
+//  - the metrics (bar height, bead size, spacing, insets) are measured on
+//    real macOS 26.6 Tahoe: 2x screenshots of Cody's Mac, converted to points
+//    (docs/KWIN.md §4.4 has the table). Loft uses the compact title bar
+//    Brave and other tab-strip apps get: a 40 pt strip, 14 pt traffic lights
+//    23 pt apart, centred 20 pt from the top, the first one 13 pt from the
+//    window's left edge. (Brave on Linux draws its own strip 40 px tall too,
+//    so KWin-decorated and client-decorated windows line up.)
+//  - the art (colors, rims, glyphs, states, corners, shadow) is the MacTahoe
+//    KDE theme's Aurorae decoration (a careful copy of Tahoe's;
+//    vinceliuice/MacTahoe-kde, share/aurorae/themes/MacTahoe-{Light,Dark}/):
+//    the rc's [General] and the SVGs (close.svg, minimize.svg, maximize.svg,
+//    restore.svg, decoration.svg). Where a number comes from rendering that
+//    theme in KWin 6.8 instead of from a file, the comment says "measured".
 //
 // The traffic lights are fixed colors on macOS, so they are not theme
 // colors here either: only light / dark appearance picks a set.
@@ -20,22 +28,28 @@ namespace Loft::Tahoe
 
 // ── layout (logical px, from the frame's outer edge) ────────────────────────
 
-// MacTahoe-*rc [Layout]: TitleEdgeTop 8 + max(TitleHeight 16, ButtonHeight 16
-// + ButtonMarginTop 2) + TitleEdgeBottom 8. Aurorae counts the button margin
-// into the title row, so the bar it draws is 34 px tall (measured), not 32.
-constexpr qreal TitleBarHeight = 34;
-// The beads: 14 px circles (the SVGs' r=7 path) in 16 px button cells
-// (ButtonWidth/ButtonHeight 16), cells 10 px apart (ButtonSpacing 10), the
-// first cell TitleEdgeLeft 16 px from the frame's edge, its top at
-// TitleEdgeTop 8 + ButtonMarginTop 2 = 10. So bead centres sit at
-// x = 24, 50, 76 and y = 18 (measured: the close bead covers x 17..30,
-// y 11..24 of the frame).
-constexpr qreal ButtonCell = 16;
-constexpr qreal ButtonSpacing = 10;
-constexpr qreal ButtonLeft = 16;
-constexpr qreal ButtonTop = 10;
-constexpr qreal BeadRadius = 7; // close.svg path2: "c 3.865929,0 6.999939,-3.134 …" (r = 7)
+// macOS's compact title bar (Brave, Safari-style tab strips): 40 pt. A
+// unified toolbar (Finder, Preview) is ~52 pt; the INI's TitleBarHeight
+// picks that or anything else, and the beads stay centred (below).
+constexpr qreal TitleBarHeight = 40;
+// The beads: 14 pt circles, 23 pt centre to centre (9 pt gaps), centred
+// vertically in the bar. macOS insets the first bead from the window's left
+// edge by as much as from its top (13 pt in a 40 pt bar, 19 in a 52 pt
+// toolbar), so the left inset follows the bar height the same way:
+// left = top = (TitleBarHeight − 14) / 2. MacTahoe's Aurorae theme drew the
+// same 14 px beads in a 34 px bar, 26 px apart, 16 px in.
+constexpr qreal BeadRadius = 7; // also close.svg path2: "c 3.865929,0 6.999939,-3.134 …" (r = 7)
+constexpr qreal ButtonCell = 2 * BeadRadius; // the clickable square: the bead
+constexpr qreal ButtonSpacing = 9; // 23 − 14
 constexpr qreal BeadRimWidth = 0.5; // light: a 6.5 px fill (path4) over the 7 px rim (path2)
+// Keeps a bar set too low in the INI from cutting the beads (and leaves
+// a 2 px margin above and below them).
+constexpr qreal MinTitleBarHeight = ButtonCell + 4;
+// The beads' inset from the top and the left for a bar this tall.
+constexpr qreal buttonInset(qreal titleBarHeight)
+{
+    return (titleBarHeight - ButtonCell) / 2;
+}
 // decoration.svg decoration-topleft path1023: "C 443.296 201.0625 454 211.7665
 // 454 225.0625" from x 430 → a 24 px corner. macOS rounds the bottom corners
 // the same (Aurorae can't round the window under it; we can, borderRadius).
@@ -161,7 +175,10 @@ constexpr qreal ShadowFalloff = 1.5;
 //
 // In bead units: the bead's centre at (0, 0), its radius 7. Converted from
 // the SVG path data (translated so the bead's centre, (12, 1040.3622) in the
-// files, is the origin).
+// files, is the origin). MacTahoe's beads are 14 px like macOS's, so the
+// glyphs keep their size and proportions to the bead (× 6 px, − 8 × 2 px,
+// zoom triangles in a 6 × 6 px box: macOS's are 6–7 pt in a 14 pt bead);
+// they would scale with BeadRadius if it changed.
 
 // close.svg path6-36: a rounded ×, 2 px strokes.
 inline QPainterPath closeGlyph()

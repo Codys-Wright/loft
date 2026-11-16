@@ -23,7 +23,8 @@
 #   loft-pointer           Auto Scroll for scrolling capture (the same crate):
 #                          pointer motion + wheel notches over the capture area
 #   loft-kdecoration       Loft's KWin decoration plugin (kdecoration/, dev.loft.decoration)
-#   loft-kwin-decoration   selects it in kwinrc while Loft runs in Plasma, reverts after
+#   loft-kwin-decoration   selects it and macOS's button order (GTK follows) in kwinrc while
+#                          Loft runs in Plasma, reverts after
 #   loft-kwin-patched      KWin + nix/kwin/tile-while-moving-modifier.patch (kwinrc
 #                          [Windows] TileWhileMovingModifier: Option-drag tiles)
 #   loft-kwin-tile-modifier  sets that key while Loft runs in Plasma, reverts after
@@ -820,13 +821,16 @@
           text = builtins.readFile ./kwin-tile-modifier.sh;
         };
 
-        # Selects Loft's decoration in kwinrc while Loft runs, and puts the
-        # previous one back (nix/kwin-decoration.sh; docs/KWIN.md §5).
+        # Selects Loft's decoration and macOS's button order in kwinrc while Loft
+        # runs, and puts the previous ones back (nix/kwin-decoration.sh; docs/KWIN.md §5).
         loft-kwin-decoration = pkgs.writeShellApplication {
           name = "loft-kwin-decoration";
           runtimeInputs = [
             pkgs.coreutils
             pkgs.dbus
+            pkgs.gawk
+            pkgs.glib.bin # gdbus
+            pkgs.gnused
             pkgs.kdePackages.kconfig
           ];
           text = builtins.readFile ./kwin-decoration.sh;

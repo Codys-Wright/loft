@@ -28,7 +28,7 @@ int main()
     CHECK(dark.titleBarActive == QColor(0x33, 0x33, 0x33)); // MacTahoe-Dark decoration.svg
     CHECK(light.titleBarActive == QColor(0xff, 0xff, 0xff));
     CHECK(light.textInactive == QColor(177, 177, 177)); // MacTahoe-Lightrc InactiveTextColor
-    CHECK(dark.cornerRadius == 24 && dark.titleBarHeight == 34 && dark.fontSize == 13);
+    CHECK(dark.cornerRadius == 24 && dark.titleBarHeight == 40 && dark.fontSize == 13);
 
     // The appearance applies wherever it is in the file, overrides on top.
     const Look l = parseLook(QStringLiteral("; comment\n"
@@ -50,7 +50,7 @@ int main()
     CHECK(l.textInactive == light.textInactive); // a bad value keeps Tahoe's
     CHECK(l.textActive == light.textActive); // only [Colors] sets colors
     CHECK(l.cornerRadius == 0);
-    CHECK(l.titleBarHeight == 26); // clamped: the beads fit
+    CHECK(l.titleBarHeight == 18); // clamped: the 14 px beads fit, 2 px to spare
     CHECK(l.fontSize == light.fontSize); // negative ignored
     CHECK(parseLook(QStringLiteral("[General]\nAppearance=dark\n")) == dark);
     CHECK(parseLook(QStringLiteral("[General]\nAppearance=sepia\n")) == dark);
