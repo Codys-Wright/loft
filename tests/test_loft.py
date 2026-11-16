@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from loft import color, hooks
@@ -291,6 +292,28 @@ class Hooks(unittest.TestCase):
         self.assertEqual(hooks.selected("kitty,gtk", dev=True), ["kitty", "gtk"])
         with self.assertRaises(ValueError):
             hooks.selected("kitty,bogus", dev=False)
+
+    def test_shell_pids(self):
+        # The running Loft shells in our session, found when the CLI's own
+        # shell path isn't the one the shell runs from (a Plasma terminal).
+        sess = {"WAYLAND_DISPLAY": "wayland-1", "XDG_RUNTIME_DIR": "/run/user/1"}
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = Path(tmp)
+
+            def fake(pid, comm, env):
+                d = proc / str(pid)
+                d.mkdir()
+                (d / "comm").write_text(comm + "\n")
+                (d / "environ").write_bytes(b"\0".join(f"{k}={v}".encode() for k, v in env.items()))
+
+            fake(10, ".quickshell-wra", {**sess, "LOFT_SHELL_PATH": "/src"})  # comm is cut at 15
+            fake(14, "quickshell", {**sess, "LOFT_SHELL_PATH": "/src"})
+            fake(11, ".quickshell-wrapped", sess)  # not Loft's
+            fake(12, ".quickshell-wrapped", {"WAYLAND_DISPLAY": "wayland-9", "XDG_RUNTIME_DIR": "/run/user/1", "LOFT_SHELL_PATH": "/src"})
+            fake(13, "kitty", {**sess, "LOFT_SHELL_PATH": "/src"})
+            (proc / "self").mkdir()
+            with unittest.mock.patch.dict(os.environ, sess):
+                self.assertEqual(hooks._shell_pids(proc), [10, 14])
 
 
 if __name__ == "__main__":
