@@ -73,7 +73,8 @@ Item {
                 visible: root.imageSource !== ""
                 source: root.imageSource
                 fillMode: Image.PreserveAspectCrop
-                asynchronous: true
+                // Not theme icons: AppIcon.qml (Qt's icon loader isn't thread-safe).
+                asynchronous: !String(source).startsWith("image://icon/")
             }
 
             IconImage {
@@ -81,7 +82,7 @@ Item {
                 visible: root.imageSource === "" && root.glyph === "" && root.iconSource !== ""
                 implicitSize: 36
                 source: root.iconSource
-                asynchronous: true
+                asynchronous: !String(source).startsWith("image://icon/") // AppIcon.qml
             }
 
             // Loft's own banners can bring a glyph (no icon theme needed);
