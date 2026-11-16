@@ -40,7 +40,10 @@ Singleton {
             workspaceNames: true,
             perOutputWorkspaces: false,
             titleBarEvents: false,
-            configReload: false
+            configReload: false,
+            // KWin puts its title bar (Loft's decoration) on the shell's own
+            // windows too: WindowChrome leaves out its traffic lights.
+            serverDecorations: true
         })
 
     signal outputsChanged

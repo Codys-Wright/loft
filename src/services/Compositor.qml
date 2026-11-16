@@ -40,7 +40,9 @@ Singleton {
 
     // What the backend can do: { columns, floating, minimize, overview,
     // windowScreenshot, workspaceNames, perOutputWorkspaces, titleBarEvents,
-    // configReload }. Menus hide what's off.
+    // configReload, serverDecorations }. Menus hide what's off;
+    // serverDecorations = the compositor gives the shell's own windows a
+    // title bar, so they don't draw traffic lights.
     readonly property var capabilities: impl.capabilities
 
     Component.onCompleted: {
