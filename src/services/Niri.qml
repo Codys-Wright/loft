@@ -39,7 +39,8 @@ Singleton {
             workspaceNames: true,
             perOutputWorkspaces: true,
             titleBarEvents: true,
-            configReload: true
+            configReload: true,
+            serverDecorations: false
         })
 
     // A screenshot was taken (niri's screenshot UI or actions); path may be "".
