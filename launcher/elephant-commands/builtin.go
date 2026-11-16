@@ -24,11 +24,16 @@ type command struct {
 	note     func() string
 }
 
+// Log Out ends the session the compositor runs: niri's quit, or Plasma's
+// session manager under KWin (it closes apps and saves the session first).
+const logoutCmd = `if [ -n "${NIRI_SOCKET:-}" ]; then niri msg action quit --skip-confirmation; ` +
+	`else busctl --user call org.kde.Shutdown /Shutdown org.kde.Shutdown logout; fi`
+
 func builtins() []*command {
 	c := []*command{
 		// ── Session ─────────────────────────────────────────────────────
 		{id: "lock", title: "Lock Screen", kind: "System", icon: "system-lock-screen", keywords: []string{"lock"}, cmd: "{ipc} lock lock", danger: true, delay: 250},
-		{id: "logout", title: "Log Out", kind: "System", icon: "system-log-out", keywords: []string{"logout", "sign out", "log off", "exit", "quit niri"}, cmd: "niri msg action quit --skip-confirmation", confirm: true, danger: true},
+		{id: "logout", title: "Log Out", kind: "System", icon: "system-log-out", keywords: []string{"logout", "sign out", "log off", "exit", "quit niri", "quit plasma"}, cmd: logoutCmd, confirm: true, danger: true},
 		{id: "restart", title: "Restart", kind: "System", icon: "system-reboot", keywords: []string{"reboot", "restart computer"}, cmd: "systemctl reboot", confirm: true, danger: true},
 		{id: "shutdown", title: "Shut Down", kind: "System", icon: "system-shutdown", keywords: []string{"shutdown", "power off", "poweroff", "turn off"}, cmd: "systemctl poweroff", confirm: true, danger: true},
 		{id: "sleep", title: "Sleep", kind: "System", icon: "system-suspend", keywords: []string{"suspend", "standby"}, cmd: "systemctl suspend", confirm: true, danger: true, note: sleepNote},
