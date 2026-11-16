@@ -10,7 +10,9 @@
 //! - stdin: one command per line, e.g. `{"cmd":"focusWindow","window":"{uuid}"}`
 //!   (applied by the script) or `setDesktopName` / `switchLayout` /
 //!   `toggleOverview` (done here over KWin's D-Bus API). EOF ends the daemon.
+//! - `loft-kwin shot …`: a screenshot through KWin's ScreenShot2 (src/shot.rs).
 
+mod shot;
 mod state;
 
 use std::collections::VecDeque;
@@ -194,7 +196,11 @@ async fn watch_layouts(conn: Connection) {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-    if std::env::args().nth(1).is_some_and(|a| a == "--help" || a == "-h") {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|a| a == "shot") {
+        return shot::run(&shot::parse(&args[1..])?).await;
+    }
+    if args.first().is_some_and(|a| a == "--help" || a == "-h") {
         println!(
             "loft-kwin — Loft's KWin backend daemon\n\n\
              Loads the loft-bridge KWin script and relays: stdout {{\"State\"}} /\n\

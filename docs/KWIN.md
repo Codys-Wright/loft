@@ -182,7 +182,7 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | traffic-light title bars (`title-bar.patch`) | **Loft's own KDecoration3 plugin** (§4.4) |
 | per-workspace wallpaper surfaces (`workspace-layers.patch`) | off (decided). One wallpaper per screen, swapped on desktop/activity change (the existing stock-niri path), under KWin's slide effect |
 | window thumbnails (`toplevel-export.patch`) | **icons** (decided, the existing stock-niri fallback). Later stills via `ScreenShot2.CaptureWindow` (restricted: loft-kwin's .desktop needs `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2`) |
-| screen/area capture via grim | `ScreenShot2.CaptureScreen/CaptureArea`, or spectacle `-b -n` |
+| screen/area capture via grim | **done** (§4.7): `loft-kwin shot`, KWin's `ScreenShot2` |
 | keybinds (loft-niri → niri KDL binds) | kglobalaccel, **done** (§4.5): `loft-keys.js`, a KWin script of `registerShortcut`s generated from shell-binds + Settings → Keyboard Shortcuts, loaded while Loft's shell runs (§5) |
 | window rules (loft-niri window_rules.rs) | applied by loft-bridge.js at `windowAdded` while Loft runs, not written to `kwinrulesrc` (§5) |
 | outputs / Displays page | `kscreen-doctor` (or KScreen D-Bus). Identities from its JSON |
@@ -553,6 +553,31 @@ Testing: `LOFT_DEV_KWIN=Testing: `LOFT_DEV_KWIN=$(nix build .#loft-kwin-patched 
 --session NAME --compositor kwin --shell plasma`, then set the key in the session's
 scratch kwinrc and reconfigure (TESTING.md).
 
+### 4.7 Screenshots through ScreenShot2
+
+**Done.** KWin has no wlr-screencopy, so `grim` can't capture and niri's
+`screenshot-window` doesn't exist. `loft-kwin shot` (crates/loft-kwin/src/shot.rs) calls
+KWin's `org.kde.KWin.ScreenShot2` and writes a PNG:
+
+```sh
+loft-kwin shot screen DP-2 out.png [--pointer]    # one output, native resolution
+loft-kwin shot window '{uuid}' out.png            # a window (its kwin_uuid), title bar included
+loft-kwin shot area X Y W H out.png               # global logical rect, native resolution
+loft-kwin shot workspace out.png                  # every output
+```
+
+KWin replies with the metadata (width, height, stride, QImage format; 6.8 hands back
+RGBX8888) and writes the raw pixels into a pipe we pass. 6.8.2 accepted the calls from an
+ordinary session process: no `X-KDE-DBUS-Restricted-Interfaces` desktop entry was
+needed (checked on THEBATTLESHIP and in a nested session).
+
+Under the KWin backend, Capture.qml's screen shots and the frozen frames for area
+selection run `KWin.screenshotArgv()` instead of grim, and `Compositor.screenshotWindow`
+(`capabilities.windowScreenshot`) runs `shot window`, copies the PNG and emits
+`screenshotTaken`, like niri. Not done: **recording** (wf-recorder needs
+wlr-screencopy; KWin records through the ScreenCast portal or `zkde_screencast`), and
+window thumbnails (step 11, the same `shot window`).
+
 ## 5. One Plasma session, two shells: switching and backing out
 
 Requirements: both shells work in the same Plasma session, never run at once, can be
@@ -682,7 +707,7 @@ What it took:
    crash fallback, `loft-kwin-decoration apply/revert`.
 7. ✅ Decoration plugin (§4.4): `dev.loft.decoration`, `loft-kwin-decoration apply|revert`.
 8. ✅ Lock screen shell package (§4.3).
-9. Keybinds, display settings, capture through ScreenShot2.
+9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). Display settings, recording.
 10. Spaces on Activities (§4.2).
 11. Window thumbnails through ScreenShot2.
 

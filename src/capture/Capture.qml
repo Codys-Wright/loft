@@ -253,7 +253,9 @@ Singleton {
         const out = newShotPath();
         const name = screenFocused?.name ?? "";
         Compositor.shutter();
-        exec(["sh", "-c", 'mkdir -p "$(dirname "$2")" && exec grim ${3:+-c} ${1:+-o "$1"} "$2"', "sh", name, out, cfg.showPointer ? "1" : ""], (code, _out, err) => code === 0 ? shotDone(out) : failed("Screenshot failed", err));
+        // KWin has no wlr-screencopy (grim): its ScreenShot2, via loft-kwin.
+        const argv = Compositor.backend === "kwin" ? KWin.screenshotArgv(name, out, cfg.showPointer) : ["sh", "-c", 'mkdir -p "$(dirname "$2")" && exec grim ${3:+-c} ${1:+-o "$1"} "$2"', "sh", name, out, cfg.showPointer ? "1" : ""];
+        exec(argv, (code, _out, err) => code === 0 ? shotDone(out) : failed("Screenshot failed", err));
     }
 
     function shootWindow() {
@@ -300,7 +302,8 @@ Singleton {
         for (const s of Quickshell.screens) {
             const f = `${tmp}/frozen-${s.name}-${Date.now()}.png`;
             shots[s.name] = f;
-            cmds.push(`grim -o '${s.name.replace(/'/g, "")}' '${f}'`);
+            const name = s.name.replace(/'/g, "");
+            cmds.push(Compositor.backend === "kwin" ? `'${KWin.bin}' shot screen '${name}' '${f}'` : `grim -o '${name}' '${f}'`);
         }
         exec(["sh", "-c", `rm -f "$1"/frozen-*.png; mkdir -p "$1" && ${cmds.join(" && ")}`, "sh", tmp], (code, _out, err) => {
             if (code !== 0) {
