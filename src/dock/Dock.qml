@@ -51,8 +51,8 @@ PanelWindow {
     readonly property bool fullscreen: Displays.fullscreenOn(modelData)
     // Windows on this display's active workspace (for "whenWindows").
     readonly property bool occupied: {
-        const ws = Niri.workspaces.find(w => w.output === modelData.name && w.is_active);
-        return !!ws && Niri.windows.some(w => w.workspace_id === ws.id);
+        const ws = Compositor.workspaces.find(w => w.output === modelData.name && w.is_active);
+        return !!ws && Compositor.windows.some(w => w.workspace_id === ws.id);
     }
     readonly property bool hideable: fullscreen || prefs.hidden || prefs.autoHide === "always" || (prefs.autoHide === "whenWindows" && occupied)
     readonly property bool busy: winHover.hovered || menuOpen || stackOpenHere || dragging || previewHere
@@ -134,7 +134,7 @@ PanelWindow {
         for (const a of pinned)
             t.push(`app:pinned:${a}`);
         const running = [];
-        for (const w of Niri.windows) {
+        for (const w of Compositor.windows) {
             const a = w.app_id;
             if (a && !pinned.some(p => DockData.sameApp(p, a)) && !running.some(r => DockData.sameApp(r, a)))
                 running.push(a);

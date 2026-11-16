@@ -13,8 +13,8 @@ PanelWindow {
     required property ShellScreen modelData
     screen: modelData
 
-    readonly property string output: QuitGuard.window ? (Niri.workspaceMap[QuitGuard.window.workspace_id]?.output ?? "") : ""
-    readonly property bool shown: QuitGuard.phase !== "" && (output === "" ? (Niri.focusedWorkspace?.output ?? "") === modelData.name : output === modelData.name)
+    readonly property string output: QuitGuard.window ? (Compositor.workspaceMap[QuitGuard.window.workspace_id]?.output ?? "") : ""
+    readonly property bool shown: QuitGuard.phase !== "" && (output === "" ? (Compositor.focusedWorkspace?.output ?? "") === modelData.name : output === modelData.name)
     readonly property string appName: Apps.name(QuitGuard.appId)
 
     visible: shown || fadeAnim.running

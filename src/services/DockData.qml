@@ -27,7 +27,7 @@ Singleton {
     }
 
     function windowsOf(appId) {
-        return Niri.windows.filter(w => w.app_id && sameApp(w.app_id, appId));
+        return Compositor.windows.filter(w => w.app_id && sameApp(w.app_id, appId));
     }
 
     function isPinned(appId) {
@@ -173,7 +173,7 @@ Singleton {
 
     // A display by connector ("DP-1") or niri identity; "" = the focused one.
     function screenNamed(name) {
-        const n = name || Niri.focusedWorkspace?.output || "";
+        const n = name || Compositor.focusedWorkspace?.output || "";
         return Quickshell.screens.find(s => s.name === n || displayKey(s) === n) ?? null;
     }
 
@@ -313,7 +313,7 @@ Singleton {
     function wsName(ws) {
         if (ws.name)
             return ws.name;
-        const clash = Niri.workspaces.some(x => x.id !== ws.id && x.idx === ws.idx);
+        const clash = Compositor.workspaces.some(x => x.id !== ws.id && x.idx === ws.idx);
         return clash ? `Desktop ${ws.idx} (${ws.output})` : `Desktop ${ws.idx}`;
     }
 
@@ -330,7 +330,7 @@ Singleton {
         } else {
             const name = wsName(ws);
             if (!ws.name)
-                Niri.action("SetWorkspaceName", { name: name, workspace: { Id: ws.id } });
+                Compositor.setWorkspaceName(ws.id, name);
             batch.window_rules[appId] = { "open-on-workspace": name };
         }
         NiriSettings.apply(batch);
@@ -341,15 +341,15 @@ Singleton {
     function ensureNamed() {
         const wanted = [...new Set(Object.values(rules).map(r => r["open-on-workspace"]).filter(n => n))];
         for (const name of wanted) {
-            if (Niri.workspaces.some(w => w.name === name))
+            if (Compositor.workspaces.some(w => w.name === name))
                 continue;
             const m = /^Desktop (\d+)(?: \((.+)\))?$/.exec(name);
             if (!m)
                 continue;
-            const output = m[2] ?? Niri.focusedWorkspace?.output;
-            const ws = Niri.workspaces.find(w => w.output === output && w.idx === Number(m[1]) && !w.name);
+            const output = m[2] ?? Compositor.focusedWorkspace?.output;
+            const ws = Compositor.workspaces.find(w => w.output === output && w.idx === Number(m[1]) && !w.name);
             if (ws)
-                Niri.action("SetWorkspaceName", { name: name, workspace: { Id: ws.id } });
+                Compositor.setWorkspaceName(ws.id, name);
         }
     }
 
@@ -360,7 +360,7 @@ Singleton {
     }
     onRulesChanged: ensureTimer.restart()
     Connections {
-        target: Niri
+        target: Compositor
         function onWorkspaceMapChanged() {
             ensureTimer.restart();
         }

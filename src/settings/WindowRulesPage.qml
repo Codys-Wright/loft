@@ -344,7 +344,7 @@ ColumnLayout {
                 readonly property var rec: WindowRules.rule(app)
                 readonly property var builtin: WindowRules.builtinFor(app)
                 readonly property var badges: WindowRules.summary(app)
-                readonly property bool running: Niri.windows.some(w => w.app_id === app)
+                readonly property bool running: Compositor.windows.some(w => w.app_id === app)
                 Layout.fillWidth: true
                 spacing: 6
 

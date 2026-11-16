@@ -317,7 +317,7 @@ exec wl-paste --watch sh -c "$1" sh "$2" "$3" </dev/null`
         id: pasteDelay
         interval: 180
         onTriggered: {
-            const app = Niri.focusedWindow?.app_id ?? "";
+            const app = Compositor.focusedWindow?.app_id ?? "";
             let terminal = false;
             try {
                 terminal = new RegExp(ClipboardConfig.paste.terminals).test(app);

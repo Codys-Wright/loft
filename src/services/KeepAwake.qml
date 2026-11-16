@@ -79,7 +79,7 @@ Singleton {
         const apps = Array.from(cfg.apps ?? []);
         if (apps.length === 0)
             return "";
-        const w = Niri.windows.find(x => apps.includes(x.app_id));
+        const w = Compositor.windows.find(x => apps.includes(x.app_id));
         return w ? w.app_id : "";
     }
     readonly property bool hasBattery: UPower.displayDevice?.isLaptopBattery ?? false

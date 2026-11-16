@@ -17,6 +17,8 @@ import qs.services
 //   remap       remaps in every app
 //   leaveAlone  the shell's Apps to leave alone (no remaps there)
 //   xremap      { config, following }: whether an xremap reads Loft's config
+//   wmKey       ralt (niri: the WM key is Right Alt) or meta (Plasma: it sends
+//               Meta); groups are shown as they render for it
 //
 // Every write is a `loft keys …` command, one at a time: it checks the whole
 // config before saving (an unknown key is refused, `error` says why) and
@@ -112,7 +114,7 @@ Singleton {
         const ids = new Set(Object.keys(appRules));
         for (const a of data.leaveAlone ?? [])
             ids.add(a);
-        for (const w of Niri.windows)
+        for (const w of Compositor.windows)
             if (w.app_id && Apps.own[w.app_id] === undefined)
                 ids.add(w.app_id);
         return [...ids];
@@ -185,6 +187,12 @@ Singleton {
         return out;
     }
 
+    // A hold that is the window-manager key: Right Alt in niri, F24 (an
+    // xremap virtual modifier that sends Meta) in Plasma — `wmKey` (keys.py).
+    function isWmKey(hold) {
+        return hold === "Alt_R" || (hold === "F24" && root.data.wmKey === "meta");
+    }
+
     // A remap's target: a combination, a sequence, or tap / hold.
     function prettyAction(v) {
         if (v === null || v === undefined)
@@ -194,7 +202,7 @@ Singleton {
         if (Array.isArray(v))
             return v.length ? v.map(prettyAction).join(" then ") : "nothing";
         if (v.tap !== undefined || v.hold !== undefined)
-            return `tap ${prettyAction(v.tap)} · hold ${v.hold === "Alt_R" ? "window-manager key" : prettyAction(v.hold)}`;
+            return `tap ${prettyAction(v.tap)} · hold ${isWmKey(v.hold) ? "window-manager key" : prettyAction(v.hold)}`;
         if (v.launch)
             return `run ${[].concat(v.launch).join(" ")}`;
         return JSON.stringify(v);
@@ -320,7 +328,7 @@ Singleton {
         }
         // The focused window's app.
         function openFocused(): void {
-            const w = Niri.windows.find(x => x.is_focused);
+            const w = Compositor.windows.find(x => x.is_focused);
             root.openSettings(w?.app_id ?? "");
         }
     }

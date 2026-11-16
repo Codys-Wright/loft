@@ -84,10 +84,10 @@ Singleton {
     function show(screenName) {
         if (!enabled)
             return;
-        screen = screenName || (Niri.focusedWorkspace?.output ?? "");
+        screen = screenName || (Compositor.focusedWorkspace?.output ?? "");
         pointerX = -1;
         pointerY = -1;
-        windowId = Niri.focusedWindow?.id ?? null;
+        windowId = Compositor.focusedWindow?.id ?? null;
         if (Features.on("clipboard"))
             Clipboard.refresh();
         open = true;

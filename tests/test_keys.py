@@ -38,6 +38,9 @@ class Scratch(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"LOFT_KEYMAP_SEED": str(self.seed)})
         env.start()
         self.addCleanup(env.stop)
+        # niri unless a test says otherwise (the caller's desktop doesn't count).
+        for k in (keys.WM_KEY_ENV, "XDG_CURRENT_DESKTOP"):
+            os.environ.pop(k, None)
 
     def write_list(self, apps):
         f = keys.config_file(self.state)
@@ -168,6 +171,94 @@ class Layers(Scratch):
         cfg = keys.render(keys.resolve(self.state), only_groups=["dual-role"])
         self.assertEqual([e["name"] for e in cfg["modmap"]], ["Esc / Caps Lock: tap = Escape, hold = window-manager key"])
         self.assertEqual(cfg["keymap"], [])
+
+
+
+class WmKey(Scratch):
+    """The window-manager key: Right Alt for niri, Meta (via a virtual
+    modifier) for Plasma (keys.py module docstring, docs/KWIN.md §4.5)."""
+
+    def render(self, wm, **kw):
+        cfg = keys.render(keys.resolve(self.state), wm=wm, **kw)
+        keys.check(cfg)
+        return cfg
+
+    def test_niri_is_the_groups_as_written(self):
+        cfg = self.render(keys.WM_RALT)
+        self.assertEqual(cfg, keys.render(keys.resolve(self.state)), "ralt is the default")
+        self.assertEqual(cfg.get("virtual_modifiers", []), [])
+        self.assertEqual(cfg["modmap"][0]["remap"]["CapsLock"]["hold"], "Alt_R")
+        self.assertNotIn(keys.WM_ENTRY_NAME, [e["name"] for e in cfg["keymap"]])
+        parity = next(e for e in cfg["keymap"] if e["name"].startswith("macOS system shortcuts"))
+        self.assertEqual(parity["remap"]["Ctrl-Up"], "Ctrl-Alt_R-Up")
+
+    def test_plasma_holds_a_virtual_modifier_that_sends_meta(self):
+        self.seed.write_text(json.dumps({"groups": {"right-ctrl-mod": True, "symbols": True}}))
+        cfg = self.render(keys.WM_META)
+        self.assertEqual(cfg["virtual_modifiers"], [keys.WM_VMOD])
+        holds = {k: v["hold"] for e in cfg["modmap"] for k, v in e["remap"].items()}
+        self.assertEqual(holds, {"Esc": "F24", "CapsLock": "F24", "Ctrl_R": "F24"})
+        taps = {k: v["tap"] for e in cfg["modmap"] for k, v in e["remap"].items()}
+        self.assertEqual(taps, {"Esc": "Esc", "CapsLock": "Esc", "Ctrl_R": "Ctrl_R"})
+        # First, before per-app and every other entry, so nothing else takes the key.
+        first = cfg["keymap"][0]
+        self.assertEqual(first["name"], keys.WM_ENTRY_NAME)
+        self.assertNotIn("exact_match", first, "held Shift / Ctrl / Alt stay held")
+        for k in ("t", "Left", "Space", "Tab", "Enter", "Backspace", "1", "slash", "F5", "Home", "PageDown", "Esc"):
+            self.assertEqual(first["remap"][f"F24-{k}"], f"Super_L-{k}")
+        parity = next(e for e in cfg["keymap"] if e["name"].startswith("macOS system shortcuts"))
+        self.assertEqual(parity["remap"]["Ctrl-Up"], "Ctrl-Super_L-Up")
+        self.assertEqual(parity["remap"]["Ctrl-Super_L-q"], "Ctrl-Super_L-q")
+        self.assertFalse(any("Alt_R" in json.dumps(e) for e in cfg["keymap"] + cfg["modmap"]))
+        # ⌘ and Right ⌘ (symbols) are untouched.
+        plain = keys.render(keys.resolve(self.state))
+        for name in ("Cmd shortcuts (non-terminal)", "Symbols layer (Right Super held)", "Text navigation and editing"):
+            self.assertEqual(next(e for e in cfg["keymap"] if e["name"] == name), next(e for e in plain["keymap"] if e["name"] == name))
+
+    def test_plasma_without_a_hold_adds_nothing(self):
+        self.seed.write_text(json.dumps({"groups": {"dual-role": False}}))
+        cfg = self.render(keys.WM_META)
+        self.assertEqual(cfg.get("virtual_modifiers", []), [])
+        self.assertNotIn(keys.WM_ENTRY_NAME, [e["name"] for e in cfg["keymap"]])
+        # Just the dual-role keys (a nested session's xremap) bring the entry along.
+        cfg = self.render(keys.WM_META, only_groups=["dual-role"])
+        self.assertEqual([e["name"] for e in cfg["keymap"]], [keys.WM_ENTRY_NAME])
+
+    def test_leave_alone_covers_the_wm_key(self):
+        self.write_list(["steam"])
+        cfg = self.render(keys.WM_META, leave=["steam"])
+        self.assertIn("steam", cfg["keymap"][0]["application"]["not"])
+
+    def test_which_key(self):
+        self.assertEqual(keys.wm_key(self.state), keys.WM_RALT)
+        with mock.patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "KDE"}):
+            self.assertEqual(keys.wm_key(self.state), keys.WM_META)
+            # What the last write recorded beats the desktop…
+            keys.write_xremap(self.state, keys.WM_RALT)
+            self.assertEqual(keys.wm_key(self.state), keys.WM_RALT)
+        self.assertEqual(keys.wm_key_file(self.state).read_text(), "ralt\n")
+        # …the units' $LOFT_WM_KEY beats the record, and --wm-key beats both.
+        with mock.patch.dict(os.environ, {keys.WM_KEY_ENV: "meta"}):
+            self.assertEqual(keys.wm_key(self.state), keys.WM_META)
+            self.assertEqual(keys.wm_key(self.state, "ralt"), keys.WM_RALT)
+            r = keys.write_xremap(self.state)
+        self.assertEqual(r["wmKey"], keys.WM_META)
+        self.assertTrue(r["changed"])
+        self.assertEqual(self.config()["keymap"][0]["name"], keys.WM_ENTRY_NAME)
+        # A runtime edit (Settings, a terminal) keeps the session's key.
+        keys.edit(self.state, lambda l: l.update({"remap": {"Super_L-F1": "F1"}}))
+        self.assertEqual(self.config()["virtual_modifiers"], [keys.WM_VMOD])
+        with mock.patch.dict(os.environ, {keys.WM_KEY_ENV: "hyper"}), self.assertRaises(SystemExit):
+            keys.wm_key(self.state)
+
+    def test_virtual_modifiers_are_checked(self):
+        cfg = self.render(keys.WM_META)
+        cfg["keymap"][0]["remap"]["F23-a"] = "b"
+        with self.assertRaises(SystemExit):
+            keys.check(cfg)
+        cfg["virtual_modifiers"] = ["Shift_L"]
+        with self.assertRaises(SystemExit):
+            keys.check(cfg)
 
 
 if __name__ == "__main__":

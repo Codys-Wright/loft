@@ -36,7 +36,7 @@ PanelWindow {
     // The windows mode (App Exposé): stays open until a pick or Escape.
     property bool windowsMode: false
 
-    readonly property bool onThisScreen: (Niri.focusedWorkspace?.output ?? modelData.name) === modelData.name
+    readonly property bool onThisScreen: (Compositor.focusedWorkspace?.output ?? modelData.name) === modelData.name
 
     // Window thumbnails, sized so every app fits on the display.
     readonly property bool thumbs: WindowCapture.canWindows
@@ -65,7 +65,7 @@ PanelWindow {
 
     function snapshot() {
         const byApp = {};
-        for (const w of Niri.windows.slice().sort((a, b) => stamp(b) - stamp(a))) {
+        for (const w of Compositor.windows.slice().sort((a, b) => stamp(b) - stamp(a))) {
             const id = w.app_id || "unknown";
             if (!byApp[id])
                 byApp[id] = { appId: id, windows: [] };
@@ -83,10 +83,10 @@ PanelWindow {
             open = false;
             return;
         }
-        const appId = Niri.focusedWindow?.app_id;
+        const appId = Compositor.focusedWindow?.app_id;
         if (!appId)
             return;
-        apps = Niri.windows.filter(w => w.app_id === appId).sort((a, b) => stamp(b) - stamp(a)).map(w => ({
+        apps = Compositor.windows.filter(w => w.app_id === appId).sort((a, b) => stamp(b) - stamp(a)).map(w => ({
                     appId: appId,
                     windows: [w]
                 }));
@@ -118,7 +118,7 @@ PanelWindow {
 
     function commit() {
         if (open && apps[selected])
-            Niri.focusWindow(apps[selected].windows[0].id);
+            Compositor.focusWindow(apps[selected].windows[0].id);
         open = false;
     }
 

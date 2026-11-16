@@ -1,0 +1,16 @@
+{
+    "KPlugin": {
+        "Description": "Loft's title bars: macOS traffic lights and a centered title, in the colors of Loft's theme",
+        "EnabledByDefault": true,
+        "Id": "dev.loft.decoration",
+        "Name": "Loft",
+        "ServiceTypes": [
+            "org.kde.kdecoration3"
+        ]
+    },
+    "org.kde.kdecoration3": {
+        "blur": false,
+        "kcmodule": false,
+        "recommendedBorderSize": "None"
+    }
+}

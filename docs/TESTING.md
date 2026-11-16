@@ -102,6 +102,71 @@ and `open-on-output` by identity work). Frames are paced at 60 Hz, clients rende
 - There's no input device: drive it with `loft-input` as usual. Mod is `mod-key` (the
   session isn't nested), `bind` knows that.
 
+### KDE sessions: `--compositor kwin`
+
+```sh
+loft-dev --session k1 --compositor kwin "$PWD"                  # Loft's shell on KWin
+loft-dev --session k2 --compositor kwin --shell plasma          # stock plasmashell, to compare
+loft-dev --session k3 --compositor kwin --size 1280x800 --output-count 2
+loft-dev --stop k1
+# another KWin, e.g. the patched one (docs/KWIN.md §4.6): a kwin_wayland or a package dir
+LOFT_DEV_KWIN=$(nix build .#loft-kwin-patched --print-out-paths) \
+  loft-dev --session k4 --compositor kwin --shell plasma
+```
+
+A whole KDE session nested in the headless host: the system's KWin 6
+(`kwin_wayland --exit-with-session`), `kactivitymanagerd` and `kded6`, then the shell. `--shell
+loft` (default) is the checkout's shell (`loft-shell` with `LOFT_SHELL_SRC=<checkout>/src`,
+so QML hot-reloads, `LOFT_DEV=1`, state in the session dir) plus the checkout's launcher.
+`--shell plasma` is stock plasmashell in the same harness.
+
+What differs from niri sessions:
+
+- **Always GPU-rendered** (as `--gpu`): with the pixman host KWin quits ("requires
+  compositing"). Still headless: no monitor, no modeset.
+- **Scratch `$HOME`.** KDE writes config on start (`kwinrc`, `…-appletsrc`,
+  `kglobalshortcutsrc`, an Akonadi DB), so `HOME` and `XDG_{CONFIG,DATA,CACHE,STATE}_HOME`
+  point into `<session dir>/home`. It's fresh on every start (about 90 MB, on the runtime
+  tmpfs); `--keep-home` keeps it. Defaults still come from `/etc/xdg`, so it looks like the
+  machine's Plasma. Bluedevil's kded module is off (it would start obexd against the real
+  bluez).
+- **A private bus with service activation** (KDE needs it), so portals, gvfs, at-spi,
+  ksecretd … start on demand. Everything runs in **one user unit, `loft-dev-kwin-NAME`**;
+  `loft-dev --stop NAME` stops it all, and the unit's `ExecStopPost` unmounts the document
+  portal's and gvfs's FUSE mounts under `<session dir>/run`. Only KWin talks to the host;
+  the bus has KWin's socket, so activated services land in KWin, not on the host.
+- `session.env` has `LOFT_DEV_COMPOSITOR=kwin`, `WAYLAND_DISPLAY` = KWin's socket (for
+  clients, `loft --dev`), `LOFT_DEV_HOST_DISPLAY` = the host (input and screenshots go
+  there), `DISPLAY` (KWin's Xwayland), the scratch `HOME`/XDG dirs, the bus, and
+  `LOFT_DEV_OUTPUT_RECTS` (`WL-0=0,0,1600x1000+WL-1=…`). It sources in a shell
+  (`set -a; . session.env`) to run KDE tools against the session (`qdbus org.kde.KWin …`,
+  `kscreen-doctor -o`).
+- `--output-count N`: N KWin outputs (`WL-0`, `WL-1`, …) of `--size`, side by side.
+- `--kwin-scale S`: fractional scaling (1.25, 1.5 …). The host output is scaled and KWin
+  follows it (kscreen-doctor still reports 1); `--size` stays device pixels, so the
+  session is `--size / S` logical. loft-shot's image is then larger than the output: the
+  top-left `--size` pixels are the session.
+- `--kwin-env NAME=VALUE` (repeatable): extra environment for the whole session, e.g. a
+  plugin build first on `QT_PLUGIN_PATH` (the first match wins), or `LOFT_STATE_DIR` for
+  KWin's plugins to read the session's theme.
+
+Driving it:
+
+- `loft-shot --session NAME` works as usual, with `--output WL-0`, `--region`, `--crop`,
+  `--grid`. `--window` / `--layer` need niri and say so.
+- `loft-input` clicks, types, drags and scrolls into KWin (it's a window on the host).
+  `key` combos reach KWin itself, so **global shortcuts fire with `key`** (`key super+w` opens
+  Overview). `bind COMPONENT/NAME` runs a kglobalaccel shortcut by name on the session's bus
+  (`bind kwin/Overview`, `bind "kwin/Window Close"`); `bind --list` lists them. A combo given
+  to `bind` points you to `key`.
+- `spawn CMD` starts CMD with the session's environment as a transient unit bound to the
+  session's (so `--stop` takes it down too).
+- `info` lists the outputs only (KWin reports no windows here).
+- The host has no input devices of its own, and a virtual device appearing per loft-input
+  run made KWin lose `wl_pointer.enter` (it then drops clicks). loft-dev holds a pointer and
+  keyboard on the host for the session's lifetime (unit `loft-dev-kwin-NAME-input`), which
+  fixes it.
+
 Run it in the background and wait for `session.env`:
 
 ```sh
@@ -260,6 +325,26 @@ checkout's `niri-loft` into `~/.local/state/loft/dev/niri`. If the session's nir
 `niri-loft-live` package (`programs.niri.package`), the next login runs that build, as long
 as it accepts the config. `loft dev live stop --niri` (or removing the link from a TTY) goes
 back to the installed niri at the next login.
+
+**In Plasma** (a session from the "Loft" login entry), `loft dev live` is the same idea:
+it detects KDE (`XDG_CURRENT_DESKTOP` has `KDE`, or `loft-plasma check loft`), stops
+`loft-plasma-shell` / `loft-plasma-launcher` instead (they carry the same
+`ConditionPathExists=!%t/loft-live/active`), runs the checkout's shell and launcher as
+`loft-live-shell` / `loft-live-launcher`, and skips everything niri (no fragments, no
+`--niri`). `stop` starts the installed Plasma units again (their `ExecCondition` still
+decides). The marker records the desktop, so `stop` from a TTY does the right thing.
+
+**Trying its Plasma path in isolation:** run it inside a `--compositor kwin` session:
+
+```sh
+loft-dev --session lv --compositor kwin --shell plasma &
+until [ -f "$XDG_RUNTIME_DIR/loft-dev-lv/session.env" ]; do sleep 0.2; done
+env -u NIRI_SOCKET bash -c 'set -a; . "$XDG_RUNTIME_DIR/loft-dev-lv/session.env"; set +a; loft-live start'
+```
+
+Inside a loft-dev KDE session loft-live takes the Plasma path against that session: its
+units are `loft-live-shell-lv` / `loft-live-launcher-lv`, bound to the session's unit, the
+marker lives in the session's runtime dir, and no installed unit is touched.
 
 Agents: this changes the person's desktop. Only start it when asked.
 
@@ -466,3 +551,10 @@ the refresh rate of each display live (240 + 180 + 180 Hz).
   WLR_RENDERER=pixman`, and the session renders through Mesa's EGL vendor with
   `LIBGL_ALWAYS_SOFTWARE=1`. The CPU cost is near zero when idle and a few cores during
   animations.
+- `--compositor kwin` (`run_kwin` in loft-dev.sh): writes `kwin-run.sh` (the unit's main:
+  host sway on `gles2`, then `dbus-run-session -- env WAYLAND_DISPLAY=<host> kwin_wayland
+  --exit-with-session kde-session.sh`) and `kde-session.sh` (runs inside KWin: updates the
+  bus's activation environment, writes `kde.env`, starts kactivitymanagerd, kded6 and the
+  shell), runs them as `loft-dev-kwin-NAME`, then waits for `kde.env` and writes
+  session.env. One host output `N×W` wide holds the N KWin windows. `KWIN_PID` is found by
+  `comm` (KWin has capabilities, so `/proc/PID/exe` isn't readable).

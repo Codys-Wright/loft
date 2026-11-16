@@ -60,6 +60,7 @@ def xremap_pair(b: dict) -> tuple[str, str]:
     if via == "ctrl":
         # Right Alt is niri's Mod (lv3:ralt_switch): the plain Ctrl shortcut
         # becomes the WM key's Mod+Ctrl one, so niri never binds a plain Ctrl+key.
+        # Under Plasma the group renders with Meta instead (keys.for_wm_key).
         if mods != ["Ctrl"]:
             raise ValueError(f"{b['id']}: via ctrl takes a plain Ctrl shortcut, not {b['mac']!r}")
         return src, f"Ctrl-Alt_R-{k}"
@@ -80,6 +81,8 @@ def xremap_group(data: dict) -> dict:
         "id": GROUP_ID,
         "name": "macOS system shortcuts → Loft (⌃←/→/↑/↓, ⌃⌘…, ⌘H/M)",
         "section": "keymap",
+        # Right Alt (niri's Mod) added here is Meta under Plasma (keys.for_wm_key).
+        "wmKey": True,
         "description": (
             "⌃←/→ spaces, ⌃↑ Mission Control, ⌃↓ App Exposé "
             "reach niri as Mod+⌃+arrow (plain ⌃+arrows, which ⌥←/→ word navigation sends, stay "

@@ -14,7 +14,7 @@ ColumnLayout {
 
     spacing: 0
 
-    readonly property var names: Niri.keyboardLayouts.names ?? []
+    readonly property var names: Compositor.keyboardLayouts.names ?? []
 
     Repeater {
         model: root.names
@@ -22,9 +22,9 @@ ColumnLayout {
             required property var modelData
             required property int index
             text: modelData
-            checked: index === Niri.keyboardLayouts.current_idx
+            checked: index === Compositor.keyboardLayouts.current_idx
             onClicked: {
-                Niri.action("SwitchLayout", { layout: { Index: index } });
+                Compositor.switchKeyboardLayout(index);
                 root.dismiss();
             }
         }

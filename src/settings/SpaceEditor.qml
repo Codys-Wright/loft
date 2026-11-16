@@ -364,7 +364,7 @@ ColumnLayout {
             SettingsSelect {
                 implicitWidth: 190
                 placeholder: "Add a running app…"
-                options: [...new Set(Niri.windows.map(w => Apps.name(w.app_id)).filter(n => n && !ed.allow.includes(n)))].sort().map(n => ({ value: n, label: n }))
+                options: [...new Set(Compositor.windows.map(w => Apps.name(w.app_id)).filter(n => n && !ed.allow.includes(n)))].sort().map(n => ({ value: n, label: n }))
                 current: null
                 onActivated: v => ed.patch({ focus: { allow: ed.allow.concat([v]) } })
             }

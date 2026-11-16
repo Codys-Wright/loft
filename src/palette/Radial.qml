@@ -207,10 +207,10 @@ Singleton {
 
     // ── Opening ──────────────────────────────────────────────────────────
     function begin(how, screenName) {
-        windowId = Niri.focusedWindow?.id ?? null;
-        appId = Niri.focusedWindow?.app_id ?? "";
+        windowId = Compositor.focusedWindow?.id ?? null;
+        appId = Compositor.focusedWindow?.app_id ?? "";
         profileId = profileFor(appId)?.id ?? "";
-        screen = screenName || (Niri.focusedWorkspace?.output ?? "");
+        screen = screenName || (Compositor.focusedWorkspace?.output ?? "");
         source = how;
         sticky = how === "";
         ring = -1;

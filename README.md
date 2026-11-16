@@ -411,7 +411,8 @@ pauses Loft's window shortcuts in games / VMs / remote desktops, and turns the k
 layer off in them.
 
 **Keyboard layer** (`programs.loft.keyboard.enable`): the macOS-style remaps — Super = ⌘,
-Esc / Caps Lock hold = the window-manager key, ⌥ word navigation, per-app extras for
+Esc / Caps Lock hold = the window-manager key (niri's Mod; Meta + the next key in a Plasma
+session), ⌥ word navigation, per-app extras for
 terminals, browsers, file managers and editors — are Loft's (`cli/loft/keymap/mac.json`),
 run by xremap (`loft-keys.service`). Nix seeds them; `loft keys` changes them at runtime,
 and xremap reloads. **Settings → Keyboard Remaps** does the same by hand (groups, per-app

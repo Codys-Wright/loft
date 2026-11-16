@@ -70,7 +70,7 @@ Scope {
     PanelWindow {
         id: toast
         visible: root.error !== "" || root.showOk
-        screen: Quickshell.screens.find(s => s.name === (Niri.focusedWorkspace?.output ?? "")) ?? Quickshell.screens[0]
+        screen: Quickshell.screens.find(s => s.name === (Compositor.focusedWorkspace?.output ?? "")) ?? Quickshell.screens[0]
 
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "loft:reload"

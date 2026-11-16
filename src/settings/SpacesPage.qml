@@ -425,8 +425,8 @@ ColumnLayout {
                     id: line
                     required property var modelData
                     readonly property bool keep: modelData.workspace === "keep"
-                    readonly property var ws: keep ? null : (Niri.workspaces.find(w => w.name === modelData.workspace) ?? null)
-                    readonly property int windows: ws ? Niri.windowsOn(ws.id).length : 0
+                    readonly property var ws: keep ? null : (Compositor.workspaces.find(w => w.name === modelData.workspace) ?? null)
+                    readonly property int windows: ws ? Compositor.windowsOn(ws.id).length : 0
                     Layout.fillWidth: true
                     spacing: 10
 

@@ -35,6 +35,22 @@ whole config (entry shapes, key names) before it is saved.
                                              xremap service run this)
   loft keys render [--group ID]              print a config (e.g. dual-role keys only)
   loft keys leave-alone [--json]             the apps to leave alone
+
+The window-manager key (Caps Lock / Esc held, Right Ctrl held: the groups
+with `"wmKey": true`) depends on the session, `wm_key()`:
+
+  ralt  niri: the hold is Right Alt, which XKB lv3:ralt_switch makes
+        ISO_Level3_Shift, niri's Mod. The groups render as written.
+  meta  Plasma: KWin's (and Loft's kwinkeys) shortcuts take only Meta / Ctrl /
+        Alt / Shift, so the hold is F24 as an xremap virtual modifier, which
+        no app ever sees, and a generated first keymap entry (`wm_key_entry`)
+        sends WM key + X as Meta + X (Shift / Ctrl / Alt held stay held).
+        Right Alt added by a wmKey group's keymap becomes Meta (Super_L).
+
+`--wm-key` on xremap / render, then $LOFT_WM_KEY (the niri and Plasma units
+set it), then what the last `loft keys xremap` wrote (<state>/xremap/wm-key,
+so a `loft keys …` from a terminal matches the running xremap), then
+XDG_CURRENT_DESKTOP (KDE → meta), else ralt.
 """
 
 from __future__ import annotations
@@ -51,7 +67,33 @@ SECTIONS = ("modmap", "keymap", "experimental_map")
 KEYMAP_DIR = Path(__file__).parent / "keymap"
 DEFAULTS = KEYMAP_DIR / "mac.json"
 # Group fields that are Loft's, not xremap's.
-META = ("id", "section", "on", "description")
+META = ("id", "section", "on", "description", "wmKey")
+
+# The window-manager key (module docstring).
+WM_RALT = "ralt"
+WM_META = "meta"
+WM_KEYS = (WM_RALT, WM_META)
+WM_KEY_ENV = "LOFT_WM_KEY"
+# What the WM-key groups hold as written (niri's Mod via lv3:ralt_switch)…
+WM_HOLD = "Alt_R"
+# …and under Plasma: a key no keyboard here has, as an xremap virtual
+# modifier (never emitted; a WM key + X with no remap would reach the app as X,
+# hence every key in WM_PASS_KEYS)…
+WM_VMOD = "F24"
+# …which sends Meta. xremap ignores its own output device, so the ⌘ groups'
+# Super_L-… remaps don't take this Super_L.
+WM_META_KEY = "Super_L"
+WM_ENTRY_NAME = "Window-manager key → Meta (Plasma)"
+# Every key WM key + key sends as Meta + key (evdev names).
+WM_PASS_KEYS = (
+    [chr(c) for c in range(ord("a"), ord("z") + 1)]
+    + [str(d) for d in range(10)]
+    + ["minus", "equal", "leftbrace", "rightbrace", "semicolon", "apostrophe", "grave", "backslash", "comma", "dot", "slash", "102nd"]
+    + ["Space", "Tab", "Enter", "Backspace", "Esc", "Delete", "Insert"]
+    + ["Home", "End", "PageUp", "PageDown", "Left", "Right", "Up", "Down"]
+    + [f"F{n}" for n in range(1, 24)]
+    + ["Print", "SysRq", "Pause", "Compose"]
+)
 
 MOD_RE = re.compile(r"^(shift|ctrl|control|c|alt|m|super|win|windows|meta)(_l|_r)?$", re.I)
 # niri app ids (some have spaces: "Code - OSS").
@@ -119,6 +161,81 @@ def defaults() -> dict:
 
 def evdev_keys() -> set[str]:
     return set((KEYMAP_DIR / "evdev-keys.txt").read_text().split())
+
+
+# ── The window-manager key ──────────────────────────────────────────────────
+
+
+def wm_key_file(state_dir: Path) -> Path:
+    return xremap_dir(state_dir) / "wm-key"
+
+
+def _wm(v: str | None, where: str) -> str | None:
+    if not v:
+        return None
+    v = v.strip().lower()
+    if v not in WM_KEYS:
+        raise KeysError(f"{where}: {v!r} isn't a window-manager key ({', '.join(WM_KEYS)})")
+    return v
+
+
+def wm_key(state_dir: Path | None = None, given: str | None = None) -> str:
+    """ralt (niri) or meta (Plasma): see the module docstring."""
+    if w := _wm(given, "--wm-key"):
+        return w
+    if w := _wm(os.environ.get(WM_KEY_ENV), WM_KEY_ENV):
+        return w
+    if state_dir is not None:
+        try:
+            recorded = wm_key_file(state_dir).read_text().strip().lower()
+        except OSError:
+            recorded = ""
+        if recorded in WM_KEYS:
+            return recorded
+    if "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").split(":"):
+        return WM_META
+    return WM_RALT
+
+
+def wm_key_entry() -> dict:
+    """Plasma's WM key + X → Meta + X, the first keymap entry. Not exact: a
+    held Shift / Ctrl / Alt stays held (WM key + Shift + ← → Meta + Shift + ←),
+    and it comes before every other entry, so none of them takes a key the
+    WM key is held for."""
+    return {"name": WM_ENTRY_NAME, "remap": {f"{WM_VMOD}-{k}": f"{WM_META_KEY}-{k}" for k in WM_PASS_KEYS}}
+
+
+def _meta_combo(combo):
+    """A keymap action with Right Alt as a modifier, Meta instead."""
+    if isinstance(combo, str):
+        *mods, key = combo.split("-")
+        return "-".join([WM_META_KEY if m.lower() == WM_HOLD.lower() else m for m in mods] + [key])
+    if isinstance(combo, list):
+        return [_meta_combo(x) for x in combo]
+    return combo
+
+
+def _vmod_hold(action):
+    """A modmap action that holds Right Alt, holding the virtual modifier instead."""
+    if isinstance(action, str):
+        return WM_VMOD if action.lower() == WM_HOLD.lower() else action
+    if isinstance(action, list):
+        return [_vmod_hold(x) for x in action]
+    if isinstance(action, dict) and "hold" in action:
+        return dict(action, hold=_vmod_hold(action["hold"]))
+    return action
+
+
+def for_wm_key(group: dict, wm: str) -> dict:
+    """`group` as it renders for `wm`: unchanged unless meta and a wmKey group."""
+    if wm != WM_META or not group.get("wmKey"):
+        return group
+    out = copy.deepcopy(group)
+    if out.get("section", "keymap") == "modmap":
+        out["remap"] = {k: _vmod_hold(v) for k, v in out["remap"].items()}
+    else:
+        out["remap"] = {k: _meta_combo(v) for k, v in out["remap"].items()}
+    return out
 
 
 # ── Apps to leave alone (the shell's list) ──────────────────────────────────
@@ -274,11 +391,12 @@ def _expand(names, classes: dict, where: str) -> list[str]:
     return out
 
 
-def render(model: dict, only_groups: list[str] | None = None, leave: Sequence[str] = (), with_apps: bool = True) -> dict:
-    """The xremap config for `model` (resolve()).
+def render(model: dict, only_groups: list[str] | None = None, leave: Sequence[str] = (), with_apps: bool = True, wm: str = WM_RALT) -> dict:
+    """The xremap config for `model` (resolve()), for window-manager key `wm`.
 
     `only_groups`: just those groups (on or not), no app or everywhere remaps."""
     cfg: dict = {"virtual_modifiers": list(model["virtual_modifiers"]), "modmap": [], "keymap": []}
+    wm_hold = False
     if only_groups is None and with_apps:
         for app, rule in model["apps"].items():
             if rule["remap"]:
@@ -298,6 +416,8 @@ def render(model: dict, only_groups: list[str] | None = None, leave: Sequence[st
         section = g.get("section", "keymap")
         if section not in SECTIONS:
             raise KeysError(f"group {g['id']}: section must be one of {', '.join(SECTIONS)}")
+        g = for_wm_key(g, wm)
+        wm_hold = wm_hold or (wm == WM_META and section == "modmap" and bool(g.get("wmKey")))
         entry = {"name": g.get("name", g["id"])}
         entry.update({k: copy.deepcopy(v) for k, v in g.items() if k not in META + ("name", "source", "onSource")})
         app = entry.get("application")
@@ -306,6 +426,11 @@ def render(model: dict, only_groups: list[str] | None = None, leave: Sequence[st
         if with_apps and off_in.get(g["id"]):
             _exclude_entry(entry, off_in[g["id"]])
         cfg.setdefault(section, []).append(entry)
+    if wm_hold:
+        # A WM-key hold is on: the virtual modifier and its Meta entry, first.
+        if WM_VMOD not in cfg["virtual_modifiers"]:
+            cfg["virtual_modifiers"].append(WM_VMOD)
+        cfg["keymap"].insert(0, wm_key_entry())
     out = exclude(cfg, list(leave)) if leave else cfg
     return {k: v for k, v in out.items() if v or k == "keymap"}
 
@@ -317,13 +442,14 @@ def _key_ok(tok: str, keys: set[str]) -> bool:
     return tok.upper() in keys or bool(MOD_RE.match(tok))
 
 
-def check_combo(combo, keys: set[str], where: str, modmap: bool = False) -> None:
+def check_combo(combo, keys: set[str], where: str, modmap: bool = False, vmods: Sequence[str] = ()) -> None:
     if not isinstance(combo, str) or not combo:
         raise KeysError(f"{where}: expected a key name, got {combo!r}")
     parts = [combo] if modmap else combo.split("-")
     *mods, key = parts
+    vm = {v.upper() for v in vmods}
     for m in mods:
-        if not MOD_RE.match(m):
+        if not MOD_RE.match(m) and m.upper() not in vm:
             raise KeysError(f"{where}: {m!r} in {combo!r} isn't a modifier (Shift, Ctrl/C, Alt/M, Super/Win, with _L/_R)")
     if not _key_ok(key, keys):
         raise KeysError(f"{where}: unknown key {key!r} in {combo!r} (evdev names without KEY_: a, Esc, CapsLock, LeftBrace, F13 …)")
@@ -349,6 +475,9 @@ def _check_action(v, keys: set[str], where: str, modmap: bool) -> None:
 
 def check(config: dict) -> None:
     keys = evdev_keys()
+    vmods = config.get("virtual_modifiers") or []
+    if not isinstance(vmods, list) or not all(isinstance(v, str) and _key_ok(v, keys) and not MOD_RE.match(v) for v in vmods):
+        raise KeysError(f"virtual_modifiers: expected key names that aren't modifiers, got {vmods!r}")
     for section in SECTIONS:
         entries = config.get(section) or []
         if not isinstance(entries, list):
@@ -365,7 +494,7 @@ def check(config: dict) -> None:
                     if not all(isinstance(a, str) and a for a in _as_list(v)):
                         raise KeysError(f"{where}: application lists hold app ids")
             for k, v in e["remap"].items():
-                check_combo(k, keys, f"{where} remap", modmap=section == "modmap")
+                check_combo(k, keys, f"{where} remap", modmap=section == "modmap", vmods=vmods)
                 _check_action(v, keys, f"{where} remap.{k}", modmap=section == "modmap")
 
 
@@ -387,22 +516,27 @@ def xremap_following(state_dir: Path) -> bool:
     return False
 
 
-def write_xremap(state_dir: Path) -> dict:
-    """Render and write <state>/xremap/config.json (only when it changed).
+def write_xremap(state_dir: Path, wm: str | None = None) -> dict:
+    """Render and write <state>/xremap/config.json (only when it changed), for
+    the window-manager key `wm` (default wm_key()), and record that key.
 
-    Returns {"written": path, "changed": bool, "apps": leave-alone list, "groups": on ids}."""
+    Returns {"written": path, "changed": bool, "apps": leave-alone list, "groups": on ids, "wmKey": wm}."""
+    wm = wm_key(state_dir, wm)
     model = resolve(state_dir)
     apps = leave_alone(state_dir)
-    cfg = render(model, leave=apps)
+    cfg = render(model, leave=apps, wm=wm)
     check(cfg)
     out = output_file(state_dir)
     text = _dump(cfg)
     changed = not out.exists() or out.read_text() != text
     if changed:
         _write_atomic(out, text)
+    rec = wm_key_file(state_dir)
+    if not rec.exists() or rec.read_text() != wm + "\n":
+        _write_atomic(rec, wm + "\n")
     # The old Nix-recorded base (before Loft owned the keymap) no longer applies.
     (xremap_dir(state_dir) / "base").unlink(missing_ok=True)
-    return {"written": str(out), "changed": changed, "apps": apps, "groups": [g["id"] for g in model["groups"] if g.get("on", True)]}
+    return {"written": str(out), "changed": changed, "apps": apps, "groups": [g["id"] for g in model["groups"] if g.get("on", True)], "wmKey": wm}
 
 
 def edit(state_dir: Path, mutate) -> dict:
@@ -413,7 +547,7 @@ def edit(state_dir: Path, mutate) -> dict:
     for k in ("groups", "apps", "remap"):
         if k in layer and not layer[k]:
             del layer[k]
-    check(render(resolve(state_dir, runtime=layer), leave=leave_alone(state_dir)))
+    check(render(resolve(state_dir, runtime=layer), leave=leave_alone(state_dir), wm=wm_key(state_dir)))
     _write_atomic(f, _dump(layer))
     return write_xremap(state_dir)
 
@@ -492,6 +626,8 @@ def _print_show(state_dir: Path) -> None:
             print(f"  {k} → {v}")
     apps = leave_alone(state_dir)
     print(f"\nLeft alone: {', '.join(apps) if apps else '(none)'}")
+    wm = wm_key(state_dir)
+    print(f"\nWindow-manager key: {'Meta (Plasma: Caps Lock / Esc held + key → Meta + key)' if wm == WM_META else 'Right Alt (niri Mod, lv3:ralt_switch)'}  [{wm}]")
     out = output_file(state_dir)
     print(f"\nxremap: {out} ({'xremap is reading it' if xremap_following(state_dir) else 'no xremap reads it'})")
 
@@ -523,6 +659,9 @@ def add_parser(top, state_dir_of) -> None:
         st = state_dir_of(ctx)
         if a.json:
             m = resolve(st)
+            # Groups as they render here (under Plasma the WM key sends Meta).
+            m["wmKey"] = wm_key(st)
+            m["groups"] = [for_wm_key(g, m["wmKey"]) for g in m["groups"]]
             m["leaveAlone"] = leave_alone(st)
             m["xremap"] = {"config": str(output_file(st)), "following": xremap_following(st)}
             print(json.dumps(m, indent=2, ensure_ascii=False))
@@ -645,25 +784,28 @@ def add_parser(top, state_dir_of) -> None:
 
     s.set_defaults(fn=_remap)
 
+    wm_help = "the window-manager key: ralt (niri) or meta (Plasma); default $LOFT_WM_KEY, then the last one written, then the desktop"
     s = sub.add_parser("xremap", help="write xremap's config (<state>/xremap/config.json)")
     s.add_argument("--base", help=argparse.SUPPRESS)
+    s.add_argument("--wm-key", choices=WM_KEYS, help=wm_help)
 
     def _xremap(ctx, a):
         if a.base:
             # Before Loft owned the keymap the consumer passed its own config;
             # failing makes that consumer's fallback use it as it is.
             raise KeysError("--base is gone: Loft owns the keymap now (programs.loft.keyboard; seed in ~/.config/loft/keyboard.json)")
-        done(ctx, write_xremap(state_dir_of(ctx)))
+        done(ctx, write_xremap(state_dir_of(ctx), a.wm_key))
 
     s.set_defaults(fn=_xremap)
 
     s = sub.add_parser("render", help="print an xremap config (to stdout)")
     s.add_argument("--group", action="append", metavar="ID", help="only these groups (on or off), no per-app remaps")
     s.add_argument("--out", help="write here instead (only when it changed)")
+    s.add_argument("--wm-key", choices=WM_KEYS, help=wm_help)
 
     def _render(ctx, a):
         st = state_dir_of(ctx)
-        cfg = render(resolve(st), only_groups=a.group, leave=leave_alone(st))
+        cfg = render(resolve(st), only_groups=a.group, leave=leave_alone(st), wm=wm_key(st, a.wm_key))
         check(cfg)
         if a.out:
             out = Path(a.out)
@@ -682,3 +824,7 @@ def add_parser(top, state_dir_of) -> None:
         print(json.dumps(apps) if a.json else "\n".join(apps))
 
     s.set_defaults(fn=_list)
+
+    from . import kwinkeys
+
+    kwinkeys.add_parser(sub, state_dir_of)

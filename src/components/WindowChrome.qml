@@ -40,15 +40,21 @@ Item {
     property bool canFullscreen: true
 
     readonly property bool fullscreen: hostWindow?.fullscreen ?? false
+    // The compositor's title bar (KWin with Loft's decoration) carries the
+    // traffic lights and moves the window: none of our own, and the sidebar
+    // starts at the top.
+    readonly property bool decorated: Compositor.capabilities.serverDecorations ?? false
+    readonly property int sidebarTop: decorated ? 10 : toolbarHeight
     // Active = niri's focused window is this one.
     readonly property bool active: {
-        if (!Niri.available)
+        if (!Compositor.available)
             return true;
-        const w = Niri.focusedWindow;
+        const w = Compositor.focusedWindow;
         return w !== null && w.title === (hostWindow?.title ?? "") && (w.app_id ?? "").indexOf("quickshell") >= 0;
     }
     readonly property alias surface: frame
-    readonly property real radius: fullscreen ? 0 : Theme.windowRadius
+    // Square inside the compositor's frame: its decoration rounds the window.
+    readonly property real radius: fullscreen || decorated ? 0 : Theme.windowRadius
     readonly property int toolbarHeight: 52
 
     default property alias content: contentSlot.data
@@ -113,10 +119,12 @@ Item {
                     top: parent.top
                 }
                 height: root.toolbarHeight
+                enabled: !root.decorated
                 onPressed: root.startMove()
             }
 
             TrafficLights {
+                visible: !root.decorated
                 x: 18
                 y: (root.toolbarHeight - height) / 2
                 active: root.active
@@ -130,7 +138,7 @@ Item {
             ColumnLayout {
                 anchors {
                     fill: parent
-                    topMargin: root.toolbarHeight
+                    topMargin: root.sidebarTop
                     leftMargin: 10
                     rightMargin: 10
                     bottomMargin: 10
@@ -243,7 +251,7 @@ Item {
                     spacing: 16
 
                     TrafficLights {
-                        visible: !root.hasSidebar
+                        visible: !root.hasSidebar && !root.decorated
                         active: root.active
                         canHide: root.canHide
                         canFullscreen: root.canFullscreen

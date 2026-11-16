@@ -4,7 +4,8 @@
 #
 #   loft-live [start] [--niri] [CHECKOUT]   take over: the installed shell and
 #                                          launcher stop, the checkout's run
-#                                          on this niri with hot reload
+#                                          on this niri (or Plasma session)
+#                                          with hot reload
 #   loft-live stop [--niri]                hand back to the installed Loft
 #   loft-live status
 #
@@ -23,6 +24,17 @@
 # be swapped under a running session: --niri builds the checkout's niri-loft
 # into <state>/dev/niri, which the session's niri (package niri-loft-live)
 # runs from the next login on; `stop --niri` removes it again.
+#
+# In a Plasma session that runs Loft (the "Loft" login entry; detected by
+# XDG_CURRENT_DESKTOP=…KDE… or `loft-plasma check loft`), the installed units
+# are loft-plasma-shell / loft-plasma-launcher (they carry the same
+# ConditionPathExists on the marker), and there are no niri fragments: the
+# QML, themes and launcher are what goes live. `stop` hands back to them.
+#
+# Inside a `loft-dev --compositor kwin` session, loft-live takes the Plasma
+# path against that session: its units are named …-NAME and bound to the
+# session's unit, its marker lives in the session's runtime dir, and nothing
+# on the real desktop is touched. That is how its Plasma path is tested.
 
 usage() {
   cat >&2 <<'EOF'
@@ -52,12 +64,54 @@ rt="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 live="$rt/loft-live"
 state="${LOFT_LIVE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/loft}"
 dev="$state/dev"
-installed_units=(loft-shell.service loft-launcher.service)
-live_units=(loft-live-shell.service loft-live-launcher.service)
 
 say() { echo "loft-live: $*"; }
 env_get() { sed -n "s/^$1=//p" "$live/active" 2>/dev/null | head -n1; }
 is_active() { [ -f "$live/active" ]; }
+
+# Which desktop: niri, or a Plasma session (Loft's shell in Plasma). A run
+# that is active keeps the desktop it started on (`stop` from a TTY).
+# Inside a loft-dev KDE session: that session (test mode, see above).
+dev_session=""
+dev_unit=""
+if [ -n "${LOFT_SESSION:-}" ]; then
+  senv="${LOFT_DEV_HOST_RUNTIME:-/run/user/$(id -u)}/loft-dev-$LOFT_SESSION/session.env"
+  if [ "$(sed -n 's/^LOFT_DEV_COMPOSITOR=//p' "$senv" 2>/dev/null)" = kwin ]; then
+    dev_session="$LOFT_SESSION"
+    dev_unit="$(sed -n 's/^LOFT_DEV_UNIT=//p' "$senv")"
+  fi
+fi
+# The user manager is found through XDG_RUNTIME_DIR, which inside a loft-dev
+# session is the session's own.
+mgr_rt="$rt"
+[ -z "$dev_session" ] || mgr_rt="${LOFT_DEV_HOST_RUNTIME:-/run/user/$(id -u)}"
+sctl() { XDG_RUNTIME_DIR="$mgr_rt" systemctl "$@"; }
+srun() { XDG_RUNTIME_DIR="$mgr_rt" systemd-run "$@"; }
+is_kde() { case ":${XDG_CURRENT_DESKTOP:-}:" in *:KDE:*) return 0 ;; esac; return 1; }
+desktop="$(env_get DESKTOP || true)"
+if [ -z "$desktop" ]; then
+  if [ -n "$dev_session" ]; then
+    desktop=plasma
+  elif [ -n "${NIRI_SOCKET:-}" ] && niri msg version >/dev/null 2>&1; then
+    desktop=niri
+  elif is_kde || { command -v loft-plasma >/dev/null && loft-plasma check loft; }; then
+    desktop=plasma
+  else
+    desktop=niri
+  fi
+fi
+if [ -n "$dev_session" ]; then
+  # Test mode: never the real desktop's units; state is the session's.
+  installed_units=()
+  state="${LOFT_STATE_DIR:-$state}"
+  dev="$state/dev"
+elif [ "$desktop" = plasma ]; then
+  installed_units=(loft-plasma-shell.service loft-plasma-launcher.service)
+else
+  installed_units=(loft-shell.service loft-launcher.service)
+fi
+sfx="${dev_session:+-$dev_session}"
+live_units=("loft-live-shell$sfx.service" "loft-live-launcher$sfx.service")
 
 # The running compositor's features, from its version string ("…, loft:
 # workspace-layers, title-bar"). Builds from before the title bar say
@@ -84,8 +138,9 @@ status() {
     say "not active: the installed Loft runs"
   fi
   for u in "${installed_units[@]}" "${live_units[@]}"; do
-    printf '  %-28s %s\n' "$u" "$(systemctl --user is-active "$u" 2>/dev/null || true)"
+    printf '  %-28s %s\n' "$u" "$(sctl --user is-active "$u" 2>/dev/null || true)"
   done
+  [ "$desktop" = niri ] || { say "desktop: Plasma${dev_session:+ (loft-dev session $dev_session)}"; return 0; }
   if [ -L "$dev/niri" ]; then
     say "next login's niri: $(readlink -f "$dev/niri")"
   fi
@@ -101,9 +156,9 @@ stop() {
     [ "$niri" = 1 ] || say "not active"
     return 0
   fi
-  systemctl --user stop "${live_units[@]}" 2>/dev/null || true
+  sctl --user stop "${live_units[@]}" 2>/dev/null || true
   # niri drops the checkout's fragments (the include is optional).
-  rm -f "$dev/niri.kdl"
+  [ "$desktop" != niri ] || rm -f "$dev/niri.kdl"
   rm -f "$live/active"
   # The installed CLI renders the theme with its own templates again.
   theme="$(LOFT_STATE_DIR="$state" loft theme current 2>/dev/null || true)"
@@ -111,25 +166,34 @@ stop() {
     LOFT_STATE_DIR="$state" LOFT_HOOKS=none loft theme apply "$theme" >/dev/null 2>&1 \
       || say "re-rendering the theme with the installed loft failed; \`loft theme apply\` fixes it"
   fi
-  systemctl --user start "${installed_units[@]}" || true
+  if [ -n "$dev_session" ]; then
+    say "stopped (loft-dev session $dev_session: no installed units to hand back to)"
+    return 0
+  fi
+  # Plasma: the units' ExecCondition (loft-plasma check loft) still decides.
+  sctl --user start "${installed_units[@]}" || true
   say "handed back to the installed Loft"
 }
 
 start() {
-  if [ -z "${NIRI_SOCKET:-}" ] || ! niri msg version >/dev/null 2>&1; then
-    echo "loft-live: needs the real niri session (NIRI_SOCKET); for a window, use loft-dev" >&2
+  if [ "$desktop" = niri ] && { [ -z "${NIRI_SOCKET:-}" ] || ! niri msg version >/dev/null 2>&1; }; then
+    echo "loft-live: needs the real niri session (NIRI_SOCKET) or a Plasma session running Loft; for a window, use loft-dev" >&2
     exit 1
   fi
-  if [ -n "${LOFT_SESSION:-}" ]; then
+  if [ -n "${LOFT_SESSION:-}" ] && [ -z "$dev_session" ]; then
     echo "loft-live: inside the loft-dev session $LOFT_SESSION; run it from the real desktop" >&2
     exit 1
+  fi
+  if [ "$desktop" = plasma ] && [ -z "$dev_session" ] && command -v loft-plasma >/dev/null && ! loft-plasma check loft; then
+    say "warning: this Plasma session runs plasmashell, not Loft (\`loft-plasma use loft\` switches);"
+    say "the checkout's shell runs next to it"
   fi
   root="$(realpath "${root:-$PWD}")"
   if [ ! -f "$root/src/shell.qml" ] || [ ! -f "$root/niri/shell-binds.kdl.in" ]; then
     echo "loft-live: $root is not a Loft checkout (pass its path, or run from inside it)" >&2
     exit 1
   fi
-  if ! grep -qF "$dev/niri.kdl" "${XDG_CONFIG_HOME:-$HOME/.config}/loft/niri.kdl" 2>/dev/null; then
+  if [ "$desktop" = niri ] && ! grep -qF "$dev/niri.kdl" "${XDG_CONFIG_HOME:-$HOME/.config}/loft/niri.kdl" 2>/dev/null; then
     say "warning: loft/niri.kdl doesn't include $dev/niri.kdl (programs.loft from before"
     say "loft-live): the checkout's QML runs, but its niri fragments and binds don't"
   fi
@@ -140,7 +204,8 @@ start() {
   # The installed shell's environment (state dir, library, icon theme, …),
   # then what makes it the checkout's.
   unit_env=()
-  read -r -a unit_env <<< "$(systemctl --user show loft-shell.service -p Environment --value 2>/dev/null || true)"
+  [ ${#installed_units[@]} -eq 0 ] \
+    || read -r -a unit_env <<< "$(sctl --user show "${installed_units[0]}" -p Environment --value 2>/dev/null || true)"
   [ ${#unit_env[@]} -gt 0 ] || unit_env=("LOFT_STATE_DIR=$state")
 
   # `loft` for the shell: the checkout's CLI (its renderers and templates).
@@ -160,16 +225,19 @@ start() {
     "LOFT_THEME_PATH=${XDG_DATA_HOME:-$HOME/.local/share}/loft/themes:$root/themes"
     "LOFT_SHELL_PATH=$root/src"
     "LOFT_SHELL_SRC=$root/src"
+    # The active theme, as the installed loft-shell wrapper sets it (niri's
+    # session environment happened to carry it; Plasma's doesn't).
+    "LOFT_THEME_FILE=${LOFT_THEME_FILE:-$state/current/theme.json}"
   )
 
   # A previous live run first (stopping its shell removes the marker), then
   # mark: from here on the installed units refuse to start.
-  systemctl --user stop "${live_units[@]}" 2>/dev/null || true
-  systemctl --user reset-failed "${live_units[@]}" 2>/dev/null || true
+  sctl --user stop "${live_units[@]}" 2>/dev/null || true
+  sctl --user reset-failed "${live_units[@]}" 2>/dev/null || true
   {
-    printf 'CHECKOUT=%s\nSTARTED=%s\n' "$root" "$(date -Iseconds)"
+    printf 'CHECKOUT=%s\nSTARTED=%s\nDESKTOP=%s\n' "$root" "$(date -Iseconds)" "$desktop"
   } > "$live/active"
-  systemctl --user stop "${installed_units[@]}" 2>/dev/null || true
+  [ ${#installed_units[@]} -eq 0 ] || sctl --user stop "${installed_units[@]}" 2>/dev/null || true
 
   # The theme, rendered by the checkout's templates.
   # (By name: `current` is a rendered composition, not a pack.)
@@ -182,24 +250,27 @@ start() {
   # The checkout's niri fragments, after the installed ones (later wins).
   # quickshell by absolute path: niri spawns with its own PATH, which
   # doesn't have it (a bare name made every shell keybind do nothing).
-  qs="$(command -v quickshell)"
-  sed "s|@IPC@|\"$qs\" \"ipc\" \"--path\" \"$root/src\" \"call\"|g" \
-    "$root/niri/shell-binds.kdl.in" > "$live/shell-binds.kdl"
-  {
-    echo "// loft-live: $root over the installed Loft. Removed by \`loft-live stop\`."
-    echo "include \"$live/shell-binds.kdl\""
-    if niri_has workspace-layers && [ -f "$root/niri/workspace-wallpapers.kdl" ]; then
-      echo "include \"$root/niri/workspace-wallpapers.kdl\""
+  # (Plasma: none; KWin's side is loft-kwin's, at runtime.)
+  if [ "$desktop" = niri ]; then
+    qs="$(command -v quickshell)"
+    sed "s|@IPC@|\"$qs\" \"ipc\" \"--path\" \"$root/src\" \"call\"|g" \
+      "$root/niri/shell-binds.kdl.in" > "$live/shell-binds.kdl"
+    {
+      echo "// loft-live: $root over the installed Loft. Removed by \`loft-live stop\`."
+      echo "include \"$live/shell-binds.kdl\""
+      if niri_has workspace-layers && [ -f "$root/niri/workspace-wallpapers.kdl" ]; then
+        echo "include \"$root/niri/workspace-wallpapers.kdl\""
+      fi
+      if niri_has title-bar && [ -f "$root/niri/title-bar.kdl" ]; then
+        echo "include \"$root/niri/title-bar.kdl\""
+        # The theme's bar colors over the checkout's fallback.
+        echo "include optional=true \"$state/current/niri-loft.kdl\""
+      fi
+      [ -f "$root/niri/dev-local.kdl" ] && echo "include \"$root/niri/dev-local.kdl\""
+    } > "$dev/niri.kdl"
+    if [ -f "$root/niri/title-bar.kdl" ] && ! niri_has title-bar; then
+      say "the running niri has no title bar; \`loft-live --niri\` builds one for the next login"
     fi
-    if niri_has title-bar && [ -f "$root/niri/title-bar.kdl" ]; then
-      echo "include \"$root/niri/title-bar.kdl\""
-      # The theme's bar colors over the checkout's fallback.
-      echo "include optional=true \"$state/current/niri-loft.kdl\""
-    fi
-    [ -f "$root/niri/dev-local.kdl" ] && echo "include \"$root/niri/dev-local.kdl\""
-  } > "$dev/niri.kdl"
-  if [ -f "$root/niri/title-bar.kdl" ] && ! niri_has title-bar; then
-    say "the running niri has no title bar; \`loft-live --niri\` builds one for the next login"
   fi
 
   setenv=()
@@ -212,26 +283,49 @@ start() {
   for e in WAYLAND_DISPLAY NIRI_SOCKET DISPLAY XDG_CURRENT_DESKTOP; do
     [ -n "${!e:-}" ] && setenv+=("--setenv=$e=${!e}")
   done
+  # Plasma: the session's own bus, runtime dir and XDG dirs (the same as the
+  # user manager's in a real session; a loft-dev session's own in one).
+  if [ "$desktop" = plasma ]; then
+    # The user manager can still hold a niri login's NIRI_SOCKET (lingering):
+    # the shell would drive that niri instead of KWin.
+    setenv+=(-p UnsetEnvironment=NIRI_SOCKET)
+    for e in DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME \
+      XDG_STATE_HOME XDG_SESSION_TYPE KDE_FULL_SESSION KDE_SESSION_VERSION LOFT_SESSION LOFT_DEV_HOST_RUNTIME; do
+      [ -n "${!e:-}" ] && setenv+=("--setenv=$e=${!e}")
+    done
+  fi
 
-  common=(--user --collect --quiet -p Restart=on-failure -p RestartSec=2
-    -p PartOf=graphical-session.target)
+  common=(--user --collect --quiet -p Restart=on-failure -p RestartSec=2)
+  if [ -n "$dev_unit" ]; then
+    # Test mode: the loft-dev session's unit takes these down with it.
+    common+=(-p "BindsTo=$dev_unit" -p "After=$dev_unit")
+  else
+    common+=(-p PartOf=graphical-session.target)
+  fi
   # The marker goes with the live shell: when the session ends (PartOf) —
   # the runtime dir outlives a logout when the user lingers — the next login
   # starts the installed Loft.
-  systemd-run "${common[@]}" --unit=loft-live-shell --description="Loft shell (live from $root)" \
-    -p "ExecStopPost=rm -f $live/active" \
+  srun "${common[@]}" --unit="${live_units[0]}" --description="Loft shell (live from $root)" \
+    -p "ExecStopPost=$(command -v rm) -f $live/active" \
     "${setenv[@]}" quickshell --path "$root/src"
-  systemd-run "${common[@]}" --unit=loft-live-launcher --description="Loft launcher (live from $root)" \
+  srun "${common[@]}" --unit="${live_units[1]}" --description="Loft launcher (live from $root)" \
     "${setenv[@]}" "--setenv=LOFT_LAUNCHER_DIR=$root/launcher" loft-launcher service
 
-  say "live from $root: the installed shell and launcher are stopped"
-  say "logs: journalctl --user -fu loft-live-shell   back: loft-live stop"
+  if [ -n "$dev_session" ]; then
+    say "live from $root in the loft-dev session $dev_session"
+  else
+    say "live from $root: the installed shell and launcher are stopped"
+  fi
+  say "logs: journalctl --user -fu ${live_units[0]%.service}   back: loft-live stop"
 }
 
 case "$action" in
   status) status ;;
   stop) stop ;;
   start)
+    if [ "$niri" = 1 ] && [ "$desktop" != niri ]; then
+      echo "loft-live: --niri is for niri sessions" >&2; exit 2
+    fi
     if [ "$niri" = 1 ]; then build_niri; fi
     start
     ;;

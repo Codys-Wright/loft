@@ -149,7 +149,7 @@ Singleton {
         if (col.length > 0 && (perWorkspace || rotateMinutes > 0)) {
             let i = step;
             if (perWorkspace)
-                i += Math.max(0, ((ws ?? Niri.focusedWorkspace)?.idx ?? 1) - 1);
+                i += Math.max(0, ((ws ?? Compositor.focusedWorkspace)?.idx ?? 1) - 1);
             return col[i % col.length];
         }
         return Theme.wallpaperImage;
@@ -238,7 +238,7 @@ Singleton {
                     height: s.height
                 })),
         main: Displays.mainScreen?.name ?? "",
-        workspaces: Niri.workspaces.filter(w => w.output).map(w => ({
+        workspaces: Compositor.workspaces.filter(w => w.output).map(w => ({
                     output: w.output,
                     idx: w.idx,
                     name: w.name ?? "",
@@ -559,7 +559,7 @@ Singleton {
         }
 
         function current(): string {
-            return root.wallpaperFor(Niri.focusedWorkspace?.output ?? "");
+            return root.wallpaperFor(Compositor.focusedWorkspace?.output ?? "");
         }
 
         function lockDesign(): string {
@@ -661,7 +661,7 @@ Singleton {
         if (col.length === 0)
             return;
         // The theme default shows the rendered bundle's copy: find it by its pack path.
-        let cur = col.indexOf(wallpaperFor(Niri.focusedWorkspace?.output ?? ""));
+        let cur = col.indexOf(wallpaperFor(Compositor.focusedWorkspace?.output ?? ""));
         if (cur < 0)
             cur = col.indexOf(defaultWallpaper);
         chooseWallpaper(col[((cur < 0 ? 0 : cur + dir) % col.length + col.length) % col.length]);

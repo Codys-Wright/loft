@@ -11,7 +11,9 @@
 #                   a fake loft-pointer, recording zooms, the workspace panorama's layout math
 #                   on recorded niri JSON and a run against a fake niri), Apps to leave alone
 #                   → xremap (tests/test_keys.py), spaces/templates and the instance fixtures
-#                   against schemas/space-1.json, and Spotify themed by Loft
+#                   against schemas/space-1.json, shell-binds → the Plasma session's KWin
+#                   shortcut script and the record/revert of taken keys (tests/test_kwinkeys.py),
+#                   and Spotify themed by Loft
 #                   (tests/test_spotify.py: palette → text scheme, wrapper rewriting on a fake
 #                   Spotify tree, version-change detection, setup with a fake spicetify, the
 #                   `spotify` hook) — all offline
@@ -36,9 +38,16 @@
 #   loft-niri-clippy  `cargo clippy --all-targets -D warnings`
 #   loft-appmenu    the global menu daemon builds and its tests pass
 #   loft-appmenu-clippy  the same clippy gate for it
+#   loft-kwin       the KWin backend daemon builds and its tests pass (KWin snapshots →
+#                   niri-shaped windows/workspaces: stable ids, one workspace per
+#                   desktop × output, focus and timestamps)
+#   loft-kwin-clippy  the same clippy gate for it
 #   loft-sleep      the sleep watcher builds and its tests pass (fake BlueZ adapters +
 #                   sleep lock: off before sleep, back on after, only what was on)
 #   loft-sleep-clippy  the same clippy gate for it
+#   loft-kdecoration  Loft's KWin decoration plugin builds against KDecoration3 and its
+#                   ctest passes (kdecoration.ini parsing: appearance, Tahoe defaults,
+#                   #rrggbbaa overrides, clamps)
 #   spicetify-live  Spotify's live recolor extension (spicetify/loft-live.js): colors.css
 #                   re-read cache-busted and swapped in at the same cascade slot
 #   loft-input      the test driver builds and its tests pass (keymaps, combos,
@@ -250,7 +259,22 @@
           installPhase = "touch $out";
         });
 
+        loft-kwin = self'.packages.loft-kwin;
+
+        loft-kwin-clippy = self'.packages.loft-kwin.overrideAttrs (old: {
+          pname = "loft-kwin-clippy";
+          nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.clippy ];
+          dontCargoBuild = true;
+          doCheck = false;
+          buildPhase = ''
+            cargo clippy --offline -p loft-kwin --all-targets -- -D warnings
+          '';
+          installPhase = "touch $out";
+        });
+
         loft-sleep = self'.packages.loft-sleep;
+
+        loft-kdecoration = self'.packages.loft-kdecoration;
 
         loft-sleep-clippy = self'.packages.loft-sleep.overrideAttrs (old: {
           pname = "loft-sleep-clippy";

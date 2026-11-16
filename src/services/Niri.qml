@@ -4,7 +4,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Live niri state + actions over niri's IPC socket ($NIRI_SOCKET).
+// Live niri state + actions over niri's IPC socket ($NIRI_SOCKET): the niri
+// backend of services/Compositor.qml. Nothing else uses this directly.
 //
 // One socket subscribes to the event stream (newline-delimited JSON, niri-ipc
 // `Event`); a second one sends `Action` requests. This replaces the Hyprland
@@ -28,12 +29,23 @@ Singleton {
     // { names: [...], current_idx } (KeyboardLayoutsChanged / …Switched).
     property var keyboardLayouts: ({ names: [], current_idx: 0 })
 
+    // What niri offers, for Compositor.capabilities: everything.
+    readonly property var capabilities: ({
+            columns: true,
+            floating: true,
+            minimize: false,
+            overview: true,
+            windowScreenshot: true,
+            workspaceNames: true,
+            perOutputWorkspaces: true,
+            titleBarEvents: true,
+            configReload: true,
+            serverDecorations: false
+        })
+
     // A screenshot was taken (niri's screenshot UI or actions); path may be "".
     // niri only says so once the PNG is encoded, seconds later on big outputs.
     signal screenshotTaken(string path)
-    // The moment Loft's own capture takes the picture (before encoding): the
-    // island's shutter flashes then, not when screenshotTaken follows.
-    signal shutter()
     // niri (re)loaded its config files; failed = it kept the previous config.
     signal configLoaded(bool failed)
     // niri-loft (nix/niri/title-bar.patch): a window's yellow traffic
@@ -76,6 +88,135 @@ Singleton {
 
     function toggleOverview() {
         action("ToggleOverview");
+    }
+
+    // ── Actions: any compositor ───────────────────────────────────────────
+    // The next (delta > 0) or previous workspace on the focused output.
+    function focusWorkspaceRelative(delta) {
+        root.action(delta > 0 ? "FocusWorkspaceDown" : "FocusWorkspaceUp");
+    }
+
+    function closeWindow(id) {
+        root.action("CloseWindow", { id: id });
+    }
+
+    function moveWindowToWorkspace(windowId, workspaceId, focus) {
+        root.action("MoveWindowToWorkspace", { window_id: windowId, reference: { Id: workspaceId }, focus: focus === true });
+    }
+
+    // By position (1-based) on the window's output.
+    function moveWindowToWorkspaceIndex(windowId, index, focus) {
+        root.action("MoveWindowToWorkspace", { window_id: windowId, reference: { Index: index }, focus: focus === true });
+    }
+
+    // The focused window to the next (delta > 0) or previous workspace.
+    function moveFocusedWindowToWorkspaceRelative(delta, focus) {
+        root.action(delta > 0 ? "MoveWindowToWorkspaceDown" : "MoveWindowToWorkspaceUp", { focus: focus === true });
+    }
+
+    function moveWindowToOutput(id, output) {
+        root.action("MoveWindowToMonitor", { id: id, output: output });
+    }
+
+    function moveFocusedWindowToNextOutput() {
+        root.action("MoveWindowToMonitorNext");
+    }
+
+    function toggleFloating(id) {
+        root.action("ToggleWindowFloating", { id: id });
+    }
+
+    function setFloating(id, floating) {
+        root.action(floating ? "MoveWindowToFloating" : "MoveWindowToTiling", { id: id });
+    }
+
+    function toggleFullscreen(id) {
+        root.action("FullscreenWindow", { id: id });
+    }
+
+    function maximizeToEdges(id) {
+        root.action("MaximizeWindowToEdges", { id: id });
+    }
+
+    function centerWindow(id) {
+        root.action("CenterWindow", { id: id });
+    }
+
+    // Sizes and positions in % of the output's working area.
+    function setWindowWidthPercent(id, percent) {
+        root.action("SetWindowWidth", { id: id, change: { SetProportion: percent } });
+    }
+
+    function setWindowHeightPercent(id, percent) {
+        root.action("SetWindowHeight", { id: id, change: { SetProportion: percent } });
+    }
+
+    function resetWindowHeight(id) {
+        root.action("ResetWindowHeight", { id: id });
+    }
+
+    function moveFloatingWindowPercent(id, x, y) {
+        root.action("MoveFloatingWindow", { id: id, x: { SetProportion: x }, y: { SetProportion: y } });
+    }
+
+    function setWorkspaceName(workspaceId, name) {
+        root.action("SetWorkspaceName", { name: name, workspace: { Id: workspaceId } });
+    }
+
+    function unsetWorkspaceName(workspaceId) {
+        root.action("UnsetWorkspaceName", { reference: { Id: workspaceId } });
+    }
+
+    function switchKeyboardLayout(index) {
+        root.action("SwitchLayout", { layout: { Index: index } });
+    }
+
+    // The compositor writes `path` (and copies it); screenshotTaken follows.
+    function screenshotWindow(id, path, showPointer) {
+        root.action("ScreenshotWindow", { id: id, write_to_disk: true, show_pointer: showPointer, path: path });
+    }
+
+    // ── Actions: scrolling-layout columns (capabilities.columns) ─────────
+    // These act on the focused column; given a window id, it's focused first.
+    function maximizeColumn(id) {
+        focusFirst(id);
+        root.action("MaximizeColumn");
+    }
+
+    function setColumnWidthPercent(id, percent) {
+        focusFirst(id);
+        root.action("SetColumnWidth", { change: { SetProportion: percent } });
+    }
+
+    function expandColumn(id) {
+        focusFirst(id);
+        root.action("ExpandColumnToAvailableWidth");
+    }
+
+    function centerVisibleColumns(id) {
+        focusFirst(id);
+        root.action("CenterVisibleColumns");
+    }
+
+    function expelWindowFromColumn(id) {
+        focusFirst(id);
+        root.action("ExpelWindowFromColumn");
+    }
+
+    function consumeOrExpelWindowLeft(id) {
+        root.action("ConsumeOrExpelWindowLeft", { id: id });
+    }
+
+    function focusFirst(id) {
+        if (id !== undefined && id !== null)
+            root.focusWindow(id);
+    }
+
+    // KWin's minimize/activities have no niri counterpart (capabilities.minimize).
+    function setMinimized(id, minimized) {
+    }
+
+    function setActivity(activity) {
     }
 
     // ── Event handling ────────────────────────────────────────────────────

@@ -1,0 +1,83 @@
+diff --git a/src/kwin.kcfg b/src/kwin.kcfg
+index e6dba4a..7c93cb6 100644
+--- a/src/kwin.kcfg
++++ b/src/kwin.kcfg
+@@ -188,6 +188,9 @@
+         <entry name="ElectricBorderTiling" type="Bool">
+             <default>true</default>
+         </entry>
++        <entry name="TileWhileMovingModifier" type="String">
++            <default>Shift</default>
++        </entry>
+         <entry name="ElectricBorderCornerRatio" type="Double">
+             <default>0.25</default>
+             <min>0.0</min>
+diff --git a/src/options.cpp b/src/options.cpp
+index 9024359..a10d2e0 100644
+--- a/src/options.cpp
++++ b/src/options.cpp
+@@ -757,6 +757,16 @@ void Options::syncFromKcfgc()
+     setBorderlessMaximizedWindows(m_settings->borderlessMaximizedWindows());
+     setElectricBorderMaximize(m_settings->electricBorderMaximize());
+     setElectricBorderTiling(m_settings->electricBorderTiling());
++    const QString tileWhileMovingModifier = m_settings->tileWhileMovingModifier();
++    if (tileWhileMovingModifier == QLatin1StringView("Alt")) {
++        m_tileWhileMovingModifier = Qt::AltModifier;
++    } else if (tileWhileMovingModifier == QLatin1StringView("Ctrl")) {
++        m_tileWhileMovingModifier = Qt::ControlModifier;
++    } else if (tileWhileMovingModifier == QLatin1StringView("Meta")) {
++        m_tileWhileMovingModifier = Qt::MetaModifier;
++    } else {
++        m_tileWhileMovingModifier = Qt::ShiftModifier;
++    }
+     setElectricBorderCornerRatio(m_settings->electricBorderCornerRatio());
+     setElectricBorderAllScreenCorner(m_settings->electricBorderAllScreenCorner());
+     setAllowTearing(m_settings->allowTearing());
+diff --git a/src/options.h b/src/options.h
+index 118cae2..2469f90 100644
+--- a/src/options.h
++++ b/src/options.h
+@@ -612,6 +612,13 @@ public:
+     {
+         return electric_border_tiling;
+     }
++    /**
++     * Modifier that, held while moving a window, tiles it into the custom tile under the pointer.
++     */
++    Qt::KeyboardModifier tileWhileMovingModifier() const
++    {
++        return m_tileWhileMovingModifier;
++    }
+     /**
+      * @returns true if each screen has its own active corners instead of limiting
+      * to only four corners across all screens.
+@@ -973,6 +980,7 @@ private:
+ 
+     Qt::Corner m_pictureInPictureHomeCorner = Qt::BottomRightCorner;
+     int m_pictureInPictureMargin = 20;
++    Qt::KeyboardModifier m_tileWhileMovingModifier = Qt::ShiftModifier;
+ 
+     MouseCommand wheelToMouseCommand(MouseWheelCommand com, qreal delta) const;
+ };
+diff --git a/src/window.cpp b/src/window.cpp
+index 1eb0453..51d5b60 100644
+--- a/src/window.cpp
++++ b/src/window.cpp
+@@ -1092,7 +1092,7 @@ void Window::finishInteractiveMoveResize(bool cancel)
+             maximize(*maximizeMode, m_electricGeometryRestore);
+         }
+         setElectricBorderMaximizing(false);
+-    } else if (wasMove && (m_interactiveMoveResize.modifiers & Qt::ShiftModifier)) {
++    } else if (wasMove && (m_interactiveMoveResize.modifiers & options->tileWhileMovingModifier())) {
+         setQuickTileMode(QuickTileFlag::Custom, m_interactiveMoveResize.anchor);
+     }
+     setElectricBorderMode(std::nullopt);
+@@ -1229,7 +1229,7 @@ void Window::updateInteractiveMoveResize(const QPointF &global, Qt::KeyboardModi
+         }
+ 
+         if (!isRequestedFullScreen()) {
+-            if (modifiers & Qt::ShiftModifier) {
++            if (modifiers & options->tileWhileMovingModifier()) {
+                 resetQuickTilingMaximizationZones();
+                 const auto &r = quickTileGeometry(QuickTileFlag::Custom, global);
+                 if (r.isEmpty()) {

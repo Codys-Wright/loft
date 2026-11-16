@@ -112,7 +112,7 @@ Singleton {
     // Apps that have something: a rule of yours, a running window, a config rule.
     function knownApps() {
         const ids = new Set(Object.keys(rules));
-        for (const w of Niri.windows)
+        for (const w of Compositor.windows)
             if (w.app_id && Apps.own[w.app_id] === undefined)
                 ids.add(w.app_id);
         for (const r of configRules)
@@ -308,7 +308,7 @@ Singleton {
     }
 
     Connections {
-        target: Niri
+        target: Compositor
         function onConfigLoaded() {
             root.refresh();
         }
@@ -339,7 +339,7 @@ Singleton {
         }
         // The focused window's app: Keep Opaque on/off.
         function toggleOpaqueFocused(): void {
-            const w = Niri.windows.find(x => x.is_focused);
+            const w = Compositor.windows.find(x => x.is_focused);
             if (w?.app_id)
                 root.setOpaque(w.app_id, !root.isOpaque(w.app_id));
         }

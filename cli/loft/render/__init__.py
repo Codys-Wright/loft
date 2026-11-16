@@ -19,6 +19,7 @@ the same name.
     walker      walker.css             colors material launcher                  —
     noctalia    noctalia.json          colors                                    —
     spotify     spicetify.ini          colors                                    spotify
+    kdecoration kdecoration.ini        colors                                    — (the plugin watches it)
 
 `loft theme render` writes them flat into a directory; `loft theme apply` and
 `preview` go through the composition cache (render/compose.py).
@@ -33,7 +34,7 @@ from pathlib import Path
 
 from ..facets.model import Catalog
 from ..facets.resolve import Resolved
-from . import compose, gtk, manifest, niri, noctalia, qt, shell, spotify, terminal, walker, wallpapers
+from . import compose, gtk, kdecoration, manifest, niri, noctalia, qt, shell, spotify, terminal, walker, wallpapers
 from .spotify import spicetify_scheme  # noqa: F401  (tests, spotify tooling)
 from .unit import Source, Unit
 
@@ -49,6 +50,7 @@ UNITS: list[Unit] = [
     walker.UNIT,
     noctalia.UNIT,
     spotify.UNIT,
+    kdecoration.UNIT,
 ]
 BY_NAME = {u.name: u for u in UNITS} | {compose.APPS.name: compose.APPS}
 

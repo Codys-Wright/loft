@@ -41,7 +41,7 @@ Singleton {
     property bool compositorHasIt: false
     property string compositorVersion: ""
     readonly property bool supported: configured && compositorHasIt
-    readonly property bool active: supported && Settings.wallpaper.moveWithWorkspaces && !PerformanceMode.on && Niri.available && Vibes.fakeLayout === null
+    readonly property bool active: supported && Settings.wallpaper.moveWithWorkspaces && !PerformanceMode.on && Compositor.available && Vibes.fakeLayout === null
     // Tests / measurements: every workspace gets a surface (the naive way).
     readonly property bool all: (Quickshell.env("LOFT_WS_WALLPAPERS_ALL") ?? "") === "1"
 
@@ -69,8 +69,8 @@ Singleton {
     }
 
     function update() {
-        const want = active ? Plan.plan(Niri.workspaces, Quickshell.screens.map(s => s.name), {
-            overview: Niri.overviewOpen,
+        const want = active ? Plan.plan(Compositor.workspaces, Quickshell.screens.map(s => s.name), {
+            overview: Compositor.overviewOpen,
             zoom: overviewZoom,
             all: all,
             live: live
@@ -104,7 +104,7 @@ Singleton {
         ready = r;
         const e = live[key];
         if (on && e && !covered[e.screen]) {
-            const ws = Niri.workspaces.find(w => w.output === e.screen && w.is_active);
+            const ws = Compositor.workspaces.find(w => w.output === e.screen && w.is_active);
             if (ws && refOf(ws) === e.ref) {
                 const c = Object.assign({}, covered);
                 c[e.screen] = true;
@@ -121,13 +121,13 @@ Singleton {
 
     // The workspace a surface is for (null once it is gone).
     function workspaceFor(screen, ref) {
-        return Niri.workspaces.find(w => w.output === screen && refOf(w) === ref) ?? null;
+        return Compositor.workspaces.find(w => w.output === screen && refOf(w) === ref) ?? null;
     }
 
     onActiveChanged: update()
     Component.onCompleted: update()
     Connections {
-        target: Niri
+        target: Compositor
         function onWorkspaceMapChanged() {
             root.update();
         }
@@ -194,7 +194,7 @@ Singleton {
                 supported: root.supported,
                 active: root.active,
                 compositor: root.compositorVersion,
-                overview: Niri.overviewOpen,
+                overview: Compositor.overviewOpen,
                 surfaces: root.keys.length,
                 perScreen: per,
                 decodedMB: Math.round(bytes / 1048576 * 10) / 10,

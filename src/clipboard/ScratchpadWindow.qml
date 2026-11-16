@@ -125,7 +125,7 @@ FloatingWindow {
 
     // Active = niri's focused window is this one (the glass dims, the
     // traffic lights turn grey otherwise).
-    readonly property bool focusedHere: !Niri.available || (Niri.focusedWindow?.title === window.title)
+    readonly property bool focusedHere: !Compositor.available || (Compositor.focusedWindow?.title === window.title)
 
     GlassSurface {
         id: frame

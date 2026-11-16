@@ -38,7 +38,7 @@ Item {
 
     readonly property bool spacesOn: Spaces.enabled && Spaces.loaded && Spaces.spaces.length > 0
     readonly property bool isMain: Displays.mainScreen?.name === output
-    readonly property var workspaces: Niri.workspacesOn(output)
+    readonly property var workspaces: Compositor.workspacesOn(output)
     readonly property var activeWs: workspaces.find(w => w.is_active) ?? null
 
     // Workspace icons (spaces off): a named workspace's glyph, "" = a dot.
@@ -173,7 +173,7 @@ Item {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.spacesOn ? Spaces.toggleSwitcher(root.output) : Niri.toggleOverview()
+            onClicked: root.spacesOn ? Spaces.toggleSwitcher(root.output) : Compositor.toggleOverview()
         }
     }
 
@@ -206,7 +206,7 @@ Item {
                     readonly property bool isDivider: modelData.kind === "divider"
                     // This display's workspaces of the space (or the one workspace).
                     readonly property var mine: isSpace ? Spaces.workspacesOf(modelData.space.id, root.output) : modelData.ws ? [modelData.ws] : []
-                    readonly property bool occupied: mine.some(w => Niri.windowsOn(w.id).length > 0)
+                    readonly property bool occupied: mine.some(w => Compositor.windowsOn(w.id).length > 0)
                     readonly property bool urgent: mine.some(w => w.is_urgent)
                     readonly property bool here: mine.length > 0
                     // A named workspace's icon ("" = the dot glyphs).
@@ -302,7 +302,7 @@ Item {
                             if (dot.isSpace)
                                 Spaces.focus(dot.modelData.space.id);
                             else
-                                Niri.focusWorkspace(dot.modelData.ws.id);
+                                Compositor.focusWorkspace(dot.modelData.ws.id);
                         }
                     }
                 }

@@ -106,6 +106,74 @@
         assert off.home-manager.sharedModules == [ ];
         pkgs.runCommand "niri-follows-system" { } "touch $out";
 
+      # programs.loft.plasma: SDDM offers a "Loft" session that can be the
+      # default (NixOS checks defaultSession against the provided sessions),
+      # it runs Plasma's startup through the marker script, home-manager
+      # users get programs.loft.plasma.enable, and Loft's KWin decoration is
+      # installed system-wide.
+      checks.plasma-session-module =
+        let
+          eval =
+            extra:
+            (self.inputs.nixpkgs.lib.nixosSystem {
+              modules = [
+                self.nixosModules.default
+                {
+                  options.home-manager.sharedModules = lib.mkOption {
+                    type = lib.types.listOf lib.types.raw;
+                    default = [ ];
+                  };
+                  config = {
+                    nixpkgs.hostPlatform = pkgs.stdenv.hostPlatform.system;
+                    boot.loader.grub.enable = false;
+                    fileSystems."/" = {
+                      device = "nodev";
+                      fsType = "tmpfs";
+                    };
+                    system.stateVersion = "25.11";
+                    services.displayManager.sddm.enable = true;
+                    services.desktopManager.plasma6.enable = true;
+                    programs.loft.plasma.enable = true;
+                    services.displayManager.defaultSession = "loft";
+                  };
+                }
+                extra
+              ];
+            }).config;
+          c = eval { };
+          # kwinPackage: a stand-in package, so the check builds no KWin.
+          kwin = pkgs.hello;
+          ck = eval { programs.loft.plasma.kwinPackage = kwin; };
+          sessions = c.services.displayManager.sessionData.desktops;
+          shared = c.home-manager.sharedModules;
+          hasKwin = lib.any (m: (m.programs.loft.plasma.kwinPackage.content or null) == kwin);
+        in
+        assert lib.any (m: (m.programs.loft.plasma.enable.content or null) == true) shared;
+        # kwinPackage: off by default; set, it reaches home-manager and gets
+        # the capability wrapper NixOS gives the stock kwin_wayland.
+        assert !(c.security.wrappers ? loft-kwin_wayland) && !(hasKwin shared);
+        assert hasKwin ck.home-manager.sharedModules;
+        assert ck.security.wrappers.loft-kwin_wayland.source == "${kwin}/bin/kwin_wayland";
+        assert ck.security.wrappers.loft-kwin_wayland.capabilities == "cap_sys_nice+ep";
+        # KWin finds Loft's decoration in the system profile.
+        assert lib.elem self.packages.${pkgs.stdenv.hostPlatform.system}.loft-kdecoration c.environment.systemPackages;
+        pkgs.runCommand "plasma-session-module" { } ''
+          f=${sessions}/share/wayland-sessions/loft.desktop
+          grep -qx 'Name=Loft' "$f"
+          grep -qx 'DesktopNames=KDE' "$f"
+          exec=$(sed -n 's/^Exec=//p' "$f")
+          grep -q 'plasma-session"$' "$exec"
+          grep -q 'startplasma-wayland$' "$exec"
+          # The plain Plasma entry is still there.
+          ls ${sessions}/share/wayland-sessions/ | grep -q '^plasma'
+          # The lock screen's shell package is in the system profile.
+          grep -q '"Id": "dev.loft.desktop"' ${c.system.path}/share/plasma/shells/dev.loft.desktop/metadata.json
+          test -f ${c.system.path}/share/plasma/shells/dev.loft.desktop/contents/lockscreen/LockScreen.qml
+          grep -q 'DefaultSession=loft.desktop' ${c.environment.etc."sddm.conf.d/00-nixos.conf".source} \
+            || grep -q 'Session=loft' ${c.environment.etc."sddm.conf.d/00-nixos.conf".source}
+          touch $out
+        '';
+
       checks.greeter-vm = pkgs.testers.runNixOSTest {
         name = "loft-greeter";
         nodes.machine = {
@@ -182,6 +250,40 @@
     }:
     let
       cfg = config.programs.loft.greeter;
+      plasmaCfg = config.programs.loft.plasma;
+      plasmaWorkspace = config.programs.loft.plasma.workspacePackage;
+
+      # The "Loft" login entry: Plasma's own startup (KWin + the KDE
+      # services, the same command as NixOS's "Plasma" entry), recorded so
+      # the user units know this session is Loft's (loft-plasma in
+      # nix/modules/home.nix). exec keeps the PID: the marker names the
+      # startplasma-wayland process for as long as the session runs.
+      loftPlasmaStart = pkgs.writeShellScript "loft-plasma-session" ''
+        rt="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}/loft"
+        ${pkgs.coreutils}/bin/mkdir -p "$rt"
+        echo "$$" > "$rt/plasma-session"
+        ${pkgs.coreutils}/bin/rm -f "$rt/plasma-session.plasma"
+        exec ${plasmaWorkspace}/libexec/plasma-dbus-run-session-if-needed ${plasmaWorkspace}/bin/startplasma-wayland
+      '';
+      loftPlasmaSession =
+        pkgs.runCommand "loft-plasma-session"
+          {
+            passthru.providedSessions = [ "loft" ];
+            desktop = ''
+              [Desktop Entry]
+              Type=Application
+              Name=Loft
+              Comment=KDE Plasma with the Loft shell
+              Exec=${loftPlasmaStart}
+              TryExec=${plasmaWorkspace}/bin/startplasma-wayland
+              DesktopNames=KDE
+            '';
+            passAsFile = [ "desktop" ];
+          }
+          ''
+            mkdir -p $out/share/wayland-sessions
+            cp $desktopPath $out/share/wayland-sessions/loft.desktop
+          '';
       sddm = config.services.displayManager.sddm;
       sp = self.packages.${pkgs.stdenv.hostPlatform.system};
       helper = lib.getExe sp.loft-greeter-install;
@@ -189,6 +291,38 @@
     {
       # programs.loft.fanControl (nix/modules/fans.nix).
       imports = [ self.nixosModules.fanControl ];
+
+      options.programs.loft.plasma = {
+        enable = lib.mkEnableOption ''
+          a "Loft" login session: KDE Plasma (KWin and the KDE services) with
+          Loft's shell in place of plasmashell, next to the plain "Plasma"
+          one. Every home-manager user gets `programs.loft.plasma.enable` by
+          default. Make it the default with
+          `services.displayManager.defaultSession = "loft"`'';
+
+        workspacePackage = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.kdePackages.plasma-workspace;
+          defaultText = lib.literalExpression "pkgs.kdePackages.plasma-workspace";
+          description = "The plasma-workspace whose startplasma-wayland the session runs (the system's Plasma).";
+        };
+
+        kwinPackage = lib.mkOption {
+          type = lib.types.nullOr lib.types.package;
+          default = null;
+          example = lib.literalExpression "inputs.loft.packages.\${pkgs.stdenv.hostPlatform.system}.loft-kwin-patched";
+          description = ''
+            A KWin for Plasma sessions instead of the system's, e.g. Loft's
+            `loft-kwin-patched` (Option-drag tiles while Loft runs; see the
+            home-manager option `programs.loft.plasma.tileModifier`). Gives
+            it the CAP_SYS_NICE that NixOS gives the system's KWin
+            (/run/wrappers/bin/loft-kwin_wayland: realtime scheduling for
+            the compositor), and makes it every home-manager user's
+            `programs.loft.plasma.kwinPackage`, which starts it. Only KWin
+            is rebuilt; the rest of Plasma stays the system's.
+          '';
+        };
+      };
 
       options.programs.loft.greeter = {
         enable = lib.mkEnableOption "the Loft login screen (SDDM theme `loft`), showing the lock design you sync to it";
@@ -227,6 +361,46 @@
             { programs.loft.niriPackage = lib.mkDefault config.programs.niri.package; }
           ];
         })
+        (lib.mkIf plasmaCfg.enable (
+          lib.mkMerge [
+            {
+              assertions = [
+                {
+                  assertion = config.services.desktopManager.plasma6.enable;
+                  message = "programs.loft.plasma needs KDE Plasma 6 (services.desktopManager.plasma6.enable).";
+                }
+              ];
+              services.displayManager.sessionPackages = [ loftPlasmaSession ];
+              # Loft's KWin decoration (dev.loft.decoration): in the system
+              # profile, so KWin finds it on QT_PLUGIN_PATH. loft-plasma-shell
+              # selects it only while Loft runs (loft-kwin-decoration).
+              environment.systemPackages = [
+                sp.loft-kdecoration
+                sp.loft-plasma-lockscreen
+              ];
+              # Plasma's lock screen with Loft's design: the shell package
+              # dev.loft.desktop (docs/KWIN.md §4.3). Installed only; the
+              # home-manager module points KWin at it in Loft sessions.
+            }
+            (lib.optionalAttrs (options ? home-manager.sharedModules) {
+              home-manager.sharedModules = [ { programs.loft.plasma.enable = lib.mkDefault true; } ];
+            })
+            # The same capability NixOS's Plasma module gives kwin_wayland.
+            (lib.mkIf (plasmaCfg.kwinPackage != null) {
+              security.wrappers.loft-kwin_wayland = {
+                owner = "root";
+                group = "root";
+                capabilities = "cap_sys_nice+ep";
+                source = "${lib.getBin plasmaCfg.kwinPackage}/bin/kwin_wayland";
+              };
+            })
+            (lib.optionalAttrs (options ? home-manager.sharedModules) {
+              home-manager.sharedModules = lib.mkIf (plasmaCfg.kwinPackage != null) [
+                { programs.loft.plasma.kwinPackage = lib.mkDefault plasmaCfg.kwinPackage; }
+              ];
+            })
+          ]
+        ))
         (lib.mkIf cfg.enable {
           services.displayManager.sddm = {
             # Above mkDefault and the mkOverride 900 a desktop module may use

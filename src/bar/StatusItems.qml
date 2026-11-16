@@ -312,7 +312,7 @@ Item {
         BarExtra {
             controlId: "inputSource"
             screenName: root.screenName
-            readonly property string name: (Niri.keyboardLayouts.names ?? [])[Niri.keyboardLayouts.current_idx ?? 0] ?? ""
+            readonly property string name: (Compositor.keyboardLayouts.names ?? [])[Compositor.keyboardLayouts.current_idx ?? 0] ?? ""
             // "English (US)" → "EN"; "German" → "DE"-ish: the first letters.
             label: {
                 const m = name.match(/\(([A-Z]{2,3})\)/);

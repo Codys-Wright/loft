@@ -89,8 +89,42 @@ def _signal_procs(names: tuple[str, ...], sig: int) -> int:
     return sent
 
 
+def _shell_pids(proc: Path = Path("/proc")) -> list[int]:
+    """This user's running Loft shells in our Wayland session: Quickshell
+    processes started by loft-shell (it exports LOFT_SHELL_PATH)."""
+    uid = os.getuid()
+    mine = _wayland_socket(dict(os.environ))
+    pids = []
+    for d in proc.iterdir():
+        if not d.name.isdigit():
+            continue
+        try:
+            if d.stat().st_uid != uid:
+                continue
+            comm = (d / "comm").read_text().strip()
+        except OSError:
+            continue
+        # comm is cut at 15 bytes: the wrapped binary shows as .quickshell-wra.
+        if comm.lstrip(".").split("-wra")[0] != "quickshell":
+            continue
+        env = _environ(d)
+        if env.get("LOFT_SHELL_PATH") and _same_session(d, mine):
+            pids.append(int(d.name))
+    return sorted(pids)
+
+
 def _ipc(ctx, *call: str) -> bool:
-    return _run(["quickshell", "ipc", "--any-display", "--path", str(ctx.shell_path), "call", *call])
+    # By path first: right whenever loft runs inside the shell's environment
+    # (Settings, the launcher, niri binds). A terminal elsewhere (a Plasma
+    # session, an app the shell didn't start) has the CLI's own default path,
+    # which needn't be the source the shell runs from (a devSource, another
+    # store copy): then address the running shell by its pid.
+    if _run(["quickshell", "ipc", "--any-display", "--path", str(ctx.shell_path), "call", *call]):
+        return True
+    ok = False
+    for pid in _shell_pids():
+        ok = _run(["quickshell", "ipc", "--pid", str(pid), "call", *call]) or ok
+    return ok
 
 
 def shell(ctx) -> None:

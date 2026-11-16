@@ -22,6 +22,12 @@
 #                          docs/TESTING.md
 #   loft-pointer           Auto Scroll for scrolling capture (the same crate):
 #                          pointer motion + wheel notches over the capture area
+#   loft-kdecoration       Loft's KWin decoration plugin (kdecoration/, dev.loft.decoration)
+#   loft-kwin-decoration   selects it and macOS's button order (GTK follows) in kwinrc while
+#                          Loft runs in Plasma, reverts after
+#   loft-kwin-patched      KWin + nix/kwin/tile-while-moving-modifier.patch (kwinrc
+#                          [Windows] TileWhileMovingModifier: Option-drag tiles)
+#   loft-kwin-tile-modifier  sets that key while Loft runs in Plasma, reverts after
 #
 # Both sessions include <state>/overrides/spaces.kdl once, after the theme
 # (`loft-niri space render`: the spaces' workspaces, rules and binds).
@@ -168,6 +174,7 @@
             self'.packages.loft
             self'.packages.loft-niri
             self'.packages.loft-appmenu
+            self'.packages.loft-kwin # the KWin backend (src/services/KWin.qml)
             self'.packages.loft-sleep # Settings → Everyday: `loft-sleep status`
             self'.packages.loft-pointer # scrolling capture → Auto
           ];
@@ -306,6 +313,7 @@
             self'.packages.loft-sleep
             self'.packages.loft-input # loft-input / loft-shot inside the session
             self'.packages.loft-live # `loft-dev live …`
+            self'.packages.loft-shell # the shell of --compositor kwin sessions
             pkgs.dbus # dbus-run-session: the private bus of isolated sessions
           ];
           text =
@@ -350,6 +358,7 @@
             self'.packages.loft
             self'.packages.loft-niri
             self'.packages.loft-appmenu
+            self'.packages.loft-kwin # the KWin backend, on Plasma
             pkgs.nix
           ];
           text =
@@ -643,6 +652,36 @@
           meta.mainProgram = "loft-appmenu";
         };
 
+        # Loft's KWin backend (crates/loft-kwin): the shell runs it in a KWin
+        # session (src/services/KWin.qml); it loads the loft-bridge KWin script.
+        loft-kwin = pkgs.rustPlatform.buildRustPackage {
+          pname = "loft-kwin";
+          version = "0.1.0";
+          src = lib.fileset.toSource {
+            root = ../.;
+            fileset = lib.fileset.unions [
+              ../Cargo.toml
+              ../Cargo.lock
+              ../crates
+            ];
+          };
+          cargoLock.lockFile = ../Cargo.lock;
+          cargoBuildFlags = [
+            "-p"
+            "loft-kwin"
+          ];
+          cargoTestFlags = [
+            "-p"
+            "loft-kwin"
+          ];
+          # Display identities spell the EDID vendor out like niri does.
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          postInstall = ''
+            wrapProgram $out/bin/loft-kwin --set-default LOFT_PNP_IDS ${pkgs.hwdata}/share/hwdata/pnp.ids
+          '';
+          meta.mainProgram = "loft-kwin";
+        };
+
         # Bluetooth off during sleep (crates/loft-sleep): a user service
         # (programs.loft) listening for logind's PrepareForSleep.
         loft-sleep = pkgs.rustPlatform.buildRustPackage {
@@ -729,6 +768,73 @@
             mainProgram = "loft-shot";
           };
         });
+
+        # Loft's KWin decoration (kdecoration/, docs/KWIN.md §4.4): macOS
+        # Tahoe's title bar, light or dark with the theme (kdecoration.ini).
+        # KWin finds it on QT_PLUGIN_PATH (the NixOS module puts it in the
+        # system profile); loft-kwin-decoration selects it while Loft runs.
+        loft-kdecoration = pkgs.stdenv.mkDerivation {
+          pname = "loft-kdecoration";
+          version = "0.1.0";
+          src = lib.fileset.toSource {
+            root = ../kdecoration;
+            fileset = ../kdecoration;
+          };
+          nativeBuildInputs = [ pkgs.cmake ];
+          buildInputs = with pkgs.kdePackages; [
+            qtbase
+            kcoreaddons
+            kdecoration
+          ];
+          # A plugin, not an app: nothing to wrap.
+          dontWrapQtApps = true;
+          doCheck = true; # config-test: the INI parser
+          meta = {
+            description = "Loft's KWin window decoration (dev.loft.decoration)";
+            platforms = lib.platforms.linux;
+          };
+        };
+
+        # KWin + nix/kwin/tile-while-moving-modifier.patch: a kwinrc key
+        # [Windows] TileWhileMovingModifier=Shift|Alt|Ctrl|Meta for the key
+        # that, held while dragging a window, tiles it (stock: Shift, hard-
+        # coded). Default Shift, so it behaves like stock until the key is set.
+        # Only KWin rebuilds: nothing in Plasma depends on this package, the
+        # session runs it through programs.loft.plasma.kwinPackage
+        # (docs/KWIN.md §4.6).
+        loft-kwin-patched = pkgs.kdePackages.kwin.overrideAttrs (old: {
+          pname = "loft-kwin-patched";
+          patches = (old.patches or [ ]) ++ [ ./kwin/tile-while-moving-modifier.patch ];
+        });
+
+        # Sets [Windows] TileWhileMovingModifier while Loft runs (Option-drag
+        # tiles, like macOS) and restores the previous value after
+        # (nix/kwin-tile-modifier.sh; docs/KWIN.md §4.6).
+        loft-kwin-tile-modifier = pkgs.writeShellApplication {
+          name = "loft-kwin-tile-modifier";
+          runtimeInputs = [
+            pkgs.coreutils
+            pkgs.dbus
+            pkgs.gnused
+            pkgs.kdePackages.kconfig
+          ];
+          text = builtins.readFile ./kwin-tile-modifier.sh;
+        };
+
+        # Selects Loft's decoration and macOS's button order in kwinrc while Loft
+        # runs, and puts the previous ones back (nix/kwin-decoration.sh; docs/KWIN.md §5).
+        loft-kwin-decoration = pkgs.writeShellApplication {
+          name = "loft-kwin-decoration";
+          runtimeInputs = [
+            pkgs.coreutils
+            pkgs.dbus
+            pkgs.gawk
+            pkgs.glib.bin # gdbus
+            pkgs.gnused
+            pkgs.kdePackages.kconfig
+          ];
+          text = builtins.readFile ./kwin-decoration.sh;
+        };
 
         # The one-time move from studio-linux's paths (nix/migrate.sh), run by
         # the sessions and the home-manager activation.

@@ -17,7 +17,7 @@ ColumnLayout {
 
     // Apps to pick from: running ones first, then those already listed.
     function candidates(listed) {
-        const ids = [...new Set(Niri.windows.map(w => w.app_id).filter(a => a && Apps.own[a] === undefined))];
+        const ids = [...new Set(Compositor.windows.map(w => w.app_id).filter(a => a && Apps.own[a] === undefined))];
         return ids.filter(a => !listed.includes(a)).sort((a, b) => Apps.name(a).localeCompare(Apps.name(b))).map(a => ({ value: a, label: Apps.name(a) }));
     }
 

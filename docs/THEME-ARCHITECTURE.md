@@ -796,6 +796,7 @@ facet kinds it reads, and its cache key covers only those.
 | `walker` | `walker.css` + theme link | colors, material, launcher, typography | next open |
 | `fonts` | links in `~/.local/share/fonts/loft/` | typography | `fc-cache` (once) |
 | `noctalia` | `noctalia.json` (transition only) | colors | its watcher |
+| `kdecoration` | `kdecoration.ini` (Loft's KWin decoration: Tahoe's light or dark appearance) | colors | the plugin watches it |
 
 ### 6.2 Cache and composition
 

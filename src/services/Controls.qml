@@ -122,7 +122,7 @@ Singleton {
         case "battery":
             return hasBattery;
         case "inputSource":
-            return (Niri.keyboardLayouts.names ?? []).length > 1;
+            return (Compositor.keyboardLayouts.names ?? []).length > 1;
         case "readout.battery":
             return hasBattery;
         }

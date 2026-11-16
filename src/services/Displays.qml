@@ -17,10 +17,31 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    // connector → niri identity, from `niri msg -j outputs`.
+    // connector → niri identity, from `niri msg -j outputs` (under KWin:
+    // loft-kwin rebuilds the same "Make Model Serial" from KWin's outputs).
     property var identities: ({})
     // connector → model name (for labels: "MPG491CX OLED").
     property var models: ({})
+
+    readonly property bool fromKWin: Compositor.backend === "kwin"
+
+    function fromKWinOutputs() {
+        const m = {}, models = {};
+        for (const o of KWin.displays) {
+            m[o.name] = o.identity;
+            models[o.name] = o.model || o.name;
+        }
+        identities = m;
+        root.models = models;
+    }
+
+    Connections {
+        target: KWin
+        enabled: root.fromKWin
+        function onDisplaysChanged() {
+            root.fromKWinOutputs();
+        }
+    }
 
     readonly property var screens: Quickshell.screens
 
@@ -62,12 +83,12 @@ Singleton {
     function fullscreenOn(screen) {
         if (!screen)
             return false;
-        const ws = Niri.workspaces.find(w => w.output === screen.name && w.is_active);
+        const ws = Compositor.workspaces.find(w => w.output === screen.name && w.is_active);
         if (!ws)
             return false;
-        const active = Niri.windowMap[ws.active_window_id] ?? null;
+        const active = Compositor.windowMap[ws.active_window_id] ?? null;
         const column = active && !active.is_floating ? active.layout?.pos_in_scrolling_layout?.[0] : undefined;
-        return Niri.windows.some(w => {
+        return Compositor.windows.some(w => {
             const size = w.layout?.tile_size;
             if (w.workspace_id !== ws.id || w.is_floating || !size || size[0] < screen.width - 1 || size[1] < screen.height - 1)
                 return false;
@@ -84,13 +105,16 @@ Singleton {
     }
 
     function refresh() {
-        outputs.running = true;
+        if (fromKWin)
+            fromKWinOutputs();
+        else
+            outputs.running = true;
     }
 
     Component.onCompleted: refresh()
 
     Connections {
-        target: Niri
+        target: Compositor
         function onOutputsChanged() {
             root.refresh();
         }

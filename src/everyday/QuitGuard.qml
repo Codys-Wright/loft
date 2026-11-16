@@ -63,7 +63,7 @@ Singleton {
     // The bind fired (press or repeat).
     function key() {
         const now = Date.now();
-        const w = Niri.focusedWindow;
+        const w = Compositor.focusedWindow;
         if (!w)
             return;
         if (!isProtected(w.app_id)) {
@@ -71,7 +71,7 @@ Singleton {
             const burst = now - lastPlainAt < repeatGapMs;
             lastPlainAt = now;
             if (!burst)
-                Niri.action("CloseWindow", { id: w.id });
+                Compositor.closeWindow(w.id);
             return;
         }
         if (holding && window && window.id === w.id) {
@@ -104,7 +104,7 @@ Singleton {
         progress = 1;
         phase = "quitting";
         fade.restart();
-        if (Niri.windowMap[window.id])
+        if (Compositor.windowMap[window.id])
             MenuState.doQuitApp(appId);
     }
 

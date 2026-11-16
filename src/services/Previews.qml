@@ -64,9 +64,9 @@ Singleton {
 
     // Drop the snapshots of closed windows.
     Connections {
-        target: Niri
+        target: Compositor
         function onWindowMapChanged() {
-            const gone = Object.keys(root.thumbs).filter(id => !Niri.windowMap[id]);
+            const gone = Object.keys(root.thumbs).filter(id => !Compositor.windowMap[id]);
             if (gone.length === 0)
                 return;
             const m = Object.assign({}, root.thumbs);
@@ -78,21 +78,21 @@ Singleton {
 
     // ── Where a window is ────────────────────────────────────────────────
     function isParked(w) {
-        return (Niri.workspaceMap[w.workspace_id]?.name ?? "").startsWith("hidden-");
+        return (Compositor.workspaceMap[w.workspace_id]?.name ?? "").startsWith("hidden-");
     }
 
     // The window's rectangle on its display right now, in that display's
     // logical px — { output, x, y, width, height } — or null when niri
     // doesn't say or something may cover it.
     function screenRect(w) {
-        const ws = Niri.workspaceMap[w.workspace_id];
-        if (!ws || !ws.is_active || !ws.output || isParked(w) || Niri.overviewOpen)
+        const ws = Compositor.workspaceMap[w.workspace_id];
+        if (!ws || !ws.is_active || !ws.output || isParked(w) || Compositor.overviewOpen)
             return null;
         const scr = Quickshell.screens.find(s => s.name === ws.output);
         const l = w.layout;
         if (!scr || !l)
             return null;
-        const others = Niri.windows.filter(x => x.id !== w.id && x.workspace_id === ws.id);
+        const others = Compositor.windows.filter(x => x.id !== w.id && x.workspace_id === ws.id);
         let r = null;
         if (w.is_floating && l.tile_pos_in_workspace_view) {
             const off = l.window_offset_in_tile ?? [0, 0];

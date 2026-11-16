@@ -6,9 +6,9 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use serde_json::json;
 use loft_niri::binds::{self, Bind};
 use loft_niri::config::ConfigTree;
+use serde_json::json;
 
 use crate::backend::{Axis, Backend, Uinput, Wayland};
 use crate::cli::{Button, Cmd, Global, ScrollDir, button_args};
@@ -83,12 +83,15 @@ impl Exec {
 
     fn outputs(&mut self) -> Result<&[OutputRect]> {
         if self.outputs.is_none() {
-            self.outputs = Some(self.niri()?.outputs()?);
+            self.outputs = Some(self.target.outputs()?);
         }
         Ok(self.outputs.as_deref().unwrap_or_default())
     }
 
     fn tree(&mut self) -> Option<&ConfigTree> {
+        if self.target.is_kwin() {
+            return None;
+        }
         if self.tree.is_none() {
             let t = self
                 .target
@@ -464,9 +467,13 @@ impl Exec {
                 if self.target.is_live() && !self.global.live {
                     bail!("refusing to spawn on the live desktop without --live");
                 }
-                self.niri()?.action(niri_ipc::Action::Spawn {
-                    command: command.clone(),
-                })?;
+                if self.target.is_kwin() {
+                    self.spawn_kwin(command)?;
+                } else {
+                    self.niri()?.action(niri_ipc::Action::Spawn {
+                        command: command.clone(),
+                    })?;
+                }
             }
             Cmd::Shot { args } => {
                 if let Some(b) = self.backend.as_mut() {
@@ -480,6 +487,9 @@ impl Exec {
     }
 
     fn bind(&mut self, combo: Option<&str>, list: bool, dry_run: bool) -> Result<()> {
+        if self.target.is_kwin() {
+            return self.bind_kwin(combo, list, dry_run);
+        }
         let (all, mk) = self.binds()?;
         if list || combo.is_none() {
             println!("Mod = {mk}");
@@ -511,7 +521,100 @@ impl Exec {
         Ok(())
     }
 
+    /// KDE sessions: KWin sees loft-input's keys (they come from the host
+    /// like a real keyboard's), so `key COMBO` already fires global
+    /// shortcuts. `bind` runs one by name through kglobalaccel on the
+    /// session's bus: `bind kwin/Window Close`, `bind --list`.
+    fn bind_kwin(&mut self, name: Option<&str>, list: bool, dry_run: bool) -> Result<()> {
+        let qdbus = |args: &[&str]| -> Result<String> {
+            let out = Command::new("qdbus")
+                .envs(&self.target.env)
+                .args(args)
+                .output()
+                .context("running qdbus (KDE's, on PATH)")?;
+            if !out.status.success() {
+                bail!(
+                    "qdbus {}: {}",
+                    args.join(" "),
+                    String::from_utf8_lossy(&out.stderr).trim()
+                );
+            }
+            Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+        };
+        let Some(name) = name.filter(|_| !list) else {
+            // Components are object paths /component/NAME.
+            let comps = qdbus(&[
+                "--literal",
+                "org.kde.kglobalaccel",
+                "/kglobalaccel",
+                "org.kde.KGlobalAccel.allComponents",
+            ])?;
+            for comp in comps.split("/component/").skip(1) {
+                let comp: String = comp
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+                let names = qdbus(&[
+                    "org.kde.kglobalaccel",
+                    &format!("/component/{comp}"),
+                    "org.kde.kglobalaccel.Component.shortcutNames",
+                ])?;
+                for n in names.lines().filter(|l| !l.is_empty()) {
+                    println!("{comp}/{n}");
+                }
+            }
+            println!("(KWin sees `key` combos directly; `bind COMPONENT/NAME` runs one by name)");
+            return Ok(());
+        };
+        let (comp, action) = name.split_once('/').with_context(|| {
+            format!(
+                "`{name}`: KDE sessions take a shortcut by name, COMPONENT/NAME (e.g. `kwin/Window Close`, see `bind --list`); for a key combo use `key {name}`, which KWin receives directly"
+            )
+        })?;
+        // kglobalaccel's object paths mangle names like this (component names
+        // are plain identifiers in practice).
+        let path = format!("/component/{}", comp.replace(['-', '.', ' '], "_"));
+        if dry_run || self.global.verbose {
+            println!("{name} → kglobalaccel {path} invokeShortcut \"{action}\"");
+        }
+        if !dry_run {
+            if let Some(be) = self.backend.as_mut() {
+                be.sync()?;
+            }
+            qdbus(&[
+                "org.kde.kglobalaccel",
+                &path,
+                "org.kde.kglobalaccel.Component.invokeShortcut",
+                action,
+            ])?;
+        }
+        Ok(())
+    }
+
     fn info(&mut self, as_json: bool) -> Result<()> {
+        if self.target.is_kwin() {
+            let outputs = self.target.outputs()?;
+            let b = bounding(&outputs);
+            if as_json {
+                let v = json!({
+                    "target": self.target.name.clone().unwrap_or_else(|| "live".into()),
+                    "compositor": "kwin",
+                    "wayland_display": self.target.wayland_display,
+                    "bounds": b,
+                    "outputs": outputs,
+                });
+                println!("{}", serde_json::to_string_pretty(&v)?);
+            } else {
+                println!(
+                    "{}  KDE session (KWin): outputs only, KWin reports no windows here",
+                    self.target.label()
+                );
+                for o in &outputs {
+                    println!("  {:<8} {}", o.name, o.rect);
+                }
+            }
+            return Ok(());
+        }
         let niri = self.niri()?;
         let outputs = niri.outputs()?;
         let ws = niri.workspaces()?;
@@ -593,6 +696,38 @@ impl Exec {
                 l.output,
                 l.keyboard_interactivity
             );
+        }
+        Ok(())
+    }
+
+    /// KDE sessions: a transient unit bound to the session's, with its
+    /// environment, so `loft-dev --stop` takes it down too.
+    fn spawn_kwin(&self, command: &[String]) -> Result<()> {
+        let unit = self
+            .target
+            .env
+            .get("LOFT_DEV_UNIT")
+            .context("session.env has no LOFT_DEV_UNIT")?;
+        let mut cmd = Command::new("systemd-run");
+        cmd.args(["--user", "--quiet", "--collect"])
+            .arg(format!("--property=BindsTo={unit}"))
+            .arg(format!("--property=After={unit}"))
+            // The user manager's environment may name the real desktop's
+            // niri; the session's own variables follow.
+            .arg("--property=UnsetEnvironment=NIRI_SOCKET");
+        for (k, v) in &self.target.env {
+            cmd.arg(format!("--setenv={k}={v}"));
+        }
+        if let Ok(path) = std::env::var("PATH") {
+            cmd.arg(format!("--setenv=PATH={path}"));
+        }
+        let st = cmd
+            .arg("--")
+            .args(command)
+            .status()
+            .context("running systemd-run")?;
+        if !st.success() {
+            bail!("systemd-run failed ({st})");
         }
         Ok(())
     }

@@ -103,7 +103,7 @@ RowLayout {
             onClicked: mouse => {
                 if (mouse.button === Qt.MiddleButton || !MenuState.systemMenuOn) {
                     MenuState.close();
-                    Niri.toggleOverview();
+                    Compositor.toggleOverview();
                 } else
                     MenuState.toggleTitle(root.screenName, MenuState.systemTitle);
             }
@@ -189,7 +189,7 @@ RowLayout {
                 if (title.interactive)
                     MenuState.toggleTitle(root.screenName, title.titleIndex);
                 else
-                    Niri.toggleOverview();
+                    Compositor.toggleOverview();
             }
             onContainsMouseChanged: if (containsMouse && title.interactive)
                 MenuState.hoverTitle(root.screenName, title.titleIndex)

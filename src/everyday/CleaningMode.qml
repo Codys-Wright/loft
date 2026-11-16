@@ -14,7 +14,9 @@ import qs.services
 // exclusive-keyboard layer surface would still let niri run every bind.
 //
 // Leave: hold Esc (or the key Esc becomes when held, e.g. xremap's
-// Esc-hold → Alt_R = ISO_Level3_Shift), the timer, or `cleaning stop`.
+// Esc-hold → Alt_R = ISO_Level3_Shift), the timer, or `cleaning stop`. In
+// Plasma the hold is xremap's private WM key (cli/loft/keys.py) and sends no
+// key on its own, so there only the timer and `cleaning stop` end it.
 Scope {
     id: root
 
