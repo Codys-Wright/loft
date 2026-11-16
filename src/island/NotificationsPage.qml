@@ -83,7 +83,7 @@ Item {
                             anchors.fill: parent
                             visible: parent.source !== ""
                             source: parent.source
-                            asynchronous: true
+                            asynchronous: !String(source).startsWith("image://icon/") // AppIcon.qml
                         }
                         // No icon in the theme: a bell, not Qt's "missing" pattern.
                         Icon {

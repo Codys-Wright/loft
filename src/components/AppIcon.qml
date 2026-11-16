@@ -30,7 +30,11 @@ Item {
         source: root.current
         sourceSize: Qt.size(root.pixelSize, root.pixelSize)
         fillMode: Image.PreserveAspectFit
-        asynchronous: true
+        // Theme icons (image://icon/…) load on the GUI thread: Qt's icon
+        // loader isn't thread-safe, and the pixmap reader thread loading one
+        // while the GUI thread loads another crashed the shell (QSvgIconEngine,
+        // seen under Plasma). Files and thumbnails still load in the background.
+        asynchronous: !String(source).startsWith("image://icon/")
         smooth: true
         mipmap: true
         onStatusChanged: {

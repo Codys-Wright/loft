@@ -149,7 +149,7 @@ ColumnLayout {
                             visible: row.iconSource !== ""
                             source: row.iconSource
                             sourceSize: Qt.size(36, 36)
-                            asynchronous: true
+                            asynchronous: !String(source).startsWith("image://icon/") // AppIcon.qml
                         }
                         Icon {
                             anchors.centerIn: parent
