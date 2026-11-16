@@ -89,6 +89,13 @@ Scope {
     signal failed(string message)
 
     function lock() {
+        // KWin has no ext-session-lock: Plasma's locker locks, showing Loft's
+        // design (lock/plasma, docs/KWIN.md §4.3). No marker: a restarted
+        // shell must not try a session lock KWin will refuse.
+        if (Compositor.backend === "kwin") {
+            Quickshell.execDetached(["busctl", "--user", "call", "org.freedesktop.ScreenSaver", "/ScreenSaver", "org.freedesktop.ScreenSaver", "Lock"]);
+            return;
+        }
         if (sessionLock.locked)
             return;
         // The compositor may have ended a lock behind our back (e.g. it
