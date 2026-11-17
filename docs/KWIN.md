@@ -391,12 +391,15 @@ on `QT_PLUGIN_PATH`.
   red and yellow are KDecoration's Close / Minimize (minimize is real, = Hide, §4.1).
   **Green** is full screen; with **Option** (Alt, PLAN.md §5: Loft's Option key) held it
   zooms (KWin's maximize, both ways) and shows a "+" instead of the arrows, live as the key
-  goes down and up; the tooltip says "Enter Full Screen" / "Zoom". **Pressing and
-  holding** green (350 ms, as niri-loft) opens Loft's window menu under the bead, and the
-  release doesn't count as a click. **Right-click** on the bar (beads included) opens the
-  same menu at the pointer: Enter Full Screen, Zoom, Center, Arrange ▸ (halves, thirds,
-  quarters, fill, center, maximize, full screen), Move to Workspace ▸, Move to Display ▸ —
-  the shell's `trafficLightItems`, which niri-loft's bar opens too. Double-click on the
+  goes down and up; the tooltip says "Enter Full Screen" / "Zoom". **Resting the
+  pointer** on green (600 ms, as macOS 26 Tahoe) or **pressing and holding** it (350 ms,
+  as niri-loft) opens Loft's window menu under the bead; the release after a hold doesn't
+  count as a click. **Right-click** on the bar (beads included) opens the same menu at the
+  pointer. The menu is the shell's `trafficLightItems` (niri-loft's bar opens it too), laid
+  out like Tahoe's: rows of tile icons first — Move & Resize (halves, quarters), Fill &
+  Arrange (fill, center, and the window with the others on its workspace left & right, top
+  & bottom, in quarters) — then Enter Full Screen, Zoom, Move to Display ▸, Move to
+  Workspace ▸ (and Move to Space ▸). See WINDOW-DECORATIONS.md for the rows. Double-click on the
   bar zooms whatever KWin's title-bar action is; drag and the other title-bar actions
   are KWin's settings.
   - **How** (`kdecoration/shell.{h,cpp}`): KDecoration has no request for full screen
@@ -448,10 +451,29 @@ on `QT_PLUGIN_PATH`.
     move) and a resize only shows in `frameGeometry` once the client acks it, so each
     step used to start from the stale frame (Left Half came out at the old size). The
     script now builds each step on the geometry it last asked for (kept 1 s).
-  - Not done: hover-and-hold (macOS Tahoe also opens the menu when the pointer rests on
-    green), Arrange through KWin's own quick tiles (its shortcut semantics combine with
-    the current tile and hop outputs), and a menu laid out like Tahoe's (tiles at the top
-    level instead of under Arrange ▸).
+  - **Rest** (`Button::restFrom`): the timer starts when the pointer enters green, or
+    moves on it; leaving or pressing stops it. Only while the shell runs (KWin's own menu
+    doesn't open on hover). After the menu opens, closing it (Esc, a click elsewhere) makes
+    KWin hover the bead again at the same spot; that doesn't reopen it until the pointer
+    has moved more than 3 px, as on macOS, where the menu stays closed until you move.
+  - **Tiles** (`Arrange.tileRows`, drawn by `MenuPanel`'s `tiles` rows): each icon is a
+    small screen with the window's rect filled (other windows' rects lighter); ← / →
+    move along a row, ↑ / ↓ between rows, Return applies. "Arrange …" puts this window
+    in the first rect and the most recently focused other windows (`focus_timestamp`) in
+    the rest, then focuses this one; they're dimmed when the workspace has too few
+    windows. Under niri a tile floats a tiled window (as Arrange's presets always did);
+    the column choices live on under Column ▸.
+  - Tested nested (KWin 6.8.2, the branch's plugin, loft-kwin and shell): rest on green →
+    no menu at 300 ms, the menu at 1 s; leave after 300 ms → none; Esc with the pointer
+    still on green → none 1.5 s later (tooltip only), a 4 px move → the menu again; hold
+    700 ms → the menu, the release doesn't toggle full screen; hovering a tile names it
+    on the header; Arrange Left & Right with two windows, Arrange in Quarters with four
+    (this window top left, the next most recent top right, …); Down, Right, Return →
+    Top Right. niri (`loft-dev --gpu`): right-click on a tiled foot's bar → the same rows
+    plus Column ▸ and niri's shortcuts; Left Half → floating, 640×674 at 0,50.
+  - Not done: Arrange through KWin's own quick tiles (its shortcut semantics combine with
+    the current tile and hop outputs); the rest timer on niri-loft's bar (its input code
+    lives in the niri fork).
 - **Selected only while Loft runs** (§5): `loft-kwin-decoration apply` (the
   `ExecStartPost` of `loft-plasma-shell.service`) records the user's own kwinrc
   `[org.kde.kdecoration2] library` / `theme` in `<state>/kwin-decoration.prev` (a key
@@ -831,8 +853,12 @@ answers `created(node)` with a PipeWire node, and loft-kwin runs
 
 ```
 gst-launch-1.0 -e pipewiresrc path=NODE keepalive-time=500 always-copy=true ! videorate ! 30 fps
-  ! videoconvert ! videoscale ! I420 (even width/height) ! x264enc veryfast, constant quality
-  ! h264parse ! mp4mux ! filesink        [+ pulsesrc ! avenc_aac ! mux.]
+  ! ENCODER (even width/height) ! h264parse ! mp4mux ! filesink        [+ pulsesrc ! avenc_aac ! mux.]
+
+ENCODER, the first that works (--encoder auto|nvenc|va|x264, or LOFT_RECORD_ENCODER):
+  nvenc  videoscale ! nvh264enc preset=p4 tune=high-quality rc-mode=vbr const-quality=25   (NVIDIA; takes BGRx, converts on the GPU)
+  va     vapostproc ! NV12 VAMemory ! vah264enc rate-control=cqp qpi=24 qpp=26              (AMD / Intel)
+  x264   videoconvert ! videoscale ! I420 ! x264enc veryfast pass=qual quantizer=23        (CPU, always there)
 ```
 
 so the file is what wf-recorder makes under niri: H.264 (High, yuv420p) in MP4 with an
@@ -855,17 +881,50 @@ interface filter looks aimed at sandboxed clients (`wp_security_context_v1`). Sh
 is its binary, with `X-KDE-Wayland-Interfaces=zkde_screencast_unstable_v1`.
 
 The Nix package wraps `loft-kwin` with exactly the GStreamer plugins this uses (`gstreamer`,
-`-base`, `-good`, `-ugly` for x264enc, `gst-libav` for avenc_aac, and PipeWire's
-pipewiresrc) on `GST_PLUGIN_SYSTEM_PATH_1_0`. PipeWire itself is the session's.
+`-base`, `-good`, `-ugly` for x264enc, `-bad` for h264parse, nvcodec and va, `gst-libav` for
+avenc_aac, and PipeWire's pipewiresrc) on `GST_PLUGIN_SYSTEM_PATH_1_0`. PipeWire itself is
+the session's; the GPU drivers (libnvidia-encode, the VA driver) are the system's
+(`/run/opengl-driver`).
+
+**Hardware encoding.** GPU encoders register in GStreamer even when they can't open (no
+driver, no encode entrypoint), so auto runs a 3-frame test encode per candidate (NVENC,
+then VA-API; x264 isn't probed) and keeps the pick in `$XDG_RUNTIME_DIR/loft-kwin-encoder`
+with the plugin path, so a new loft-kwin or driver set probes again. The probe runs while
+KWin sets the stream up. If the chosen GPU encoder still fails before anything was written,
+the recording restarts with x264 and the pick becomes x264. VA-API picks the first render
+node with an encoder (here the AMD iGPU, renderD129); NVENC the first CUDA device.
+
+**The first run after an update.** GStreamer scans every plugin into its registry
+(`$XDG_CACHE_HOME/gstreamer-1.0`) the first time a new plugin set is used: 9.5 s here
+(nvcodec and va probe their devices, lv2 reads `~/.lv2`). A recording started then used to
+lose its first seconds, and one stopped in that window left no file at all. The daemon now
+warms up 20 s after it starts (`record::warm_up`: a one-buffer pipeline, then auto's probe).
+
+**Stopping early.** gst-launch killed by SIGINT before its pipeline plays writes nothing,
+and one stopped right after PLAYING wrote 0.1 s. loft-kwin now reads gst-launch's
+"Setting pipeline to PLAYING" and holds a stop until the pipeline has played 1 s
+(`MIN_RUN`; at most 15 s for it to start), so the file always has frames.
 
 The shell: `Recorder.start` runs `loft-kwin record …` instead of wf-recorder when
 `Compositor.backend` is `kwin` (Recorder.qml `kwinArgs`): the focused output, an area from
 the frozen-frame overlay (with the screen's `devicePixelRatio` as `--scale`), or a window.
 Audio modes map the same way (system → `--audio @DEFAULT_MONITOR@`, mic → `--audio
 default`, both → system in the file plus the separate mic track muxed afterwards, as under
-niri). Pause sends SIGTSTP, which loft-kwin passes on as SIGSTOP to gst-launch (wf-recorder
-takes SIGSTOP itself); the paused span stays in the file as a held frame. The island's live
-activity, the notification, the thumbnail and the recording editor are unchanged.
+niri). The island's live activity, the notification, the thumbnail and the recording
+editor are unchanged.
+
+**Pause is a cut.** Both recorders used to pause by being stopped (SIGSTOP; loft-kwin's
+SIGTSTP still does that, for scripts), and both kept the paused span as one held frame:
+wf-recorder 0.6 under niri writes variable-rate timestamps, so its file had a 4.0 s gap
+(4.59 s → 8.58 s) for a 4 s pause, and gst-launch's videorate filled the same span with
+copies. Now `Recorder.qml` ends the part on pause (SIGINT, so it's finished) and starts a
+new recorder into the next part on resume (`Recording_….part2.mp4`, …, with
+`.mic2.wav` … for "both"); stop runs `loft capture join OUT PART[:MIC]…`
+(`cli/loft/capture.py`), which muxes each part's mic in (per part, so the mic stays in
+step with its video) and concatenates the parts with ffmpeg's concat demuxer (stream copy;
+re-encoded to the first part's size when a part's frame size differs, e.g. a window that
+was resized). One part is just renamed. A part that wrote nothing is skipped. Same under
+niri and KWin.
 `capabilities.windowRecording` (KWin only) adds **Record Focused Window** to the capture
 selector and IPC `capture recordWindow`; niri's recorder can't record one window, so niri
 doesn't show it.
@@ -880,8 +939,29 @@ the thumbnail; `capture recordArea` + a drag on the overlay → `record area 200
 … --scale 1`; `capture recordWindow` → `record window {uuid}`. Frames extracted with ffmpeg
 showed the counter advancing and the block moving.
 
-Not done: hardware encoding (VA-API: `vah264enc` from gst-plugins-bad), and recording
-with KWin's cursor as metadata instead of embedded.
+Measured in the nested session (1920×1080 on the NVIDIA node, 10 s, CPU = loft-kwin +
+gst-launch user + sys over the run, 100 % = one core; KWin's own share is the same for all):
+
+| content | encoder | CPU | file | length |
+|---|---|---|---|---|
+| a terminal scrolling one line every 0.2 s | x264 | 61 % | 1.2 MB | 10.8 s (falls behind, 2.7 s to finish) |
+| | VA-API (AMD iGPU) | 13 % | 1.6 MB | 9.5 s |
+| | NVENC | 15 % | 2.4 MB | 10.3 s |
+| full-screen random text, redrawn at 30 fps | x264 | 87 % | 1.8 MB | 11.3 s (smeared, unreadable) |
+| | VA-API | 25 % | 15.5 MB | 9.2 s |
+| | NVENC | 24 % | 18.1 MB | 10.3 s |
+
+(Lengths under 10 s are the start-up; x264's over 10 s is its backlog.) Auto picked NVENC
+here. Early stops (the new build): stop 0.1 / 0.3 / 0.6 s after starting, and 0.2 s with
+an empty registry (`GST_REGISTRY` pointed at a new file) → 1.07–1.13 s files, 32–34 frames;
+the previous build wrote no file for any of them (gst-launch died on SIGINT). Through the
+shell: start, 3 s, pause 3 s, resume 3 s, pause, stop while paused → 5.7 s with a clock
+jumping 55.75 → 59.30 (paused 55.71–58.84), each part starting ~0.4 s after the call;
+the same under niri with wf-recorder → 51.88 → 55.21 (paused 52.12–55.15).
+
+Not done: recording with KWin's cursor as metadata instead of embedded; a resume takes
+~0.4 s to show frames (a new screencast and pipeline), and a part is at least 1 s long, so
+pausing within a second of resuming records up to that second.
 
 ### 4.11 Settings → Displays through KScreen
 
