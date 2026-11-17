@@ -100,7 +100,7 @@ still todo — and Loft adds a whole desktop's worth of features vorssaint doesn
 | Command Bar (search, calculator, units, emoji, scripts) | ✅ | Spotlight (walker + elephant): apps, windows, system commands with confirm, Settings pages, calculator with units / currency / time zones, Raycast-compatible script commands, emoji, files with previews, clipboard, 13,570 web !bangs, quicklinks; `?` help |
 | Quick panel (floating palette) | ✅ | ⌃⌘V glass palette at the pointer: favorite tools from the action catalog, clipboard, snippets, type-to-filter |
 | Quick toggles | ✅ | Control Center controls (+ pin any to the menu bar) |
-| Radial menu | ✅ | Hold ⌃⌘Space or middle-button on the desktop: pointer-centered wheel, submenu rings, per-app profiles, release-to-activate |
+| Radial menu | ❌ | Removed from Loft (2026-11) |
 | Scratchpad (tabbed Markdown notes) | ✅ | |
 | Cleaning Mode | ✅ | Dark session lock on every display: no keys, clicks or shortcuts; hold Esc 3 s, timer or IPC to leave |
 

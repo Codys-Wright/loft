@@ -11,7 +11,7 @@ const nav = new Function(`${src}; return { pages, groups, aliases, page, resolve
 const app = fs.readFileSync(appFile, "utf8");
 
 // Every id of the flat sidebar before the redesign still opens a page.
-const oldIds = ["appearance", "wallpaper", "lockscreen", "dock", "island", "displays", "spaces", "input", "layout", "keybinds", "keyremaps", "windowrules", "system", "sound", "capture", "features", "clipboard", "snippets", "phone", "spotlight", "everyday", "menubar", "desktopmenu", "quickpanel", "radialmenu", "about"];
+const oldIds = ["appearance", "wallpaper", "lockscreen", "dock", "island", "displays", "spaces", "input", "layout", "keybinds", "keyremaps", "windowrules", "system", "sound", "capture", "features", "clipboard", "snippets", "phone", "spotlight", "everyday", "menubar", "desktopmenu", "quickpanel", "about"];
 for (const id of oldIds)
     assert.strictEqual(nav.resolve(id), id, `old id ${id} no longer resolves`);
 

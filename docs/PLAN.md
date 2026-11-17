@@ -505,7 +505,7 @@ Physical keys on a Mac-layout keyboard, Loft's xremap layer on.
 | ⌘⌥Esc force quit | Mod/Super+Alt+Escape → System Monitor → Processes (Quit / Force Quit) | ✓ (filled) |
 | ⌘, settings | xremap → Ctrl+comma: the app's own settings, like macOS. Loft Settings: Mod+Comma (Caps+,) | ✓ |
 | ⌃⌘F full screen | Mod/Super+Ctrl+F → fullscreen-window (was Ctrl+F to the app: find) | ✓ (filled) |
-| ⌃⌘V / ⌃⌘Space / ⌃⌘A / ⌃⌘S (Loft's own) | Quick Panel / Radial Menu / Arrange / Space Switcher: same fix as ⌃⌘Q, the ⌘→Ctrl groups no longer turn them into Ctrl+V / A / S | ✓ (fixed) |
+| ⌃⌘V / ⌃⌘A / ⌃⌘S (Loft's own) | Quick Panel / Arrange / Space Switcher: same fix as ⌃⌘Q, the ⌘→Ctrl groups no longer turn them into Ctrl+V / A / S | ✓ (fixed) |
 | ⌃←/→, ⌃↑, ⌃↓ | Spaces, overview, App Exposé (above) | ✓ (new) |
 
 ---
@@ -756,9 +756,9 @@ complete menu-bar system does":
   exists.
 
 Shipped (FEATURES.md has each): mixer, system monitor, snapping, clipboard
-history + snippets, shelf, Command Bar, radial menu, capture/recording,
+history + snippets, shelf, Command Bar, capture/recording,
 keep-awake, the nirimod-style Settings pages. Partial or open: fan control
-(#7), window thumbnails in the switcher and dock previews (#8).
+(#7), window thumbnails in the switcher and dock previews (#8). The radial menu shipped too and was later removed.
 
 ---
 

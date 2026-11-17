@@ -78,10 +78,9 @@ SHELL_ALLOW: dict[str, frozenset[str]] = {
         "osd": "message",
         "perf": "status",
         "quickpanel": "toggle open close settings",
-        "radial": "toggle open close settings",
         "scratchpad": "toggle open close",
         "settings": "toggle displays input layout keybinds windowrules features desktopmenu quickpanel "
-        "radialmenu wallpaper lockscreen capture island menubar spotlight phone dock spaces open",
+        "wallpaper lockscreen capture island menubar spotlight phone dock spaces open",
         "shelf": "toggle open close list",
         "shell": "reload lastError",
         "snippets": "toggle open close settings",

@@ -25,7 +25,7 @@ once with `repeat=false` and at most once per `cooldown-ms`. The script
 keeps both: a `repeat=false` bind skips triggers that follow the last one
 within REPEAT_GAP_MS (a repeat), a cooldown bind skips those within its
 cooldown. The shell gets the press and release itself from loft-kwin
-(docs/KWIN.md §4.13) for the keys that need them (⌘Q held, the Radial Menu).
+(docs/KWIN.md §4.13) for the keys that need them (⌘Q held).
 
 Mod and Super are both Meta here: the KWin session has no ISO_Level3_Shift
 window-manager key (niri/base.kdl `mod-key`). The keyboard layer makes the

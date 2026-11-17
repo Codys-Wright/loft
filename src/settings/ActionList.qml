@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import qs.components
 import qs.services
 
-// An arrangeable list of actions (Settings → Quick Panel / Radial Menu):
+// An arrangeable list of actions (Settings → Quick Panel):
 // drag a row by its handle (or use the arrows) to reorder, − removes,
 // clicking a row selects it.
 //   items: [{ icon, label, sub, appId, badge }]
