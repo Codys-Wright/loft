@@ -29,12 +29,13 @@ Singleton {
     property var keyboardLayouts: ({ names: [], current_idx: 0 })
     property var activities: []
     property string currentActivity: ""
-    // Spaces as Activities (docs/KWIN.md §4.2): space id → activity id, from
-    // loft-kwin's last `syncSpaces` (its map in <state>/kwin-activities.json),
-    // and kactivitymanagerd's activities [{ id, name, icon }].
-    property var spaceActivities: ({})
-    property var activityInfo: []
-    property bool spacesSynced: false
+    // Spaces are the user's KDE Activities (docs/KWIN.md §4.2), read-only:
+    // kactivitymanagerd's [{ id, name, icon, key, position }] in the order of
+    // their "Switch to activity" keys (Meta+1…9, 0), else KDE's own order;
+    // loft-kwin sends it again on every change.
+    property var activityList: []
+    property bool activitiesLoaded: false
+    property string activitiesError: ""
     // [{ name, geometry, identity ("Make Model Serial", niri's), model }]
     property var displays: []
 
@@ -149,12 +150,14 @@ Singleton {
                 layoutKey = layout;
                 displayLayoutChanged();
             }
-        } else if (msg.Spaces) {
-            spaceActivities = msg.Spaces.map ?? {};
-            activityInfo = msg.Spaces.activities ?? [];
-            spacesSynced = true;
-            for (const e of msg.Spaces.errors ?? [])
-                console.warn(`KWin: activities: ${e}`);
+        } else if (msg.Activities) {
+            activityList = msg.Activities.activities ?? [];
+            activitiesError = msg.Activities.error ?? "";
+            if (activitiesError)
+                console.warn(`KWin: activities: ${activitiesError}`);
+            if (msg.Activities.current)
+                currentActivity = msg.Activities.current;
+            activitiesLoaded = true;
         } else if (msg.SpaceOpened) {
             spaceOpened(msg.SpaceOpened);
         } else if (msg.WindowActionsMenuRequested) {
@@ -308,10 +311,9 @@ Singleton {
         send({ cmd: "setActivity", activity: activity });
     }
 
-    // Make kactivitymanagerd's activities match the spaces
-    // ([{ id, name, icon, template }]); answered with a Spaces line.
-    function syncSpaces(spaces) {
-        send({ cmd: "syncSpaces", spaces: spaces });
+    // Ask for the Activities again (answered with an Activities line).
+    function refreshActivities() {
+        send({ cmd: "activities" });
     }
 
     // A space's apps (`loft-niri space specs`) into its Activity: loft-kwin

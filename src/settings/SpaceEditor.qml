@@ -82,7 +82,9 @@ ColumnLayout {
     }
 
     // ── Name and icon ────────────────────────────────────────────────────
+    // KWin: the name is the Activity's (rename it in Plasma).
     SettingsRow {
+        visible: !Spaces.byActivity
         label: "Name"
         hint: ed.isInstance ? `From the “${ed.space.template}” template; a name here overrides it` : ""
         SettingsTextField {
@@ -408,7 +410,7 @@ ColumnLayout {
         Text {
             Layout.fillWidth: true
             visible: ed.confirmDelete
-            text: `Delete “${ed.space.name}”? Its windows stay where they are; the spaces after it move up a ⌘ number.`
+            text: Spaces.byActivity ? `Remove Loft's settings for “${ed.space.name}” (${ed.space.id}.json)? The KDE Activity and its windows stay as they are.` : `Delete “${ed.space.name}”? Its windows stay where they are; the spaces after it move up a ⌘ number.`
             color: Theme.warn
             font.family: Theme.fontUi
             font.pixelSize: 12
@@ -423,14 +425,23 @@ ColumnLayout {
             font.pixelSize: 10
             elide: Text.ElideMiddle
         }
+        // KWin: the document stays in the library, linked to nothing.
         SettingsButton {
-            visible: ed.isInstance && !ed.confirmDelete
+            visible: Spaces.byActivity && !ed.confirmDelete
+            text: "Unlink"
+            onClicked: Spaces.link(ed.space.id, "", r => {
+                if (r.ok)
+                    ed.deleted();
+            })
+        }
+        SettingsButton {
+            visible: ed.isInstance && !ed.confirmDelete && !Spaces.byActivity
             text: "Archive"
             onClicked: ed.patch({ archived: true })
         }
         SettingsButton {
             visible: !ed.confirmDelete
-            text: "Delete Space…"
+            text: Spaces.byActivity ? "Remove Settings…" : "Delete Space…"
             onClicked: ed.confirmDelete = true
         }
         SettingsButton {

@@ -93,6 +93,8 @@ class Generated(unittest.TestCase):
     def test_every_remap_lands_on_a_niri_bind(self):
         binds = niri_binds()
         for b in parity.load()["binds"]:
+            if parity.plasma_only(b):
+                continue
             _, to = parity.xremap_pair(b)
             for want in as_niri(to):
                 self.assertIn(want, binds, f"{b['id']}: xremap sends {to}, niri has no {sorted(want)}")
@@ -161,7 +163,27 @@ class Plasma(unittest.TestCase):
         group = keys.for_wm_key(parity.xremap_group(parity.load()), keys.WM_META)
         for b in parity.load()["binds"]:
             src, _ = parity.xremap_pair(b)
-            self.assertEqual(as_qt(group["remap"][src]), kwinkeys.qt_keys(b["niri"]), b["id"])
+            self.assertEqual(as_qt(group["remap"][src]), b["kde"] if parity.plasma_only(b) else kwinkeys.qt_keys(b["niri"]), b["id"])
+
+    def test_ctrl_shift_arrows_move_the_window_a_desktop_in_plasma_only(self):
+        """⌃⇧←/→ → Meta+Ctrl+Shift+←/→ (KWin's Window One Desktop to the
+        Left/Right) under Plasma; under niri the keys stay the app's."""
+        raw = parity.xremap_group(parity.load())
+        plasma = keys.for_wm_key(raw, keys.WM_META)
+        self.assertEqual(as_qt(plasma["remap"]["Ctrl-Shift-Left"]), "Meta+Ctrl+Shift+Left")
+        self.assertEqual(as_qt(plasma["remap"]["Ctrl-Shift-Right"]), "Meta+Ctrl+Shift+Right")
+        self.assertNotIn("plasmaRemap", plasma)
+        self.assertNotIn("Ctrl-Shift-Left", raw["remap"])
+        model = {"virtual_modifiers": [], "classes": {}, "apps": {}, "remap": {}, "groups": [raw]}
+        niri_cfg = keys.render(model, wm=keys.WM_RALT)
+        self.assertNotIn("Ctrl-Shift-Left", niri_cfg["keymap"][0]["remap"])
+        self.assertNotIn("plasmaRemap", niri_cfg["keymap"][0])
+        kde_cfg = keys.render(model, wm=keys.WM_META)
+        keys.check(kde_cfg)
+        self.assertIn("Ctrl-Shift-Left", kde_cfg["keymap"][-1]["remap"])
+        # ⌃←/→ reach KWin as Meta+Ctrl+←/→ (its Switch One Desktop), ⌥←/→ stay word jumps.
+        self.assertEqual(as_qt(plasma["remap"]["Ctrl-Left"]), "Meta+Ctrl+Left")
+        self.assertNotIn("Alt-Left", plasma["remap"])
 
     def test_niri_is_unchanged(self):
         group = parity.xremap_group(parity.load())

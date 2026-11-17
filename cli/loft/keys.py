@@ -67,7 +67,7 @@ SECTIONS = ("modmap", "keymap", "experimental_map")
 KEYMAP_DIR = Path(__file__).parent / "keymap"
 DEFAULTS = KEYMAP_DIR / "mac.json"
 # Group fields that are Loft's, not xremap's.
-META = ("id", "section", "on", "description", "wmKey")
+META = ("id", "section", "on", "description", "wmKey", "plasmaRemap")
 
 # The window-manager key (module docstring).
 WM_RALT = "ralt"
@@ -227,7 +227,9 @@ def _vmod_hold(action):
 
 
 def for_wm_key(group: dict, wm: str) -> dict:
-    """`group` as it renders for `wm`: unchanged unless meta and a wmKey group."""
+    """`group` as it renders for `wm`: unchanged unless meta and a wmKey group.
+    Under meta a group's `plasmaRemap` (Plasma-only remaps: ⌃⇧←/→ → KWin's
+    Window One Desktop to the Left/Right) joins its remaps."""
     if wm != WM_META or not group.get("wmKey"):
         return group
     out = copy.deepcopy(group)
@@ -235,6 +237,7 @@ def for_wm_key(group: dict, wm: str) -> dict:
         out["remap"] = {k: _vmod_hold(v) for k, v in out["remap"].items()}
     else:
         out["remap"] = {k: _meta_combo(v) for k, v in out["remap"].items()}
+    out["remap"].update(out.pop("plasmaRemap", None) or {})
     return out
 
 

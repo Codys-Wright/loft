@@ -45,7 +45,7 @@ Singleton {
     // windowThumbnails = window stills from the compositor (KWinThumbs);
     // serverDecorations = the compositor gives the shell's own windows a
     // title bar, so they don't draw traffic lights; spaces = Spaces work
-    // (niri: named workspaces via loft-niri; KWin: one Activity per Space).
+    // (niri: named workspaces via loft-niri; KWin: the KDE Activities).
     readonly property var capabilities: impl.capabilities
 
     Component.onCompleted: {
@@ -69,10 +69,11 @@ Singleton {
     // KDE Activities (KWin only; empty under niri).
     readonly property var activities: backend === "kwin" ? KWin.activities : []
     readonly property string currentActivity: backend === "kwin" ? KWin.currentActivity : ""
-    // Spaces as Activities (KWin, docs/KWIN.md §4.2): space id → activity id
-    // once loft-kwin synced them (spacesSynced), else {}.
-    readonly property var spaceActivities: backend === "kwin" ? KWin.spaceActivities : ({})
-    readonly property bool spacesSynced: backend === "kwin" && KWin.spacesSynced
+    // Spaces are the KDE Activities (KWin, docs/KWIN.md §4.2), read-only:
+    // [{ id, name, icon, key, position }] in Loft's order (KDE's "Switch to
+    // activity" keys), once loft-kwin reported them (activitiesLoaded).
+    readonly property var activityList: backend === "kwin" ? KWin.activityList : []
+    readonly property bool activitiesLoaded: backend === "kwin" && KWin.activitiesLoaded
 
     function workspacesOn(output) {
         return impl.workspacesOn(output);
@@ -251,10 +252,11 @@ Singleton {
         impl.setActivity(activity);
     }
 
-    // KWin: one Activity per Space ([{ id, name, icon, template }]).
-    function syncSpaces(spaces) {
+    // KWin: ask loft-kwin for the Activities again (it also sends them on
+    // every change). Loft never creates, renames or removes one.
+    function refreshActivities() {
         if (backend === "kwin")
-            KWin.syncSpaces(spaces);
+            KWin.refreshActivities();
     }
 
     // KWin: start a space's missing apps in its Activity, on their roles'

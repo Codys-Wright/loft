@@ -34,22 +34,26 @@ import Quickshell.Io
 // Afterwards spaces.kdl is re-rendered (once spaces are in use) and the
 // index reloaded.
 //
-// Under KWin (docs/KWIN.md §4.2) each Space is a KDE Activity instead: the
-// library and its editing stay loft-niri's (files only), but after every
-// reload the space list goes to loft-kwin (`Compositor.syncSpaces`), which
-// creates / renames / removes Activities to match and keeps the space ↔
-// activity map. Activation is `SetCurrentActivity` (through the bridge), the
+// Under KWin (docs/KWIN.md §4.2) the Spaces ARE the user's KDE Activities,
+// and KDE stays the source of truth: Loft never creates, renames, re-icons
+// or removes one. The list is kactivitymanagerd's (loft-kwin reads it and
+// sends it again on every change, `Compositor.activityList`), in the order
+// of their KDE "Switch to activity" keys (Meta+1…9, then 0), else KDE's.
+// A library document attaches Loft's extras (dock, menu bar, Focus,
+// wallpapers, apps and display roles) to an Activity only when it names it:
+// `"activity": "<id or name>"` (Settings → Spaces links one). Without one
+// the Activity is a plain Space: its name, KDE's icon (as a glyph), no
+// extras. Activation is `SetCurrentActivity` (through the bridge), the
 // active space is the current Activity's, a window moves to a Space by
 // setting its activities, and the layout's roles come from KWin's outputs
 // (`space list --displays`). Workspace names, spaces.kdl, render / ensure /
-// gather are niri-only. Spin-up (P3) under KWin (§4.12): on a space's
-// first activation in a session (`startup: first-activate`), on Open and
-// at login (`startup: login`) the shell asks `loft-niri space specs` for
-// its apps on KWin's displays and hands them to loft-kwin (`openSpace`),
-// which starts the missing ones in the Activity, each on its role's
-// display. "New Space from Current Desktop" captures the current
-// Activity's windows (`space capture --displays --windows`) and moves them
-// into the new space's Activity.
+// gather are niri-only. Spin-up (P3) under KWin (§4.12), for a linked
+// Activity: on its first activation in a session (`startup:
+// first-activate`), on Open and at login (`startup: login`) the shell asks
+// `loft-niri space specs` for its apps on KWin's displays and hands them to
+// loft-kwin (`openSpace`), which starts the missing ones in the Activity,
+// each on its role's display. "New Space from Current Desktop" saves the
+// current Activity's windows as a document linked to it.
 //
 // IPC: spaces focus <id|n> | next | prev | moveWindow <id|n> | list | active
 // | switcher | reload | open <id|n> | capture <name>.
@@ -69,25 +73,69 @@ Singleton {
         return lib === "none" || lib === "off" ? "" : `${lib}/Spaces`;
     }
 
-    // niri: named workspaces (loft-niri); KWin: one Activity per Space.
+    // niri: named workspaces (loft-niri); KWin: the KDE Activities.
     readonly property bool enabled: Features.on("spaces") && !!Compositor.capabilities.spaces
     readonly property bool byActivity: Compositor.backend === "kwin"
-    // KWin: space id → activity id (loft-kwin's map), and back.
-    readonly property var activityOf: Compositor.spaceActivities
+    // KWin: space id → activity id, and back.
+    readonly property var activityOf: {
+        const m = {};
+        if (byActivity)
+            for (const s of all)
+                m[s.id] = s.activity;
+        return m;
+    }
     function spaceOfActivity(activity) {
-        for (const [id, a] of Object.entries(activityOf))
-            if (a === activity)
-                return id;
-        return "";
+        return activity ? (all.find(s => s.activity === activity)?.id ?? "") : "";
     }
 
-    // Every space, in order: { id, name, icon, order, position (1…9 or
-    // null), template, archived, displays: { role: workspace | "keep" },
-    // doc } (loft-niri's JSON). `spaces` leaves out the archived ones.
-    property var all: []
+    // The library (loft-niri's JSON): { id, name, icon, order, position
+    // (1…9 or null), template, archived, displays: { role: workspace |
+    // "keep" }, doc }. Every space, in order, is that list under niri; under
+    // KWin the Activities (activitySpaces). `spaces` leaves out the archived.
+    property var library: []
+    readonly property var all: byActivity ? activitySpaces : library
     readonly property var spaces: all.filter(s => !s.archived)
     property var problems: []
-    property bool loaded: false
+    property bool libraryLoaded: false
+    readonly property bool loaded: byActivity ? Compositor.activitiesLoaded : libraryLoaded
+
+    // KWin: the library document an Activity's settings come from — one
+    // whose `activity` is the Activity's id, or its name (any case).
+    function linkedDoc(a) {
+        const n = (a.name ?? "").toLowerCase();
+        return library.find(s => !s.archived && s.doc?.activity === a.id) ?? library.find(s => !s.archived && typeof s.doc?.activity === "string" && n !== "" && s.doc.activity.toLowerCase() === n) ?? null;
+    }
+    // A glyph for an Activity without Loft settings (the bar draws Nerd
+    // Font glyphs, not freedesktop icons), from its KDE icon or name.
+    function glyphFor(a) {
+        const t = `${a.icon ?? ""} ${a.name ?? ""}`.toLowerCase();
+        const by = [[/music|audio/, "󰝚"], [/video|movie|film/, "󰕧"], [/cod|develop|program|terminal/, "󰅩"], [/gam/, "󰊗"], [/edit|graphic|photo|draw/, "󰏫"], [/config|setting|system|prefer/, "󰒓"], [/mail|chat|comm|internet/, "󰭹"], [/work|office|task/, "󰃖"]];
+        for (const [re, g] of by)
+            if (re.test(t))
+                return g;
+        return "󰕰";
+    }
+    // KWin: one space per Activity, in Loft's order. Linked: the
+    // document's id, icon and settings; the name is always KDE's.
+    readonly property var activitySpaces: Compositor.activityList.map((a, i) => {
+        const d = linkedDoc(a);
+        return {
+            id: d ? d.id : a.id,
+            name: a.name || d?.name || "Activity",
+            icon: d?.icon || glyphFor(a),
+            kdeIcon: a.icon ?? "",
+            order: i,
+            position: a.position ?? null,
+            key: a.key ?? "",
+            activity: a.id,
+            linked: d !== null,
+            template: d?.template ?? null,
+            archived: false,
+            displays: d?.displays ?? {},
+            startup: d ? (d.startup ?? "first-activate") : "never",
+            doc: d?.doc ?? null
+        };
+    })
     // The live displays with their roles, most specific first:
     // [{ name, identity, roles }] (empty when niri isn't reachable).
     property var layout: []
@@ -104,9 +152,14 @@ Singleton {
         return m;
     }
 
+    // By id, position (⌘N; KWin: the digit of the Activity's key), and
+    // under KWin also by Activity id or name.
     function find(key) {
         const k = String(key ?? "");
-        return spaces.find(s => s.id === k) ?? spaces.find(s => String(s.position) === k) ?? null;
+        const found = spaces.find(s => s.id === k) ?? spaces.find(s => s.position !== null && s.position !== undefined && String(s.position) === k);
+        if (found || !byActivity)
+            return found ?? null;
+        return spaces.find(s => s.activity === k) ?? spaces.find(s => s.name.toLowerCase() === k.toLowerCase()) ?? null;
     }
 
     // A space's badge color (Theme.badgeColor): its own `color`, else one
@@ -205,9 +258,9 @@ Singleton {
         apply();
     }
 
-    // KWin: the current Activity's space ("" on an Activity that isn't one).
+    // KWin: the current Activity's space.
     function deriveActivity() {
-        if (!Compositor.spacesSynced)
+        if (!Compositor.activitiesLoaded)
             return;
         const id = spaceOfActivity(Compositor.currentActivity);
         if (id === activeId || (id !== "" && !find(id)))
@@ -236,23 +289,19 @@ Singleton {
         function onCurrentActivityChanged() {
             quiet.restart();
         }
-        function onSpaceActivitiesChanged() {
+        // KWin: the Activities changed (added, removed, renamed in Plasma,
+        // their keys): the list follows, nothing is written back.
+        function onActivityListChanged() {
             quiet.restart();
-            root.adoptCaptured();
             root.loginSpin();
         }
-        // An Activity of a space was removed in Plasma: make a new one.
         function onActivitiesChanged() {
-            if (root.byActivity && root.enabled && Object.values(root.activityOf).some(a => !Compositor.activities.includes(a)))
-                root.sync();
-        }
-        // loft-kwin (re)started: sync once it's there.
-        function onAvailableChanged() {
-            if (Compositor.available)
-                root.sync();
+            if (root.byActivity)
+                Compositor.refreshActivities();
         }
     }
     onOwnersChanged: quiet.restart()
+    onAllChanged: quiet.restart()
 
     // ── Per-space settings (§5) ─────────────────────────────────────────
     // The dock layer DockData.profileFor puts between Settings.dock and a
@@ -371,12 +420,8 @@ Singleton {
         if (!s)
             return;
         const a = activityOf[s.id];
-        if (!a) {
-            lastError = `the space “${s.name}” has no Activity yet`;
-            console.warn(`Spaces: ${lastError}`);
-            sync();
+        if (!a)
             return;
-        }
         lastError = "";
         Compositor.setActivity(a);
         // The first activation in a session spins the space's apps up.
@@ -401,6 +446,12 @@ Singleton {
         const a = activityOf[s.id];
         if (!a)
             return;
+        // A plain Activity (no Loft settings) has no apps to start.
+        if (!s.linked) {
+            if (focus === true)
+                Compositor.setActivity(a);
+            return;
+        }
         markOpened(s.id);
         spinQueue = spinQueue.concat([{ space: s.id, activity: a, focus: focus === true }]);
         if (!specs.running)
@@ -449,27 +500,12 @@ Singleton {
 
     // `startup: login`: opened once the Activities exist, without switching.
     function loginSpin() {
-        if (!byActivity || !enabled || !loaded || !Compositor.spacesSynced || persist.loginDone)
+        if (!byActivity || !enabled || !loaded || !libraryLoaded || persist.loginDone)
             return;
         persist.loginDone = true;
         for (const s of spaces)
             if (s.startup === "login" && !opened(s.id))
                 spin(s, false);
-    }
-
-    // "New Space from Current Desktop" under KWin: the windows captured, to
-    // move into the new space's Activity once it has one.
-    property var pendingCapture: null
-    function adoptCaptured() {
-        const p = pendingCapture;
-        const a = p ? activityOf[p.space] : "";
-        if (!a)
-            return;
-        pendingCapture = null;
-        for (const id of p.windows)
-            Compositor.setWindowActivities(id, [a], false);
-        markOpened(p.space);
-        Compositor.setActivity(a);
     }
 
     // Move a window (default: the focused one) to a space, without
@@ -660,7 +696,10 @@ Singleton {
     }
 
     // Move a space up (-1) or down (+1) in Mod+N order.
+    // KWin: the order is KDE's (its "Switch to activity" keys), not Loft's.
     function move(id, delta) {
+        if (byActivity)
+            return;
         const ids = spaces.map(s => s.id);
         const i = ids.indexOf(id);
         const j = i + delta;
@@ -672,9 +711,9 @@ Singleton {
     }
 
     // "New Space from Current Desktop": what each display shows now.
-    // KWin: the current Activity's windows (not minimized, not Loft's own),
-    // which then move to the new space's Activity, and it becomes current
-    // (as niri's first activation gathers them into the new workspaces).
+    // KWin: the current Activity's windows (not minimized, not Loft's own)
+    // become the apps of a new document linked to that Activity; nothing
+    // moves, and the Activity itself isn't touched.
     function capture(name, icon, done) {
         const args = ["capture", "--save", "--name", name, "--icon", icon || ""];
         if (!byActivity) {
@@ -682,6 +721,14 @@ Singleton {
             return;
         }
         const act = Compositor.currentActivity;
+        const here = all.find(s => s.activity === act);
+        if (here?.linked) {
+            const r = { ok: false, error: `“${here.name}” already has Loft settings (${here.id}); edit those, or unlink them first` };
+            editError = r.error;
+            if (done)
+                done(r);
+            return;
+        }
         const wins = Compositor.windows.filter(w => (w.kwin_activities ?? []).includes(act) && !w.is_minimized && w.app_id && w.app_id !== "org.quickshell");
         const rows = wins.map(w => ({
                     app_id: w.app_id,
@@ -691,11 +738,40 @@ Singleton {
                     maximized: w.is_maximized === true
                 }));
         write(args.concat(["--displays", JSON.stringify(Compositor.impl.displays ?? []), "--windows", JSON.stringify(rows)]), r => {
-            if (r.ok && r.id)
-                pendingCapture = { space: r.id, windows: wins.map(w => w.id) };
-            if (done)
+            if (r.ok && r.id) {
+                // Its windows are already open there: activating it again
+                // this session shouldn't start them twice.
+                markOpened(r.id);
+                write(["patch", r.id, JSON.stringify({ activity: act })], done);
+            } else if (done)
                 done(r);
         });
+    }
+
+    // KWin: attach a library document's settings to an Activity (by id),
+    // or detach them (activity ""). The Activity itself isn't touched.
+    function link(docId, activity, done) {
+        patch(docId, { activity: activity || null }, done);
+    }
+
+    // KWin: Loft settings for a plain Activity, as a new document linked to
+    // it (named and iconed like the Activity; no displays bound).
+    function linkNew(activity, done) {
+        const s = all.find(x => x.activity === activity);
+        if (!s || s.linked)
+            return;
+        const base = s.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "activity";
+        let id = base;
+        for (let n = 2; library.some(x => x.id === id); n++)
+            id = `${base}-${n}`;
+        create({
+            kind: "space",
+            id: id,
+            name: s.name,
+            icon: s.icon,
+            activity: activity,
+            displays: {}
+        }, done);
     }
 
     // ── The index ───────────────────────────────────────────────────────
@@ -709,42 +785,17 @@ Singleton {
     }
     property bool relist: false
 
-    // KWin: Activities follow the (non-archived) spaces. The windows of a
-    // space that's gone (deleted, archived) move to the active space (else
-    // the first) first: KWin would put them on every Activity once theirs is
-    // removed.
-    function sync() {
-        if (!byActivity || !enabled || !loaded)
-            return;
-        const keep = spaces.find(s => s.id === activeId && activityOf[s.id]) ?? spaces.find(s => activityOf[s.id]);
-        for (const [sid, a] of Object.entries(activityOf)) {
-            if (!keep || spaces.some(s => s.id === sid))
-                continue;
-            for (const w of Compositor.windows)
-                if ((w.kwin_activities ?? []).length === 1 && w.kwin_activities[0] === a)
-                    Compositor.setWindowActivities(w.id, [activityOf[keep.id]], false);
-        }
-        Compositor.syncSpaces(spaces.map(s => ({
-                    id: s.id,
-                    name: s.name,
-                    icon: s.icon ?? "",
-                    template: s.template ?? null
-                })));
-    }
-    onEnabledChanged: sync()
-
     Process {
         id: lister
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
                     const v = JSON.parse(text);
-                    root.all = v.spaces ?? [];
+                    root.library = v.spaces ?? [];
                     root.problems = v.problems ?? [];
                     root.layout = v.layout ?? [];
                     root.templates = v.templates ?? [];
-                    root.loaded = true;
-                    root.sync();
+                    root.libraryLoaded = true;
                     root.loginSpin();
                     quiet.restart();
                 } catch (e) {
@@ -858,7 +909,9 @@ Singleton {
                         position: s.position,
                         active: s.id === root.activeId,
                         displays: s.displays,
-                        activity: root.activityOf[s.id] ?? null
+                        activity: root.activityOf[s.id] ?? null,
+                        key: s.key ?? null,
+                        linked: root.byActivity ? s.linked : null
                     })));
         }
         function active(): string {

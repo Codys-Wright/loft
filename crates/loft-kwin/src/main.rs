@@ -21,9 +21,10 @@
 //! - `loft-kwin record …`: a screen recording through KWin's zkde_screencast
 //!   and PipeWire (src/record.rs).
 //! - `loft-kwin displays [set JSON]`: outputs through KScreen (src/displays.rs).
-//! - Spaces as Activities (src/activities.rs): stdin `syncSpaces` makes
-//!   kactivitymanagerd match the shell's Space list and answers
-//!   `{"Spaces": {"map": {space: activity}, …}}`; `loft-kwin spaces list|prune`.
+//! - Spaces are the user's KDE Activities (src/activities.rs), read-only:
+//!   stdin `activities` answers `{"Activities": {"activities": [{id, name,
+//!   icon, key, position}], "current"}}` in KDE's "Switch to activity" key
+//!   order, sent again on every change; `loft-kwin spaces list|prune`.
 //!   stdin `openSpace` starts a Space's missing apps in its Activity, on
 //!   their roles' displays (src/spinup.rs), answered with `{"SpaceOpened"}`.
 
@@ -315,9 +316,11 @@ async fn direct(conn: &Connection, cmd: &Value) -> Result<bool> {
             let () = p.call("invokeShortcut", &("Overview",)).await?;
             Ok(true)
         }
-        "syncSpaces" => {
-            let spaces: Vec<activities::SpaceInfo> = serde_json::from_value(cmd["spaces"].clone())?;
-            emit(&activities::sync(conn, &activities::state_dir(), &spaces).await?);
+        // Spaces are the user's Activities: read them, never write them
+        // (src/activities.rs). `syncSpaces` is what older shells sent; it
+        // gets the same read-only answer.
+        "activities" | "syncSpaces" => {
+            emit(&activities::report(conn).await);
             Ok(true)
         }
         "switchLayout" => {
@@ -488,8 +491,8 @@ async fn main() -> Result<()> {
              loft-kwin thumbs DIR MAX_PX UUID…               window stills for the dock and switcher\n\
              loft-kwin record screen|area|window …           a screen recording (zkde_screencast)\n\
              loft-kwin displays [set JSON]                   outputs through KScreen\n\
-             loft-kwin spaces list                           Spaces ↔ Activities map\n\
-             loft-kwin spaces prune [--dry-run] [--force]    remove the Activities Loft made"
+             loft-kwin spaces list                           the Activities (= Spaces), in Loft's order\n\
+             loft-kwin spaces prune [--dry-run]              undo what older Loft builds did to Activities"
         );
         return Ok(());
     }
@@ -522,6 +525,7 @@ async fn main() -> Result<()> {
     effects_off(&conn).await;
 
     tokio::spawn(watch_layouts(conn.clone()));
+    tokio::spawn(activities::watch(conn.clone(), emit));
 
     let mut model = state::Model::new();
     // Display identities spell the vendor out like niri (LOFT_PNP_IDS: set
