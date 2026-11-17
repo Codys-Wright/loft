@@ -147,6 +147,7 @@ workspace.windowRemoved.connect(w => {
     delete fresh[id];
     delete placed[id];
     delete stayFor[id];
+    delete pendingGeometry[id];
     recentHere = recentHere.filter(x => x !== w);
     push();
 });
@@ -313,7 +314,17 @@ function placeGeometry(w, p, screen, desktop) {
         x = a.x + (a.width - width) / 2;
         y = a.y + (a.height - height) / 2;
     }
-    setGeometry(w, x, y, width, height);
+    const r = { x: x, y: y, width: width, height: height };
+    askGeometry(w, r);
+    // Opened onto another Activity or desktop: a hidden client doesn't take
+    // the resize (KWin moves it, the size stays its own), so ask again when
+    // it's first shown here (showPending).
+    if (!visibleHere(w))
+        pendingGeometry["" + w.internalId] = r;
+}
+
+function askGeometry(w, r) {
+    setGeometry(w, r.x, r.y, r.width, r.height);
     // A window placed as it maps (windowAdded) answers its first configure
     // with its own size, and KWin places it again: ask once more after it
     // settled, while it isn't what was asked.
@@ -323,12 +334,35 @@ function placeGeometry(w, p, screen, desktop) {
         t.singleShot = true;
         t.timeout.connect(() => {
             const f = w.frameGeometry;
-            if (!w.deleted && f && (Math.abs(f.width - width) > 2 || Math.abs(f.height - height) > 2
-                || Math.abs(f.x - x) > 2 || Math.abs(f.y - y) > 2))
-                setGeometry(w, x, y, width, height);
+            if (!w.deleted && f && (Math.abs(f.width - r.width) > 2 || Math.abs(f.height - r.height) > 2
+                || Math.abs(f.x - r.x) > 2 || Math.abs(f.y - r.y) > 2))
+                setGeometry(w, r.x, r.y, r.width, r.height);
         });
         t.start();
     }
+}
+
+// uuid → the geometry a placement asked for while the window wasn't shown.
+const pendingGeometry = {};
+
+function showPending() {
+    for (const id in pendingGeometry) {
+        const w = windowById(id);
+        if (!w || w.deleted) {
+            delete pendingGeometry[id];
+            continue;
+        }
+        if (!visibleHere(w))
+            continue;
+        const r = pendingGeometry[id];
+        delete pendingGeometry[id];
+        askGeometry(w, r);
+    }
+}
+for (const s of ["currentActivityChanged", "currentDesktopChanged"]) {
+    try {
+        workspace[s].connect(showPending);
+    } catch (e) {}
 }
 
 // p: { activity (id) | activityName, desktop, output (connector), open
@@ -350,10 +384,15 @@ function place(w, p, why) {
         workspace.sendClientToScreen(w, s);
     if (p.keepAbove === true || p.keepAbove === false)
         w.keepAbove = p.keepAbove;
+    // (A rule may have placed it first, when an expectation came after the
+    // window: the expectation's `open` replaces the rule's.)
     if (p.open === "fullscreen")
         w.fullScreen = true;
-    else if (p.open === "maximized")
+    else if (p.open === "maximized") {
+        if (w.fullScreen)
+            w.fullScreen = false;
         w.setMaximize(true, true);
+    }
     else if (p.size || p.position)
         placeGeometry(w, p, s || w.output, d);
     if (p.follow === true) {

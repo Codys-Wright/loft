@@ -1587,8 +1587,15 @@ Two things learned on the way: KWin activates a new window (sometimes before
 user was in (a short history of recently focused windows "here", else the topmost
 one); and a window sized as it maps answers its first configure with its own size,
 so the geometry is asked again 200 and 800 ms later if it isn't what was asked. A
-size is capped to the output's work area (bar and dock struts). Apps that remember
-their window size (Konsole's `konsolestaterc`) reopen at it; that isn't a rule.
+window opened onto another Activity or desktop is moved but doesn't take the resize
+while hidden (seen after the stack rebase: `loft open --activity Coding --size …`
+from Default left Konsole at its own size), so the geometry is kept and asked again
+when the window is first shown here (`showPending`, on an Activity or desktop
+switch). An expectation that arrives after a rule placed the window (the app mapped
+before `loft-kwin expect` ran) places it again; `open: maximized` then drops the
+rule's full screen. A size is capped to the output's work area (bar and dock
+struts). Apps that remember their window size (Konsole's `konsolestaterc`) reopen
+at it; that isn't a rule.
 
 **Tested** in a nested KWin 6.8.2 (§6: `--output-count 2 --size 1280x800`, scratch
 `LOFT_LIBRARY` / `LOFT_SPACES_DIR`), Activities Default, Music, Coding, Gaming made on
@@ -1615,6 +1622,24 @@ state` and screenshots:
 Not tested: the late-title re-match (no test), the running-instance fallback (a
 unit test only), `loft open` under niri (its action lists are unit-tested), and the
 Nix option beyond evaluating its type with the example and the module parsing.
+
+**Re-tested after the stack rebase** (same session shape, KDE "Switch to activity"
+keys Meta+1…4 set on the session's kglobalaccel, the rule and `loft open` as above):
+the KWrite rule with `follow=false` (Coding / Two / WL-1 full screen, Default / 1 and
+the Konsole's focus kept) and `follow=true` (switched to Coding · 2, KWrite focused);
+`loft open … --size 1200x800 -- konsole` (Coding / Two / WL-1, 1200×694 once Coding is
+shown, after the fix above) and a plain Konsole (stayed on the current Activity and
+desktop, focused); `--activity music --desktop Two --monitor main --maximized
+--follow -- kwrite` (Music / Two / WL-0, maximized, focused, switched); refusals for
+`--activity Nope` (from loft-kwin's dry run, with the Activities' names), `--monitor
+left`, `--desktop 5`, nothing started. The stack's own paths still work: Spaces =
+the four Activities in key order, following a rename both ways; `spaces open` of a
+Space linked to Gaming started Konsole on Gaming / WL-1 and switched there, a second
+Open started nothing; dragging a Konsole and pressing Meta+2 mid-drag carried it to
+Music, focused after the drop; with `loft-keys.js` loaded, tapping Meta+Q on a
+protected Konsole showed "Hold ⌘Q to quit Konsole" and kept it, holding 2 s quit it;
+Settings → Spaces & Windows → Window Rules showed KWrite's rule (Coding, 2 · Two,
+Right (WL-1), Follows).
 
 ## 5. One Plasma session, two shells: switching and backing out
 
