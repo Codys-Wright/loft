@@ -21,6 +21,8 @@
 //! - `loft-kwin record …`: a screen recording through KWin's zkde_screencast
 //!   and PipeWire (src/record.rs).
 //! - `loft-kwin displays [set JSON]`: outputs through KScreen (src/displays.rs).
+//! - `loft-kwin motion [set JSON]`: animation speed and KWin's effects
+//!   (src/motion.rs).
 //! - Spaces are the user's KDE Activities (src/activities.rs), read-only:
 //!   stdin `activities` answers `{"Activities": {"activities": [{id, name,
 //!   icon, key, position}], "current"}}` in KDE's "Switch to activity" key
@@ -51,6 +53,7 @@ mod heal;
 mod idle;
 mod input;
 mod keys;
+mod motion;
 mod placement;
 mod record;
 mod shot;
@@ -796,6 +799,9 @@ async fn main() -> Result<()> {
     if args.first().is_some_and(|a| a == "input") {
         return input::cli(&args[1..]).await;
     }
+    if args.first().is_some_and(|a| a == "motion") {
+        return motion::cli(&args[1..]).await;
+    }
     if args.first().is_some_and(|a| a == "spaces") {
         return activities::cli(&args[1..]).await;
     }
@@ -813,6 +819,7 @@ async fn main() -> Result<()> {
              loft-kwin record screen|area|window …           a screen recording (zkde_screencast)\n\
              loft-kwin displays [set JSON]                   outputs through KScreen\n\
              loft-kwin input [set JSON]                      keyboard layouts (kxkbrc), mouse and trackpad (KWin's InputDevice)\n\
+             loft-kwin motion [set JSON]                     animation speed (kdeglobals) and KWin's effects\n\
              loft-kwin spaces list                           the Activities (= Spaces), in Loft's order\n\
              loft-kwin spaces prune [--dry-run]              undo what older Loft builds did to Activities"
         );

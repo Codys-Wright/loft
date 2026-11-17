@@ -117,14 +117,16 @@ Scope {
             KeyRemaps.refresh();
         else if (s === "displays")
             Displays.refreshOutputs();
-        else if (s === "layout")
+        else if (s === "layout") {
             NiriSettings.refresh();
-        else if (s === "input") {
+            KdeMotion.reload();
+        } else if (s === "input") {
             NiriSettings.refresh();
             NiriSettings.refreshBinds();
             KeyRemaps.refresh();
         } else if (s === "windows") {
             NiriSettings.refresh();
+            KdeMotion.reload();
             WindowRules.refresh();
         }
     }
