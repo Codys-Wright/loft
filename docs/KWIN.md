@@ -78,8 +78,8 @@ compositor), `configLoaded(failed)`, `windowMinimizeRequested(id)`,
   `expelWindowFromColumn`, `consumeOrExpelWindowLeft`
 
 **Capabilities.** `Compositor.capabilities` is `{ columns, overview, windowScreenshot,
-workspaceNames, perOutputWorkspaces, titleBarEvents, configReload }`, all true under
-niri. Nothing reads it yet. The KWin step gates menu items on it (e.g. MenuState's
+workspaceNames, perOutputWorkspaces, titleBarEvents, configReload, spaces }`, all true
+under niri (`spaces`: Spaces work; under KWin they are Activities, §4.2). Nothing reads it yet. The KWin step gates menu items on it (e.g. MenuState's
 "Maximize Column" and Arrange's column presets hide when `columns` is false).
 
 ### How the consumers map
@@ -96,6 +96,8 @@ niri. Nothing reads it yet. The KWin step gates menu items on it (e.g. MenuState
 | Wallpapers: `WorkspaceWallpapers`, `VideoWallpapers`, `Vibes` | active workspace per output, overview | per-workspace wallpaper **surfaces** off (they need niri-loft's patch). The "one wallpaper per screen, swapped on switch" fallback works |
 | Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **KDE Activities** (decided, §4.2). Off until that lands |
 | Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | **done** (§4.8): `Displays.outputs` / `setOutputs` → `KScreen.qml` → `loft-kwin displays` (kscreen-doctor) |
+| Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **KDE Activities**, one per Space (done, §4.2) |
+| Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | KWin-native: `kscreen-doctor -j` / KScreen D-Bus |
 | Title-bar events (`windowMinimizeRequested`, `windowActionsMenuRequested`) | niri-loft's traffic lights | not needed: KWin decorations minimize and open the window menu themselves |
 | `configLoaded` (NiriSettings, WindowRules) | niri reloaded its KDL | `org.kde.KWin.reloadConfig` after writing kwinrc / kwinrulesrc |
 
@@ -210,29 +212,89 @@ decoration's minimize button and Loft's Hide then mean the same thing.
 
 ### 4.2 Spaces = KDE Activities
 
-An Activity is a set of windows (plus its own desktops, wallpaper and settings) that
-switches as one across **every** display. That is what a Space is (SPACES.md §1),
-without having to activate several per-output workspaces together.
+**Done** (step 10). An Activity is a set of windows (plus its own desktops, wallpaper
+and settings) that switches as one across **every** display. That is what a Space is
+(SPACES.md §1), without having to activate several per-output workspaces together.
 
-- **API:** `org.kde.ActivityManager /ActivityManager/Activities`: `ListActivities`,
-  `ListActivitiesWithInformation`, `AddActivity`, `RemoveActivity`, `SetActivityName`,
-  `SetCurrentActivity`, `CurrentActivity`, signals `CurrentActivityChanged`,
-  `ActivityAdded/Removed`, `ActivityNameChanged` (checked on this machine). In the KWin
-  script: `workspace.activities`, `workspace.currentActivity`, `window.activities`
-  (settable), `workspace.currentActivityChanged`.
-- **Mapping:** a Space (singleton or template instance) gets one Activity. loft-kwin
-  keeps a `space id ↔ activity uuid` map in Loft's state dir. `Spaces.focus` becomes
-  `SetCurrentActivity`. A spin-up launches the Space's apps and the bridge tags them
-  with `window.activities = [uuid]`. Display **roles** (main/left/right…) become
-  per-window placement (`sendClientToScreen`) at `windowAdded`, from the same role
-  resolution loft-niri does today (shared Rust code).
-- **Per-Space look:** wallpaper, dock set and theme key off the current activity
-  instead of named workspaces. The wallpaper path is the per-screen swap above.
-- **The shell's model:** `Compositor` gains `activities` / `currentActivity` and
-  windows gain `activities: [uuid]`. Under niri it reports no activities, and Spaces
-  keeps using loft-niri. `Spaces.qml` picks its engine from `Compositor.backend`.
-- **Backing out (§5):** activities Loft created stay in Plasma and are harmless there
-  (plasmashell shows them in its Activities switcher). `loft spaces prune` removes them.
+- **API:** `org.kde.ActivityManager /ActivityManager/Activities` (kactivitymanagerd
+  6.8.2): `ListActivities`, `ActivityName`, `ActivityIcon`, `AddActivity(name) → id`,
+  `RemoveActivity`, `SetActivityName`, `SetActivityIcon`, `CurrentActivity`. In the KWin
+  script: `workspace.activities`, `workspace.currentActivity` (settable),
+  `window.activities` (settable, `[]` = every Activity), `currentActivityChanged`,
+  `activitiesChanged`.
+- **The library stays loft-niri's.** Space documents, their validation and the writes
+  (`space save|patch|delete|reorder`) are files only and work without niri.
+  `space list --displays '[{name, identity, geometry}]'` resolves the display roles from
+  KWin's outputs instead of niri's (Settings → Spaces, per-Space wallpapers).
+- **Mapping** (`crates/loft-kwin/src/activities.rs`). After every reload of the list,
+  `Spaces.qml` sends the non-archived Spaces to loft-kwin (`{"cmd":"syncSpaces",
+  "spaces":[{id, name, icon, template}]}`), which makes kactivitymanagerd match and
+  answers `{"Spaces": {"map": {space: activity}, "activities", "current", "errors"}}`.
+  The map is `<state>/kwin-activities.json` (`{"spaces": {"<id>": {"activity": uuid,
+  "adopted"?: {name, icon}}}}`). The plan is a pure function with unit tests:
+  - a Space without an Activity gets one (`AddActivity`, then its icon);
+  - **the very first sync** (no map file yet) lets the first Space **adopt** the current
+    Activity, so the windows already open belong to a Space. Its old name and icon are
+    recorded. Later syncs never adopt;
+  - name and icon follow the document. Loft's icons are Nerd Font glyphs, which Plasma
+    can't draw, so the Activity gets a freedesktop icon: the document's `icon` if it is
+    already an icon name, else one per built-in / template (`main` → `user-desktop`,
+    `music` → `audio-x-generic`, `project` → `folder-development` …), else `activities`;
+  - a Space that's gone (deleted, archived) loses its Activity (`RemoveActivity`); an
+    adopted one gets its old name and icon back and is kept;
+  - an Activity removed in Plasma is forgotten and its Space gets a new one (the shell
+    re-syncs when a mapped Activity disappears, and whenever loft-kwin restarts).
+  Order isn't an Activity property: ⌘1…9 follow the library's order, as under niri.
+- **Switching.** `Spaces.focus` / `next` / `prev` (bar dots, the switcher, ⌃⌘← →, ⌘1…9)
+  set `workspace.currentActivity` through the bridge (`setActivity`), with loft-niri's
+  order and wrap-around. The **active Space** is the current Activity's
+  (`Spaces.deriveActivity`, "" on an Activity that isn't a Space's); a change fires
+  `activated`, so the island banner, per-Space dock / menu bar extras / Do Not Disturb
+  work as under niri. `bar.hidden` hides the bar on every display (an Activity spans
+  them all). Focusing a window of another Space (dock, switcher) switches to its
+  Activity first (bridge.js `focusWindow`).
+- **Moving a window:** `Spaces.moveWindow(space, window?, follow?)` → bridge.js
+  `setWindowActivities` (`w.activities = [uuid]`). From the window menus ("Move to
+  Space", Window menu and the app menu's move commands), ⌘⇧1…9 and `qs ipc call spaces
+  moveWindow <id|n>`. Windows report `kwin_activities`; the bar's dots and the switcher
+  count a Space's windows from it.
+- **Shortcuts.** spaces.kdl (niri) never reaches KWin, so `loft keys kwin render` adds
+  ⌘1…9 → `spaces focus N` and ⌘⇧1…9 → `spaces moveWindow N` (ids `spaces-focus-N`,
+  `spaces-movewindow-N`) after shell-binds and before the user's changes. ⌘ and Mod are
+  both Meta here, so **⌘⇧3/4/5 stay Capture** and "Move Window to Space 3–5" has no key
+  (use the menu). With Spaces off the shell steps KWin's desktops instead.
+- **Per-Space wallpaper:** one wallpaper per screen, swapped (crossfaded) on Activity
+  change: `Vibes.spaceWallpaper` takes the active Space's `wallpapers` for the screen's
+  most specific role, else the per-workspace choice made under niri for the workspace
+  the Space binds to that role. Nothing per-workspace beyond that (decided).
+- **Not under KWin** (niri-only, hidden there): "New Space from Current Desktop"
+  (captures niri workspaces), P3 spin-up / Open / gather (launching a Space's apps and
+  tagging them), display roles as window placement, and the per-role workspace lines in
+  Settings → Spaces (a card says "KDE Activity · every display · N windows" instead).
+- **Backing out (§5):** Activities Loft created stay in Plasma and are harmless there
+  (plasmashell shows them in its Activities switcher). `loft spaces prune [--dry-run]`
+  (= `loft-kwin spaces prune`) removes them, gives the adopted one its name and icon
+  back and deletes the map; `loft spaces activities` prints the map and the session's
+  Activities. Both use the session bus; `loft --dev` targets a dev session.
+- **Backing out while Loft runs:** `prune` refuses while `dev.loft.KWinBridge` has an
+  owner (Loft's shell with Spaces on would make them again at once); `--force` anyway.
+- **Windows of a removed Space:** KWin puts a window whose only Activity is removed on
+  **every** Activity (seen), so before a sync removes one, the shell moves that Space's
+  windows to the active Space (else the first).
+- **Tested** in a nested KWin 6.8.2 (§6, `--kwin-env LOFT_SPACES_DIR=<scratch>` — the
+  session otherwise inherits the real `LOFT_LIBRARY`) with kactivitymanagerd on the
+  session's bus, checked with `busctl` against `org.kde.ActivityManager` and a one-shot
+  KWin script printing each window's `activities`: the first sync adopted "Default" as
+  Main and made the built-ins' Activities; three new Spaces got three Activities;
+  switching from a bar dot, the switcher (↓ Enter), `spaces focus N|next|prev` (wraps)
+  and Settings → Spaces' Activate set the current Activity; `spaces moveWindow 8` and
+  the app menu's Move to Space moved KWrite's Activity without switching; a dock click on
+  it switched to its Space; a rename and deletes followed in kactivitymanagerd; deleting
+  the active Space with KWrite on it moved KWrite to Main; a Space's `wallpapers` showed
+  while it was active; Settings' reorder arrow changed ⌘N order; `prune` was refused
+  while the shell ran and with `--force` (Spaces off) left only "Default", named and
+  iconed as before, with the map gone. Not run: the ⌘1…9 kglobalaccel shortcuts
+  themselves (their command is the IPC call above; registration as in §4.5).
 
 ### 4.3 Loft's lock design in Plasma's locker
 
@@ -873,7 +935,7 @@ when Loft stops:
 | the tile-while-dragging modifier (`[Windows] TileWhileMovingModifier`, §4.6) | `loft-kwin-tile-modifier apply` / `revert`, recorded in `<state>/kwin-tile-modifier.prev` like the decoration. Only set with `programs.loft.plasma.kwinPackage` |
 | any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |
 | the lock screen | `PLASMA_DEFAULT_SHELL` only in KWin's environment, and only when the login is Loft's (`loft-plasma lock-env`, §4.3). Lock and unlock stay Plasma's either way |
-| activities created for Spaces | kept (harmless). `loft spaces prune` removes them |
+| activities created for Spaces (`<state>/kwin-activities.json`) | kept (harmless). `loft spaces prune` removes them and renames the adopted one back |
 
 Loft never writes `plasma-org.kde.plasma.desktop-appletsrc`, `plasmashellrc` or
 `kwinrulesrc`, so plasmashell comes back with your panels as you left them.
@@ -966,6 +1028,9 @@ What it took:
 9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). ✅ Display settings (§4.8). Recording.
 10. Spaces on Activities (§4.2).
 11. ✅ Window thumbnails through ScreenShot2 (§4.8).
+9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). Display settings, recording.
+10. ✅ Spaces on Activities (§4.2).
+11. Window thumbnails through ScreenShot2.
 
 ## 8. Notes for the fleet flake (~/.flake, out of scope here)
 

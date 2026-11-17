@@ -153,6 +153,10 @@ enum SpaceCmd {
         /// Include archived instances.
         #[arg(long)]
         archived: bool,
+        /// The displays, instead of asking niri (KWin sessions, docs/KWIN.md
+        /// §4.2): `[{"name", "identity", "geometry": [x, y, w, h]}]`.
+        #[arg(long)]
+        displays: Option<String>,
     },
     /// Activate a space (id, or its position 1…9): every display it binds.
     /// Activating the active space again brings back `keep` displays that
@@ -938,7 +942,7 @@ fn space_cmd(
         });
     };
     match cmd {
-        SpaceCmd::List { archived } => {
+        SpaceCmd::List { archived, displays } => {
             let spaces: Vec<_> = cat
                 .spaces
                 .iter()
@@ -968,9 +972,10 @@ fn space_cmd(
                 })
                 .collect();
             // The live layout: each display's roles (Settings → Spaces).
-            let layout: Vec<Value> = loft_niri::live_outputs()
-                .map(|o| {
-                    let ds = roles::displays_from_niri(&o);
+            let given = displays.as_deref().map(displays_from_json).transpose()?;
+            let layout: Vec<Value> = given
+                .or_else(|| loft_niri::live_outputs().map(|o| roles::displays_from_niri(&o)))
+                .map(|ds| {
                     let rs = roles::roles(&ds, main.as_deref());
                     ds.iter()
                         .map(|d| {
@@ -1225,6 +1230,35 @@ fn space_cmd(
 }
 
 /// `space capture`: the live state → a new space document.
+/// `space list --displays`: `[{"name", "identity", "geometry": [x, y, w, h]}]`
+/// (KWin.qml's `displays`) → roles' displays, in roles' order.
+fn displays_from_json(text: &str) -> Result<Vec<loft_niri::spaces::roles::Display>> {
+    #[derive(serde::Deserialize)]
+    struct D {
+        name: String,
+        #[serde(default)]
+        identity: String,
+        #[serde(default)]
+        geometry: [f64; 4],
+    }
+    let ds: Vec<D> = serde_json::from_str(text)
+        .context("--displays: expected [{name, identity, geometry: [x, y, w, h]}]")?;
+    let mut v: Vec<_> = ds
+        .into_iter()
+        .filter(|d| d.geometry[2] > 0.0 && d.geometry[3] > 0.0)
+        .map(|d| loft_niri::spaces::roles::Display {
+            identity: if d.identity.is_empty() { d.name.clone() } else { d.identity },
+            name: d.name,
+            x: d.geometry[0].round() as i32,
+            y: d.geometry[1].round() as i32,
+            width: d.geometry[2].round() as i32,
+            height: d.geometry[3].round() as i32,
+        })
+        .collect();
+    v.sort_by(|a, b| (a.x, a.y, &a.name).cmp(&(b.x, b.y, &b.name)));
+    Ok(v)
+}
+
 fn capture_doc(
     cat: &loft_niri::spaces::model::Catalog,
     paths: &Paths,

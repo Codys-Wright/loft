@@ -82,7 +82,8 @@ Item {
         const ws = activeWs;
         if (!ws)
             return -1;
-        const owner = spacesOn ? Spaces.ownerOf(ws.name) : "";
+        // KWin: an Activity spans every display, so it's the active space.
+        const owner = spacesOn ? (Spaces.byActivity ? Spaces.activeId : Spaces.ownerOf(ws.name)) : "";
         return cells.findIndex(c => owner ? c.kind === "space" && c.space.id === owner : c.kind === "ws" && c.ws.id === ws.id);
     }
     readonly property real activeX: {
@@ -206,9 +207,11 @@ Item {
                     readonly property bool isDivider: modelData.kind === "divider"
                     // This display's workspaces of the space (or the one workspace).
                     readonly property var mine: isSpace ? Spaces.workspacesOf(modelData.space.id, root.output) : modelData.ws ? [modelData.ws] : []
-                    readonly property bool occupied: mine.some(w => Compositor.windowsOn(w.id).length > 0)
-                    readonly property bool urgent: mine.some(w => w.is_urgent)
-                    readonly property bool here: mine.length > 0
+                    // KWin: the space's Activity's windows on this display.
+                    readonly property var spaceWindows: isSpace && Spaces.byActivity ? Spaces.windowsOf(modelData.space.id, root.output) : null
+                    readonly property bool occupied: spaceWindows ? spaceWindows.length > 0 : mine.some(w => Compositor.windowsOn(w.id).length > 0)
+                    readonly property bool urgent: spaceWindows ? spaceWindows.some(w => w.is_urgent) : mine.some(w => w.is_urgent)
+                    readonly property bool here: spaceWindows ? true : mine.length > 0
                     // A named workspace's icon ("" = the dot glyphs).
                     readonly property string glyph: !isSpace && modelData.ws ? root.wsIcon(modelData.ws) : ""
 

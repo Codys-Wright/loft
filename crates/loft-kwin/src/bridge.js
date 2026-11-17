@@ -198,6 +198,9 @@ function apply(c) {
             return;
         if (w.minimized)
             w.minimized = false;
+        // A window of another Activity (Space): switch to it first.
+        if (w.activities && w.activities.length > 0 && w.activities.indexOf(workspace.currentActivity) < 0)
+            workspace.currentActivity = w.activities[0];
         if (!w.onAllDesktops && w.desktops.length > 0 && w.desktops.indexOf(workspace.currentDesktop) < 0)
             workspace.currentDesktop = w.desktops[0];
         workspace.activeWindow = w;
@@ -306,6 +309,20 @@ function apply(c) {
     case "setActivity":
         if (workspace.activities.indexOf(c.activity) >= 0)
             workspace.currentActivity = c.activity;
+        return;
+    case "setWindowActivities":
+        // Spaces under KWin (docs/KWIN.md §4.2): [] = every Activity.
+        if (w) {
+            const asked = c.activities || [];
+            const known = asked.filter(a => workspace.activities.indexOf(a) >= 0);
+            if (asked.length > 0 && known.length === 0)
+                return;
+            w.activities = known;
+            if (c.follow && known.length > 0) {
+                workspace.currentActivity = known[0];
+                workspace.activeWindow = w;
+            }
+        }
         return;
     case "refresh":
         push();

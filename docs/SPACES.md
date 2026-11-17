@@ -707,6 +707,11 @@ loft-niri space delete <id> | reorder <id>…            # the library keeps ≥
 loft-niri space capture --name N [--icon I] [--id ID] [--save]   # New Space from Current Desktop
 ```
 
+Under KWin (a Plasma session) a Space is a KDE Activity instead of named workspaces:
+loft-niri still owns the library (`space list --displays JSON` takes KWin's outputs),
+loft-kwin keeps the Activities in step, and `loft spaces activities | prune [--dry-run]`
+lists / removes them. See [KWIN.md §4.2](KWIN.md#42-spaces--kde-activities).
+
 The `loft space …` Python commands above (and the Spotlight provider) are not written
 yet; Settings → Spaces and the shell use `loft-niri` directly. Writes refuse any change
 that adds a problem to the library (unknown role, a workspace another space owns, a
