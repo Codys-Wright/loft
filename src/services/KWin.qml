@@ -181,6 +181,10 @@ Singleton {
             const w = windows.find(x => x.kwin_uuid === e.window);
             if (w)
                 windowActionsMenuRequested(w.id, e.output ?? "", e.x, e.y);
+        } else if (msg.KeepAwake) {
+            keepAwake = msg.KeepAwake;
+            if (msg.KeepAwake.error)
+                console.warn(`KWin: keep awake: ${msg.KeepAwake.error}`);
         } else if (msg.KeyboardLayouts) {
             keyboardLayouts = msg.KeyboardLayouts;
         } else if (msg.Shortcut) {
@@ -331,6 +335,16 @@ Singleton {
         shot.running = true;
     }
 
+    // Keep Awake (KeepAwake.qml): loft-kwin holds a PowerDevil inhibition
+    // while `why` isn't "" (sent again when loft-kwin restarts).
+    property string keepAwakeWhy: ""
+    // loft-kwin's answer: { held, cookie?, error? }
+    property var keepAwake: ({ held: false })
+    function setKeepAwake(why) {
+        keepAwakeWhy = why;
+        send({ cmd: "keepAwake", why: why });
+    }
+
     function setActivity(activity) {
         send({ cmd: "setActivity", activity: activity });
     }
@@ -393,8 +407,12 @@ Singleton {
             onRead: line => console.warn(`loft-kwin: ${line}`)
         }
         onRunningChanged: {
-            if (running)
+            if (running) {
+                if (root.keepAwakeWhy !== "")
+                    root.send({ cmd: "keepAwake", why: root.keepAwakeWhy });
                 return;
+            }
+            root.keepAwake = { held: false };
             root.available = false;
             root.overviewOpen = false;
             // Crashed, or KWin wasn't ready yet: come back.

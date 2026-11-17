@@ -47,7 +47,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import capture, cleaner, dock, doctor, fans, greeter, hooks, importers, index, indexcmds, island, keys, library, mcp, media, openwin, ports, qtglobal, render, spaces, spotify, themecmds, transparency, updates, utilities, vibes, wallsets, wallvideo
+from . import capture, cleaner, dock, doctor, fans, greeter, hooks, importers, index, indexcmds, island, kdeidle, keys, library, mcp, media, openwin, ports, qtglobal, render, spaces, spotify, themecmds, transparency, updates, utilities, vibes, wallsets, wallvideo
 from .facets import FacetError
 from .pack import IGNORED, Pack, PackError, is_any_pack, is_pack, is_pack_v2, pack_id, validate_v2
 
@@ -1423,6 +1423,8 @@ def parser() -> argparse.ArgumentParser:
     q.set_defaults(fn=cmd_qt_sync)
     # Global mode: every Qt app while Loft is the shell (qtglobal.py).
     qtglobal.add_parser(qsub, lambda ctx: ctx.state_dir)
+    # Loft's idle settings in KDE's config under Plasma (kdeidle.py).
+    kdeidle.add_parser(top, lambda ctx: ctx.state_dir)
 
     # The Transparency / Blur dials (Settings → Appearance).
     transparency.add_parser(top)
