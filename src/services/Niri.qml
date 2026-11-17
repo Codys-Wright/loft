@@ -36,6 +36,7 @@ Singleton {
             minimize: false,
             overview: true,
             windowScreenshot: true,
+            windowRecording: false,
             workspaceNames: true,
             perOutputWorkspaces: true,
             titleBarEvents: true,

@@ -38,6 +38,8 @@ Singleton {
             overview: true,
             // loft-kwin shot (KWin's ScreenShot2).
             windowScreenshot: true,
+            // loft-kwin record window (KWin's zkde_screencast stream_window).
+            windowRecording: true,
             workspaceNames: true,
             perOutputWorkspaces: false,
             titleBarEvents: false,

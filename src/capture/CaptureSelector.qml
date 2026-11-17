@@ -275,6 +275,14 @@ PanelWindow {
                 where: "screen"
             }
             ModeButton {
+                icon: "󰖯"
+                tip: "Record Focused Window"
+                kind: "record"
+                where: "window"
+                // KWin streams one window; niri's recorder can't.
+                visible: Capture.allowed(kind) && (Compositor.capabilities.windowRecording ?? false)
+            }
+            ModeButton {
                 icon: "󰹑"
                 tip: "Record Selected Portion"
                 kind: "record"

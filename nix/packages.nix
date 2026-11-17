@@ -315,6 +315,7 @@
             self'.packages.loft-live # `loft-dev live …`
             self'.packages.loft-shell # the shell of --compositor kwin sessions
             pkgs.dbus # dbus-run-session: the private bus of isolated sessions
+            pkgs.wireplumber # with pipewire: the private PipeWire of --compositor kwin sessions
           ];
           text =
             builtins.replaceStrings
@@ -675,10 +676,30 @@
             "loft-kwin"
           ];
           # Display identities spell the EDID vendor out like niri does.
+          # `loft-kwin record` (src/record.rs) runs gst-launch-1.0 on KWin's
+          # PipeWire screencast node: pipewiresrc (pipewire), videorate /
+          # videoconvert / videoscale (base), x264enc (ugly), mp4mux /
+          # pulsesrc (good), avenc_aac (libav). Only these plugins, so the
+          # system's GStreamer set stays out.
           nativeBuildInputs = [ pkgs.makeWrapper ];
-          postInstall = ''
-            wrapProgram $out/bin/loft-kwin --set-default LOFT_PNP_IDS ${pkgs.hwdata}/share/hwdata/pnp.ids
-          '';
+          postInstall =
+            let
+              gst = pkgs.gst_all_1;
+              plugins = lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" [
+                gst.gstreamer
+                gst.gst-plugins-base
+                gst.gst-plugins-good
+                gst.gst-plugins-ugly
+                gst.gst-libav
+                pkgs.pipewire
+              ];
+            in
+            ''
+              wrapProgram $out/bin/loft-kwin --set-default LOFT_PNP_IDS ${pkgs.hwdata}/share/hwdata/pnp.ids \
+                --prefix PATH : ${lib.getBin gst.gstreamer}/bin \
+                --set GST_PLUGIN_SYSTEM_PATH_1_0 ${plugins} \
+                --unset GST_PLUGIN_PATH --unset GST_PLUGIN_PATH_1_0
+            '';
           meta.mainProgram = "loft-kwin";
         };
 
