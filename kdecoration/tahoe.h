@@ -214,8 +214,8 @@ inline QPainterPath minimizeGlyph()
 }
 
 // maximize.svg path6-0-54: two triangles toward the corners (macOS's
-// full-screen / zoom glyph).
-inline QPainterPath zoomGlyph()
+// full-screen glyph: what green does without Option).
+inline QPainterPath fullScreenGlyph()
 {
     QPainterPath p;
     p.moveTo(QPointF{-1.5859, -3});
@@ -231,22 +231,15 @@ inline QPainterPath zoomGlyph()
     return p;
 }
 
-// restore.svg path1031 / path1838 (the maximized window's green bead): the
-// triangles turned toward the centre.
-inline QPainterPath restoreGlyph()
+// Option held over the green bead (macOS: zoom instead of full screen): a
+// "+", the minimize bar's 2 px rounded stroke both ways, 8 px across.
+inline QPainterPath plusGlyph()
 {
-    QPainterPath p;
-    p.moveTo(QPointF{0, -4.5859});
-    p.lineTo(QPointF{0, -1});
-    p.cubicTo(QPointF{0, -0.5845}, QPointF{0.5845, 0}, QPointF{1, 0});
-    p.lineTo(QPointF{4.5859, 0});
-    p.closeSubpath();
-    p.moveTo(QPointF{0, 4.5859});
-    p.lineTo(QPointF{0, 1});
-    p.cubicTo(QPointF{0, 0.5845}, QPointF{-0.5845, 0}, QPointF{-1, 0});
-    p.lineTo(QPointF{-4.5859, 0});
-    p.closeSubpath();
-    return p;
+    QPainterPath h;
+    h.addRoundedRect(QRectF(-4, -1, 8, 2), 1, 1);
+    QPainterPath v;
+    v.addRoundedRect(QRectF(-1, -4, 2, 8), 1, 1);
+    return h.united(v);
 }
 
 } // namespace Loft::Tahoe

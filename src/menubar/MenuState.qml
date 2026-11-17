@@ -43,7 +43,8 @@ Singleton {
     property var hidden: []
     // A context menu (the dock's): { items: () => [...], x, y, edge } —
     // the point (screen coordinates) on the edge of what was clicked, and
-    // which screen edge that sits on (bottom/left/right): the menu opens
+    // which screen edge that sits on (bottom/left/right; "pointer": a title
+    // bar's menu, down and right from the point): the menu opens
     // away from it. `current` is -2 while it's open.
     property var context: null
     // Its items, built once on open (and on refreshContext()): rebuilding
@@ -833,7 +834,7 @@ Singleton {
         }
         function onWindowActionsMenuRequested(id, output, x, y) {
             if (Compositor.windowMap[id])
-                root.openContext(output, x, y, "bottom", () => root.trafficLightItems(Compositor.windowMap[id]));
+                root.openContext(output, x, y, "pointer", () => root.trafficLightItems(Compositor.windowMap[id]));
         }
     }
 

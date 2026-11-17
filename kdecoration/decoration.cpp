@@ -1,4 +1,5 @@
 #include "decoration.h"
+#include "shell.h"
 #include "tahoe.h"
 
 #include <KDecoration3/DecoratedWindow>
@@ -14,6 +15,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPointer>
 #include <QStyleHints>
 
 #include <cmath>
@@ -316,13 +318,17 @@ void Decoration::mousePressEvent(QMouseEvent *event)
         return; // a bead's
     }
     const QPointF pos = event->position();
-    if (!titleBar().contains(pos) || m_buttons->geometry().contains(pos)) {
+    if (!titleBar().contains(pos)) {
         return;
     }
     if (event->button() == Qt::RightButton) {
-        // KWin's window menu, at the pointer.
-        requestShowWindowMenu(QRect(pos.toPoint(), QSize(1, 1)));
+        // Loft's window menu (KWin's without the shell), at the pointer;
+        // on the beads too (they only take the left button).
+        showWindowMenu(QStringLiteral("menu"), pos);
         event->accept();
+        return;
+    }
+    if (m_buttons->geometry().contains(pos)) {
         return;
     }
     if (event->button() != Qt::LeftButton) {
@@ -343,15 +349,109 @@ void Decoration::mousePressEvent(QMouseEvent *event)
     m_lastPressPos = pos;
 }
 
+void Decoration::showWindowMenu(const QString &kind, const QPointF &anchor)
+{
+    QPointer<Decoration> self(this);
+    auto kwinMenu = [self, anchor] {
+        if (self) {
+            self->requestShowWindowMenu(QRect(anchor.toPoint(), QSize(1, 1)));
+        }
+    };
+    if (!Shell::self()->send(kind, anchor, rect().size(), kwinMenu)) {
+        kwinMenu();
+    }
+}
+
 // ── buttons ─────────────────────────────────────────────────────────────────
+
+namespace
+{
+// How long green is held before the menu opens (niri-loft's title bar: the
+// same ~350 ms).
+constexpr int HoldMs = 350;
+} // namespace
 
 Button::Button(DecorationButtonType type, Decoration *decoration, QObject *parent)
     : KDecoration3::DecorationButton(type, decoration, parent)
 {
     // The base class wires the click to KWin: close, minimize, toggle
-    // maximize (left = both ways, middle = vertical, right = horizontal).
-    if (type == DecorationButtonType::Maximize) {
-        setAcceptedButtons(Qt::LeftButton | Qt::MiddleButton | Qt::RightButton);
+    // maximize. Green is macOS's instead: full screen, zoom with Option, the
+    // window menu when held (left button only; a right-click is the bar's).
+    if (type != DecorationButtonType::Maximize) {
+        return;
+    }
+    disconnect(this, &KDecoration3::DecorationButton::clicked, decoration, nullptr);
+    connect(this, &KDecoration3::DecorationButton::clicked, this, &Button::zoomClicked);
+    m_hold = new QTimer(this);
+    m_hold->setSingleShot(true);
+    m_hold->setInterval(HoldMs);
+    connect(m_hold, &QTimer::timeout, this, &Button::held);
+    // KDecoration's tooltip says "Maximize": say what green does now
+    // (connected after the base class's, so this text wins).
+    auto tip = [this] {
+        if (isHovered() && !isPressed()) {
+            this->decoration()->requestShowToolTip(Shell::self()->optionHeld() ? QStringLiteral("Zoom") : QStringLiteral("Enter Full Screen"));
+        }
+    };
+    connect(this, &KDecoration3::DecorationButton::hoveredChanged, this, tip);
+    // The glyph (and the tooltip) follow Option while the pointer is on the beads.
+    connect(Shell::self(), &Shell::optionHeldChanged, this, [this, tip] {
+        auto *deco = static_cast<Decoration *>(this->decoration());
+        if (deco && deco->buttonsHovered()) {
+            update();
+        }
+        tip();
+    });
+}
+
+void Button::mousePressEvent(QMouseEvent *event)
+{
+    KDecoration3::DecorationButton::mousePressEvent(event);
+    if (m_hold && event->isAccepted() && event->button() == Qt::LeftButton) {
+        // KWin passes the modifiers with presses (not with hovers).
+        m_pressOption = (event->modifiers() & Qt::AltModifier) || Shell::self()->optionHeld();
+        m_heldOpened = false;
+        m_hold->start();
+    }
+}
+
+void Button::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (m_hold) {
+        m_hold->stop();
+    }
+    KDecoration3::DecorationButton::mouseReleaseEvent(event);
+}
+
+void Button::held()
+{
+    auto *deco = static_cast<Decoration *>(decoration());
+    if (!deco || !isPressed()) {
+        return;
+    }
+    m_heldOpened = true;
+    // Under the bead, like macOS's menu.
+    deco->showWindowMenu(QStringLiteral("tileMenu"), QPointF(geometry().left(), geometry().bottom()));
+}
+
+void Button::zoomClicked()
+{
+    auto *deco = static_cast<Decoration *>(decoration());
+    if (!deco || m_heldOpened) {
+        m_heldOpened = false;
+        return;
+    }
+    QPointer<Decoration> guard(deco);
+    auto maximize = [guard] {
+        if (guard) {
+            guard->requestToggleMaximization(Qt::LeftButton);
+        }
+    };
+    // Option: zoom (KWin's maximize). Otherwise full screen, which only the
+    // shell's bridge can ask for (KDecoration has no request for it); without
+    // the shell, green maximizes as before.
+    if (m_pressOption || !Shell::self()->send(QStringLiteral("fullscreen"), geometry().center(), deco->rect().size(), maximize)) {
+        maximize();
     }
 }
 
@@ -380,7 +480,9 @@ void Button::paint(QPainter *painter, const QRectF &)
             break;
         default:
             bead = pal.zoom;
-            glyph = deco->maximized() ? Tahoe::restoreGlyph() : Tahoe::zoomGlyph();
+            // Option: zoom ("+"), else full screen (macOS shows the same
+            // arrows on a zoomed window).
+            glyph = Shell::self()->optionHeld() ? Tahoe::plusGlyph() : Tahoe::fullScreenGlyph();
             break;
         }
     }

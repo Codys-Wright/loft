@@ -159,10 +159,31 @@ menu bar all hide the same way. The shell's `Niri` service listens and calls
 
 **Window menu** — the patch emits `WindowActionsMenuRequested { id, output, x,
 y }` (output-local pointer position) after ~350 ms on the green button, or on a
-right-click on the bar; the shell opens its menu there and runs the choice
-through `niri msg action`.
+right-click on the bar; the shell opens its menu there (down and right from the
+point) and runs the choice through `niri msg action`.
 
 Touch on the bar does nothing yet (only the pointer drives it).
+
+## Under KWin
+
+In a Plasma session the bar is Loft's KWin decoration (`kdecoration/`,
+[KWIN.md §4.4](KWIN.md#44-lofts-kwin-decoration)), with the same behaviour as
+macOS and as the niri bar above, through the shell:
+
+| Input | Does |
+|---|---|
+| click red | close (KWin) |
+| click yellow | minimize (KWin's, = Hide) |
+| click green | toggle full screen (through loft-kwin's bridge) |
+| Option (Alt) + click green | zoom: KWin's maximize, both ways |
+| hover green | the full-screen arrows; with Option held, "+" (follows the key live) |
+| press and hold green (350 ms) | the shell's window menu under the bead |
+| right-click the bar (beads included) | the shell's window menu at the pointer |
+| double-click the bar | zoom |
+
+The menu is the same one niri's bar opens (`MenuState.trafficLightItems`); it
+opens down and right from the point, as macOS's. Without Loft's shell (no
+`dev.loft.KWinBridge` on the bus), green maximizes and the menus are KWin's.
 
 ## Where it lives in niri 26.04
 

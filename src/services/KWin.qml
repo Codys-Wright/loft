@@ -53,7 +53,9 @@ Singleton {
             windowRecording: true,
             workspaceNames: true,
             perOutputWorkspaces: false,
-            titleBarEvents: false,
+            // Loft's decoration: right-click / held green → the window
+            // menu (windowActionsMenuRequested). Minimize is KWin's own.
+            titleBarEvents: true,
             configReload: false,
             // KWin puts its title bar (Loft's decoration) on the shell's own
             // windows too: WindowChrome leaves out its traffic lights.
@@ -65,6 +67,9 @@ Singleton {
     signal outputsChanged
     // A screen moved, was resized or rescaled (KScreen re-reads its outputs).
     signal displayLayoutChanged
+    // Loft's decoration asked for the window menu (right-click on the bar,
+    // or green held): x, y logical within the output, as niri's event.
+    signal windowActionsMenuRequested(int id, string output, real x, real y)
     // A window screenshot of ours finished (screenshotWindow), path written.
     signal screenshotTaken(string path)
     property string outputKey: ""
@@ -147,6 +152,11 @@ Singleton {
             spacesSynced = true;
             for (const e of msg.Spaces.errors ?? [])
                 console.warn(`KWin: activities: ${e}`);
+        } else if (msg.WindowActionsMenuRequested) {
+            const e = msg.WindowActionsMenuRequested;
+            const w = windows.find(x => x.kwin_uuid === e.window);
+            if (w)
+                windowActionsMenuRequested(w.id, e.output ?? "", e.x, e.y);
         } else if (msg.KeyboardLayouts) {
             keyboardLayouts = msg.KeyboardLayouts;
         } else if (msg.Error) {

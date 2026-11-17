@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui DBus)
 find_package(KF6CoreAddons REQUIRED)
 find_package(KDecoration3 REQUIRED)
 
@@ -19,11 +19,13 @@ set(LOFT_PLUGIN_DIR "lib/qt-6/plugins" CACHE STRING "Qt plugin dir, relative to 
 add_library(dev.loft.decoration MODULE
     config.cpp
     decoration.cpp
+    shell.cpp
 )
 set_target_properties(dev.loft.decoration PROPERTIES PREFIX "")
 target_link_libraries(dev.loft.decoration PRIVATE
     Qt6::Core
     Qt6::Gui
+    Qt6::DBus
     KF6::CoreAddons
     KDecoration3::KDecoration
 )

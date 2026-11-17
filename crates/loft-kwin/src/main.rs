@@ -152,6 +152,50 @@ async fn client(args: &[String]) -> Result<()> {
         _ => anyhow::bail!("usage: loft-kwin send JSON | loft-kwin state"),
     }
     Ok(())
+    /// From Loft's decoration (kdecoration/shell.cpp), in KWin: a title-bar
+    /// action, `{"action": "menu"|"tileMenu"|"fullscreen", "x", "y" (decoration-
+    /// local anchor), "width", "height" (the frame)}`. The script finds the
+    /// window under the pointer and does it. True = taken; false tells the
+    /// decoration to fall back to KWin's own behaviour.
+    async fn title_bar(&self, json: String) -> bool {
+        match title_bar_command(&json) {
+            Some(cmd) => {
+                self.queue.push(cmd);
+                true
+            }
+            None => {
+                eprintln!("loft-kwin: bad title-bar request {json:?}");
+                false
+            }
+        }
+    }
+
+    /// From the script: an event for the shell (one stdout line as is), e.g.
+    /// `{"WindowActionsMenuRequested": {"window", "output", "x", "y", "kind"}}`.
+    async fn event(&self, json: String) {
+        match serde_json::from_str::<Value>(&json) {
+            Ok(v) if v.is_object() => emit(&v),
+            _ => eprintln!("loft-kwin: bad event from the script {json:?}"),
+        }
+    }
+}
+
+/// A decoration's title-bar request → the script's `titleBar` command.
+fn title_bar_command(json: &str) -> Option<Value> {
+    let req: Value = serde_json::from_str(json).ok()?;
+    let action = req["action"].as_str()?;
+    if !matches!(action, "menu" | "tileMenu" | "fullscreen") {
+        return None;
+    }
+    let num = |k: &str| req[k].as_f64().filter(|v| v.is_finite());
+    Some(json!({
+        "cmd": "titleBar",
+        "action": action,
+        "x": num("x")?,
+        "y": num("y")?,
+        "width": num("width")?,
+        "height": num("height")?,
+    }))
 }
 
 fn emit(v: &Value) {
@@ -382,7 +426,25 @@ async fn main() -> Result<()> {
     }
 
     unload_script(&conn).await;
-    Ok(())
+    // Exit now: tokio's stdin reader is a blocking thread that the runtime
+    // would wait for on shutdown, so after SIGTERM the process would linger
+    // without its bus name and the shell (which restarts loft-kwin when it
+    // exits) would never notice.
+    std::process::exit(0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn title_bar_requests() {
+        let cmd = title_bar_command(r#"{"action":"tileMenu","x":34,"y":27,"width":802,"height":641}"#).unwrap();
+        assert_eq!(cmd, json!({"cmd": "titleBar", "action": "tileMenu", "x": 34.0, "y": 27.0, "width": 802.0, "height": 641.0}));
+        assert!(title_bar_command(r#"{"action":"close","x":0,"y":0,"width":1,"height":1}"#).is_none());
+        assert!(title_bar_command(r#"{"action":"menu","x":0,"y":0}"#).is_none());
+        assert!(title_bar_command("not json").is_none());
+    }
 }
 
 #[cfg(test)]
