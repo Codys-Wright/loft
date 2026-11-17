@@ -610,11 +610,71 @@ held Shift / Ctrl / Alt stays held (Caps+Shift+← → Meta+Shift+←), and it c
 before every other entry, so the ⌘ groups can't take the key (xremap never
 re-reads its own output, so its Super_L isn't ⌘). The `mac-parity` group sends
 Meta where niri gets Right Alt (⌃↑ → Meta+Ctrl+Up). Taps stay Escape, ⌘ stays
-Cmd, Right ⌘ stays the symbols layer. Every `loft keys` write records the key in
+Cmd, Right ⌘ stays plain Super (or the symbols layer, when on; below). Every `loft keys` write records the key in
 `<state>/xremap/wm-key`, so a `loft keys …` from a terminal renders for the
 xremap that runs (then `XDG_CURRENT_DESKTOP` with KDE → meta). `loft keys show`
 says which. Not covered: WM key + mouse (KWin's Meta+drag) and a WM-key hold
 alone (Cleaning Mode's "hold Esc" — the timer still ends it).
+
+**Window focus and move: Caps + H/J/K/L.** niri's window binds in `niri/base.kdl`
+are registered under KWin too (`kwinkeys.WINDOW_BINDS`, checked against base.kdl by
+`tests/test_kwinkeys.py`). Each one calls a KWin workspace slot from the script, so
+nothing goes through kglobalaccel's own KWin actions:
+
+| Keys (Caps held = Meta) | niri (base.kdl) | KWin |
+|---|---|---|
+| Caps H / L, Caps ← / → | focus-column-left / right | `slotSwitchWindowLeft/Right` (Switch to Window to the Left/Right) |
+| Caps J / K, Caps ↓ / ↑ | focus-window-or-workspace-down / up | `slotSwitchWindowDown/Up` (Switch to Window Below/Above) |
+| Caps ⇧ H / L | move-column-left / right | `slotWindowQuickTileLeft/Right` |
+| Caps ⇧ J / K | move-window-down / up-or-to-workspace-down / up | `slotWindowQuickTileBottom/Top` |
+
+KWin has no columns, so the semantics differ at the edges. Focus is directional and
+crosses outputs, and it stops at the last window, where niri's J/K go on to the next
+workspace. Move is a quick tile to that half. A second press at an output's edge moves
+the window to the next output, which niri's move-column doesn't do. Tiles combine:
+⇧K on a right-tiled window gives the top-right quarter, and ⇧J then gives the right
+half back. niri has no Mod+⇧+arrows, so KDE keeps Meta+⇧+←/→ (Window to Previous/Next
+Screen). `claim` takes Meta+←/→/↑/↓ from KWin's Quick Tile actions, and Meta+L from
+ksmserver's Lock Session in a full Plasma session. `release` gives them back. A
+Settings → Keyboard Shortcuts change to Mod+H … wins here as well (a disabled Mod+L
+leaves Meta+L to KDE).
+
+**⌘H / ⌘M under KWin.** Under niri, ⌘H / ⌘M go out on Right Super (`Super+H`
+"Hide App"), and niri tells Super from Mod. KWin doesn't: Super_L, Super_R and the WM
+key's Meta are all Meta, so `Super+H` would be Meta+H, which is now focus left. Under
+Plasma the parity group's `plasmaRemap` sends ⌘H / ⌘M as **Meta+Ctrl+Alt+H / M**
+instead (parity.json `kdeKeys`), and kwinkeys registers Hide App / Minimize on those
+keys (`plasma_keys()`). The niri side is unchanged.
+
+**Right ⌘ is the system's Super key.** Left ⌘ (Super_L) is the macOS ⌘ (the `cmd`
+groups, ⌘C → Ctrl+C …). Right ⌘ (Super_R) never was in a ⌘→Ctrl group, and the
+`right-cmd` group makes that explicit. Right ⌘ reaches the desktop as plain Super:
+
+- **Under Plasma**, Right ⌘ + key = Meta + key: KDE's own Meta shortcuts, and the
+  ones Loft registers for Caps. So Right ⌘ H/J/K/L focuses like Caps H/J/K/L, and
+  Right ⌘ A opens the Control Center.
+- **Right ⌘ L locks the screen.** xremap sends it as ⌃⌘Q (`Super_R-l` →
+  `Ctrl-Super_L-q`, exact match), which is Loft's Lock Screen: KWin's Meta+Ctrl+Q,
+  niri's Super+Ctrl+Q. Plain Meta+L would be the WM key's focus right.
+- **Under niri** the same group applies (Right ⌘ L locks). Otherwise Right ⌘ stays
+  niri's Super: it fires niri's `Super+…` binds (the ⌘ twins: Spotlight, ⌘⇧3/4/5,
+  ⌘Tab, and Hide App on Right ⌘ H) and is not niri's Mod, which is Caps (Right Alt).
+  Making Right ⌘ niri's Mod would need XKB `lv3:rwin_switch` and give up those binds,
+  so it is left as it is.
+- The symbols layer (`symbols`, off by default) comes before `right-cmd`. When it's on,
+  it owns Right ⌘, and Right ⌘ L types its symbol.
+
+**Verified (focus and move)** in a nested KWin 6.8.2 (`loft-dev --compositor kwin
+--shell plasma`, private bus): Loft's script rendered from the checkout, loaded, and
+`claim` run against the session's kglobalaccel. Real key presses (`loft-input key
+super+…`) moved focus between two Konsole windows, checked with `loft-kwin state`:
+Meta+H/L/←/→ and Meta+J/K/↑/↓. Meta+⇧+H/L/K/J tiled left, right, top-right and back.
+Hide, Minimize and Lock were registered on Meta+Ctrl+Alt+H, Meta+Ctrl+Alt+M and
+Meta+Ctrl+Q (the callbacks need the user's systemd, which isn't on that bus). Unload
+and `release` gave KWin's Quick Tile keys back, and the desktop keys were never taken.
+The xremap side (Right ⌘ L, ⌘H → Meta+Ctrl+Alt+H) is checked only on the rendered
+config (`tests/test_keys.py`, `tests/test_parity.py`). xremap-kde never runs against
+input devices in tests.
 
 **Verified** in a nested KWin 6.8.2 (private bus, scratch HOME; a stand-in for
 systemd's `StartUnit` on the private bus that runs the real `loft-plasma-key`

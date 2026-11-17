@@ -80,6 +80,24 @@ def xremap_pair(b: dict) -> tuple[str, str]:
     raise ValueError(f"{b['id']}: via must be ctrl, cmd, super or kde, not {via!r}")
 
 
+# Qt modifier (a `kdeKeys` value) → xremap modifier.
+QT_TO_XREMAP = {"Meta": "Super_L", "Ctrl": "Ctrl", "Alt": "Alt", "Shift": "Shift"}
+
+
+def xremap_of_qt(keys: str) -> str:
+    """`Meta+Ctrl+Alt+H` → `Ctrl-Alt-Super_L-h` (what xremap sends for it)."""
+    *mods, key = keys.split("+")
+    order = ["Ctrl", "Alt", "Shift", "Meta"]
+    if set(mods) - set(order):
+        raise ValueError(f"{keys!r}: modifiers are Meta, Ctrl, Alt, Shift")
+    return "-".join([QT_TO_XREMAP[m] for m in order if m in mods] + [_xkey(key)])
+
+
+def kde_keys(data: dict) -> dict[str, str]:
+    """{niri combo: KWin key} for the binds whose key moves under Plasma (`kdeKeys`)."""
+    return {b["niri"]: b["kdeKeys"] for b in data["binds"] if b.get("kdeKeys") and b.get("niri")}
+
+
 def plasma_only(b: dict) -> bool:
     """A bind only a Plasma session gets (KWin's own shortcut, no niri bind)."""
     return b.get("session") == "plasma"
@@ -88,6 +106,8 @@ def plasma_only(b: dict) -> bool:
 def xremap_group(data: dict) -> dict:
     remap = dict(xremap_pair(b) for b in data["binds"] if not plasma_only(b))
     plasma = dict(xremap_pair(b) for b in data["binds"] if plasma_only(b))
+    # Binds that keep their niri key but take another one under Plasma.
+    plasma.update({xremap_pair(b)[0]: xremap_of_qt(b["kdeKeys"]) for b in data["binds"] if b.get("kdeKeys")})
     group = {
         "id": GROUP_ID,
         "name": "macOS system shortcuts → Loft (⌃←/→/↑/↓, ⌃⌘…, ⌘H/M)",
@@ -106,7 +126,9 @@ def xremap_group(data: dict) -> dict:
     }
     if plasma:
         # Merged into `remap` under Plasma only (keys.for_wm_key): ⌃⇧←/→ move
-        # the window a desktop, KWin's Window One Desktop to the Left/Right.
+        # the window a desktop, KWin's Window One Desktop to the Left/Right;
+        # ⌘H / ⌘M on their own KWin keys (`kdeKeys`), since Right Super's
+        # Meta+H is the WM key's (focus left) there.
         group["plasmaRemap"] = dict(sorted(plasma.items()))
     return group
 

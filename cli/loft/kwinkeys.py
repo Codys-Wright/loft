@@ -23,6 +23,10 @@ Mod and Super are both Meta here: the KWin session has no ISO_Level3_Shift
 window-manager key (niri/base.kdl `mod-key`). The keyboard layer makes the
 WM key (Caps Lock / Esc / Right Ctrl held) send Meta in Plasma instead
 (keys.py, LOFT_WM_KEY=meta), so the same physical keys reach these shortcuts.
+niri's window binds from base.kdl (Mod+H/J/K/L and arrows focus, Mod+Shift+H/J/K/L
+move) are added as KWin workspace calls (WINDOW_BINDS). KWin can't tell Left or Right
+Super from that Meta, so binds that niri keeps apart by Super vs. Mod take their
+parity.json `kdeKeys` here: ⌘H / ⌘M hide on Meta+Ctrl+Alt+H / M, not Meta+H.
 """
 
 from __future__ import annotations
@@ -126,6 +130,8 @@ class Bind:
     args: list = field(default_factory=list)
     title: str | None = None
     origin: str = "shell-binds"
+    # The KWin key when it isn't qt_keys(combo) (parity.json `kdeKeys`).
+    keys: str | None = None
 
 
 @dataclass
@@ -328,6 +334,8 @@ def _kwin_js(action: str) -> str | None:
         return "var w = workspace.activeWindow; if (w) w.fullScreen = !w.fullScreen;"
     if action == "close-window":
         return "var w = workspace.activeWindow; if (w) w.closeWindow();"
+    if action in WINDOW_ACTIONS:
+        return f"workspace.{WINDOW_ACTIONS[action][0]}();"
     return None
 
 
@@ -344,7 +352,7 @@ def translate(binds: list[Bind]) -> tuple[list[Action], list[str]]:
         if b.title:
             titles.setdefault(json.dumps([b.action, b.args]), b.title)
     for b in binds:
-        keys = qt_keys(b.combo)
+        keys = b.keys or qt_keys(b.combo)
         if keys is None:
             skipped.append(f"{b.combo}: no Qt key name")
             continue
@@ -369,7 +377,7 @@ def translate(binds: list[Bind]) -> tuple[list[Action], list[str]]:
             aid, n = f"{base}-{n}", n + 1
         ids.add(aid)
         seen_keys[keys] = b.combo
-        title = b.title or titles.get(json.dumps([b.action, b.args])) or aid
+        title = b.title or titles.get(json.dumps([b.action, b.args])) or (WINDOW_ACTIONS.get(b.action) or (None, None))[1] or aid
         actions.append(Action(id=aid, keys=keys, text=f"Loft: {title}", kind=kind, command=command, js=js, combo=b.combo))
     return actions, skipped
 
@@ -475,12 +483,65 @@ def kde_owned(b: Bind) -> bool:
     return bool(ipc) and any(ipc[: len(k)] == list(k) for k in KDE_OWNED_IPC)
 
 
+# niri's window binds (niri/base.kdl: Mod+H/J/K/L and Mod+arrows focus,
+# Mod+Shift+H/J/K/L move), so the WM key (Caps held → Meta) does the same
+# under KWin. KWin has no columns: focus is its "Switch to Window to the
+# Left/Below/Above/Right" (directional, across outputs; nothing past the last
+# window, where niri's J/K go on to the next workspace), and move is its quick
+# tile to that half (a second press at an output's edge moves the window to
+# the next output, as KWin's quick tile does; niri's move-column stops at the
+# edge, its J/K go on to the next workspace). Workspace scripting slots
+# (KWin 6.8's WorkspaceWrapper). tests/test_kwinkeys.py checks this list
+# against base.kdl.
+WINDOW_ACTIONS = {
+    "focus-column-left": ("slotSwitchWindowLeft", "Focus Window Left"),
+    "focus-column-right": ("slotSwitchWindowRight", "Focus Window Right"),
+    "focus-window-or-workspace-down": ("slotSwitchWindowDown", "Focus Window Below"),
+    "focus-window-or-workspace-up": ("slotSwitchWindowUp", "Focus Window Above"),
+    "move-column-left": ("slotWindowQuickTileLeft", "Move Window Left (Tile Left)"),
+    "move-column-right": ("slotWindowQuickTileRight", "Move Window Right (Tile Right)"),
+    "move-window-down-or-to-workspace-down": ("slotWindowQuickTileBottom", "Move Window Down (Tile Bottom)"),
+    "move-window-up-or-to-workspace-up": ("slotWindowQuickTileTop", "Move Window Up (Tile Top)"),
+}
+WINDOW_BINDS = [
+    ("Mod+H", "focus-column-left"),
+    ("Mod+L", "focus-column-right"),
+    ("Mod+J", "focus-window-or-workspace-down"),
+    ("Mod+K", "focus-window-or-workspace-up"),
+    ("Mod+Left", "focus-column-left"),
+    ("Mod+Right", "focus-column-right"),
+    ("Mod+Down", "focus-window-or-workspace-down"),
+    ("Mod+Up", "focus-window-or-workspace-up"),
+    ("Mod+Shift+H", "move-column-left"),
+    ("Mod+Shift+L", "move-column-right"),
+    ("Mod+Shift+J", "move-window-down-or-to-workspace-down"),
+    ("Mod+Shift+K", "move-window-up-or-to-workspace-up"),
+]
+
+
+def window_binds() -> list[Bind]:
+    return [Bind(combo=c, action=a, origin="base") for c, a in WINDOW_BINDS]
+
+
+def plasma_keys() -> dict[str, str]:
+    """{normalized niri combo: KWin key} for binds that take another key under
+    Plasma (parity.json `kdeKeys`): ⌘H / ⌘M hide, which niri binds as Super+H /
+    Super+M — under KWin that is Meta+H, the WM key's focus left, so the
+    keyboard layer sends them as Meta+Ctrl+Alt+H / M instead."""
+    from . import parity
+
+    return {_norm(c): k for c, k in parity.kde_keys(parity.load()).items()}
+
+
 def build(binds_text: str, overrides: dict | None = None) -> tuple[list[Action], list[str]]:
     binds = parse_binds(binds_text)
     kde = [f"{b.combo}: KDE's own here (desktops inside the Activity)" for b in binds if kde_owned(b)]
     binds = [b for b in binds if not kde_owned(b)]
+    moved = plasma_keys()
+    for b in binds:
+        b.keys = moved.get(_norm(b.combo))
     # After shell-binds, before the user's changes: a moved or disabled key wins.
-    binds = binds + space_binds(binds)
+    binds = binds + space_binds(binds) + window_binds()
     if overrides:
         binds = apply_overrides(binds, overrides)
     actions, skipped = translate(binds)
