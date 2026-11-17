@@ -29,6 +29,9 @@
 //!   their roles' displays (src/spinup.rs), answered with `{"SpaceOpened"}`;
 //!   `closeSpace` closes the windows of its Activity that are its apps
 //!   (`dryRun`: lists them), answered with `{"SpaceClosed"}`.
+//! - Self-healing (src/heal.rs, docs/KWIN.md §4.18): the bridge script and
+//!   Loft's shortcuts script (`loft-keys`) are loaded again when KWin loses
+//!   them (a KWin restart, an unload, a script that never started).
 //! - stdout `{"Shortcut": {"name": "loft-…", "state": "pressed"|"repeated"|
 //!   "released"}}`: Loft's global shortcuts held and let go (src/keys.rs).
 //! - Where windows open (src/placement.rs, docs/KWIN.md §4.17): Loft's
@@ -41,6 +44,7 @@
 
 mod activities;
 mod displays;
+mod heal;
 mod input;
 mod keys;
 mod placement;
@@ -111,6 +115,18 @@ struct Bridge {
     /// The last state emitted, as JSON ("" until the first snapshot).
     state: Arc<Mutex<String>>,
     queue: Arc<Queue>,
+    /// The script's polls, for the healer (src/heal.rs).
+    live: Arc<heal::Liveness>,
+}
+
+/// Marks a NextCommands poll as in flight until dropped (also when zbus
+/// drops the call).
+struct InFlight<'a>(&'a heal::Liveness);
+
+impl Drop for InFlight<'_> {
+    fn drop(&mut self) {
+        self.0.end();
+    }
 }
 
 #[interface(name = "dev.loft.KWinBridge")]
@@ -123,6 +139,8 @@ impl Bridge {
     /// The commands queued since the last poll, as a JSON array; waits up to
     /// POLL for one to arrive.
     async fn next_commands(&self) -> String {
+        self.live.begin();
+        let _in_flight = InFlight(&self.live);
         self.queue.take(POLL).await
     }
 
@@ -787,12 +805,20 @@ async fn main() -> Result<()> {
     let (commands_tx, mut commands) = mpsc::unbounded_channel::<Incoming>();
     let state = Arc::new(Mutex::new(String::new()));
     let queue = Arc::new(Queue::default());
+    let live = Arc::new(heal::Liveness::default());
+    let stopping = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     let conn = match zbus::connection::Builder::session()?
         .name(BUS_NAME)?
         .serve_at(
             "/Bridge",
-            Bridge { snapshots: snapshots_tx, commands: commands_tx, state: state.clone(), queue: queue.clone() },
+            Bridge {
+                snapshots: snapshots_tx,
+                commands: commands_tx,
+                state: state.clone(),
+                queue: queue.clone(),
+                live: live.clone(),
+            },
         )?
         .serve_at("/WindowMenu", ClientWindowMenu { queue: queue.clone() })?
         .build()
@@ -817,6 +843,7 @@ async fn main() -> Result<()> {
     // keeps the names for the window rules.
     let (reports_tx, mut reports) = mpsc::unbounded_channel::<Value>();
     tokio::spawn(activities::watch(conn.clone(), move |r: &Value| drop(reports_tx.send(r.clone()))));
+    tokio::spawn(heal::watch(conn.clone(), live, stopping.clone()));
     // GStreamer's first run after an update scans every plugin (~10 s), and
     // auto's encoder probe takes a moment: do both now, so the first
     // recording starts at once (record.rs).
@@ -884,6 +911,8 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Before unloading: the healer must not put the bridge back.
+    stopping.store(true, std::sync::atomic::Ordering::SeqCst);
     unload_script(&conn).await;
     effects_restore(&conn).await;
     // Exit now: tokio's stdin reader is a blocking thread that the runtime

@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import re
 import shlex
 import tempfile
 import unittest
@@ -116,7 +117,8 @@ class FromShellBinds(unittest.TestCase):
     def test_niri_actions_become_kwin_calls(self):
         self.assertEqual(self.by_id["toggle-overview"].kind, "kwin")
         self.assertIn('loftKwin("Overview")', self.by_id["toggle-overview"].js)
-        self.assertIn("fullScreen", self.by_id["fullscreen-window"].js)
+        self.assertEqual(self.by_id["fullscreen-window"].js, "loftFullscreen();")
+        self.assertIn("w.fullScreen = !w.fullScreen", kwinkeys.render_js(self.actions))
 
     def test_unique_ids_and_keys(self):
         self.assertEqual(len({a.id for a in self.actions}), len(self.actions))
@@ -174,13 +176,48 @@ class FromShellBinds(unittest.TestCase):
         self.assertNotIn("Meta+L", {a.keys for a in actions})
 
     def test_window_binds_are_base_kdls(self):
-        """WINDOW_BINDS is niri/base.kdl's focus / move binds, one for one."""
+        """WINDOW_BINDS is niri/base.kdl's window binds, one for one, but for
+        the ones that stay unbound under KWin (Mod+V: every window floats)."""
         base = kwinkeys.parse_binds((REPO / "niri" / "base.kdl").read_text())
-        # (Mod+Shift+1…5, move to workspace N, are Spaces: ⌘⇧N, space_binds.)
+        # (Mod+1…5 and Mod+Shift+1…5 are Spaces: KDE's Activities, space_binds.)
         niri = {(b.combo, b.action) for b in base
-                if b.action.startswith(("focus-column", "focus-window", "move-column", "move-window")) and "to-workspace" != b.action[-12:]}
-        self.assertEqual(niri, set(kwinkeys.WINDOW_BINDS))
+                if "workspace" not in b.action or b.action.startswith(("focus-window-or", "move-window-down-or", "move-window-up-or"))}
+        niri -= {(c, a) for c, a in niri if a in ("spawn", "close-window", "quit", "show-hotkey-overlay", "toggle-overview")}
+        self.assertEqual({(c, a) for c, a in niri if a not in kwinkeys.WINDOW_UNBOUND}, set(kwinkeys.WINDOW_BINDS))
+        self.assertIn(("Mod+V", "toggle-window-floating"), niri)
         self.assertTrue(all(a in kwinkeys.WINDOW_ACTIONS for _, a in kwinkeys.WINDOW_BINDS))
+
+    def test_window_size_keys_like_niri(self):
+        """Mod+F maximize, Mod+Shift+F fullscreen, Mod+C center, Mod+W next
+        preset width; Mod+V stays KDE's; shell-binds' Mod+Ctrl+F still
+        fullscreen."""
+        by_keys = {a.keys: a for a in self.actions}
+        self.assertEqual(by_keys["Meta+F"].js, "workspace.slotWindowMaximize();")
+        self.assertEqual(by_keys["Meta+Shift+F"].js, "loftFullscreen();")
+        self.assertEqual(by_keys["Meta+Ctrl+F"].js, "loftFullscreen();")
+        self.assertEqual(by_keys["Meta+Ctrl+F"].text, "Loft: Full Screen")
+        self.assertEqual(by_keys["Meta+Shift+F"].text, "Loft: Full Screen")
+        self.assertEqual(by_keys["Meta+C"].js, "loftCenter();")
+        self.assertEqual(by_keys["Meta+W"].js, "loftPresetWidth();")
+        self.assertNotIn("Meta+V", by_keys)
+        # Mod+Shift+W is still the shell's Wallpapers.
+        self.assertEqual(by_keys["Meta+Shift+W"].kind, "exec")
+        js = kwinkeys.render_js(self.actions)
+        for fn in ("loftFullscreen", "loftCenter", "loftPresetWidth"):
+            self.assertIn(f"function {fn}(", js)
+        self.assertIn("var LOFT_PRESETS = [0.33333, 0.5, 0.66667];", js)
+
+    def test_presets_follow_niri(self):
+        """Mod+W's widths are base.kdl's preset-column-widths, or the user's."""
+        text = (REPO / "niri" / "base.kdl").read_text()
+        block = text[text.index("preset-column-widths {"):]
+        block = block[:block.index("}")]
+        self.assertEqual([float(x) for x in re.findall(r"proportion ([0-9.]+)", block)], kwinkeys.DEFAULT_PRESETS)
+        self.assertEqual(kwinkeys.presets_of(None), kwinkeys.DEFAULT_PRESETS)
+        ov = {"layout": {"preset-column-widths": [0.25, 0.5, {"fixed": 1200}, "x", 2, True]}}
+        self.assertEqual(kwinkeys.presets_of(ov), [0.25, 0.5, {"fixed": 1200}])
+        self.assertIn('var LOFT_PRESETS = [0.25, 0.5, {"fixed": 1200}];',
+                      kwinkeys.render_js(self.actions, kwinkeys.presets_of(ov)))
 
     def test_hide_moves_off_meta_h(self):
         """⌘H / ⌘M (niri's Super+H / Super+M) would be Meta+H / Meta+M here,
@@ -221,7 +258,7 @@ class Overrides(unittest.TestCase):
                 "Mod+Ctrl+X": {"action": "spawn", "args": ["kitty"], "title": "Kitty"},
                 "Mod+Ctrl+Y": {"action": "spawn", "args": ["foot"], "off": True},
                 "shift+mod+m": {"disabled": True},
-                "Mod+O": {"action": "center-column"},
+                "Mod+O": {"action": "toggle-window-floating"},
                 "Mod+Ctrl+H": {"action": "focus-column-left"},
             }
         }
@@ -233,7 +270,7 @@ class Overrides(unittest.TestCase):
         self.assertEqual(by_keys["Meta+Ctrl+X"].text, "Loft: Kitty")
         self.assertNotIn("Meta+Ctrl+Y", by_keys)
         self.assertNotIn("Meta+Shift+M", by_keys)  # mute mics: disabled (any modifier order)
-        self.assertTrue(any("center-column" in s for s in skipped))
+        self.assertTrue(any("toggle-window-floating" in s for s in skipped))
         # A niri window action KWin has works from a custom shortcut too.
         self.assertIn("slotSwitchWindowLeft", by_keys["Meta+Ctrl+H"].js)
 
