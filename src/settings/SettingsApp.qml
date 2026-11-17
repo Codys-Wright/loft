@@ -5,6 +5,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.components
 import qs.services
+import "settingsnav.js" as Nav
 
 // Loft Settings: a floating glass window (like macOS System Settings) that
 // edits the runtime overrides (Settings → overrides/shell.json). Everything
@@ -17,35 +18,12 @@ Scope {
     // The open page lives in Panels so IPC (`themes open`) can choose it.
     readonly property string section: Panels.settingsSection
 
-    // Sidebar: icon + Theme.badgeColor name (System Settings style badges).
-    readonly property var sections: [
-        { id: "appearance", icon: "󰏘", badge: "graphite", label: "Appearance" },
-        { id: "wallpaper", icon: "󰸉", badge: "cyan", label: "Wallpaper" },
-        { id: "lockscreen", icon: "󰌾", badge: "indigo", label: "Lock Screen" },
-        { id: "dock", icon: "󱂬", badge: "blue", label: "Dock", feature: "dock" },
-        { id: "island", icon: "󰟜", badge: "purple", label: "Dynamic Island", feature: "island" },
-        { id: "displays", icon: "󰍹", badge: "teal", label: "Displays" },
-        { id: "spaces", icon: "󰕰", badge: "indigo", label: "Spaces", feature: "spaces" },
-        { id: "input", icon: "󰌌", badge: "gray", label: "Keyboard & Mouse" },
-        { id: "layout", icon: "󰕰", badge: "mint", label: "Layout & Motion" },
-        { id: "keybinds", icon: "󰘳", badge: "graphite", label: "Keyboard Shortcuts" },
-        { id: "keyremaps", icon: "󰌌", badge: "indigo", label: "Keyboard Remaps" },
-        { id: "windowrules", icon: "󰖲", badge: "teal", label: "Window Rules" },
-        { id: "system", icon: "󰍛", badge: "gray", label: "System" },
-        { id: "sound", icon: "󰕾", badge: "pink", label: "Sound" },
-        { id: "capture", icon: "󰹑", badge: "orange", label: "Capture", feature: "capture" },
-        { id: "features", icon: "󰐱", badge: "green", label: "Features" },
-        { id: "clipboard", icon: "󰨸", badge: "yellow", label: "Clipboard & Files" },
-        { id: "snippets", icon: "󱐋", badge: "brown", label: "Snippets", feature: "snippets" },
-        { id: "phone", icon: "󰄜", badge: "green", label: "Phone", feature: "phone" },
-        { id: "spotlight", icon: "󰍉", badge: "blue", label: "Spotlight" },
-        { id: "everyday", icon: "󰅶", badge: "orange", label: "Everyday" },
-        { id: "menubar", icon: "󰍜", badge: "graphite", label: "Menu Bar" },
-        { id: "desktopmenu", icon: "󰍝", badge: "blue", label: "Desktop Menu", feature: "desktopMenu" },
-        { id: "quickpanel", icon: "󰕮", badge: "orange", label: "Quick Panel", feature: "quickPanel" },
-        { id: "radialmenu", icon: "󰫈", badge: "purple", label: "Radial Menu", feature: "radialMenu" },
-        { id: "about", icon: "󰋼", badge: "gray", label: "About" }
-    ]
+    // The structure (grouped sidebar, sub-pages, ids, search keywords)
+    // lives in settingsnav.js. Old flat ids are still page ids: a sub-page
+    // like "wallpaper" opens under its parent (Appearance ▸ Wallpaper).
+    readonly property string current: Nav.resolve(section) || "appearance"
+    readonly property string parentPage: Nav.parentOf(current)
+    readonly property string topPage: Nav.topOf(current)
 
     IpcHandler {
         target: "settings"
@@ -115,34 +93,134 @@ Scope {
         function spaces(): void {
             root.show("spaces");
         }
-        // Any page by id (Spotlight's "… Settings" commands).
+        function general(): void {
+            root.show("general");
+        }
+        // Any page by id (Spotlight's "… Settings" commands), old flat ids
+        // included; sub-pages open under their parent.
         function open(section: string): void {
-            if (root.sections.some(s => s.id === section))
-                root.show(section);
+            const id = Nav.resolve(section);
+            if (id !== "")
+                root.show(id);
         }
     }
 
     // The niri pages show live state: re-read it whenever they're opened.
+    // (Overviews show counts from them too: Keyboard & Mouse, Spaces &
+    // Windows.)
     function refreshNiri() {
         if (!open)
             return;
-        if (section === "keybinds")
+        const s = current;
+        if (s === "keybinds")
             NiriSettings.refreshBinds();
-        else if (section === "windowrules")
+        else if (s === "windowrules")
             WindowRules.refresh();
-        else if (section === "keyremaps")
+        else if (s === "keyremaps")
             KeyRemaps.refresh();
-        else if (section === "displays")
+        else if (s === "displays")
             Displays.refreshOutputs();
-        else if (["input", "layout"].includes(section))
+        else if (s === "layout")
             NiriSettings.refresh();
+        else if (s === "input") {
+            NiriSettings.refresh();
+            NiriSettings.refreshBinds();
+            KeyRemaps.refresh();
+        } else if (s === "windows") {
+            NiriSettings.refresh();
+            WindowRules.refresh();
+        }
     }
     onOpenChanged: refreshNiri()
-    onSectionChanged: refreshNiri()
+    onCurrentChanged: {
+        refreshNiri();
+        // A new page starts at its top (a search hit scrolls after this).
+        content.contentY = 0;
+    }
 
     function show(section) {
         Panels.settingsSection = section;
         Panels.settingsOpen = true;
+    }
+
+    function back() {
+        if (parentPage !== "")
+            Panels.settingsSection = parentPage;
+    }
+
+    // ── Sidebar search: pages (labels + keywords, settingsnav.js) and the
+    // settings on them (row labels and card titles, read from the pages).
+    readonly property string query: chrome.searchText.trim()
+    property var rowIndex: []
+    readonly property var pageHits: query === "" ? [] : Nav.searchPages(query)
+    readonly property var rowHits: {
+        if (query === "")
+            return [];
+        const labels = new Set(pageHits.map(id => Nav.page(id).label.toLowerCase()));
+        return Nav.searchRows(rowIndex, query, 30).filter(h => !labels.has(h.label.toLowerCase()));
+    }
+    onQueryChanged: if (query !== "")
+        indexTimer.restart()
+
+    Timer {
+        id: indexTimer
+        interval: 80
+        onTriggered: root.rowIndex = root.buildIndex()
+    }
+
+    // SettingsRow / NiriRow (they have `hintColor`) and PageHeader titles
+    // (`actions`) of every page slot, in page order.
+    function buildIndex() {
+        const out = [];
+        const walk = (item, page) => {
+            for (const c of item.children) {
+                if (c.hintColor !== undefined && typeof c.label === "string") {
+                    const l = c.label.trim();
+                    if (l.length > 1)
+                        out.push({ page: page, label: l, kind: "row", item: c });
+                } else if (c.actions !== undefined && typeof c.title === "string" && c.title.trim().length > 1) {
+                    out.push({ page: page, label: c.title.trim(), kind: "section", item: c });
+                }
+                walk(c, page);
+            }
+        };
+        for (const slot of pages.children)
+            if (typeof slot.page === "string" && slot.page !== "")
+                walk(slot, slot.page);
+        return out;
+    }
+
+    // Open a search hit: its page, scrolled to the row, which flashes.
+    property var target: null
+    function openHit(hit) {
+        target = hit.item ?? null;
+        Panels.settingsSection = hit.page;
+        scrollTimer.restart();
+    }
+
+    Timer {
+        id: scrollTimer
+        interval: 60
+        onTriggered: {
+            const t = root.target;
+            root.target = null;
+            if (!t || !t.visible)
+                return;
+            const p = t.mapToItem(content.contentItem, 0, 0);
+            content.contentY = Math.max(0, Math.min(p.y - 40, content.contentHeight - content.height));
+            flash.x = p.x - 8;
+            flash.y = p.y - 6;
+            flash.width = t.width + 16;
+            flash.height = t.height + 12;
+            flashAnim.restart();
+        }
+    }
+
+    function acceptSearch() {
+        if (pageHits.length > 0)
+            Panels.settingsSection = pageHits[0];
+        else if (rowHits.length > 0)
+            openHit(rowHits[0]);
     }
 
     // Settings → Displays → Identify.
@@ -157,13 +235,21 @@ Scope {
     component Slider_: SettingsSlider {}
     component Card: SettingsCard {}
 
+    // One page (or sub-page) of the content column: shown while current.
+    component PageSlot: ColumnLayout {
+        property string page
+        Layout.fillWidth: true
+        spacing: 12
+        visible: root.current === page
+    }
+
     // ── Window ──────────────────────────────────────────────────────────
     FloatingWindow {
         id: window
         visible: root.open
         title: "Loft Settings"
-        implicitWidth: 880
-        implicitHeight: 640
+        implicitWidth: 920
+        implicitHeight: 660
         color: "transparent"
         // Closing the window (niri's close-window, Escape) clears the state.
         onVisibleChanged: if (!visible)
@@ -179,28 +265,111 @@ Scope {
         WindowChrome {
             id: chrome
             hostWindow: window
-            title: root.sections.find(s => s.id === root.section)?.label ?? ""
+            title: Nav.page(root.current)?.label ?? ""
             searchable: true
             onCloseRequested: Panels.settingsOpen = false
             onHideRequested: Panels.settingsOpen = false
+            onSearchAccepted: root.acceptSearch()
 
             focus: root.open
             Keys.onEscapePressed: Panels.settingsOpen = false
-
-            // Sections of switched-off modules hide (Features page); the
-            // search field filters by name.
-            sidebar: Repeater {
-                model: root.sections.filter(s => (!s.feature || Features.on(s.feature)) && s.label.toLowerCase().includes(chrome.searchText.trim().toLowerCase()))
-                delegate: SidebarItem {
-                    required property var modelData
-                    icon: modelData.icon
-                    badge: modelData.badge
-                    label: modelData.label
-                    current: root.section === modelData.id
-                    windowActive: chrome.active
-                    onClicked: Panels.settingsSection = modelData.id
+            // ⌘[ / Alt+← : back to the parent page.
+            Keys.onPressed: event => {
+                if ((event.key === Qt.Key_BracketLeft && (event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))) || (event.key === Qt.Key_Left && (event.modifiers & Qt.AltModifier))) {
+                    root.back();
+                    event.accepted = true;
                 }
             }
+
+            // Sub-pages: "‹ Parent" back to the overview they belong to.
+            leading: SettingsButton {
+                visible: root.parentPage !== ""
+                icon: "󰅁"
+                text: Nav.page(root.parentPage)?.label ?? ""
+                onClicked: root.back()
+            }
+
+            sidebar: [
+                // Grouped entries, a small gap between groups (no headers).
+                // Off modules stay listed, greyed: their page turns them on.
+                Repeater {
+                    model: root.query === "" ? Nav.groups : []
+                    delegate: ColumnLayout {
+                        id: group
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        Layout.topMargin: index > 0 ? 10 : 0
+                        spacing: 2
+
+                        Repeater {
+                            model: group.modelData
+                            delegate: SidebarItem {
+                                required property string modelData
+                                readonly property var info: Nav.page(modelData)
+                                icon: info.icon
+                                badge: info.badge
+                                label: info.label
+                                dimmed: info.feature !== "" && !Features.on(info.feature)
+                                current: root.topPage === modelData
+                                windowActive: chrome.active
+                                onClicked: Panels.settingsSection = modelData
+                            }
+                        }
+                    }
+                },
+
+                // Search: matching pages, then matching settings.
+                Repeater {
+                    model: root.pageHits
+                    delegate: SidebarItem {
+                        required property string modelData
+                        readonly property var info: Nav.page(modelData)
+                        icon: info.icon
+                        badge: info.badge
+                        label: info.label
+                        detail: info.parent !== "" ? Nav.page(info.parent).label : ""
+                        dimmed: info.feature !== "" && !Features.on(info.feature)
+                        current: root.current === modelData
+                        windowActive: chrome.active
+                        onClicked: Panels.settingsSection = modelData
+                    }
+                },
+                Text {
+                    visible: root.rowHits.length > 0
+                    Layout.fillWidth: true
+                    Layout.topMargin: root.pageHits.length > 0 ? 10 : 0
+                    Layout.leftMargin: 8
+                    text: "Settings"
+                    color: Theme.subtext
+                    font.family: Theme.fontUi
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                },
+                Repeater {
+                    model: root.rowHits
+                    delegate: SidebarItem {
+                        required property var modelData
+                        readonly property var info: Nav.page(modelData.page)
+                        icon: info.icon
+                        badge: info.badge
+                        label: modelData.label
+                        detail: info.label
+                        windowActive: chrome.active
+                        onClicked: root.openHit(modelData)
+                    }
+                },
+                Text {
+                    visible: root.query !== "" && root.pageHits.length === 0 && root.rowHits.length === 0
+                    Layout.fillWidth: true
+                    Layout.topMargin: 8
+                    horizontalAlignment: Text.AlignHCenter
+                    text: "No results"
+                    color: Theme.subtext
+                    font.family: Theme.fontUi
+                    font.pixelSize: 12
+                }
+            ]
 
             // Content
             Flickable {
@@ -217,430 +386,266 @@ Scope {
                     width: parent.width
                     spacing: 12
 
-                    // Appearance: Transparency + Blur first (the shell's own
-                    // Liquid Glass slider is under its Advanced).
-                    TransparencyCard {
-                        visible: root.section === "appearance"
-                    }
-
-                    Card {
-                        visible: root.section === "appearance"
-                        // The "Theme all Qt apps" row reads it (qt.json may appear later).
-                        onVisibleChanged: if (visible)
-                            QtStyle.refresh()
-
-                        Row_ {
-                            label: "Reduce transparency"
-                            hint: "Flat, opaque menus, panels and windows; no blur"
-                            Switch_ {
-                                checked: Theme.reduceTransparency
-                                onToggled: on => Settings.appearance.reduceTransparency = on
-                            }
-                        }
-
-                        Row_ {
-                            label: "Shell blur"
-                            hint: Theme.reduceTransparency ? "Off with Reduce transparency" : (Settings.appearance.blur < 0 ? "Following the theme" : "Overridden") + " · menus, panels and the dock blur what's behind them"
-                            enabled: !Theme.reduceTransparency
-                            Switch_ {
-                                checked: Theme.blur
-                                enabled: !Theme.reduceTransparency
-                                onToggled: on => Settings.appearance.blur = on ? 1 : 0
-                            }
-                        }
-
-                        Row_ {
-                            label: "Show menu bar background"
-                            hint: "Off: titles and icons sit on the wallpaper"
-                            Switch_ {
-                                checked: Theme.barBackground
-                                onToggled: on => Settings.appearance.barBackground = on ? 1 : 0
-                            }
-                        }
-
-                        Row_ {
-                            label: "Adaptive menu bar text"
-                            hint: Theme.barBackground ? "Only without the menu bar background" : "Light or dark from the wallpaper under the bar"
-                            enabled: !Theme.barBackground
-                            Switch_ {
-                                checked: Theme.barAdaptiveText
-                                enabled: !Theme.barBackground
-                                onToggled: on => Settings.appearance.barAdaptiveText = on ? 1 : 0
-                            }
-                        }
-
-                        Text {
-                            visible: Settings.appearance.blur >= 0 || Settings.appearance.barBackground >= 0 || Settings.appearance.barAdaptiveText >= 0
-                            text: "Reset to theme"
-                            color: Theme.accent
-                            font.family: Theme.fontUi
-                            font.pixelSize: 12
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    Settings.appearance.blur = -1;
-                                    Settings.appearance.barBackground = -1;
-                                    Settings.appearance.barAdaptiveText = -1;
-                                }
-                            }
-                        }
-
-                        Row_ {
-                            label: "Appearance"
-                            hint: ThemeManager.hasModes ? "Light or dark for the shell, niri, terminals and apps" : `${ThemeManager.label || "This theme"} has only a ${Theme.dark ? "dark" : "light"} look`
-                            enabled: ThemeManager.hasModes && !ThemeManager.applying
-                            SettingsSegmented {
-                                options: [
-                                    {
-                                        value: "light",
-                                        label: "Prefer Light"
-                                    },
-                                    {
-                                        value: "dark",
-                                        label: "Prefer Dark"
-                                    }
-                                ]
-                                current: Theme.dark ? "dark" : "light"
-                                enabled: ThemeManager.hasModes && !ThemeManager.applying
-                                onActivated: v => ThemeManager.setMode(v)
-                            }
-                        }
-
-                        // Global Qt style (programs.loft.qt.global, services/QtStyle.qml).
-                        Row_ {
-                            visible: QtStyle.configured
-                            label: "Theme all Qt apps"
-                            hint: QtStyle.error || (QtStyle.enabled ? "Every Qt / KDE app in Loft's style and colors while Loft runs; KWin's own menus after a re-login" : "Only the apps Loft themes by name (Dolphin)")
-                            hintColor: QtStyle.error !== "" ? Theme.urgent : Theme.subtext
-                            Switch_ {
-                                checked: QtStyle.enabled
-                                enabled: !QtStyle.busy
-                                onToggled: on => QtStyle.setEnabled(on)
-                            }
-                        }
-
-                        Row_ {
-                            label: "Theme"
-                            hint: ThemeManager.applying ? "Applying…" : ThemeManager.error || "Recolors the shell, niri, terminals, GTK and the launcher"
-                        }
-
-                        Flow {
+                    // ── General ─────────────────────────────────────────
+                    PageSlot {
+                        page: "general"
+                        GeneralOverview {
                             Layout.fillWidth: true
-                            spacing: 10
-
-                            Repeater {
-                                model: ThemeManager.themes
-
-                                delegate: Rectangle {
-                                    id: card
-                                    required property var modelData
-                                    readonly property var p: modelData.palette
-                                    readonly property bool current: modelData.name === Theme.name
-
-                                    width: 150
-                                    height: 104
-                                    radius: 14
-                                    color: p.bg
-                                    border.width: current ? 3 : 1
-                                    border.color: current ? Theme.accent : Theme.glassBorder
-
-                                    // A tiny desktop: wallpaper strip, glass bar, accent dots.
-                                    Rectangle {
-                                        anchors {
-                                            left: parent.left
-                                            right: parent.right
-                                            top: parent.top
-                                            margins: 8
-                                        }
-                                        height: 50
-                                        radius: 8
-                                        gradient: Gradient {
-                                            orientation: Gradient.Horizontal
-                                            GradientStop { position: 0; color: (card.modelData.wallpaper?.gradient ?? [])[0] ?? card.p.surface }
-                                            GradientStop { position: 1; color: (card.modelData.wallpaper?.gradient ?? [])[2] ?? card.p.overlay }
-                                        }
-
-                                        Rectangle {
-                                            anchors {
-                                                left: parent.left
-                                                right: parent.right
-                                                top: parent.top
-                                                margins: 5
-                                            }
-                                            height: 10
-                                            radius: 5
-                                            color: Theme.withAlpha(card.modelData.glass?.tint ?? card.p.bg, 0.6)
-                                        }
-
-                                        Row {
-                                            anchors {
-                                                left: parent.left
-                                                bottom: parent.bottom
-                                                margins: 6
-                                            }
-                                            spacing: 4
-                                            Repeater {
-                                                model: [card.p.accent, card.p.accent2, card.p.ok, card.p.warn, card.p.urgent]
-                                                delegate: Rectangle {
-                                                    required property var modelData
-                                                    width: 10
-                                                    height: 10
-                                                    radius: 5
-                                                    color: modelData
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Text {
-                                        anchors {
-                                            left: parent.left
-                                            right: polarityGlyph.left
-                                            bottom: parent.bottom
-                                            margins: 10
-                                            rightMargin: 6
-                                        }
-                                        text: card.modelData.name
-                                        color: card.p.text
-                                        font.family: Theme.fontUi
-                                        font.pixelSize: 13
-                                        font.weight: card.current ? Font.Bold : Font.Medium
-                                        elide: Text.ElideRight
-                                    }
-
-                                    Text {
-                                        id: polarityGlyph
-                                        anchors {
-                                            right: parent.right
-                                            bottom: parent.bottom
-                                            margins: 10
-                                        }
-                                        text: card.modelData.polarity === "light" ? "󰖨" : "󰖔"
-                                        color: card.p.subtext
-                                        font.family: Theme.fontIcons
-                                        font.pixelSize: 12
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: ThemeManager.apply(card.modelData.name)
-                                    }
-                                }
-                            }
                         }
-
                     }
-
-                    // Appearance → Spotify (programs.loft.spotify)
-                    SpotifyCard {
-                        visible: root.section === "appearance" && (SpotifyTheme.configured || SpotifyTheme.setUp)
-                    }
-
-                    WallpaperPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "wallpaper"
-                    }
-
-                    LockScreenPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "lockscreen"
-                    }
-
-                    DockPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "dock"
-                    }
-
-                    IslandPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "island"
-                    }
-
-                    DisplaysPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "displays"
-                    }
-
-                    SpacesPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "spaces"
-                    }
-
-                    InputPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "input"
-                    }
-
-                    LayoutPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "layout"
-                    }
-
-                    KeybindsPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "keybinds"
-                    }
-
-                    WindowRulesPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "windowrules"
-                        shown: root.open
-                        flick: content
-                    }
-
-                    KeyRemapsPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "keyremaps"
-                        shown: root.open
-                        flick: content
-                    }
-
-                    FeaturesPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "features"
-                    }
-
-                    SystemPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "system"
-                    }
-
-                    SoundPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "sound"
-                    }
-
-                    CapturePage {
-                        Layout.fillWidth: true
-                        visible: root.section === "capture"
-                    }
-
-                    MenuBarPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "menubar"
-                    }
-
-                    DesktopMenuPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "desktopmenu"
-                    }
-
-                    QuickPanelPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "quickpanel"
-                    }
-
-                    RadialMenuPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "radialmenu"
-                    }
-
-                    // About: this computer (the same facts as the system
-                    // menu's About This Computer, SystemInfo.qml), then Loft.
-                    Card {
-                        id: aboutComputer
-                        visible: root.section === "about"
-                        onVisibleChanged: if (visible)
-                            SystemInfo.refresh()
-
-                        RowLayout {
+                    PageSlot {
+                        page: "about"
+                        AboutPage {
                             Layout.fillWidth: true
-                            Layout.bottomMargin: 4
-                            spacing: 14
-                            Icon {
-                                text: "\uf313"
-                                size: 44
-                                color: Theme.accent
-                            }
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                Layout.preferredWidth: 10000
-                                spacing: 2
-                                Text {
-                                    text: SystemInfo.host || "This Computer"
-                                    color: Theme.text
-                                    font.family: Theme.fontUi
-                                    font.pixelSize: 18
-                                    font.weight: Font.DemiBold
-                                }
-                                Text {
-                                    text: SystemInfo.os
-                                    visible: text !== ""
-                                    color: Theme.subtext
-                                    font.family: Theme.fontUi
-                                    font.pixelSize: 12
-                                }
-                            }
-                            SettingsButton {
-                                visible: Features.on("systemMonitor")
-                                text: "More Info…"
-                                onClicked: {
-                                    SystemStats.monitorSection = "overview";
-                                    SystemStats.monitorOpen = true;
-                                }
-                            }
                         }
-
-                        Repeater {
-                            model: SystemInfo.details
-                            delegate: Row_ {
-                                required property var modelData
-                                label: modelData[0]
-                                Text {
-                                    Layout.maximumWidth: 420
-                                    text: modelData[1]
-                                    color: Theme.text
-                                    font.family: Theme.fontUi
-                                    font.pixelSize: 12
-                                    elide: Text.ElideMiddle
-                                    horizontalAlignment: Text.AlignRight
-                                }
-                            }
+                    }
+                    PageSlot {
+                        page: "features"
+                        FeaturesPage {
+                            Layout.fillWidth: true
+                        }
+                    }
+                    PageSlot {
+                        page: "system"
+                        SystemPage {
+                            Layout.fillWidth: true
                         }
                     }
 
-                    Card {
-                        visible: root.section === "about"
-
-                        Row_ {
-                            label: "loft"
-                            hint: "niri + Quickshell · github.com/Codys-Wright/loft"
+                    // ── Appearance ──────────────────────────────────────
+                    PageSlot {
+                        page: "appearance"
+                        AppearanceOverview {
+                            Layout.fillWidth: true
                         }
-                        Row_ {
-                            label: "Settings file"
-                            hint: Settings.file
-                        }
-                        Row_ {
-                            label: "Design"
-                            hint: "Liquid Glass components ported from javiiervm/dotfiles"
+                        AppearancePage {
+                            Layout.fillWidth: true
                         }
                     }
-
-                    PhonePage {
-                        Layout.fillWidth: true
-                        visible: root.section === "phone"
+                    PageSlot {
+                        page: "wallpaper"
+                        WallpaperPage {
+                            Layout.fillWidth: true
+                        }
+                    }
+                    PageSlot {
+                        page: "lockscreen"
+                        LockScreenPage {
+                            Layout.fillWidth: true
+                        }
                     }
 
-                    ClipboardPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "clipboard"
+                    PageSlot {
+                        page: "menubar"
+                        MenuBarPage {
+                            Layout.fillWidth: true
+                        }
                     }
 
-                    SnippetsPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "snippets"
+                    // ── Desktop & Dock ──────────────────────────────────
+                    PageSlot {
+                        page: "desktop"
+                        DesktopOverview {
+                            Layout.fillWidth: true
+                        }
+                    }
+                    PageSlot {
+                        page: "dock"
+                        FeatureOffCard {
+                            feature: "dock"
+                        }
+                        DockPage {
+                            Layout.fillWidth: true
+                            visible: Features.on("dock")
+                        }
+                    }
+                    PageSlot {
+                        page: "island"
+                        FeatureOffCard {
+                            feature: "island"
+                        }
+                        IslandPage {
+                            Layout.fillWidth: true
+                            visible: Features.on("island")
+                        }
+                    }
+                    PageSlot {
+                        page: "desktopmenu"
+                        FeatureOffCard {
+                            feature: "desktopMenu"
+                        }
+                        DesktopMenuPage {
+                            Layout.fillWidth: true
+                            visible: Features.on("desktopMenu")
+                        }
+                    }
+                    PageSlot {
+                        page: "quickpanel"
+                        FeatureOffCard {
+                            feature: "quickPanel"
+                        }
+                        QuickPanelPage {
+                            Layout.fillWidth: true
+                            visible: Features.on("quickPanel")
+                        }
+                    }
+                    PageSlot {
+                        page: "radialmenu"
+                        FeatureOffCard {
+                            feature: "radialMenu"
+                        }
+                        RadialMenuPage {
+                            Layout.fillWidth: true
+                            visible: Features.on("radialMenu")
+                        }
                     }
 
-                    SpotlightPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "spotlight"
+                    PageSlot {
+                        page: "displays"
+                        DisplaysPage {
+                            Layout.fillWidth: true
+                        }
                     }
 
-                    EverydayPage {
-                        Layout.fillWidth: true
-                        visible: root.section === "everyday"
+                    // ── Spaces & Windows ────────────────────────────────
+                    PageSlot {
+                        page: "windows"
+                        WindowsOverview {
+                            Layout.fillWidth: true
+                        }
+                    }
+                    PageSlot {
+                        page: "spaces"
+                        FeatureOffCard {
+                            feature: "spaces"
+                        }
+                        SpacesPage {
+                            Layout.fillWidth: true
+                            visible: Features.on("spaces")
+                        }
+                    }
+                    PageSlot {
+                        page: "layout"
+                        LayoutPage {
+                            Layout.fillWidth: true
+                        }
+                    }
+                    PageSlot {
+                        page: "windowrules"
+                        WindowRulesPage {
+                            Layout.fillWidth: true
+                            shown: root.open
+                            flick: content
+                        }
+                    }
+
+                    // ── Tools ───────────────────────────────────────────
+                    PageSlot {
+                        page: "spotlight"
+                        SpotlightPage {
+                            Layout.fillWidth: true
+                        }
+                    }
+                    PageSlot {
+                        page: "sound"
+                        SoundPage {
+                            Layout.fillWidth: true
+                        }
+                    }
+                    PageSlot {
+                        page: "capture"
+                        FeatureOffCard {
+                            feature: "capture"
+                        }
+                        CapturePage {
+                            Layout.fillWidth: true
+                            visible: Features.on("capture")
+                        }
+                    }
+                    PageSlot {
+                        page: "clipboard"
+                        ClipboardPage {
+                            Layout.fillWidth: true
+                        }
+                    }
+                    PageSlot {
+                        page: "everyday"
+                        EverydayPage {
+                            Layout.fillWidth: true
+                        }
+                    }
+                    PageSlot {
+                        page: "phone"
+                        FeatureOffCard {
+                            feature: "phone"
+                        }
+                        PhonePage {
+                            Layout.fillWidth: true
+                            visible: Features.on("phone")
+                        }
+                    }
+
+                    // ── Keyboard & Mouse ────────────────────────────────
+                    PageSlot {
+                        page: "input"
+                        KeyboardOverview {
+                            Layout.fillWidth: true
+                        }
+                        InputPage {
+                            Layout.fillWidth: true
+                        }
+                    }
+                    PageSlot {
+                        page: "keybinds"
+                        KeybindsPage {
+                            Layout.fillWidth: true
+                        }
+                    }
+                    PageSlot {
+                        page: "keyremaps"
+                        KeyRemapsPage {
+                            Layout.fillWidth: true
+                            shown: root.open
+                            flick: content
+                        }
+                    }
+                    PageSlot {
+                        page: "snippets"
+                        FeatureOffCard {
+                            feature: "snippets"
+                        }
+                        SnippetsPage {
+                            Layout.fillWidth: true
+                            visible: Features.on("snippets")
+                        }
+                    }
+                }
+
+                // A search hit's row flashes once it's scrolled to.
+                Rectangle {
+                    id: flash
+                    radius: Theme.controlRadius
+                    color: Theme.withAlpha(Theme.accent, 0.14)
+                    border.width: 2
+                    border.color: Theme.accent
+                    opacity: 0
+                    SequentialAnimation {
+                        id: flashAnim
+                        NumberAnimation {
+                            target: flash
+                            property: "opacity"
+                            to: 1
+                            duration: 120
+                        }
+                        PauseAnimation {
+                            duration: 900
+                        }
+                        NumberAnimation {
+                            target: flash
+                            property: "opacity"
+                            to: 0
+                            duration: 500
+                        }
                     }
                 }
             }

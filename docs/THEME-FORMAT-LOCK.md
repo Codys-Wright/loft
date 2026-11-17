@@ -25,7 +25,7 @@ pack never leaves a screen without a password field.
 
 A pack can ship more than one design (`locks` in `manifest.json`, or
 `locks/<name>/Main.qml`), and the user can lock with any installed pack's
-design: Settings → Lock Screen lists the theme's own, curated ones and the
+design: Settings → Appearance → Lock Screen lists the theme's own, curated ones and the
 rest ranked by color, and remembers the choice per theme (THEME-FORMAT.md,
 "Lock designs" and "Vibes"). A `preview.png` next to `Main.qml` is shown in
 that picker. The design's `theme.conf` is the one in its own directory.

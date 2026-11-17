@@ -370,7 +370,7 @@ loft-shot    -s demo --zoom 1350,0,250,30 --mark 1497,15 --out $S/check.png
 loft-input -s demo click 1497 15
 loft-shot    -s demo --region 1000,0,600,750 --grid 50 --out $S/cc.png
 
-# 3. Drag a slider (Settings → Layout & Motion → Gaps; writes only this session's overrides)
+# 3. Drag a slider (Settings → Spaces & Windows → Layout & Motion → Gaps; writes only this session's overrides)
 loft-input -s demo click 1497 15                         # close the Control Center
 loft-input -s demo bind mod+comma                        # Settings (a floating window: see `info`)
 loft-input -s demo info                                  # "Loft Settings" 370,175 860x600

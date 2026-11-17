@@ -185,7 +185,7 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | per-workspace wallpaper surfaces (`workspace-layers.patch`) | off (decided). One wallpaper per screen, swapped on desktop/activity change (the existing stock-niri path), under KWin's slide effect |
 | window thumbnails (`toplevel-export.patch`) | **done** (§4.8): stills through `ScreenShot2.CaptureWindow` (`loft-kwin thumbs`), taken when the dock preview or the switcher opens |
 | screen/area capture via grim | **done** (§4.7): `loft-kwin shot`, KWin's `ScreenShot2` |
-| keybinds (loft-niri → niri KDL binds) | kglobalaccel, **done** (§4.5): `loft-keys.js`, a KWin script of `registerShortcut`s generated from shell-binds + Settings → Keyboard Shortcuts, loaded while Loft's shell runs (§5) |
+| keybinds (loft-niri → niri KDL binds) | kglobalaccel, **done** (§4.5): `loft-keys.js`, a KWin script of `registerShortcut`s generated from shell-binds + Settings → Keyboard & Mouse → Keyboard Shortcuts, loaded while Loft's shell runs (§5) |
 | window rules (loft-niri window_rules.rs) | applied by loft-bridge.js at `windowAdded` while Loft runs, not written to `kwinrulesrc` (§5) |
 | outputs / Displays page | `kscreen-doctor` (or KScreen D-Bus). Identities from its JSON |
 | overview (`toggle-overview`) | KWin's Overview effect; its state reaches the shell as `overviewOpen` (§4.9) |
@@ -250,7 +250,7 @@ and the first sync would have renamed the current Activity and added duplicates.
   `"activity"` is the Activity's id or name (any case) gives that Activity its dock, menu
   bar extras, `bar.hidden`, Focus, `wallpapers`, apps and display roles (§4.13); the space
   then has the document's id. **No document → a plain Activity**: switching, the bar,
-  Move to Space and its windows all work; no extras, nothing started. Settings → Spaces
+  Move to Space and its windows all work; no extras, nothing started. Settings → Spaces & Windows → Spaces
   links one (a card's **Add Loft Settings…**: new settings, or "Use “Music”" for a library
   document no Activity has yet), **Edit** / **Unlink** / **Remove Settings…** it later;
   **Save This Activity's Apps** (§4.13's capture) writes a document linked to the current
@@ -440,7 +440,7 @@ on `QT_PLUGIN_PATH`.
     `WindowActionsMenuRequested` as a held green (anchor: frame + (59, 27), the green
     bead's lower left; (16, 16) for a window without a title bar); no → KWin's own menu
     (`workspace.slotWindowOperations()`). With no active window the bridge shows KWin's.
-    A bind of the user's own on Alt+F3 (Settings → Keyboard Shortcuts) keeps the key.
+    A bind of the user's own on Alt+F3 (Settings → Keyboard & Mouse → Keyboard Shortcuts) keeps the key.
     Tested nested (KWin 6.8.2, `loft-input key alt+F3`, the branch's loft-kwin): Loft's
     menu opened under KWrite's green bead; with that loft-kwin killed, KWin's own menu at
     once; `claim` took "Window Menu" (KWin's friendly name) and `release` gave Alt+F3
@@ -824,7 +824,7 @@ niri or KWin when it runs (`$NIRI_SOCKET`, like Log Out):
 | Move Window to Next Workspace | `move-window-to-workspace-down` | `moveToDesktopRelative` +1, follows |
 | Close Window | `close-window` | `closeWindow` |
 | Overview | `toggle-overview` | `toggleOverview` (kglobalaccel `kwin/Overview`) |
-| Keyboard Shortcuts | `show-hotkey-overlay` | Loft's Settings → Keyboard Shortcuts (KDE has no overlay) |
+| Keyboard Shortcuts | `show-hotkey-overlay` | Loft's Settings → Keyboard & Mouse → Keyboard Shortcuts (KDE has no overlay) |
 | Turn Off Displays | `power-off-monitors` | `kscreen-doctor --dpms off` (any input wakes them) |
 | Toggle Floating, Expand to Available Width, Cycle Window Width | niri | **hidden** (no tiling or columns; the menus hide Float the same way) |
 
@@ -1384,7 +1384,7 @@ switch off: Kvantum's file byte for byte as before and kdeglobals as before exce
     notes}}`; the notes become an island banner (as `space open`'s under niri).
 - **When:** like niri. The first activation of a Space in the shell's life
   (`startup: first-activate`, the default; `Spaces.persist.opened`), **Open** in
-  Settings → Spaces (switch + find + place + start), and `startup: login` Spaces once the
+  Settings → Spaces & Windows → Spaces (switch + find + place + start), and `startup: login` Spaces once the
   Activities and the library are loaded (started in their Activity without switching:
   the script assigns the window's Activity, not the current one). Only Activities with
   Loft settings (a linked document, §4.2) have apps; a plain Activity starts nothing. A shell restart forgets
@@ -1400,7 +1400,7 @@ switch off: Kvantum's file byte for byte as before and kdeglobals as before exce
   nothing moves and the Activity isn't touched. An Activity that already has Loft settings
   is refused (edit or unlink those first). (Before the 2026-11-16 rework this made a new
   Activity and moved the windows into it.)
-- **IPC:** `spaces open <id|n>`, `spaces capture <name>` (besides Settings → Spaces).
+- **IPC:** `spaces open <id|n>`, `spaces capture <name>` (besides Settings → Spaces & Windows → Spaces).
 - **Tested** in a nested KWin 6.8.2 with two outputs (`--output-count 2`, WL-0 = main,
   WL-1 = right) and kactivitymanagerd, a scratch library with Main and Work (KWrite on
   `main`, Konsole on `right` without a `match`), checked with `loft-kwin state` and

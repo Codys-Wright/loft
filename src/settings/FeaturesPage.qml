@@ -4,7 +4,8 @@ import qs.components
 import qs.services
 
 // Settings → Features: switch whole modules on or off ("install only what
-// you use"). Off modules aren't loaded and their settings pages hide;
+// you use"). Off modules aren't loaded; their settings pages stay listed
+// (greyed) and show the switch that turns them back on (FeatureOffCard);
 // turning one back on restores it as it was. Core modules always run.
 ColumnLayout {
     id: page

@@ -86,7 +86,7 @@ and loads `lock.main`. Lock directories (`lock/`, `locks/`, `greeter/`) are
 not copied into the bundle and only their file names and sizes are part of
 the render cache key, so a 50 MB video doesn't slow `apply`.
 
-Choosing: Settings → Lock Screen picks any installed pack's design for the
+Choosing: Settings → Appearance → Lock Screen picks any installed pack's design for the
 active theme (stored per theme in `overrides/shell.json`, `perTheme.<theme>.lockDesign`;
 `builtin` forces the built-in one). The lock loads, in order: that choice,
 the theme's default, the built-in design. A design that fails to compile
@@ -207,7 +207,7 @@ paths, and `loft theme export` carries the images like any pack file.
 
 While the user has made no choice for the theme (no `wallpaper`, `displays`
 or `workspaces`), the shell applies the pack's set that names the most
-displays of a multi-display layout. Applying any set (Settings → Wallpaper →
+displays of a multi-display layout. Applying any set (Settings → Appearance → Wallpaper →
 Sets, `loft wallpaper set apply NAME`, IPC `wallpaper applySet NAME`)
 writes its images as display and workspace choices; *Save as Set…* /
 `loft wallpaper set save NAME` captures what is on screen (each display's

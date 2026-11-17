@@ -20,7 +20,7 @@ import qs.services
 // it with the child processes and the journal's copy-back warnings.
 // Sustained trouble (lag p99 > 50 ms or CPU > 60% for 30 s) logs one line
 // naming the likely culprit (at most every 10 minutes) and, with
-// Settings → System → "Desktop shell running slow" (off by default), shows
+// Settings → General → Monitor & Alerts → "Desktop shell running slow" (off by default), shows
 // a notification once per session.
 Singleton {
     id: root
@@ -204,7 +204,7 @@ echo $n`, "sh", String(root.pid), String(Math.floor(Quickshell.launchTime.getTim
     function likelyCulprit(l) {
         const v = VideoWallpapers;
         if (v.playingCount > 0 && v.decodePath.indexOf("zero-copy") < 0)
-            return `${v.playingCount} video wallpaper(s) playing, decoded as "${v.decodePath}" (frames may be copied through the CPU; try Settings → Wallpaper → Video wallpapers: Still frame)`;
+            return `${v.playingCount} video wallpaper(s) playing, decoded as "${v.decodePath}" (frames may be copied through the CPU; try Settings → Appearance → Wallpaper → Video wallpapers: Still frame)`;
         if (v.playingCount > 0)
             return `${v.playingCount} video wallpaper(s) playing`;
         if (l.p99 > 50)

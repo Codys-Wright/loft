@@ -2,7 +2,7 @@
 
 Status: **P0–P4 and P6 implemented** (test infra, spikes, model, roles, `spaces.kdl`
 render, activation, spin-up / restore in `loft-niri space …`, the shell, and creating /
-editing spaces in Settings → Spaces); P5, P7 are spec, and P8 (the fleet switch-over) is
+editing spaces in Settings → Spaces & Windows → Spaces); P5, P7 are spec, and P8 (the fleet switch-over) is
 ready on Loft's side (`programs.loft.spaces.enable`, §8.1). See §10 for the status and
 §3.4 for what the spikes measured. It is designed together with
 [THEME-ARCHITECTURE.md](THEME-ARCHITECTURE.md), which defines how a space can carry a
@@ -478,7 +478,7 @@ with spaces they move between spaces too, so the displays never get out of step.
   follows spaces because Loft keeps workspaces in space order (`MoveWorkspaceToIndex`).
   A Loft "Spaces overview" with labels and window thumbnails comes later (phase P7).
 
-### 6.4 Settings → Spaces
+### 6.4 Settings → Spaces & Windows → Spaces
 
 A sidebar page **Spaces**: the list of spaces (drag to reorder, which is also the
 Mod+N order), and per space: displays (a diagram of the live layout with each display's
@@ -614,7 +614,7 @@ edits them).
 What Loft provides (`nix/modules/home.nix`):
 
 - `programs.loft.spaces.enable = true` turns the `spaces` feature on by default
-  (`$LOFT_FEATURE_DEFAULTS`; a choice in Settings → Features still wins), includes
+  (`$LOFT_FEATURE_DEFAULTS`; a choice in Settings → General → Features still wins), includes
   `<state>/overrides/spaces.kdl` in `~/.config/loft/niri.kdl` (after the theme, before
   the runtime overrides, exactly once), and adds a `spawn-at-startup` there that runs
   `loft-niri space render` (writes / refreshes `spaces.kdl`, validated against the whole
@@ -728,7 +728,7 @@ loft-kwin's `openSpace` finds the apps' windows in the Space's Activity, moves t
 their roles' displays and starts the missing ones there.
 
 The `loft space …` Python commands above (and the Spotlight provider) are not written
-yet; Settings → Spaces and the shell use `loft-niri` directly. Writes refuse any change
+yet; Settings → Spaces & Windows → Spaces and the shell use `loft-niri` directly. Writes refuse any change
 that adds a problem to the library (unknown role, a workspace another space owns, a
 missing template parameter, a bad id) and write nothing then; the first write that
 touches a built-in singleton copies the built-in set into the library (§7: the
@@ -744,7 +744,7 @@ library's singletons replace the built-ins as a set).
 | **P3. Spin-up / restore** | `loft-niri space open/close/gather`: scopes, matching (cgroup, app-id, title, cwd), placement, ordering, claims in `runtime.json` | P1 | P2, P4 |
 | **P4. Shell** | `src/services/Spaces.qml` (index, active space from niri events), `bar/Workspaces.qml` → space indicator, island banner, dock / menu bar / bar / DND per space | P1 | P3 |
 | **P5. Theme per space** | the `space` layer in the resolver and `appearance.json` (THEME phases A/D), async apply after focus, pre-render on save | THEME B, D; P4 | P6 |
-| **P6. Creation UX** | `cli/loft` `space` commands, Spotlight provider, New Project sheet, Settings → Spaces page, space switcher overlay | P2, P3, P4 | P5 |
+| **P6. Creation UX** | `cli/loft` `space` commands, Spotlight provider, New Project sheet, Settings → Spaces & Windows → Spaces page, space switcher overlay | P2, P3, P4 | P5 |
 | **P7. Later** | Spaces overview, Task space design | P4 | — |
 | **P8. Fleet migration** | `~/.flake` changes, reviewed by Cody (`import-niri` output as a starting point) | P2, P4 | — |
 
@@ -809,7 +809,7 @@ library's singletons replace the built-ins as a set).
   become an island banner; a first activation's spin-up stops holding the derivation
   back after 1.5 s. Outputs changing: `space render`, `space ensure <active>`, `space
   gather <active>`, only once `overrides/spaces.kdl` exists (nothing is
-  rendered behind a user who hasn't opted in). Settings → Spaces: read-only list,
+  rendered behind a user who hasn't opted in). Settings → Spaces & Windows → Spaces: read-only list,
   Activate, Open (shown once `loft-niri space open` exists, P3). Feature id `spaces`.
 - **Not done in P4:** notes of activations the niri binds run (Mod+N, ⌃⌘← →
   spawn loft-niri directly) don't reach the shell; `space startup` belongs in the
@@ -821,7 +821,7 @@ library's singletons replace the built-ins as a set).
   `reorder` / `seed`, each validated by loading the library with the change overlaid,
   `Catalog::load_overlay`; `capture` for New Space from Current Desktop), the `loft-niri
   space save|patch|delete|reorder|seed|capture` commands, `space list --json` with the
-  live layout's roles and the templates' parameters, and Settings → Spaces as in §6.4.
+  live layout's roles and the templates' parameters, and Settings → Spaces & Windows → Spaces as in §6.4.
   Tested headless (3 outputs): create, New Project, icon, reorder (seeds the built-ins),
   dock / bar / menu bar / Focus edits on an instance (into `overrides`), activation
   applying them (bar hidden, dock auto-hidden), capture of foot windows.

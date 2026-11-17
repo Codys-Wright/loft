@@ -1,7 +1,7 @@
 """Wallpaper sets: a wallpaper per display and per workspace, by role.
 
 Every choice is per theme, in the shell's `overrides/shell.json`
-(`perTheme.<theme>`, written by the shell's Settings → Wallpaper or by
+(`perTheme.<theme>`, written by the shell's Settings → Appearance → Wallpaper or by
 `loft wallpaper …`):
 
   wallpaper   one image for the theme (every display)

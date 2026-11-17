@@ -74,7 +74,7 @@ ColumnLayout {
                     Text {
                         Layout.fillWidth: true
                         visible: text !== ""
-                        text: line.mode === "always" ? "Shown only while in use" : line.modelData.startsWith("readout.") ? "Readout (Settings → System)" : ""
+                        text: line.mode === "always" ? "Shown only while in use" : line.modelData.startsWith("readout.") ? "Readout (Settings → General → Monitor & Alerts)" : ""
                         color: Theme.subtext
                         font.family: Theme.fontUi
                         font.pixelSize: 10

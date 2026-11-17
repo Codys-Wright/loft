@@ -71,7 +71,7 @@
       # niri-loft's place-within-workspace rule is in loft/niri.kdl: the shell
       # may bind wallpapers to workspaces (WorkspaceWallpapers.qml).
       ++ lib.optional workspaceLayers "LOFT_NIRI_WORKSPACE_LAYERS=1"
-      # Feature defaults (Features.qml); Settings → Features still wins.
+      # Feature defaults (Features.qml); Settings → General → Features still wins.
       ++ lib.optional (
         featureDefaults != [ ]
       ) "LOFT_FEATURE_DEFAULTS=${lib.concatStringsSep "," featureDefaults}"
@@ -382,7 +382,7 @@
       tileModifierOn = cfg.plasma.kwinPackage != null && cfg.plasma.tileModifier != null;
 
       # Loft's shortcuts in a Plasma session (cli/loft/kwinkeys.py, docs/KWIN.md
-      # §5): the shell binds (+ Settings → Keyboard Shortcuts) as a KWin script
+      # §5): the shell binds (+ Settings → Keyboard & Mouse → Keyboard Shortcuts) as a KWin script
       # of kglobalaccel shortcuts, loaded while loft-plasma-shell runs.
       # kglobalaccel lets two actions share a key (and then the other one
       # wins), so Loft also takes its keys off the shortcuts that have them
@@ -677,7 +677,7 @@
             half needs the system too — BlueZ with `Experimental = true` and the
             Hands-Free class unit (tether-btclass@hciN) — see
             docs/research/phone-integration.md and Settings → Phone. Turn the
-            feature on in Settings → Features → iPhone once the phone is paired
+            feature on in Settings → General → Features → iPhone once the phone is paired
           '';
           package = lib.mkOption {
             type = lib.types.package;
@@ -793,9 +793,9 @@
             "-island"
           ];
           description = ''
-            Defaults for the shell's optional modules (Settings → Features,
+            Defaults for the shell's optional modules (Settings → General → Features,
             ids in src/services/Features.qml): an id turns it on, `-id` off.
-            A choice made in Settings → Features still wins.
+            A choice made in Settings → General → Features still wins.
           '';
         };
 
@@ -834,7 +834,7 @@
             description = ''
               Space documents seeded into the library (`<library>/Spaces`)
               when they aren't there yet, never overwritten: edits made in
-              Settings → Spaces stay. `"kind": "space"` documents go to
+              Settings → Spaces & Windows → Spaces stay. `"kind": "space"` documents go to
               `<name>.json`, `"space-instance"` ones to `instances/`,
               `"space-template"` ones to `templates/`. As soon as the library
               has any space of its own, those replace the built-in set, so
@@ -1328,7 +1328,7 @@
         };
 
         # programs.loft.spaces.documents → the library, once (never
-        # overwritten: Settings → Spaces edits them there).
+        # overwritten: Settings → Spaces & Windows → Spaces edits them there).
         home.activation.loftSpaces = lib.mkIf (cfg.spaces.documents != { } && spacesDir != null) (
           lib.hm.dag.entryAfter [ "writeBoundary" ] (
             lib.concatStrings (

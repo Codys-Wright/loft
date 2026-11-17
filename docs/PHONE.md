@@ -97,7 +97,7 @@ Settings → Phone shows these steps:
    Notifications** and **Sync Contacts**. If the toggles don't appear, run `tether bt solicit`.
 5. Optional, for calls: run `tether bt calls-enable on`, or use the switch in Settings → Phone.
    WirePlumber must not take the phone's Hands-Free link: drop `hfp_hf` from `bluez5.roles`.
-6. Turn on Settings → Features → **iPhone**. Settings → Phone should then say Messages,
+6. Turn on Settings → General → Features → **iPhone**. Settings → Phone should then say Messages,
    Contacts and Notifications are "on". For diagnostics, run `tether bt connection` or
    `tether status`.
 

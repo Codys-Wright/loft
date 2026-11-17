@@ -60,10 +60,18 @@ Item {
     default property alias content: contentSlot.data
     property alias sidebar: sidebarColumn.data
     property alias toolbar: toolbarSlot.data
+    // Items left of the title (Settings' back button).
+    property alias leading: leadingSlot.data
 
     signal closeRequested
+    // Enter in the sidebar's search field.
+    signal searchAccepted
     // niri has no minimize; by default hiding closes (the owner keeps state).
     signal hideRequested
+
+    function clearSearch() {
+        search.text = "";
+    }
 
     function toggleFullscreen() {
         if (root.hostWindow)
@@ -182,6 +190,7 @@ Item {
                         font.family: Theme.fontUi
                         font.pixelSize: 13
                         clip: true
+                        onAccepted: root.searchAccepted()
                         Keys.onEscapePressed: event => {
                             if (text !== "") {
                                 text = "";
@@ -258,6 +267,12 @@ Item {
                         onClose: root.closeRequested()
                         onHide: root.hideRequested()
                         onFullscreen: root.toggleFullscreen()
+                    }
+
+                    RowLayout {
+                        id: leadingSlot
+                        visible: children.length > 0
+                        spacing: 4
                     }
 
                     Text {
