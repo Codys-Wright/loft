@@ -8,7 +8,7 @@ import "glyphs.js" as G
 
 // Snippet picker (Mod+Shift+Period): search by trigger, name or text; Enter
 // types the expansion into the app that was focused. Snippets are edited in
-// Settings → Snippets. Data and expansion: services/Snippets.qml.
+// Settings → Keyboard & Mouse → Snippets. Data and expansion: services/Snippets.qml.
 PanelWindow {
     id: root
 
@@ -155,7 +155,7 @@ PanelWindow {
                     anchors.centerIn: parent
                     visible: root.rows.length === 0
                     horizontalAlignment: Text.AlignHCenter
-                    text: Snippets.items.length === 0 ? "No snippets yet — add some in Settings → Snippets" : "No matches"
+                    text: Snippets.items.length === 0 ? "No snippets yet — add some in Settings → Keyboard & Mouse → Snippets" : "No matches"
                     color: Theme.subtext
                     font.family: Theme.fontUi
                     font.pixelSize: 13

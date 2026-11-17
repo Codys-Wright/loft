@@ -88,14 +88,14 @@ designs (`locks`), plus curated links to other packs' (`vibes`, and groups in th
 [themes index](https://github.com/Codys-Wright/loft-themes)). `loft theme vibes` lists
 the theme's own, the curated ones, then every other installed pack's wallpapers and locks (and
 loose images) ranked by color closeness (CIEDE2000 between palettes and between image swatches).
-Settings → Wallpaper / Lock Screen and the wallpaper picker (`wallpaper toggle`) show the same
+Settings → Appearance → Wallpaper / Lock Screen and the wallpaper picker (`wallpaper toggle`) show the same
 set; choices, rotation and per-workspace wallpapers are remembered per theme.
 
 **Wallpaper sets.** A wallpaper per display and per niri workspace, with **Auto** filling the
 rest from the theme's vibe set in the same tone and colors (cropped around each image's subject),
 and **sets** that assign images by display role (main, left, right, portrait, …) so they fit any
 desk; theme packs ship them as `wallpaperSets` ([THEME-FORMAT.md](docs/THEME-FORMAT.md#wallpaper-sets)).
-Settings → Wallpaper → Displays & Workspaces, or:
+Settings → Appearance → Wallpaper → Displays & Workspaces, or:
 
 ```sh
 loft wallpaper plan                           # every display + workspace: what it shows and why
@@ -115,7 +115,7 @@ Wallpapers/Themes/<theme>/          # own + curated + the closest images (vibes 
 ```
 
 ```sh
-loft library sort [--json]                       # views + README.md + the index Settings → Wallpaper reads
+loft library sort [--json]                       # views + README.md + the index Settings → Appearance → Wallpaper reads
 loft library add a.jpg b.png --topic "Studio Ghibli" [--move]
 loft library status [--json]
 ```
@@ -183,7 +183,7 @@ loft spotify remove                           # delete the copy (not Spotify's o
 and a frosted card with the password field. The same design is the login screen, shipped as the
 SDDM theme `loft` (`packages.loft-sddm-theme`). A theme pack can replace both with its own
 `lock/Main.qml` ([docs/THEME-FORMAT-LOCK.md](docs/THEME-FORMAT-LOCK.md)) or ship several designs;
-Settings → Lock Screen picks one per theme (any installed pack's) and previews it.
+Settings → Appearance → Lock Screen picks one per theme (any installed pack's) and previews it.
 
 ```sh
 nix run .#greeter-preview           # the login screen in SDDM's test mode (opens a window)
@@ -319,12 +319,12 @@ Messages, calls and notifications from an iPhone, over Bluetooth through
 
 Enable the daemon with `programs.loft.phone.enable = true;`. The system side also needs BlueZ
 `Experimental = true` and the hands-free class unit. Pair once with `tether bt pair`, then turn on
-Settings → Features → iPhone (it's off by default). The pairing guide is in Settings → Phone, and
+Settings → General → Features → iPhone (it's off by default). The pairing guide is in Settings → Phone, and
 the details are in [docs/PHONE.md](docs/PHONE.md).
 
 ## Dock
 
-Rest the pointer on a running app (or click it, if you prefer: Settings → Dock → Window
+Rest the pointer on a running app (or click it, if you prefer: Settings → Desktop & Dock → Dock → Window
 previews) and its windows appear above the icon as Liquid Glass cards: click one to focus it on
 whatever desktop or display it's on (a hidden one comes back), × to close it, right-click or ⋯
 to move it to another desktop or display or hide it. niri 26.04 can't capture a single window,
@@ -334,7 +334,7 @@ ones show their app icon.
 Right-click (or Ctrl-click, or long-press) an app: its windows, recent files, New Window and the
 app's actions, Options ▸ (Keep in Dock, Open at Login, Show in Files, Assign To, Move to Desktop /
 Display), Hide, Quit (hold Alt: Force Quit). Downloads sits left of the Trash as a stack (fan,
-grid or list; drag files out), any folder can be added in Settings → Dock, and recent apps get
+grid or list; drag files out), any folder can be added in Settings → Desktop & Dock → Dock, and recent apps get
 their own section. Each display has its own dock: position, and auto-hide never / always / when
 windows are open. The helpers behind it are `loft dock …` (JSON for the shell):
 
@@ -351,10 +351,10 @@ loft dock capture                       # what window/display capture the compos
 |---|---|
 | `Mod+Shift+V` | clipboard history: search, text/image previews, pins, Enter pastes into the focused app |
 | `Mod+Shift+Alt+V` | paste as plain text |
-| `Mod+Shift+Period` | snippet picker (edit snippets in Settings → Snippets) |
+| `Mod+Shift+Period` | snippet picker (edit snippets in Settings → Keyboard & Mouse → Snippets) |
 | `Mod+Shift+N` | scratchpad: tabbed, autosaved Markdown notes |
-| `Mod+Ctrl+V` (⌃⌘V) | Quick panel: your favorite tools, the latest clipboard entries and snippets, at the pointer (Settings → Quick Panel) |
-| hold `Mod+Ctrl+Space` (⌃⌘Space) | Radial menu: point at a slice, let go; also the middle button on the desktop (Settings → Radial Menu) |
+| `Mod+Ctrl+V` (⌃⌘V) | Quick panel: your favorite tools, the latest clipboard entries and snippets, at the pointer (Settings → Desktop & Dock → Quick Panel) |
+| hold `Mod+Ctrl+Space` (⌃⌘Space) | Radial menu: point at a slice, let go; also the middle button on the desktop (Settings → Desktop & Dock → Radial Menu) |
 
 The shell records the clipboard itself (`wl-paste --watch cliphist store`, into cliphist's
 usual db — turn it off in Settings → Clipboard & Files if you already run a recorder).
@@ -415,7 +415,7 @@ Esc / Caps Lock hold = the window-manager key (niri's Mod; Meta + the next key i
 session), ⌥ word navigation, per-app extras for
 terminals, browsers, file managers and editors — are Loft's (`cli/loft/keymap/mac.json`),
 run by xremap (`loft-keys.service`). Nix seeds them; `loft keys` changes them at runtime,
-and xremap reloads. **Settings → Keyboard Remaps** does the same by hand (groups, per-app
+and xremap reloads. **Settings → Keyboard & Mouse → Keyboard Remaps** does the same by hand (groups, per-app
 rules, own remaps):
 
 ```sh

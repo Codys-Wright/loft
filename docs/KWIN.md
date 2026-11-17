@@ -185,7 +185,7 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | per-workspace wallpaper surfaces (`workspace-layers.patch`) | off (decided). One wallpaper per screen, swapped on desktop/activity change (the existing stock-niri path), under KWin's slide effect |
 | window thumbnails (`toplevel-export.patch`) | **done** (§4.8): stills through `ScreenShot2.CaptureWindow` (`loft-kwin thumbs`), taken when the dock preview or the switcher opens |
 | screen/area capture via grim | **done** (§4.7): `loft-kwin shot`, KWin's `ScreenShot2` |
-| keybinds (loft-niri → niri KDL binds) | kglobalaccel, **done** (§4.5): `loft-keys.js`, a KWin script of `registerShortcut`s generated from shell-binds + Settings → Keyboard Shortcuts, loaded while Loft's shell runs (§5) |
+| keybinds (loft-niri → niri KDL binds) | kglobalaccel, **done** (§4.5): `loft-keys.js`, a KWin script of `registerShortcut`s generated from shell-binds + Settings → Keyboard & Mouse → Keyboard Shortcuts, loaded while Loft's shell runs (§5) |
 | window rules (loft-niri window_rules.rs) | applied by loft-bridge.js at `windowAdded` while Loft runs, not written to `kwinrulesrc` (§5) |
 | outputs / Displays page | `kscreen-doctor` (or KScreen D-Bus). Identities from its JSON |
 | overview (`toggle-overview`) | KWin's Overview effect; its state reaches the shell as `overviewOpen` (§4.9) |
@@ -225,7 +225,7 @@ and settings) that switches as one across **every** display. That is what a Spac
 - **The library stays loft-niri's.** Space documents, their validation and the writes
   (`space save|patch|delete|reorder`) are files only and work without niri.
   `space list --displays '[{name, identity, geometry}]'` resolves the display roles from
-  KWin's outputs instead of niri's (Settings → Spaces, per-Space wallpapers).
+  KWin's outputs instead of niri's (Settings → Spaces & Windows → Spaces, per-Space wallpapers).
 - **Mapping** (`crates/loft-kwin/src/activities.rs`). After every reload of the list,
   `Spaces.qml` sends the non-archived Spaces to loft-kwin (`{"cmd":"syncSpaces",
   "spaces":[{id, name, icon, template}]}`), which makes kactivitymanagerd match and
@@ -287,7 +287,7 @@ and settings) that switches as one across **every** display. That is what a Spac
   KWin script printing each window's `activities`: the first sync adopted "Default" as
   Main and made the built-ins' Activities; three new Spaces got three Activities;
   switching from a bar dot, the switcher (↓ Enter), `spaces focus N|next|prev` (wraps)
-  and Settings → Spaces' Activate set the current Activity; `spaces moveWindow 8` and
+  and Settings → Spaces & Windows → Spaces' Activate set the current Activity; `spaces moveWindow 8` and
   the app menu's Move to Space moved KWrite's Activity without switching; a dock click on
   it switched to its Space; a rename and deletes followed in kactivitymanagerd; deleting
   the active Space with KWrite on it moved KWrite to Main; a Space's `wallpapers` showed
@@ -750,7 +750,7 @@ niri or KWin when it runs (`$NIRI_SOCKET`, like Log Out):
 | Move Window to Next Workspace | `move-window-to-workspace-down` | `moveToDesktopRelative` +1, follows |
 | Close Window | `close-window` | `closeWindow` |
 | Overview | `toggle-overview` | `toggleOverview` (kglobalaccel `kwin/Overview`) |
-| Keyboard Shortcuts | `show-hotkey-overlay` | Loft's Settings → Keyboard Shortcuts (KDE has no overlay) |
+| Keyboard Shortcuts | `show-hotkey-overlay` | Loft's Settings → Keyboard & Mouse → Keyboard Shortcuts (KDE has no overlay) |
 | Turn Off Displays | `power-off-monitors` | `kscreen-doctor --dpms off` (any input wakes them) |
 | Toggle Floating, Expand to Available Width, Cycle Window Width | niri | **hidden** (no tiling or columns; the menus hide Float the same way) |
 

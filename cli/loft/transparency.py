@@ -14,7 +14,7 @@ theme files); the theme's material facet is what they scale from
 the units whose output changed re-render, and only their hooks run (niri
 reloads, with loft-niri re-rendering the window rules; ghostty / kitty get
 their reload signal; the shell re-reads theme.json). The window opacity
-overrides of Settings → Window Rules are loft-niri's (`loft windows glass
+overrides of Settings → Spaces & Windows → Window Rules are loft-niri's (`loft windows glass
 --focused F`) and still win over the master dial; the shell's own glass
 override is Settings → Appearance → Liquid Glass.
 

@@ -76,10 +76,10 @@ still todo — and Loft adds a whole desktop's worth of features vorssaint doesn
 | Side buttons (Back / Forward) | 🧩 | Apps map buttons 8/9 to Back / Forward themselves |
 | Mouse button shortcuts | 🧩 | niri binds MouseBack / MouseForward / MouseMiddle (+ modifiers) |
 | Middle click (three-finger) | 🧩 | touchpad click method |
-| Apps to leave alone | ✅ | Settings → Keyboard Shortcuts → Apps to Leave Alone: Loft's window shortcuts (⌘Q, paste, snippets, palettes, Arrange) do nothing there; xremap reads `loft keys xremap`'s config (every remap off in those apps, reloaded on change — the fleet's xremap service wires it). niri's own binds can't be per app |
+| Apps to leave alone | ✅ | Settings → Keyboard & Mouse → Keyboard Shortcuts → Apps to Leave Alone: Loft's window shortcuts (⌘Q, paste, snippets, palettes, Arrange) do nothing there; xremap reads `loft keys xremap`'s config (every remap off in those apps, reloaded on change — the fleet's xremap service wires it). niri's own binds can't be per app |
 | Extra click filter / key debounce | ⬜ | No clean per-device way on Linux: libinput debounces mouse buttons by itself but never keys, keyd has no debounce, xremap's experimental `throttle_ms` is per key for every keyboard (FEATURES.md) |
 | Super key (Caps / right modifier as a combo) | ✅ | Esc / Caps hold = window key (xremap); Super = ⌘ for apps |
-| Keyboard shortcuts hub (+ macOS shortcut takeover) | ✅ | Settings → Keyboard Shortcuts: every niri bind (Loft's and your Nix config's) grouped and searchable; click to record, conflicts ask before replacing, turn off, custom shortcuts (Loft action, command, niri action), restore per shortcut or all; validated with `niri validate`. ⌘C/V/⌘⇧3/4/5 work |
+| Keyboard shortcuts hub (+ macOS shortcut takeover) | ✅ | Settings → Keyboard & Mouse → Keyboard Shortcuts: every niri bind (Loft's and your Nix config's) grouped and searchable; click to record, conflicts ask before replacing, turn off, custom shortcuts (Loft action, command, niri action), restore per shortcut or all; validated with `niri validate`. ⌘C/V/⌘⇧3/4/5 work |
 
 ## Clipboard, files and links
 | vorssaint | Loft | How |
@@ -136,7 +136,7 @@ still todo — and Loft adds a whole desktop's worth of features vorssaint doesn
 ## Panel and app settings
 | vorssaint | Loft | How |
 |---|---|---|
-| Features hub (install only what you use), reorder/hide sections, export | ✅ | Settings → Features with presets; every module switchable |
+| Features hub (install only what you use), reorder/hide sections, export | ✅ | Settings → General → Features with presets; every module switchable |
 
 ## What Loft has that vorssaint doesn't
 vorssaint relies on macOS for these; on Linux Loft builds them, in the Golden Gate style.

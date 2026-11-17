@@ -231,7 +231,7 @@ false`, menu bar background on), so every material behaves the same under it.
 
 `windows` is app windows' translucency: theme.json `windows` (off without blur, so a
 glassless theme and Reduce Transparency keep windows opaque), which loft-niri turns into
-niri window rules (Settings → Window Rules overrides it per user and per app).
+niri window rules (Settings → Spaces & Windows → Window Rules overrides it per user and per app).
 
 Rendered into: shell `Theme.glass*` tokens, `niri.kdl` `blur {}` + xray rules, kitty
 `background_opacity` / `background_blur`, Ghostty opacity, `walker.css` glass.
@@ -270,7 +270,7 @@ an optional "minimal" flag.
 ```
 
 - `speed` multiplies every shell duration (÷) and becomes niri's `slowdown` (= 1/speed).
-  It replaces Settings → Layout & Motion's "Animation speed", which writes
+  It replaces Settings → Spaces & Windows → Layout & Motion's "Animation speed", which writes
   `animations.slowdown` into `overrides/niri.json` today.
 - `niri` keys are niri's own animation names and fields, passed through by the renderer
   (validated with `niri validate`). An omitted key keeps niri's default.
@@ -895,8 +895,10 @@ are the facets:
 
 Section ids become `theme`, `theme/colors`, `theme/wallpapers`, `theme/material`,
 `theme/motion`, `theme/shape`, `theme/typography`, `theme/icons`, `theme/lock`,
-`theme/launcher`, `theme/sounds`. `SettingsApp.sections` gains `parent: "theme"` for
-the children.
+`theme/launcher`, `theme/sounds`. In `src/settings/settingsnav.js` (the Settings
+structure since the grouped-sidebar redesign: top-level entries, sub-pages with
+`parent`, aliases for old ids) they become `children` of `theme`, which replaces
+today's Appearance entry (Appearance ▸ Wallpaper / Lock Screen).
 
 **Theme overview** (`theme`):
 

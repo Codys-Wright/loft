@@ -14,7 +14,7 @@ import qs.services
 // submenu, children, run() } + icon / swatch / thumb / header).
 //
 // Its top level is a user-arranged list: `catalog` below in the default
-// order, re-ordered and shown / hidden in Settings → Desktop Menu and saved
+// order, re-ordered and shown / hidden in Settings → Desktop & Dock → Desktop Menu and saved
 // as Settings.desktopMenu.items ([{ id, shown }]). Items whose feature
 // module is off (Features.on) are left out. Submenus are built when they
 // open, so the menu always shows the live theme, wallpaper and settings.
@@ -40,7 +40,7 @@ Singleton {
     // id, label, feature (hidden while that module is off), submenu, icon
     // (only a few common items have one — Golden Gate), hint (Settings).
     readonly property var catalog: [
-        { id: "changeWallpaper", label: "Change Wallpaper…", icon: "󰸉", hint: "Settings → Wallpaper" },
+        { id: "changeWallpaper", label: "Change Wallpaper…", icon: "󰸉", hint: "Settings → Appearance → Wallpaper" },
         { id: "wallpaper", label: "Wallpaper", submenu: true, hint: "Next, previous, shuffle, suggestions that match the theme" },
         { id: "sep-wallpaper", separator: true },
         { id: "theme", label: "Theme", submenu: true, hint: "Every installed theme, with its palette" },
@@ -619,7 +619,7 @@ Singleton {
     }
 
     // Dock ▸ — the clicked display's dock (DockData's per-display prefs,
-    // the same as Settings → Dock). With several displays, Use Default
+    // the same as Settings → Desktop & Dock → Dock). With several displays, Use Default
     // puts it back on the dock-wide setting.
     function dockItems() {
         const s = Quickshell.screens.find(x => x.name === screen) ?? Quickshell.screens[0];
@@ -630,7 +630,7 @@ Singleton {
         if (multiDisplay)
             items.push(header("h-dock", DockData.displayLabel(s)));
         if (!p.enabled) {
-            // Off in Settings → Dock: no dock here at all.
+            // Off in Settings → Desktop & Dock → Dock: no dock here at all.
             items.push({ key: "dock-on", label: "Show Dock on This Display", enabled: true, run: () => DockData.setDisplayPref(s, "enabled", true) });
         } else {
             const own = !multiDisplay || p.own;
