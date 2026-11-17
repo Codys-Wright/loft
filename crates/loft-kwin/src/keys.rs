@@ -9,7 +9,7 @@
 //! rate) and `globalShortcutReleased` (when the first key of the chord is let
 //! go, the modifier or the key). This relays them to the shell as
 //! `{"Shortcut": {"name": "loft-quit", "state": "pressed"|"repeated"|"released"}}`
-//! lines; the quit guard (⌘Q held) and the Radial Menu (⌃⌘Space held) use them.
+//! lines; the quit guard (⌘Q held) uses them.
 
 use futures_util::StreamExt;
 use serde_json::{Value, json};
@@ -69,7 +69,7 @@ mod tests {
             event("globalShortcutPressed", "kwin", "loft-quit").unwrap(),
             json!({"Shortcut": {"name": "loft-quit", "state": "pressed"}})
         );
-        assert_eq!(event("globalShortcutRepeated", "kwin", "loft-radial-hold").unwrap()["Shortcut"]["state"], "repeated");
+        assert_eq!(event("globalShortcutRepeated", "kwin", "loft-quit").unwrap()["Shortcut"]["state"], "repeated");
         assert_eq!(event("globalShortcutReleased", "kwin", "loft-quit-2").unwrap()["Shortcut"]["state"], "released");
         assert!(event("globalShortcutPressed", "kwin", "Window Close").is_none());
         assert!(event("globalShortcutPressed", "plasmashell", "loft-quit").is_none());

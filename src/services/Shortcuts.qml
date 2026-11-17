@@ -8,7 +8,7 @@ import Quickshell.Io
 //
 //   leaveAlone            Apps to leave alone (niri app ids): Loft's window
 //                         shortcuts (⌘Q / hold to quit, Paste as Plain Text,
-//                         Snippets, Quick Panel, Radial Menu, Arrange, custom
+//                         Snippets, Quick Panel, Arrange, custom
 //                         shortcuts' window actions) do nothing while one of
 //                         them is focused, and `loft keys xremap` turns every
 //                         remap of Loft's keyboard layer off in them

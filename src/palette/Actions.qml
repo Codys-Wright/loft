@@ -6,7 +6,7 @@ import qs.capture
 import qs.controls
 import qs.services
 
-// The action catalog behind the Quick Panel and the Radial Menu: every
+// The action catalog behind the Quick Panel: every
 // control of the Control Center registry (Controls.qml — toggles, actions,
 // panels), plus tools (capture modes, OCR, color, clipboard, snippets,
 // scratchpad, timers), niri window actions and app launches.
@@ -15,7 +15,7 @@ import qs.services
 //     kind  "toggle" (has an on state: active(id)), "action", "panel"
 //           (opens its Control Center module), "app" (icon from the app)
 //
-// Ids are stable strings saved in quickpanel.json / radial.json:
+// Ids are stable strings saved in quickpanel.json:
 //   control:<Controls id>   capture:<mode>   niri:<action>   ws:<n>
 //   app:<desktop id>        snippet:<id>     tool ids below
 // run(id, ctx) — ctx.windowId: the window that was focused when the
@@ -69,8 +69,7 @@ Singleton {
         { id: "wallpaper:picker", label: "Wallpapers", icon: "󰸉", group: "Desktop", feature: "wallpaperPicker" },
         { id: "controlcenter", label: "Control Center", icon: "󰒓", group: "Desktop", feature: "controlcenter" },
         { id: "monitor", label: "System Monitor", icon: "󰄧", group: "Desktop", feature: "systemMonitor" },
-        { id: "quickpanel:settings", label: "Edit Quick Panel…", icon: "󰏫", group: "Desktop", feature: "quickPanel" },
-        { id: "radial:settings", label: "Edit Radial Menu…", icon: "󰏫", group: "Desktop", feature: "radialMenu" }
+        { id: "quickpanel:settings", label: "Edit Quick Panel…", icon: "󰏫", group: "Desktop", feature: "quickPanel" }
     ]
 
     // Controls → entries (the "special" ones are drawn by the bar itself).
@@ -287,8 +286,6 @@ Singleton {
             return;
         case "quickpanel:settings":
             return showSettings("quickpanel");
-        case "radial:settings":
-            return showSettings("radialmenu");
         }
     }
 

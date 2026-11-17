@@ -132,16 +132,6 @@
       "run": { "ipc": ["quickpanel", "toggle"] }
     },
     {
-      "id": "radial",
-      "mac": "Ctrl+Cmd+Space",
-      "macName": "Loft: Radial Menu (hold)",
-      "niri": "Mod+Ctrl+Space",
-      "via": "cmd",
-      "title": "Radial Menu",
-      "repeat": false,
-      "run": { "ipc": ["radial", "hold"] }
-    },
-    {
       "id": "arrange",
       "mac": "Ctrl+Cmd+A",
       "macName": "Loft: Arrange Window",

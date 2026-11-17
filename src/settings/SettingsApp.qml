@@ -62,9 +62,6 @@ Scope {
         function quickpanel(): void {
             root.show("quickpanel");
         }
-        function radialmenu(): void {
-            root.show("radialmenu");
-        }
         function wallpaper(): void {
             root.show("wallpaper");
         }
@@ -487,16 +484,6 @@ Scope {
                         QuickPanelPage {
                             Layout.fillWidth: true
                             visible: Features.on("quickPanel")
-                        }
-                    }
-                    PageSlot {
-                        page: "radialmenu"
-                        FeatureOffCard {
-                            feature: "radialMenu"
-                        }
-                        RadialMenuPage {
-                            Layout.fillWidth: true
-                            visible: Features.on("radialMenu")
                         }
                     }
 

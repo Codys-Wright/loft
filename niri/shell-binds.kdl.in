@@ -61,8 +61,6 @@ binds {
     // Spaces (docs/SPACES.md §6.2): spaces.kdl (included later) rebinds
     // Mod+Ctrl+Left/Right to loft-niri, identically; through the shell they
     // step niri's workspaces while Settings → Features → Spaces is off.
-    // The Radial Menu wheel takes the keyboard: releasing ⌃ or ⌘ picks the
-    // slice under the pointer (a tap leaves it open to click).
     // BEGIN parity — generated from cli/loft/keymap/parity.json (python3 -m loft.parity --write)
     // Ctrl+Left: Move left a space
     Mod+Ctrl+Left hotkey-overlay-title="Previous Space" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "prev"; }
@@ -91,9 +89,6 @@ binds {
     // Ctrl+Cmd+V: Loft: Quick Panel
     Mod+Ctrl+V hotkey-overlay-title="Quick Panel" { spawn "timeout" "-k" "1" "5" @IPC@ "quickpanel" "toggle"; }
     Super+Ctrl+V hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "quickpanel" "toggle"; }
-    // Ctrl+Cmd+Space: Loft: Radial Menu (hold)
-    Mod+Ctrl+Space repeat=false hotkey-overlay-title="Radial Menu" { spawn "timeout" "-k" "1" "5" @IPC@ "radial" "hold"; }
-    Super+Ctrl+Space repeat=false hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "radial" "hold"; }
     // Ctrl+Cmd+A: Loft: Arrange Window
     Mod+Ctrl+A hotkey-overlay-title="Arrange Window" { spawn "timeout" "-k" "1" "5" @IPC@ "arrange" "open"; }
     Super+Ctrl+A hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "arrange" "open"; }

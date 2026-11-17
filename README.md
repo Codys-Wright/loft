@@ -354,7 +354,6 @@ loft dock capture                       # what window/display capture the compos
 | `Mod+Shift+Period` | snippet picker (edit snippets in Settings → Keyboard & Mouse → Snippets) |
 | `Mod+Shift+N` | scratchpad: tabbed, autosaved Markdown notes |
 | `Mod+Ctrl+V` (⌃⌘V) | Quick panel: your favorite tools, the latest clipboard entries and snippets, at the pointer (Settings → Desktop & Dock → Quick Panel) |
-| hold `Mod+Ctrl+Space` (⌃⌘Space) | Radial menu: point at a slice, let go; also the middle button on the desktop (Settings → Desktop & Dock → Radial Menu) |
 
 The shell records the clipboard itself (`wl-paste --watch cliphist store`, into cliphist's
 usual db — turn it off in Settings → Clipboard & Files if you already run a recorder).
