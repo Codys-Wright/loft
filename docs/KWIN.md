@@ -581,7 +581,7 @@ loads and reports `org.kde.dolphin` for a Dolphin window. **Not run:** the
 systemd template itself (no user systemd on the private bus), xremap-kde against
 input devices (it would grab the real keyboard), and conflicts with plasmashell's own shortcuts (Meta+Q
 activities etc.: same mechanism, not present in the scratch session). The quit guard's
-hold and the Radial Menu's hold: §4.12 (KWin does repeat held shortcuts; the
+hold and the Radial Menu's hold: §4.13 (KWin does repeat held shortcuts; the
 press and release come from kglobalaccel's signals through loft-kwin).
 
 ### 4.6 Option-drag tiles, like macOS
@@ -925,7 +925,7 @@ arguments) only. Needs a check on real hardware.
 The arrangement drag also got `preventStealing`: the settings page's Flickable used to
 take the drag over (the page scrolled and the tile stayed half-moved), on niri too.
 
-### 4.12 Held shortcuts: press, repeat and release
+### 4.13 Held shortcuts: press, repeat and release
 
 Two Loft shortcuts are about holding a key: **⌘Q** (the quit guard, hold ~1 s to quit a
 protected app, `src/everyday/QuitGuard.qml`) and **⌃⌘Space** (the Radial Menu: press opens
@@ -1002,6 +1002,76 @@ plasmashell's shortcuts. Seen once in the nested session: the wheel opened at th
 top-left corner, or on the pointer's previous position, instead of under the pointer
 (`RadialMenuWindow` takes `mouseX/mouseY` on the pointer's enter; likely the
 virtual-pointer races of §6); placement isn't part of this change.
+### 4.12 Settings → Keyboard & Mouse through kxkbrc and KWin's InputDevice
+
+**Done.** Under niri the page writes `input.keyboard` / `input.mouse` / `input.touchpad`
+overrides through `loft-niri apply`. Under KWin the same controls write KDE's own
+settings, as System Settings does, and Loft records nothing:
+
+```
+InputPage ──▶ KdeInput.qml ─┬─ key repeat: kwriteconfig6 --notify kcminputrc [Keyboard]
+                            └─ loft-kwin input [set JSON]   (crates/loft-kwin/src/input.rs)
+                                 ├─ keyboard: kxkbrc [Layout] + KConfig ConfigChanged on /kxkbrc
+                                 └─ mouse / touchpad: org.kde.KWin /org/kde/KWin/InputDevice/<sysName>
+                                      Properties.Set (live) + kcminputrc [Libinput][vendor][product][name]
+```
+
+- **Layouts.** `{"keyboard": {"layout": "us,de", "variant": ",nodeadkeys", "options":
+  "caps:escape"}}` writes `LayoutList`, `VariantList` (padded to one entry per layout),
+  `Use` (false for an empty layout = the system default), `Options` and
+  `ResetOldOptions=true` (niri's options are the whole list, so they replace the
+  system's). KWin's `KeyboardLayout` watches kxkbrc with a `KConfigWatcher`
+  (kwin 6.8.2 `keyboard_layout.cpp`), so after the writes loft-kwin emits KConfig's
+  `org.kde.kconfig.notify.ConfigChanged` on `/kxkbrc` once, with every key, and KWin
+  rebuilds the keymap from a consistent file. Layout names are checked as XKB names
+  before anything is written. The bar's layout indicator follows through
+  `org.kde.keyboard` `layoutListChanged`, as before.
+- **Mouse and trackpad.** KWin exports each libinput device at
+  `/org/kde/KWin/InputDevice/<sysName>` (`org.kde.KWin.InputDevice`; the list is
+  `devicesSysNames` on `org.kde.KWin.InputDeviceManager`). A device is a trackpad when
+  `touchpad`, a mouse when `pointer` and not touch / tablet. Loft's niri keys map to:
+
+  | niri key | KWin property (supported when) | kcminputrc key |
+  |---|---|---|
+  | `accel-speed` | `pointerAcceleration` (`supportsPointerAcceleration`) | `PointerAcceleration` ("%.3f") |
+  | `accel-profile` | `pointerAccelerationProfileFlat` / `…Adaptive` = true (both `supports…`) | `PointerAccelerationProfile` (1 flat, 2 adaptive) |
+  | `natural-scroll` | `naturalScroll` (`supportsNaturalScroll`) | `NaturalScroll` |
+  | `scroll-factor` | `scrollFactor` (the property exists) | `ScrollFactor` |
+  | `left-handed` | `leftHanded` (`supportsLeftHanded`) | `LeftHanded` |
+  | `middle-emulation` (mouse) | `middleEmulation` (`supportsMiddleEmulation`) | `MiddleButtonEmulation` |
+  | `tap`, `drag` (trackpad) | `tapToClick`, `tapAndDrag` (`tapFingerCount` > 0) | `TapToClick`, `TapAndDrag` |
+  | `dwt` (trackpad) | `disableWhileTyping` (`supportsDisableWhileTyping`) | `DisableWhileTyping` |
+
+  Like niri's sections, one change goes to **every** device of that kind that supports
+  it. Setting the property applies it at once, and KWin itself writes it to kcminputrc
+  (`Device::writeEntry` in `backends/libinput/device.cpp`); loft-kwin writes the same key
+  to the same group (`[Libinput][vendor][product][name]`, as `Connection::applyDeviceConfig`
+  builds it) so it survives login either way. The page shows the first device's values
+  (niri has one value per section, KDE one per device) and only the rows some device
+  supports; the Mouse or Trackpad card is hidden when there's no such device. Scrolling
+  speed, left-handed, middle-click emulation and tap and drag are rows only KDE's page has.
+  Reset and "changed here" are hidden (no Loft overrides).
+- `loft-kwin input` prints `{keyboard: {layout, variant, options}, libinput, mouse,
+  touchpad, devices}`; `mouse` / `touchpad` are `{devices, supported, values}`. Bad
+  sections, keys or values are errors before anything is written. Its Nix wrapper adds
+  kconfig's `bin` after the system's PATH for kreadconfig6 / kwriteconfig6.
+- **Not done:** a device plugged in later keeps its own KDE settings (KDE's behaviour)
+  until the next change on the page. KDE's `[Libinput][Defaults][Pointer|Touchpad]`
+  would cover future devices, but it also changes what System Settings' Defaults
+  means, so Loft leaves it alone. KDE's scroll method, click method, button mapping
+  and tablet settings stay in System Settings.
+
+Tested in a nested session: `input set` with `us,de` / `,nodeadkeys` / `caps:escape`
+turned KWin's `org.kde.keyboard getLayoutsList` from `us` into `us` + "German (no dead
+keys)" at once, and an empty layout put it back to `us`; a control write of
+`LayoutList=us,fr` with plain `kwriteconfig6` (no notification) changed nothing until
+`input set` sent it. **The device half can't be tested nested**: KWin creates its libinput
+connection only with the DRM backend, so a nested KWin has no `/org/kde/KWin/InputDevice`
+(`input` reports `libinput: false`, and the page shows a "no mouse or trackpad" row and
+no cards). It's covered by unit tests (classification, support, the value mapping, the
+kcminputrc entries) and a D-Bus test against a fake `InputDeviceManager` + mouse over a
+socket pair (`devices_over_dbus`: listing, `GetAll`, `Properties.Set`). Needs a check on
+real hardware.
 
 ## 5. One Plasma session, two shells: switching and backing out
 

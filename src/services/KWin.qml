@@ -63,7 +63,7 @@ Singleton {
             // Spaces are KDE Activities, one per Space (Spaces.qml).
             spaces: true,
             // Loft's shortcuts report press, repeat and release
-            // (shortcutKey; docs/KWIN.md §4.12): the quit guard and the
+            // (shortcutKey; docs/KWIN.md §4.13): the quit guard and the
             // Radial Menu's hold.
             shortcutKeys: true
         })

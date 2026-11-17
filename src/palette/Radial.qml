@@ -24,7 +24,7 @@ import qs.services
 // Settings → Radial Menu.
 // IPC: radial hold | toggle | open | close | release | settings
 //
-// Under KWin (Compositor.capabilities.shortcutKeys, docs/KWIN.md §4.12) the
+// Under KWin (Compositor.capabilities.shortcutKeys, docs/KWIN.md §4.13) the
 // key comes from KWin as press / release: the press opens the wheel, the
 // release (of ⌃, ⌘ or Space, whichever goes first) picks. KWin repeats a
 // held shortcut, so the bind's own `radial hold` arrives again and again

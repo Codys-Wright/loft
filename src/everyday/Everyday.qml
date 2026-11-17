@@ -68,7 +68,7 @@ Scope {
     }
 
     // ⌘Q under KWin: press, repeats and release from KWin itself
-    // (docs/KWIN.md §4.12), so a tap cancels as soon as the key is let go.
+    // (docs/KWIN.md §4.13), so a tap cancels as soon as the key is let go.
     Connections {
         target: Compositor
         enabled: Compositor.capabilities.shortcutKeys === true

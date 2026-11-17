@@ -679,6 +679,8 @@
           # Display identities spell the EDID vendor out like niri does.
           # `loft-kwin displays` runs kscreen-doctor: the system's (it
           # matches the running KWin) when on PATH, else libkscreen's.
+          # `loft-kwin input` (src/input.rs) runs kreadconfig6 / kwriteconfig6
+          # on kxkbrc and kcminputrc: the system's first, else kconfig's.
           # `loft-kwin record` (src/record.rs) runs gst-launch-1.0 on KWin's
           # PipeWire screencast node: pipewiresrc (pipewire), videorate /
           # videoconvert / videoscale (base), x264enc (ugly), h264parse (bad), mp4mux /
@@ -703,7 +705,8 @@
                 --prefix PATH : ${lib.getBin gst.gstreamer}/bin \
                 --set GST_PLUGIN_SYSTEM_PATH_1_0 ${plugins} \
                 --unset GST_PLUGIN_PATH --unset GST_PLUGIN_PATH_1_0 \
-                --suffix PATH : ${pkgs.kdePackages.libkscreen}/bin
+                --suffix PATH : ${pkgs.kdePackages.libkscreen}/bin \
+                --suffix PATH : ${lib.getBin pkgs.kdePackages.kconfig}/bin
             '';
           meta.mainProgram = "loft-kwin";
         };

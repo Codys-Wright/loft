@@ -1,4 +1,4 @@
-//! Press, repeat and release of Loft's global shortcuts (docs/KWIN.md §4.12).
+//! Press, repeat and release of Loft's global shortcuts (docs/KWIN.md §4.13).
 //!
 //! Loft's shortcuts are kglobalaccel actions `loft-<id>` in KWin's `kwin`
 //! component (cli/loft/kwinkeys.py). A KWin script's shortcut callback fires

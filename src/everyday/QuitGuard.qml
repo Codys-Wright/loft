@@ -24,7 +24,7 @@ import qs.services
 // Apps without protection keep the old behavior (close the focused window),
 // once per burst, so a held key no longer closes window after window.
 //
-// Under KWin (Compositor.capabilities.shortcutKeys, docs/KWIN.md §4.12) the
+// Under KWin (Compositor.capabilities.shortcutKeys, docs/KWIN.md §4.13) the
 // key also comes as press / repeat / release (Compositor.shortcutKey →
 // shortcut()): KWin repeats a held shortcut too, so the repeats drive the
 // hold as above, but the release cancels at once, and between the press and
