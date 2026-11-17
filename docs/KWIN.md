@@ -267,10 +267,10 @@ and settings) that switches as one across **every** display. That is what a Spac
   change: `Vibes.spaceWallpaper` takes the active Space's `wallpapers` for the screen's
   most specific role, else the per-workspace choice made under niri for the workspace
   the Space binds to that role. Nothing per-workspace beyond that (decided).
-- **Not under KWin** (niri-only, hidden there): "New Space from Current Desktop"
-  (captures niri workspaces), P3 spin-up / Open / gather (launching a Space's apps and
-  tagging them), display roles as window placement, and the per-role workspace lines in
-  Settings → Spaces (a card says "KDE Activity · every display · N windows" instead).
+- **Spin-up, Open, display roles as placement and New Space from Current Desktop**
+  work under KWin too since §4.12. Still niri-only: the per-role workspace lines in
+  Settings → Spaces (a card says "KDE Activity · every display · N windows" instead),
+  `space close`, and the column order / widths of a Space's apps (KWin windows float).
 - **Backing out (§5):** Activities Loft created stay in Plasma and are harmless there
   (plasmashell shows them in its Activities switcher). `loft spaces prune [--dry-run]`
   (= `loft-kwin spaces prune`) removes them, gives the adopted one its name and icon
@@ -924,6 +924,71 @@ arguments) only. Needs a check on real hardware.
 
 The arrangement drag also got `preventStealing`: the settings page's Flickable used to
 take the drag over (the page scrolled and the tile stayed half-moved), on niri too.
+
+### 4.12 A Space's apps under KWin: spin-up, display roles, capture
+
+**Done.** What §4.2 left niri-only, on Activities.
+
+- **Which app goes where:** `loft-niri space specs <space> --displays JSON` (pure, no
+  niri) resolves the Space's apps on KWin's outputs the way spin-up does under niri
+  (`roles::resolve` + `apps::specs`, `crates/loft-niri/src/spaces/kwin.rs`) and prints
+  each with the **display** its role is on: `{app, role, display, exec, cwd, launch,
+  open, width, match: {appId, title, cwd}}`. A role no display has folds onto main's
+  (`stack`, `columns`) or is skipped (`skip`, in `notes`).
+- **Opening** (`crates/loft-kwin/src/spinup.rs`): the shell sends those to loft-kwin,
+  `{"cmd": "openSpace", "space", "activity", "apps", "notes", "focus"}`. loft-kwin
+  - **finds** each app's window among the windows **of the Space's Activity** (the
+    `match` regexes and cwd, all that are given; without `match`, an app id equal to the
+    command's name or ending in `.name`: `konsole` → `org.kde.konsole`). Each window
+    counts once. A window on every Activity or on another Space's is never taken, so
+    two Spaces with the same app each get their own (niri's claims do this there);
+  - **places** a found window on another display on its role's (`moveToOutput`), as
+    niri's spin-up moves a window back to its workspace;
+  - **starts** what's missing (`launch` not off) in its own process group, then sends
+    the script `expectWindow` {pid, app id pattern, title, activity, output, open,
+    ttl 20 s}. bridge.js, on `windowAdded`, takes the first window with that pid
+    (else matching the app id / title), sets its activities to the Space's, sends it to
+    the display (`workspace.sendClientToScreen`) and maximizes / fullscreens it if the
+    app says `open`. The window is placed as it maps, before the shell sees it;
+  - doesn't start an app again while its window is still coming (20 s), so two Opens in
+    a row don't duplicate it;
+  - answers `{"SpaceOpened": {space, activity, apps: [{app, display, window, spawn}],
+    notes}}`; the notes become an island banner (as `space open`'s under niri).
+- **When:** like niri. The first activation of a Space in the shell's life
+  (`startup: first-activate`, the default; `Spaces.persist.opened`), **Open** in
+  Settings → Spaces (switch + find + place + start), and `startup: login` Spaces once the
+  first sync made their Activities (started in their Activity without switching: the
+  script assigns the window's Activity, not the current one). A shell restart forgets
+  what was opened; the next activation then finds the running apps and starts nothing.
+  No systemd scopes (niri's spin-up uses them to tell an app's windows apart): matching
+  is by pid at start, then by app id / title / cwd.
+- **New Space from Current Desktop:** `space capture --displays JSON --windows JSON`
+  takes the current Activity's windows (not minimized, not Loft's own) instead of
+  niri's: per display, left to right, with `exec` from `/proc/<pid>/cmdline`, the
+  `appId` match, and `open: maximized` for a maximized window (else its width share,
+  which only niri uses). Once the new Space has its Activity, the shell **moves those
+  windows into it and switches there**. Why move rather than adopt the current Activity:
+  the current Activity almost always is another Space's (the first sync gives every
+  Activity in use a Space), so adopting it would take it from that Space. Under niri the
+  captured Space gets its own workspaces and its first activation gathers the windows
+  into them, leaving the old desktop without them; moving them at once is the same end
+  state, and the new Space's spin-up only looks inside its own Activity, so it wouldn't
+  find them where they were.
+- **IPC:** `spaces open <id|n>`, `spaces capture <name>` (besides Settings → Spaces).
+- **Tested** in a nested KWin 6.8.2 with two outputs (`--output-count 2`, WL-0 = main,
+  WL-1 = right) and kactivitymanagerd, a scratch library with Main and Work (KWrite on
+  `main`, Konsole on `right` without a `match`), checked with `loft-kwin state` and
+  loft-shot: the first `spaces focus work` started both in Work's Activity, KWrite on
+  WL-0 and Konsole on WL-1; focusing Main and Work again and two `spaces open work` in a
+  row started nothing; with Konsole moved to WL-0 and KWrite closed, Open moved Konsole
+  back to WL-1 and started only KWrite; `openSpace` without focus from Main started
+  KWrite in Work's Activity while Main stayed current; with Dolphin on WL-0 and a
+  maximized Kate on WL-1 in Main, `spaces capture Desk` wrote Desk (Dolphin on `main`,
+  Kate on `right`, `open: maximized`), made its Activity, moved both windows into it and
+  switched there; closing Kate and Open Desk started Kate maximized on WL-1. Not run:
+  `startup: login` at a real login (its path, `openSpace` without focus, was), and real
+  hardware with mixed sizes and a portrait display (roles come from the same code as
+  `space list --displays`, unit-tested).
 
 ## 5. One Plasma session, two shells: switching and backing out
 

@@ -24,11 +24,14 @@
 //! - Spaces as Activities (src/activities.rs): stdin `syncSpaces` makes
 //!   kactivitymanagerd match the shell's Space list and answers
 //!   `{"Spaces": {"map": {space: activity}, …}}`; `loft-kwin spaces list|prune`.
+//!   stdin `openSpace` starts a Space's missing apps in its Activity, on
+//!   their roles' displays (src/spinup.rs), answered with `{"SpaceOpened"}`.
 
 mod activities;
 mod displays;
 mod record;
 mod shot;
+mod spinup;
 mod state;
 
 use std::collections::VecDeque;
@@ -327,8 +330,92 @@ async fn direct(conn: &Connection, cmd: &Value) -> Result<bool> {
     }
 }
 
+/// What `openSpace` keeps between calls: the last state, and the apps
+/// started recently whose window hasn't shown up ((space, app) → when).
+struct Spin {
+    state: Arc<Mutex<String>>,
+    starting: Mutex<std::collections::HashMap<(String, String), std::time::Instant>>,
+}
+
+/// `openSpace` (src/spinup.rs): find, place, start; queue the script's
+/// commands; report.
+fn open_space(queue: &Queue, spin: &Spin, cmd: &Value) -> Value {
+    let space = cmd["space"].as_str().unwrap_or("").to_string();
+    let activity = cmd["activity"].as_str().unwrap_or("").to_string();
+    let mut notes: Vec<String> = cmd["notes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|n| n.as_str().map(String::from))
+        .collect();
+    let apps: Vec<spinup::AppReq> = match serde_json::from_value(cmd["apps"].clone()) {
+        Ok(a) => a,
+        Err(e) => return json!({ "SpaceOpened": { "space": space, "apps": [], "notes": [format!("bad apps: {e}")] } }),
+    };
+    if cmd["focus"].as_bool() == Some(true) && !activity.is_empty() {
+        queue.push(json!({ "cmd": "setActivity", "activity": activity }));
+    }
+    let matchers: Vec<Option<spinup::Matcher>> = apps
+        .iter()
+        .map(|a| match spinup::Matcher::new(a) {
+            Ok(m) => Some(m),
+            Err(e) => {
+                notes.push(format!("{}: {e}", a.app));
+                None
+            }
+        })
+        .collect();
+    let state: Value = serde_json::from_str(&spin.state.lock().unwrap()).unwrap_or(Value::Null);
+    let wins = spinup::windows_from_state(&state, Some(std::path::Path::new("/proc")));
+    let mut starting = spin.starting.lock().unwrap();
+    let ttl = Duration::from_millis(spinup::EXPECT_MS);
+    starting.retain(|_, t| t.elapsed() < ttl);
+    let recent: std::collections::BTreeSet<String> =
+        starting.keys().filter(|(s, _)| *s == space).map(|(_, a)| a.clone()).collect();
+    let mut rows = Vec::new();
+    for step in spinup::plan(&apps, &matchers, &wins, &activity, &recent) {
+        use spinup::Step;
+        let (i, window, spawn) = match step {
+            Step::Found { app, uuid, move_to } => {
+                starting.remove(&(space.clone(), apps[app].app.clone()));
+                if let Some(output) = move_to {
+                    queue.push(json!({ "cmd": "moveToOutput", "window": uuid, "output": output }));
+                }
+                (app, Some(uuid), None)
+            }
+            Step::Starting { app } => (app, None, Some("starting")),
+            Step::Missing { app } => {
+                notes.push(format!("{} isn't open, and has no command to start it", apps[app].app));
+                (app, None, None)
+            }
+            Step::Spawn { app } => {
+                let a = &apps[app];
+                match spinup::spawn(a) {
+                    Ok(pid) => {
+                        if let Some(m) = &matchers[app] {
+                            queue.push(spinup::expect_cmd(a, m, &activity, Some(pid)));
+                        }
+                        starting.insert((space.clone(), a.app.clone()), std::time::Instant::now());
+                        (app, None, Some("started"))
+                    }
+                    Err(e) => {
+                        notes.push(format!("{}: starting `{}`: {e}", a.app, a.exec.join(" ")));
+                        (app, None, None)
+                    }
+                }
+            }
+        };
+        rows.push(json!({ "app": apps[i].app, "display": apps[i].display, "window": window, "spawn": spawn }));
+    }
+    json!({ "SpaceOpened": { "space": space, "activity": activity, "apps": rows, "notes": notes } })
+}
+
 /// A command from stdin or `Command`: KWin's D-Bus API, else the script.
-async fn dispatch(conn: &Connection, queue: &Queue, cmd: Value) {
+async fn dispatch(conn: &Connection, queue: &Queue, spin: &Spin, cmd: Value) {
+    if cmd["cmd"] == "openSpace" {
+        emit(&open_space(queue, spin, &cmd));
+        return;
+    }
     match direct(conn, &cmd).await {
         Ok(true) => {}
         Ok(false) => queue.push(cmd),
@@ -444,6 +531,7 @@ async fn main() -> Result<()> {
         Ok(text) => model.pnp = state::parse_pnp_ids(&text),
         Err(e) => eprintln!("loft-kwin: no PNP ids ({pnp_path}: {e}); display vendors stay as ids"),
     }
+    let spin = Spin { state: state.clone(), starting: Mutex::default() };
     let mut stdin = BufReader::new(tokio::io::stdin()).lines();
     let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
 
@@ -466,11 +554,11 @@ async fn main() -> Result<()> {
                     continue;
                 }
                 match serde_json::from_str::<Value>(line) {
-                    Ok(cmd) => dispatch(&conn, &queue, cmd).await,
+                    Ok(cmd) => dispatch(&conn, &queue, &spin, cmd).await,
                     Err(e) => eprintln!("loft-kwin: bad command {line:?}: {e}"),
                 }
             }
-            Some(cmd) = commands.recv() => dispatch(&conn, &queue, cmd).await,
+            Some(cmd) = commands.recv() => dispatch(&conn, &queue, &spin, cmd).await,
             _ = term.recv() => break,
             _ = tokio::signal::ctrl_c() => break,
         }

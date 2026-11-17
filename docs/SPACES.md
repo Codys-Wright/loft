@@ -710,7 +710,16 @@ loft-niri space capture --name N [--icon I] [--id ID] [--save]   # New Space fro
 Under KWin (a Plasma session) a Space is a KDE Activity instead of named workspaces:
 loft-niri still owns the library (`space list --displays JSON` takes KWin's outputs),
 loft-kwin keeps the Activities in step, and `loft spaces activities | prune [--dry-run]`
-lists / removes them. See [KWIN.md §4.2](KWIN.md#42-spaces--kde-activities).
+lists / removes them. See [KWIN.md §4.2](KWIN.md#42-spaces--kde-activities). Spin-up,
+Open and New Space from Current Desktop work there too ([§4.12](KWIN.md#412-a-spaces-apps-under-kwin-spin-up-display-roles-capture)):
+
+```
+loft-niri space specs <id> [--displays JSON]           # its apps, each with its role's display
+loft-niri space capture … --displays JSON --windows JSON   # capture KWin's windows, not niri's
+```
+
+loft-kwin's `openSpace` finds the apps' windows in the Space's Activity, moves them to
+their roles' displays and starts the missing ones there.
 
 The `loft space …` Python commands above (and the Spotlight provider) are not written
 yet; Settings → Spaces and the shell use `loft-niri` directly. Writes refuse any change

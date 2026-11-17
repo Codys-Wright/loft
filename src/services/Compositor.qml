@@ -97,6 +97,8 @@ Singleton {
     signal windowActionsMenuRequested(int id, string output, real x, real y)
     // The set of outputs changed (hotplug, enable/disable).
     signal outputsChanged()
+    // KWin: loft-kwin's report on openSpace ({ space, apps, notes }).
+    signal spaceOpened(var report)
 
     Connections {
         target: Niri
@@ -129,6 +131,9 @@ Singleton {
         }
         function onWindowActionsMenuRequested(id, output, x, y) {
             root.windowActionsMenuRequested(id, output, x, y);
+        }
+        function onSpaceOpened(report) {
+            root.spaceOpened(report);
         }
     }
 
@@ -250,6 +255,13 @@ Singleton {
     function syncSpaces(spaces) {
         if (backend === "kwin")
             KWin.syncSpaces(spaces);
+    }
+
+    // KWin: start a space's missing apps in its Activity, on their roles'
+    // displays (`apps`: `loft-niri space specs`; docs/KWIN.md §4.12).
+    function openSpace(space, activity, apps, notes, focus) {
+        if (backend === "kwin")
+            KWin.openSpace(space, activity, apps, notes, focus);
     }
 
     // KWin: move a window to these activities ([] = all); follow switches too.

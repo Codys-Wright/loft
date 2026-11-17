@@ -517,6 +517,7 @@ dependencies = [
  "futures-util",
  "libc",
  "png",
+ "regex",
  "serde",
  "serde_json",
  "tokio",

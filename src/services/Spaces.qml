@@ -42,10 +42,17 @@ import Quickshell.Io
 // active space is the current Activity's, a window moves to a Space by
 // setting its activities, and the layout's roles come from KWin's outputs
 // (`space list --displays`). Workspace names, spaces.kdl, render / ensure /
-// gather and P3's spin-up are niri-only.
+// gather are niri-only. Spin-up (P3) under KWin (§4.12): on a space's
+// first activation in a session (`startup: first-activate`), on Open and
+// at login (`startup: login`) the shell asks `loft-niri space specs` for
+// its apps on KWin's displays and hands them to loft-kwin (`openSpace`),
+// which starts the missing ones in the Activity, each on its role's
+// display. "New Space from Current Desktop" captures the current
+// Activity's windows (`space capture --displays --windows`) and moves them
+// into the new space's Activity.
 //
 // IPC: spaces focus <id|n> | next | prev | moveWindow <id|n> | list | active
-// | switcher | reload.
+// | switcher | reload | open <id|n> | capture <name>.
 Singleton {
     id: root
 
@@ -231,6 +238,8 @@ Singleton {
         }
         function onSpaceActivitiesChanged() {
             quiet.restart();
+            root.adoptCaptured();
+            root.loginSpin();
         }
         // An Activity of a space was removed in Plasma: make a new one.
         function onActivitiesChanged() {
@@ -370,6 +379,97 @@ Singleton {
         }
         lastError = "";
         Compositor.setActivity(a);
+        // The first activation in a session spins the space's apps up.
+        if ((s.startup ?? "first-activate") === "first-activate" && !opened(s.id))
+            spin(s, false);
+    }
+
+    // ── Spin-up under KWin (docs/KWIN.md §4.12) ─────────────────────────
+    // Spaces opened in this shell's life (a restart opens them again, which
+    // finds what's running instead of starting it twice).
+    function opened(id) {
+        return persist.opened.split(",").includes(id);
+    }
+    function markOpened(id) {
+        if (!opened(id))
+            persist.opened = persist.opened ? `${persist.opened},${id}` : id;
+    }
+
+    property var spinQueue: []
+    // `loft-niri space specs` → loft-kwin's openSpace. focus: switch too.
+    function spin(s, focus) {
+        const a = activityOf[s.id];
+        if (!a)
+            return;
+        markOpened(s.id);
+        spinQueue = spinQueue.concat([{ space: s.id, activity: a, focus: focus === true }]);
+        if (!specs.running)
+            nextSpin();
+    }
+    function nextSpin() {
+        if (spinQueue.length === 0)
+            return;
+        const job = spinQueue[0];
+        spinQueue = spinQueue.slice(1);
+        specs.job = job;
+        specs.command = ["loft-niri", "--json", "space", "specs", job.space, "--displays", JSON.stringify(Compositor.impl.displays ?? [])];
+        specs.running = true;
+    }
+
+    Process {
+        id: specs
+        property var job: null
+        stdout: StdioCollector {
+            id: specsOut
+        }
+        stderr: StdioCollector {
+            id: specsErr
+        }
+        onExited: code => {
+            let r = null;
+            try {
+                r = JSON.parse(specsOut.text);
+            } catch (e) {}
+            if (code !== 0 || !r) {
+                root.lastError = specsErr.text.trim().split("\n").pop() || `loft-niri space specs exited with ${code}`;
+                console.warn(`Spaces: ${root.lastError}`);
+            } else if ((r.apps ?? []).length > 0 || job.focus) {
+                Compositor.openSpace(job.space, job.activity, r.apps ?? [], r.notes ?? [], job.focus);
+            }
+            root.nextSpin();
+        }
+    }
+
+    Connections {
+        target: Compositor
+        function onSpaceOpened(r) {
+            root.reportNotes(r.space, r.notes ?? []);
+        }
+    }
+
+    // `startup: login`: opened once the Activities exist, without switching.
+    function loginSpin() {
+        if (!byActivity || !enabled || !loaded || !Compositor.spacesSynced || persist.loginDone)
+            return;
+        persist.loginDone = true;
+        for (const s of spaces)
+            if (s.startup === "login" && !opened(s.id))
+                spin(s, false);
+    }
+
+    // "New Space from Current Desktop" under KWin: the windows captured, to
+    // move into the new space's Activity once it has one.
+    property var pendingCapture: null
+    function adoptCaptured() {
+        const p = pendingCapture;
+        const a = p ? activityOf[p.space] : "";
+        if (!a)
+            return;
+        pendingCapture = null;
+        for (const id of p.windows)
+            Compositor.setWindowActivities(id, [a], false);
+        markOpened(p.space);
+        Compositor.setActivity(a);
     }
 
     // Move a window (default: the focused one) to a space, without
@@ -401,9 +501,14 @@ Singleton {
     }
 
     // `loft-niri space open` (P3): gather + start the space's apps, activate.
+    // KWin: switch to its Activity, find / place / start its apps there.
     function open(key) {
         const s = find(key);
-        if (s)
+        if (!s)
+            return;
+        if (byActivity)
+            spin(s, true);
+        else
             run(["open", s.id]);
     }
 
@@ -424,10 +529,13 @@ Singleton {
         } catch (e) {
             return;
         }
-        const notes = r?.notes ?? [];
+        reportNotes(r?.space, r?.notes ?? []);
+    }
+
+    function reportNotes(space, notes) {
         if (notes.length === 0)
             return;
-        const s = find(r.space) ?? active;
+        const s = find(space) ?? active;
         Notifications.show({
             appName: "Spaces",
             appIcon: "",
@@ -564,8 +672,30 @@ Singleton {
     }
 
     // "New Space from Current Desktop": what each display shows now.
+    // KWin: the current Activity's windows (not minimized, not Loft's own),
+    // which then move to the new space's Activity, and it becomes current
+    // (as niri's first activation gathers them into the new workspaces).
     function capture(name, icon, done) {
-        write(["capture", "--save", "--name", name, "--icon", icon || ""], done);
+        const args = ["capture", "--save", "--name", name, "--icon", icon || ""];
+        if (!byActivity) {
+            write(args, done);
+            return;
+        }
+        const act = Compositor.currentActivity;
+        const wins = Compositor.windows.filter(w => (w.kwin_activities ?? []).includes(act) && !w.is_minimized && w.app_id && w.app_id !== "org.quickshell");
+        const rows = wins.map(w => ({
+                    app_id: w.app_id,
+                    pid: w.pid ?? 0,
+                    output: Compositor.workspaceMap[w.workspace_id]?.output ?? "",
+                    geometry: (w.layout?.tile_pos_in_workspace_view ?? [0, 0]).concat(w.layout?.window_size ?? [0, 0]),
+                    maximized: w.is_maximized === true
+                }));
+        write(args.concat(["--displays", JSON.stringify(Compositor.impl.displays ?? []), "--windows", JSON.stringify(rows)]), r => {
+            if (r.ok && r.id)
+                pendingCapture = { space: r.id, windows: wins.map(w => w.id) };
+            if (done)
+                done(r);
+        });
     }
 
     // ── The index ───────────────────────────────────────────────────────
@@ -615,6 +745,7 @@ Singleton {
                     root.templates = v.templates ?? [];
                     root.loaded = true;
                     root.sync();
+                    root.loginSpin();
                     quiet.restart();
                 } catch (e) {
                     console.warn(`Spaces: can't read the space list: ${e}`);
@@ -627,13 +758,13 @@ Singleton {
         }
     }
 
-    // Is P3's `space open` there? (Settings → Spaces shows Open only then.)
+    // Is P3's `space open` there (KWin: `space specs`)? (Settings → Spaces
+    // shows Open only then.)
     property bool canOpen: false
     Process {
         id: probe
-        command: ["loft-niri", "space", "open", "--help"]
-        // Spin-up (P3) is niri's for now.
-        onExited: code => root.canOpen = code === 0 && !root.byActivity
+        command: ["loft-niri", "space", root.byActivity ? "specs" : "open", "--help"]
+        onExited: code => root.canOpen = code === 0
     }
 
     Component.onCompleted: {
@@ -698,6 +829,9 @@ Singleton {
         property string activeId: ""
         property bool dndBySpace: false
         property bool dndBefore: false
+        // KWin: the spaces spun up already ("a,b"), and `startup: login` done.
+        property string opened: ""
+        property bool loginDone: false
     }
 
     IpcHandler {
@@ -732,6 +866,14 @@ Singleton {
         }
         function switcher(): void {
             root.toggleSwitcher("");
+        }
+        // Open a space: activate it and start its missing apps (P3).
+        function open(space: string): void {
+            root.open(space);
+        }
+        // New Space from Current Desktop, named `name`.
+        function capture(name: string): void {
+            root.capture(name, "", null);
         }
         function reload(): void {
             root.reload();

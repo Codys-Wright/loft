@@ -9,8 +9,9 @@ import qs.services
 //
 // Creating and editing: New Space (name + icon), New <template> (a Project:
 // its parameters), New Space from Current Desktop (what each display shows
-// now, `loft-niri space capture`), and per space the editor (SpaceEditor:
-// name, icon, displays, dock, menu bar, Focus, startup, delete / archive),
+// now, `loft-niri space capture`; KWin: the current Activity's windows),
+// and per space the editor (SpaceEditor: name, icon, displays, dock, menu
+// bar, Focus, startup, delete / archive),
 // moving up / down (the ⌘N order). Writes go through Spaces → `loft-niri
 // space save|patch|delete|reorder`, validated against the whole library
 // before anything is written.
@@ -160,8 +161,8 @@ ColumnLayout {
                 }
             }
             SettingsButton {
-                // Captures niri's workspaces per display.
-                visible: !Spaces.byActivity
+                // niri: each display's workspace; KWin: the current
+                // Activity's windows, per display.
                 text: "New Space from Current Desktop"
                 icon: "󰍹"
                 primary: page.form === "capture"
@@ -178,7 +179,7 @@ ColumnLayout {
             Text {
                 Layout.fillWidth: true
                 visible: page.form === "capture"
-                text: "Each display's current workspace becomes this space's workspace on that display, with its windows as the space's apps (in column order, with their widths). Displays showing nothing are kept. Activating the space gathers the windows; Open starts the ones that aren't running."
+                text: Spaces.byActivity ? "The windows of the current Activity become this space's apps, on the display role each one is on (left to right). They move to the new space's KDE Activity, which becomes current. Open starts the ones that aren't running." : "Each display's current workspace becomes this space's workspace on that display, with its windows as the space's apps (in column order, with their widths). Displays showing nothing are kept. Activating the space gathers the windows; Open starts the ones that aren't running."
                 color: Theme.subtext
                 font.family: Theme.fontUi
                 font.pixelSize: 11

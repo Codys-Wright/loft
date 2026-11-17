@@ -72,6 +72,9 @@ Singleton {
     signal windowActionsMenuRequested(int id, string output, real x, real y)
     // A window screenshot of ours finished (screenshotWindow), path written.
     signal screenshotTaken(string path)
+    // openSpace's report: { space, activity, apps: [{ app, display, window,
+    // spawn }], notes }.
+    signal spaceOpened(var report)
     property string outputKey: ""
     property string layoutKey: ""
 
@@ -152,6 +155,8 @@ Singleton {
             spacesSynced = true;
             for (const e of msg.Spaces.errors ?? [])
                 console.warn(`KWin: activities: ${e}`);
+        } else if (msg.SpaceOpened) {
+            spaceOpened(msg.SpaceOpened);
         } else if (msg.WindowActionsMenuRequested) {
             const e = msg.WindowActionsMenuRequested;
             const w = windows.find(x => x.kwin_uuid === e.window);
@@ -307,6 +312,13 @@ Singleton {
     // ([{ id, name, icon, template }]); answered with a Spaces line.
     function syncSpaces(spaces) {
         send({ cmd: "syncSpaces", spaces: spaces });
+    }
+
+    // A space's apps (`loft-niri space specs`) into its Activity: loft-kwin
+    // finds the open ones, moves them to their displays, starts the rest
+    // (crates/loft-kwin/src/spinup.rs). focus: switch to the Activity first.
+    function openSpace(space, activity, apps, notes, focus) {
+        send({ cmd: "openSpace", space: space, activity: activity, apps: apps, notes: notes ?? [], focus: focus === true });
     }
 
     // Put a window on these activities ([] = all); follow: switch there too.
