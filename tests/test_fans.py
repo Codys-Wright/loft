@@ -91,7 +91,21 @@ class Base(unittest.TestCase):
         return self.root / "sys/class/hwmon" / f"hwmon{n}"
 
     def attr(self, n: int, name: str) -> int:
-        return int((self.hw(n) / name).read_text())
+        # A running daemon rewrites these files (truncate, then write): a
+        # read in between sees "". Retry briefly instead of failing on it.
+        for _ in range(50):
+            text = (self.hw(n) / name).read_text().strip()
+            if text:
+                return int(text)
+            time.sleep(0.01)
+        return int(text)
+
+    def wait_attr(self, n: int, name: str, want: int, timeout: float = 10) -> int:
+        """The attribute once it reads `want`, or its last value at the timeout."""
+        deadline = time.monotonic() + timeout
+        while (got := self.attr(n, name)) != want and time.monotonic() < deadline:
+            time.sleep(0.05)
+        return got
 
     def set_temp(self, n: int, celsius: float) -> None:
         (self.hw(n) / "temp1_input").write_text(f"{int(celsius * 1000)}\n")
@@ -357,17 +371,14 @@ class Service(Base):
         env = {**os.environ, "PYTHONPATH": str(HELPER.parent.parent)}
         proc = subprocess.Popen([sys.executable, "-B", str(HELPER), "--root", str(self.root), "run"], env=env, stderr=subprocess.PIPE)
         try:
-            deadline = time.monotonic() + 10
-            while self.attr(2, "pwm1_enable") != 1 and time.monotonic() < deadline:
-                time.sleep(0.05)
-            self.assertEqual(self.attr(2, "pwm1"), 153)
+            # The daemon enables manual control, then writes the speed: wait
+            # for the speed itself, not just the enable flag.
+            self.assertEqual(self.wait_attr(2, "pwm1_enable", 1), 1)
+            self.assertEqual(self.wait_attr(2, "pwm1", 153), 153)
             self.assertTrue(fan_helper.status(self.p)["daemon"])
             # A new setting is picked up at once (config mtime).
             self.ok("manual", "hwmon2/pwm1", "80")
-            deadline = time.monotonic() + 5
-            while self.attr(2, "pwm1") != 204 and time.monotonic() < deadline:
-                time.sleep(0.05)
-            self.assertEqual(self.attr(2, "pwm1"), 204)
+            self.assertEqual(self.wait_attr(2, "pwm1", 204, timeout=5), 204)
         finally:
             proc.send_signal(signal.SIGTERM)
             _, err = proc.communicate(timeout=10)
