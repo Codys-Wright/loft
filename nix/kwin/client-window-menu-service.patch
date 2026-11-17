@@ -1,0 +1,145 @@
+diff --git a/src/kwin.kcfg b/src/kwin.kcfg
+index 7c93cb6..57829e1 100644
+--- a/src/kwin.kcfg
++++ b/src/kwin.kcfg
+@@ -191,6 +191,9 @@
+         <entry name="TileWhileMovingModifier" type="String">
+             <default>Shift</default>
+         </entry>
++        <entry name="ClientWindowMenuService" type="String">
++            <default></default>
++        </entry>
+         <entry name="ElectricBorderCornerRatio" type="Double">
+             <default>0.25</default>
+             <min>0.0</min>
+diff --git a/src/options.cpp b/src/options.cpp
+index a10d2e0..dc2ab06 100644
+--- a/src/options.cpp
++++ b/src/options.cpp
+@@ -767,6 +767,7 @@ void Options::syncFromKcfgc()
+     } else {
+         m_tileWhileMovingModifier = Qt::ShiftModifier;
+     }
++    m_clientWindowMenuService = m_settings->clientWindowMenuService();
+     setElectricBorderCornerRatio(m_settings->electricBorderCornerRatio());
+     setElectricBorderAllScreenCorner(m_settings->electricBorderAllScreenCorner());
+     setAllowTearing(m_settings->allowTearing());
+diff --git a/src/options.h b/src/options.h
+index 2469f90..d57dc02 100644
+--- a/src/options.h
++++ b/src/options.h
+@@ -619,6 +619,14 @@ public:
+     {
+         return m_tileWhileMovingModifier;
+     }
++    /**
++     * D-Bus service asked to show the window menu a client requests
++     * (xdg_toplevel.show_window_menu, _GTK_SHOW_WINDOW_MENU); empty: KWin's own.
++     */
++    QString clientWindowMenuService() const
++    {
++        return m_clientWindowMenuService;
++    }
+     /**
+      * @returns true if each screen has its own active corners instead of limiting
+      * to only four corners across all screens.
+@@ -981,6 +989,7 @@ private:
+     Qt::Corner m_pictureInPictureHomeCorner = Qt::BottomRightCorner;
+     int m_pictureInPictureMargin = 20;
+     Qt::KeyboardModifier m_tileWhileMovingModifier = Qt::ShiftModifier;
++    QString m_clientWindowMenuService;
+ 
+     MouseCommand wheelToMouseCommand(MouseWheelCommand com, qreal delta) const;
+ };
+diff --git a/src/useractions.cpp b/src/useractions.cpp
+index 83ae22b..1d644c0 100644
+--- a/src/useractions.cpp
++++ b/src/useractions.cpp
+@@ -46,6 +46,10 @@
+ #include "appmenu.h"
+ 
+ #include <QCheckBox>
++#include <QDBusConnection>
++#include <QDBusMessage>
++#include <QDBusPendingCallWatcher>
++#include <QDBusPendingReply>
+ #include <QFileInfo>
+ #include <QPushButton>
+ #include <QWindow>
+@@ -1674,6 +1678,26 @@ void Workspace::showWindowMenu(const Rect &pos, Window *window)
+     m_userActionsMenu->show(pos, window);
+ }
+ 
++void Workspace::showClientWindowMenu(Window *window, const QPointF &globalPos, std::function<void()> fallback)
++{
++    const QString service = options->clientWindowMenuService();
++    if (service.isEmpty()) {
++        fallback();
++        return;
++    }
++    QDBusMessage message = QDBusMessage::createMethodCall(service, QStringLiteral("/WindowMenu"),
++                                                          QStringLiteral("org.kde.KWin.ClientWindowMenu"), QStringLiteral("Show"));
++    message << window->internalId().toString() << globalPos.x() << globalPos.y();
++    auto watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message, 1000), this);
++    connect(watcher, &QDBusPendingCallWatcher::finished, this, [guard = QPointer<Window>(window), fallback = std::move(fallback)](QDBusPendingCallWatcher *watcher) {
++        const QDBusPendingReply<bool> reply = *watcher;
++        watcher->deleteLater();
++        if (guard && !guard->isDeleted() && (reply.isError() || !reply.value())) {
++            fallback();
++        }
++    });
++}
++
+ void Workspace::showApplicationMenu(const Rect &pos, Window *window, int actionId)
+ {
+     Workspace::self()->applicationMenu()->showApplicationMenu(window->pos().toPoint() + pos.bottomLeft(), window, actionId);
+diff --git a/src/workspace.h b/src/workspace.h
+index 12062bc..a6fa5a7 100644
+--- a/src/workspace.h
++++ b/src/workspace.h
+@@ -296,6 +296,14 @@ public:
+      * Shows the window menu and makes it active if it's not already.
+      */
+     void showWindowMenu(const Rect &pos, Window *cl);
++    /**
++     * A client asked for its window menu at @p globalPos. With
++     * Options::clientWindowMenuService() set, that service's
++     * org.kde.KWin.ClientWindowMenu.Show(window, x, y) on /WindowMenu shows it;
++     * @p fallback (KWin's menu) runs when it's unset, the call fails or it
++     * answers false.
++     */
++    void showClientWindowMenu(Window *window, const QPointF &globalPos, std::function<void()> fallback);
+     UserActionsMenu *userActionsMenu() const
+     {
+         return m_userActionsMenu;
+diff --git a/src/x11window.cpp b/src/x11window.cpp
+index 50e3d0c..55bfc21 100644
+--- a/src/x11window.cpp
++++ b/src/x11window.cpp
+@@ -3299,7 +3299,9 @@ void X11Window::NETMoveResizeWindow(int flags, qreal x, qreal y, qreal width, qr
+ void X11Window::GTKShowWindowMenu(qreal x_root, qreal y_root)
+ {
+     QPoint globalPos(x_root, y_root);
+-    workspace()->showWindowMenu(Rect(globalPos, globalPos), this);
++    workspace()->showClientWindowMenu(this, QPointF(x_root, y_root), [this, globalPos]() {
++        workspace()->showWindowMenu(Rect(globalPos, globalPos), this);
++    });
+ }
+ 
+ bool X11Window::isMovable() const
+diff --git a/src/xdgshellwindow.cpp b/src/xdgshellwindow.cpp
+index e477dc6..5d1b267 100644
+--- a/src/xdgshellwindow.cpp
++++ b/src/xdgshellwindow.cpp
+@@ -863,7 +863,10 @@ void XdgToplevelWindow::handleAppIdChanged()
+ 
+ void XdgToplevelWindow::handleWindowMenuRequested(SeatInterface *seat, const QPointF &surfacePos, quint32 serial)
+ {
+-    performMousePressCommand(Options::MouseOperationsMenu, mapFromLocal(surfacePos));
++    const QPointF globalPos = mapFromLocal(surfacePos);
++    workspace()->showClientWindowMenu(this, globalPos, [this, globalPos]() {
++        performMousePressCommand(Options::MouseOperationsMenu, globalPos);
++    });
+ }
+ 
+ void XdgToplevelWindow::handleMoveRequested(SeatInterface *seat, quint32 serial)

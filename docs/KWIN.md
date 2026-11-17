@@ -445,14 +445,56 @@ on `QT_PLUGIN_PATH`.
     menu opened under KWrite's green bead; with that loft-kwin killed, KWin's own menu at
     once; `claim` took "Window Menu" (KWin's friendly name) and `release` gave Alt+F3
     back, kglobalshortcutsrc's line as before.
-  - **Other ways KWin's menu still opens:** a Wayland client's
-    `xdg_toplevel.show_window_menu` (GTK / libadwaita header bars on right-click,
-    Chromium's CSD) and X11's `_GTK_SHOW_WINDOW_MENU` / `_NET_WM` window-menu requests go
-    straight to KWin's `UserActionsMenu`; a KWin script can't intercept them (no signal),
-    so they keep KWin's menu (with the global Qt style, §4.14, in Loft's look after a
-    re-login). KWin's `[MouseBindings]` defaults put no window menu on Alt+click
-    (Alt+right-drag resizes), and the Window Operations button (`M`) isn't in Loft's
-    button order. Loft has no task manager.
+  - **Apps that draw their own title bar** ask the compositor for the window menu
+    themselves: a Wayland client's `xdg_toplevel.show_window_menu` (GTK 3/4 and
+    libadwaita header bars on right-click, Electron's `-webkit-app-region: drag` areas)
+    and X11's `_GTK_SHOW_WINDOW_MENU` (GTK on Xwayland). Stock KWin 6.8.2 sends both
+    straight to `UserActionsMenu::show` (`XdgToplevelWindow::handleWindowMenuRequested`
+    → `performMousePressCommand(MouseOperationsMenu)`, `X11Window::GTKShowWindowMenu`
+    → `Workspace::showWindowMenu`). Nothing on that path reaches a script or an
+    effect: no signal, no config to route it, and the decoration isn't involved. The
+    only script hook, `registerUserActionsMenu`, adds entries to KWin's menu while it
+    opens and can't stop it. So it takes a **KWin patch**
+    (`nix/kwin/client-window-menu-service.patch`, ~50 lines, next to Option-drag's,
+    §4.6, in `loft-kwin-patched`):
+    - kwinrc `[Windows] ClientWindowMenuService` (default empty = stock), read with the
+      other options (`Options::clientWindowMenuService()`, member at the end of
+      `Options`, re-read on `reconfigure`).
+    - `Workspace::showClientWindowMenu(window, globalPos, fallback)`, called from those
+      two client paths only (KWin's own Alt+F3, mouse bindings and decorations are
+      unchanged): with the key set, an **async** call to `<service>`
+      `/WindowMenu` `org.kde.KWin.ClientWindowMenu.Show(s window, d x, d y) → b`
+      (KWin's internal id, the global point), 1 s timeout. An error (no owner: at
+      once), a timeout or `false` runs the fallback: KWin's menu, as stock. KWin never
+      blocks on the bus.
+    - loft-kwin serves that interface on `dev.loft.KWinBridge` and queues
+      `{"cmd":"clientMenu","window","x","y"}`; the bridge script's `clientMenu` sends
+      the same `WindowActionsMenuRequested` as a right-click on Loft's own bar (`kind`
+      `"menu"`, anchored at the point the app asked for).
+    - `loft-kwin-window-menu apply` (loft-plasma-shell's `ExecStartPost`, only with
+      `programs.loft.plasma.kwinPackage`) records the previous value in
+      `<state>/kwin-window-menu.prev`, sets `dev.loft.KWinBridge` and reconfigures KWin;
+      `revert` (`ExecStopPost`) puts it back unless it was changed by hand (§5). In
+      plain Plasma the key is unset, and even if left set, with no Loft on the bus KWin
+      falls back at once.
+    - Who asks: GTK 3 / GTK 4 / libadwaita (gnome-text-editor, gtk3-demo), Electron
+      frameless windows. Chromium's own tab strip doesn't: it shows Chromium's context
+      menu (Minimize, Maximize, New tab, …, "Use system title bar and borders").
+      Chromium `--app` windows take server-side decorations under KWin, so Loft's bar
+      already gives them Loft's menu.
+    - Needs the patched KWin and a re-login (it's the session's compositor). With
+      stock KWin these keep KWin's menu (with the global Qt style, §4.14, in Loft's
+      look after a re-login).
+    - Tested nested (KWin 6.8.2 + both patches, the branch's loft-kwin and shell,
+      `loft-input` right-clicks): key unset → KWin's menu on gnome-text-editor's
+      header bar; `apply` → Loft's menu at the pointer, and Left Half moved that
+      window; the same for a frameless Electron 43 window (`--ozone-platform=wayland`)
+      and for gtk3-demo with `GDK_BACKEND=x11`; loft-kwin killed → KWin's menu at once
+      (X11 and Wayland), Loft's again once the shell restarted it; `revert` → KWin's
+      with loft-kwin running; `revert` keeps a value set by hand.
+  - KWin's `[MouseBindings]` defaults put no window menu on Alt+click (Alt+right-drag
+    resizes), and the Window Operations button (`M`) isn't in Loft's button order. Loft
+    has no task manager.
   - **Option**: KWin builds decoration hover events without modifiers (`input.cpp`
     `DecorationEventFilter`; presses do carry them) and a key alone sends the decoration
     nothing. KWin's `InputRedirection` (a child of the application object) has
@@ -732,6 +774,11 @@ hard-coded (KWin 6.8.2, `src/window.cpp`):
 - The modifiers come from the last pointer motion, or from a key **press** during the move
   (`MoveResizeFilter::keyboardKey` in `src/input.cpp`). Releasing the key mid-drag takes
   effect at the next pointer motion. The patch keeps all of that.
+
+**The patches.** `loft-kwin-patched` carries two, both off until a kwinrc key is set and
+both applying to 6.7.5 and 6.8.2: this one, and
+`nix/kwin/client-window-menu-service.patch` ([Windows] `ClientWindowMenuService`: the
+window menus apps with their own title bars ask for go to Loft, §4.4).
 
 **The patch** (`nix/kwin/tile-while-moving-modifier.patch`, ~30 lines, upstreamable):
 a kcfg entry `[Windows] TileWhileMovingModifier` = `Shift` (default) | `Alt` | `Ctrl` |
@@ -1688,6 +1735,7 @@ when Loft stops:
 | the decoration and button order (`[org.kde.kdecoration2] library/theme/ButtonsOnLeft/ButtonsOnRight` in kwinrc; GTK's `gtk-decoration-layout` follows via kded's gtkconfig) | `loft-kwin-decoration apply` (loft-plasma-shell's `ExecStartPost`) records the previous value in Loft's state dir and sets Loft's. `loft-kwin-decoration revert` (`ExecStopPost`) puts it back. Both run `org.kde.KWin.reconfigure` (§4.4) |
 | Loft's shortcuts (`loft-keys.js`, §4.5) and the keys taken from other shortcuts | `loft-plasma-shortcuts unload` (`ExecStopPost` of loft-plasma-shell): script unloaded, Loft's actions unregistered, taken keys given back from `<state>/kwin-shortcuts-taken.json` (plasmashell's start does the last part too) |
 | the tile-while-dragging modifier (`[Windows] TileWhileMovingModifier`, §4.6) | `loft-kwin-tile-modifier apply` / `revert`, recorded in `<state>/kwin-tile-modifier.prev` like the decoration. Only set with `programs.loft.plasma.kwinPackage` |
+| where apps' own window-menu requests go (`[Windows] ClientWindowMenuService`, §4.4) | `loft-kwin-window-menu apply` / `revert`, recorded in `<state>/kwin-window-menu.prev`. Only set with `programs.loft.plasma.kwinPackage` |
 | KWin's popup fade (`fadingpopups`: 150 ms in, 600 ms out on every popup, so Loft's menus seemed to grow out of a corner) | `loft-kwin` unloads it at start (runtime only, nothing written to kwinrc) and loads it again on exit; the effects it took are noted in `$XDG_RUNTIME_DIR/loft/kwin-effects-off`, so a restart after a crash still gives them back, and an effect the user had off stays off |
 | the global Qt style (`programs.loft.qt.global`, §4.14): kdeglobals `[KDE] widgetStyle`, `[General] ColorScheme` / `ColorSchemeHash`, the `[Colors:*]` / `[ColorEffects:*]` / `[WM]` keys of Loft's scheme; Kvantum's `[General] theme` | `loft qt global start` (`ExecStartPost`, only when on) records the user's values in `<state>/qt-global.prev`; `loft qt global stop` (`ExecStopPost`, and plasmashell's `ExecStartPre`) puts back every key still Loft's and deletes the ones that weren't set, with KConfig's change notification so running apps follow |
 | Alt+F3 (KWin's Window Operations Menu, §4.4) | taken by Loft's `loft-window-menu` shortcut through the same claim / release as the others |

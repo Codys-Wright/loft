@@ -782,6 +782,15 @@ function apply(c) {
     case "titleBar":
         titleBar(c);
         return;
+    case "clientMenu":
+        // An app with its own title bar asked for its window menu (patched
+        // KWin, docs/KWIN.md §4.4): Loft's, at the point it asked for. The
+        // window isn't always `tracked` (a dialog that skips the taskbar).
+        if (w && w.frameGeometry)
+            menuEvent(w, { x: c.x - w.frameGeometry.x, y: c.y - w.frameGeometry.y }, "menu");
+        else
+            print("loft-bridge: no window " + c.window + " for its window menu");
+        return;
     case "windowMenu":
         // KWin's Window Operations Menu key (Alt+F3, loft-keys.js): Loft's
         // window menu for the active window, under its green bead.
