@@ -191,7 +191,7 @@ ColumnLayout {
 
     Text {
         Layout.fillWidth: true
-        visible: NiriSettings.error !== ""
+        visible: !page.kde && NiriSettings.error !== ""
         text: NiriSettings.error
         color: Theme.urgent
         font.family: Theme.fontUi
