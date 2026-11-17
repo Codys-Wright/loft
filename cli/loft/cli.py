@@ -47,7 +47,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import capture, cleaner, dock, doctor, fans, greeter, hooks, importers, index, indexcmds, island, keys, library, mcp, media, ports, render, spotify, themecmds, transparency, updates, utilities, vibes, wallsets, wallvideo
+from . import capture, cleaner, dock, doctor, fans, greeter, hooks, importers, index, indexcmds, island, keys, library, mcp, media, ports, render, spaces, spotify, themecmds, transparency, updates, utilities, vibes, wallsets, wallvideo
 from .facets import FacetError
 from .pack import IGNORED, Pack, PackError, is_any_pack, is_pack, is_pack_v2, pack_id, validate_v2
 
@@ -1434,6 +1434,8 @@ def parser() -> argparse.ArgumentParser:
     capture.add_parser(top)
     utilities.add_parser(top, lambda ctx: ctx.shell_path)
     keys.add_parser(top, lambda ctx: ctx.state_dir)
+    # Spaces as KDE Activities (KWin): list / prune the ones Loft made.
+    spaces.add_parser(top, lambda ctx: ctx.state_dir)
     # Theme facets: loft colors|wallpapers|material|motion|… list/show/apply/set/reset/save-as.
     themecmds.add_kind_parsers(top)
     # The login screen (SDDM) following the lock screen (PLAN §4.5).

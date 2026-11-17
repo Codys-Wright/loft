@@ -1,7 +1,8 @@
 """Unit tests for `loft mcp` (cli/loft/mcp.py, mcptools.py) that need no
 desktop: JSON-RPC framing over a pipe, the schema validator, tool listing,
 error results, the Quickshell IPC allowlist and `ipc show` parsing, and the
-niri tools against a fake `niri` on PATH. The live part (a real session) is
+niri tools against a fake `niri` on PATH, the KWin paths against a fake
+`loft-kwin`. The live part (a real session) is
 tests/mcp_session.py, run by hand against a loft-dev session.
 """
 
@@ -44,6 +45,42 @@ if a[:2] == ["msg", "--json"]:
     print(json.dumps(data[a[2]]))
 elif a[:2] == ["msg", "action"]:
     pass
+else:
+    sys.exit(2)
+"""
+
+
+KWIN_STATE = {
+    "windows": [
+        {"id": 1, "title": "kwrite", "app_id": "org.kde.kwrite", "pid": 20, "workspace_id": 1, "is_focused": True, "is_floating": True, "is_urgent": False,
+         "layout": {"window_size": [800, 600], "tile_size": [800.0, 600.0], "tile_pos_in_workspace_view": [100.0, 50.0], "pos_in_scrolling_layout": None},
+         "kwin_uuid": "{aaaa}"},
+    ],
+    "workspaces": [
+        {"id": 1, "idx": 1, "name": None, "output": "WL-1", "is_active": True, "is_focused": True, "is_urgent": False, "active_window_id": 1, "kwin_desktop": "d1"},
+        {"id": 2, "idx": 2, "name": "Music", "output": "WL-1", "is_active": False, "is_focused": False, "is_urgent": False, "active_window_id": None, "kwin_desktop": "d2"},
+    ],
+    "outputs": [{"name": "WL-1", "geometry": [0, 0, 1280, 800], "identity": "Unknown Virtual Unknown", "model": "Virtual"}],
+    "overview_open": False,
+}
+
+# A 1x1 PNG.
+TINY_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+    "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082"
+)
+
+FAKE_KWIN = r"""#!/usr/bin/env python3
+import json, os, sys
+a = sys.argv[1:]
+with open(os.environ["FAKE_KWIN_LOG"], "a") as f:
+    f.write(json.dumps(a) + "\n")
+if a == ["state"]:
+    print(open(os.environ["FAKE_KWIN_DATA"]).read())
+elif a[:1] == ["send"]:
+    pass
+elif a[:1] == ["shot"]:
+    open(a[-1], "wb").write(bytes.fromhex(os.environ["FAKE_KWIN_PNG"]))
 else:
     sys.exit(2)
 """
@@ -125,7 +162,7 @@ class Protocol(unittest.TestCase):
             self.assertIn(needle, r["content"][0]["text"], (name, args))
 
     def test_missing_session_is_a_clear_error(self):
-        env = {k: v for k, v in os.environ.items() if k not in ("NIRI_SOCKET", "WAYLAND_DISPLAY")}
+        env = {k: v for k, v in os.environ.items() if k not in ("NIRI_SOCKET", "WAYLAND_DISPLAY", "LOFT_COMPOSITOR", "XDG_CURRENT_DESKTOP")}
         with _env(env):
             r = call(self.server, "list_windows")["result"]
         self.assertTrue(r["isError"])
@@ -143,7 +180,7 @@ class Protocol(unittest.TestCase):
 
     def test_stdio_subprocess(self):
         """The real entry point: stdout carries only protocol lines."""
-        env = {k: v for k, v in os.environ.items() if k not in ("NIRI_SOCKET", "WAYLAND_DISPLAY")}
+        env = {k: v for k, v in os.environ.items() if k not in ("NIRI_SOCKET", "WAYLAND_DISPLAY", "LOFT_COMPOSITOR", "XDG_CURRENT_DESKTOP")}
         msgs = [
             {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
             {"jsonrpc": "2.0", "method": "notifications/initialized"},
@@ -281,6 +318,103 @@ class FakeNiri(unittest.TestCase):
             self.assertTrue(r["isError"])
             self.assertIn(needle, r["content"][0]["text"])
         self.assertEqual(self.actions(), [])
+
+
+class FakeKWin(unittest.TestCase):
+    """The same tools in a KDE session, against a fake `loft-kwin` (records argv, serves a state)."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="loft-mcp-"))
+        self.addCleanup(shutil.rmtree, self.dir)
+        bin_ = self.dir / "bin"
+        bin_.mkdir()
+        (bin_ / "loft-kwin").write_text(FAKE_KWIN.replace("/usr/bin/env python3", sys.executable))
+        (bin_ / "loft-kwin").chmod(0o755)
+        self.data = self.dir / "state.json"
+        self.data.write_text(json.dumps(KWIN_STATE))
+        self.log = self.dir / "log"
+        self.log.touch()
+        env = {k: v for k, v in os.environ.items() if k not in ("NIRI_SOCKET", "LOFT_COMPOSITOR", "LOFT_KWIN_BIN")}
+        env.update(PATH=f"{bin_}:{os.environ.get('PATH', '')}", XDG_CURRENT_DESKTOP="KDE", WAYLAND_DISPLAY="wayland-test",
+                   FAKE_KWIN_LOG=str(self.log), FAKE_KWIN_DATA=str(self.data), FAKE_KWIN_PNG=TINY_PNG.hex())
+        ctx = _env(env)
+        ctx.__enter__()
+        self.addCleanup(ctx.__exit__, None, None, None)
+        self.server = mcp.Server(mcptools.tools())
+
+    def sent(self):
+        return [json.loads(a[1]) for a in map(json.loads, self.log.read_text().splitlines()) if a[0] == "send"]
+
+    def ok(self, name, args=None):
+        r = call(self.server, name, args)["result"]
+        self.assertFalse(r["isError"], r["content"][0].get("text"))
+        return r["content"]
+
+    def test_session(self):
+        self.assertEqual(mcptools.session(), "kwin")
+        os.environ["LOFT_COMPOSITOR"] = "niri"
+        self.assertEqual(mcptools.session(), "niri")
+
+    def test_reading(self):
+        (w,) = json.loads(self.ok("list_windows")[0]["text"])["windows"]
+        self.assertEqual((w["id"], w["app_id"], w["output"], w["rect"]), (1, "org.kde.kwrite", "WL-1", [100.0, 50.0, 800, 600]))
+        (o,) = json.loads(self.ok("list_outputs")[0]["text"])["outputs"]
+        self.assertEqual((o["name"], o["identity"], o["focused"]), ("WL-1", "Unknown Virtual Unknown", True))
+        self.assertEqual(len(json.loads(self.ok("list_workspaces")[0]["text"])["workspaces"]), 2)
+
+    def test_actions(self):
+        self.ok("focus_window", {"id": 1})
+        self.ok("maximize_window", {"id": 1})
+        self.ok("fullscreen_window", {"id": 1})
+        self.ok("center_window", {"id": 1})
+        self.ok("close_window", {"id": 1})
+        self.ok("move_window_to_workspace", {"id": 1, "workspace": "Music", "focus": True})
+        self.ok("move_window_to_workspace", {"id": 1, "workspace": 2})
+        self.ok("move_window_to_monitor", {"id": 1, "output": "Unknown Virtual Unknown"})
+        self.ok("focus_workspace", {"workspace": 2})
+        self.ok("focus_output", {"output": "WL-1"})
+        self.ok("toggle_overview", {"state": "close"})  # already closed: nothing sent
+        self.ok("toggle_overview", {"state": "open"})
+        u = "{aaaa}"
+        self.assertEqual(
+            self.sent(),
+            [
+                {"cmd": "focusWindow", "window": u},
+                {"cmd": "toggleMaximize", "window": u},
+                {"cmd": "toggleFullscreen", "window": u},
+                {"cmd": "center", "window": u},
+                {"cmd": "closeWindow", "window": u},
+                {"cmd": "moveToDesktop", "window": u, "desktop": "d2", "focus": True},
+                {"cmd": "moveToDesktop", "window": u, "desktop": "d2", "focus": False},
+                {"cmd": "moveToOutput", "window": u, "output": "WL-1"},
+                {"cmd": "focusDesktop", "desktop": "d2"},
+                {"cmd": "focusOutput", "output": "WL-1"},
+                {"cmd": "toggleOverview"},
+            ],
+        )
+
+    def test_niri_only_tools_say_so(self):
+        for name, args in [("set_window_floating", {"id": 1, "floating": True}), ("maximize_column", {"id": 1}), ("set_column_width", {"id": 1, "proportion": 0.5})]:
+            r = call(self.server, name, args)["result"]
+            self.assertTrue(r["isError"], name)
+            self.assertIn("niri-only", r["content"][0]["text"])
+        self.assertEqual(self.sent(), [])
+
+    def test_screenshots(self):
+        content = self.ok("screenshot_window", {"id": 1})
+        meta = json.loads(next(c for c in content if c["type"] == "text")["text"])
+        self.assertEqual((meta["method"], meta["width"], meta["region"]), ("kwin-screenshot2", 1, [100.0, 50.0, 800, 600]))
+        content = self.ok("screenshot_output", {})
+        meta = json.loads(next(c for c in content if c["type"] == "text")["text"])
+        self.assertEqual((meta["output"], meta["region"]), ("WL-1", [0, 0, 1280, 800]))
+        shots = [a for a in map(json.loads, self.log.read_text().splitlines()) if a[0] == "shot"]
+        self.assertEqual([a[:3] for a in shots], [["shot", "window", "{aaaa}"], ["shot", "screen", "WL-1"]])
+
+    def test_missing_daemon_binary(self):
+        os.environ["LOFT_KWIN_BIN"] = "no-such-loft-kwin"
+        r = call(self.server, "list_windows")["result"]
+        self.assertTrue(r["isError"])
+        self.assertIn("no-such-loft-kwin is not on PATH", r["content"][0]["text"])
 
 
 class _env:

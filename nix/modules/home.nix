@@ -414,6 +414,19 @@
         }
         case "''${1:-}" in
           load)
+            # At login this runs as KWin is still starting: its /Scripting
+            # object exists before its methods do ("Cannot find
+            # loadScript"), and one try left Plasma without Loft's keys.
+            # Wait for it (up to 60 s; ExecStartPost's limit is 90).
+            i=0
+            until ${qdbus} org.kde.KWin /Scripting 2>/dev/null | ${pkgs.gnugrep}/bin/grep -q loadScript; do
+              i=$((i + 1))
+              if [ "$i" -ge 60 ]; then
+                echo "loft-plasma-shortcuts: KWin's scripting interface never came up" >&2
+                exit 1
+              fi
+              ${pkgs.coreutils}/bin/sleep 1
+            done
             unload
             ${lib.getExe sp.loft} keys kwin render --binds ${shellBinds} --out "$dir" || exit 1
             id="$(${qdbus} org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$dir/$script.js" "$script")" || exit 1
@@ -930,6 +943,9 @@
           # The lock screen's shell package, also for hosts without Loft's
           # NixOS module (which installs it system-wide).
           sp.loft-plasma-lockscreen
+          # `loft-kwin send|state|shot` for `loft mcp` and terminals (the
+          # shell and Spotlight have it on their own PATH).
+          sp.loft-kwin
         ]
         ++ lib.optional cfg.qt.enable cfg.qt.kvantumPackage
         ++ lib.optional (cfg.qt.enable && cfg.qt.dolphinLauncher) dolphinLauncher;

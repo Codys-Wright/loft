@@ -300,6 +300,8 @@ def _base_id(b: Bind) -> str:
         ipc = _ipc_args(b.args)
         if b.args and b.args[0] == "sh" and "loft-quit" in b.args:
             return "quit"
+        if ipc and b.origin == "spaces":
+            return _slug("-".join(ipc))  # spaces-focus-3, spaces-movewindow-3
         if ipc:
             return _slug("-".join(ipc[:2]))
         if b.args and str(b.args[0]).endswith("loft-launcher"):
@@ -435,8 +437,30 @@ def write(out: Path, actions: list[Action]) -> None:
     )
 
 
+def space_binds(binds: list[Bind]) -> list[Bind]:
+    """Spaces under KWin (docs/KWIN.md §4.2): niri gets Mod+1…9 / Mod+Shift+1…9
+    from loft-niri's spaces.kdl, which KWin never sees. Here they go to the
+    shell (`spaces focus N`, `spaces moveWindow N`), with the IPC command of
+    shell-binds' own `spaces` binds (Mod+Ctrl+Left/Right). The shell steps the
+    workspaces instead while Spaces is off, so nothing is lost then."""
+    proto = next((b for b in binds if b.action == "spawn" and (_ipc_args(b.args) or [""])[0] == "spaces"), None)
+    if proto is None:
+        return []
+    ipc = _ipc_args(proto.args) or []
+    prefix = proto.args[: len(proto.args) - len(ipc)]
+    out = []
+    for n in range(1, 10):
+        out.append(Bind(combo=f"Mod+{n}", action="spawn", args=[*prefix, "spaces", "focus", str(n)],
+                        title=f"Go to Space {n}", origin="spaces"))
+        out.append(Bind(combo=f"Mod+Shift+{n}", action="spawn", args=[*prefix, "spaces", "moveWindow", str(n)],
+                        title=f"Move Window to Space {n}", origin="spaces"))
+    return out
+
+
 def build(binds_text: str, overrides: dict | None = None) -> tuple[list[Action], list[str]]:
     binds = parse_binds(binds_text)
+    # After shell-binds, before the user's changes: a moved or disabled key wins.
+    binds = binds + space_binds(binds)
     if overrides:
         binds = apply_overrides(binds, overrides)
     return translate(binds)

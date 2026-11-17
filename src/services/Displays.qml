@@ -25,8 +25,9 @@ Singleton {
 
     readonly property bool fromKWin: Compositor.backend === "kwin"
 
+    // Outputs that are off drop out of KWin's screens: keep what was learnt.
     function fromKWinOutputs() {
-        const m = {}, models = {};
+        const m = Object.assign({}, identities), models = Object.assign({}, root.models);
         for (const o of KWin.displays) {
             m[o.name] = o.identity;
             models[o.name] = o.model || o.name;
@@ -44,6 +45,73 @@ Singleton {
     }
 
     readonly property var screens: Quickshell.screens
+
+    // ── Output settings (Settings → Displays, IdentifyOverlay) ────────────
+    // One interface, either backend: niri's through loft-niri (NiriSettings,
+    // recorded by identity in Loft's overrides), KWin's through KScreen
+    // (kscreen-doctor; KScreen saves them itself). Records have loft-niri's
+    // `outputs` shape: name, identity, description, modes, mode, scale,
+    // transform, logical, enabled, vrr_supported, vrr_enabled, …; KScreen's
+    // add primary, can_disable, hdr_supported, hdr_enabled, vrr_policy.
+    readonly property var outputs: fromKWin ? KScreen.outputs : NiriSettings.outputs
+    // identity → Loft's recorded override (niri only).
+    readonly property var overrides: fromKWin ? ({}) : NiriSettings.outputOverrides
+    readonly property string error: fromKWin ? KScreen.error : NiriSettings.error
+    // What the page may offer beyond the common set.
+    //   record    changes are Loft's overrides (Reset, "changed here")
+    //   primary   KDE's primary display; hdr: HDR on/off
+    //   backend   who reports the outputs, for messages
+    readonly property var outputCaps: fromKWin ? {
+        record: false,
+        primary: true,
+        hdr: true,
+        backend: "KDE (KScreen)"
+    } : {
+        record: true,
+        primary: false,
+        hdr: false,
+        backend: "niri"
+    }
+
+    function outputByName(name) {
+        return outputs.find(o => o.name === name) ?? null;
+    }
+
+    // changes: { "<identity or connector>": { mode, scale, transform,
+    // position: {x, y}, off, vrr, hdr, primary } }. `live` applies them,
+    // `record` keeps them (niri: Loft's overrides; KWin: already kept).
+    function setOutputs(changes, live, record, done) {
+        if (fromKWin)
+            KScreen.setOutputs(changes, live, record, done);
+        else
+            NiriSettings.setOutputs(changes, live, record, done);
+    }
+
+    function resetOutputs(list) {
+        if (!fromKWin)
+            NiriSettings.apply({ reset_outputs: list });
+    }
+
+    function refreshOutputs() {
+        if (fromKWin)
+            KScreen.refresh();
+        else
+            NiriSettings.refresh();
+    }
+
+    // Identify: every screen flashes its name (IdentifyOverlay).
+    property bool identifying: false
+
+    function identify() {
+        identifying = true;
+        identifyTimer.restart();
+    }
+
+    Timer {
+        id: identifyTimer
+        interval: 2500
+        onTriggered: root.identifying = false
+    }
 
     function identity(name) {
         return identities[name] ?? name;
@@ -88,6 +156,14 @@ Singleton {
             return false;
         const active = Compositor.windowMap[ws.active_window_id] ?? null;
         const column = active && !active.is_floating ? active.layout?.pos_in_scrolling_layout?.[0] : undefined;
+        // KWin has no tiling: every window counts as floating there, so the
+        // column test below never matches. Its windows say fullscreen outright.
+        if (Compositor.backend === "kwin")
+            return Compositor.windows.some(w => {
+                const acts = w.kwin_activities ?? [];
+                const here = acts.length === 0 || acts.includes(KWin.currentActivity);
+                return w.workspace_id === ws.id && w.is_fullscreen === true && !w.is_minimized && here;
+            });
         return Compositor.windows.some(w => {
             const size = w.layout?.tile_size;
             if (w.workspace_id !== ws.id || w.is_floating || !size || size[0] < screen.width - 1 || size[1] < screen.height - 1)
@@ -108,7 +184,7 @@ Singleton {
         if (fromKWin)
             fromKWinOutputs();
         else
-            outputs.running = true;
+            niriOutputs.running = true;
     }
 
     Component.onCompleted: refresh()
@@ -121,7 +197,7 @@ Singleton {
     }
 
     Process {
-        id: outputs
+        id: niriOutputs
         command: ["niri", "msg", "-j", "outputs"]
         stdout: StdioCollector {
             onStreamFinished: {

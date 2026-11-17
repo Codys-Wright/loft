@@ -18,7 +18,7 @@ until this is ready, keep the niri session.
 | Title bars | a **custom KWin decoration plugin** (KDecoration3, §4.4) |
 | Wallpapers | one per screen, swapped with the desktop/activity. No per-workspace surfaces |
 | Backing out | Loft and plasmashell must be **switchable**, live and at login, without leaving traces in each other (§5) |
-| Window thumbnails | **icons first**. Thumbnails later through `ScreenShot2` |
+| Window thumbnails | **icons first**. Thumbnails later through `ScreenShot2` (done, §4.8) |
 
 ## 1. What's already portable, and what isn't
 
@@ -78,8 +78,8 @@ compositor), `configLoaded(failed)`, `windowMinimizeRequested(id)`,
   `expelWindowFromColumn`, `consumeOrExpelWindowLeft`
 
 **Capabilities.** `Compositor.capabilities` is `{ columns, overview, windowScreenshot,
-workspaceNames, perOutputWorkspaces, titleBarEvents, configReload }`, all true under
-niri. Nothing reads it yet. The KWin step gates menu items on it (e.g. MenuState's
+workspaceNames, perOutputWorkspaces, titleBarEvents, configReload, spaces }`, all true
+under niri (`spaces`: Spaces work; under KWin they are Activities, §4.2). Nothing reads it yet. The KWin step gates menu items on it (e.g. MenuState's
 "Maximize Column" and Arrange's column presets hide when `columns` is false).
 
 ### How the consumers map
@@ -88,13 +88,15 @@ niri. Nothing reads it yet. The KWin step gates menu items on it (e.g. MenuState
 |---|---|---|
 | Bar: `bar/Workspaces`, `StatusItems`, `menubar/MenuBarTitles`, `components/WindowChrome` | workspaces per output, focused window title, layouts, overview | port: desktops, focused title, `org.kde.keyboard` |
 | Menu bar + app menu: `menubar/MenuState`, `services/AppMenu`, `Arrange` | focused window, pid groups, close/float/fullscreen/move, hide = park on a `hidden-*` workspace | port. **Hide** becomes KWin minimize (decided): `hideApp`/`hideOthers`/`showAll` and the dock's unhide go through a `Compositor.setMinimized(id, bool)` the KWin backend adds, and the `hidden-*` parking stays niri-only. Column items off. Floating presets map to `frameGeometry` |
-| Dock: `dock/*`, `services/DockData`, `Previews`, `WindowCapture` | windows by app, move/close, workspace names, thumbnails | port windows and actions. Thumbnails fall back to icons (the path stock niri uses) until §4 capture exists |
+| Dock: `dock/*`, `services/DockData`, `Previews`, `WindowCapture` | windows by app, move/close, workspace names, thumbnails | port windows and actions. Thumbnails: stills through ScreenShot2 (§4.8) |
 | Switchers: `switcher/Switcher`, `SpaceSwitcher`, `palette/*` | window list by `focus_timestamp`, focus | port. The bridge stamps `focus_timestamp` on activation |
 | Launchpad, Spotlight, panels' "which screen": `Launchpad`, `Panels`, `Hud`, `Sound`, `clipboard/*`, … (~20 files) | `focusedWorkspace.output` | port: needs the focused window's output, or the cursor's |
 | Everyday / QuitGuard / QuitOnClose / KeepAwake / KeyRemaps / WindowRules (running check) | windows by pid / app_id, close | port |
 | Capture: `capture/Capture`, `island/Island` | `screenshotWindow`, `screenshotTaken`, `shutter` | screen/area capture goes through grim today, which needs screencopy (KWin has none): switch to `org.kde.KWin.ScreenShot2` (§4) |
 | Wallpapers: `WorkspaceWallpapers`, `VideoWallpapers`, `Vibes` | active workspace per output, overview | per-workspace wallpaper **surfaces** off (they need niri-loft's patch). The "one wallpaper per screen, swapped on switch" fallback works |
 | Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **KDE Activities** (decided, §4.2). Off until that lands |
+| Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | **done** (§4.11): `Displays.outputs` / `setOutputs` → `KScreen.qml` → `loft-kwin displays` (kscreen-doctor) |
+| Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **KDE Activities**, one per Space (done, §4.2) |
 | Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | KWin-native: `kscreen-doctor -j` / KScreen D-Bus |
 | Title-bar events (`windowMinimizeRequested`, `windowActionsMenuRequested`) | niri-loft's traffic lights | not needed: KWin decorations minimize and open the window menu themselves |
 | `configLoaded` (NiriSettings, WindowRules) | niri reloaded its KDL | `org.kde.KWin.reloadConfig` after writing kwinrc / kwinrulesrc |
@@ -181,11 +183,13 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 |---|---|
 | traffic-light title bars (`title-bar.patch`) | **Loft's own KDecoration3 plugin** (§4.4) |
 | per-workspace wallpaper surfaces (`workspace-layers.patch`) | off (decided). One wallpaper per screen, swapped on desktop/activity change (the existing stock-niri path), under KWin's slide effect |
-| window thumbnails (`toplevel-export.patch`) | **icons** (decided, the existing stock-niri fallback). Later stills via `ScreenShot2.CaptureWindow` (restricted: loft-kwin's .desktop needs `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2`) |
+| window thumbnails (`toplevel-export.patch`) | **done** (§4.8): stills through `ScreenShot2.CaptureWindow` (`loft-kwin thumbs`), taken when the dock preview or the switcher opens |
 | screen/area capture via grim | **done** (§4.7): `loft-kwin shot`, KWin's `ScreenShot2` |
 | keybinds (loft-niri → niri KDL binds) | kglobalaccel, **done** (§4.5): `loft-keys.js`, a KWin script of `registerShortcut`s generated from shell-binds + Settings → Keyboard Shortcuts, loaded while Loft's shell runs (§5) |
 | window rules (loft-niri window_rules.rs) | applied by loft-bridge.js at `windowAdded` while Loft runs, not written to `kwinrulesrc` (§5) |
 | outputs / Displays page | `kscreen-doctor` (or KScreen D-Bus). Identities from its JSON |
+| overview (`toggle-overview`) | KWin's Overview effect; its state reaches the shell as `overviewOpen` (§4.9) |
+| outputs / Displays page | **done** (§4.11): `kscreen-doctor -j` + `-o`, applied with `kscreen-doctor output.…`; identities from the bridge's screens |
 | overview (`toggle-overview`) | KWin's Overview effect |
 | lock screen (`WlSessionLock`) | Plasma's locker with **Loft's lock design** (§4.3) |
 | Spaces (named niri workspaces per output) | **KDE Activities** (§4.2) |
@@ -208,29 +212,89 @@ decoration's minimize button and Loft's Hide then mean the same thing.
 
 ### 4.2 Spaces = KDE Activities
 
-An Activity is a set of windows (plus its own desktops, wallpaper and settings) that
-switches as one across **every** display. That is what a Space is (SPACES.md §1),
-without having to activate several per-output workspaces together.
+**Done** (step 10). An Activity is a set of windows (plus its own desktops, wallpaper
+and settings) that switches as one across **every** display. That is what a Space is
+(SPACES.md §1), without having to activate several per-output workspaces together.
 
-- **API:** `org.kde.ActivityManager /ActivityManager/Activities`: `ListActivities`,
-  `ListActivitiesWithInformation`, `AddActivity`, `RemoveActivity`, `SetActivityName`,
-  `SetCurrentActivity`, `CurrentActivity`, signals `CurrentActivityChanged`,
-  `ActivityAdded/Removed`, `ActivityNameChanged` (checked on this machine). In the KWin
-  script: `workspace.activities`, `workspace.currentActivity`, `window.activities`
-  (settable), `workspace.currentActivityChanged`.
-- **Mapping:** a Space (singleton or template instance) gets one Activity. loft-kwin
-  keeps a `space id ↔ activity uuid` map in Loft's state dir. `Spaces.focus` becomes
-  `SetCurrentActivity`. A spin-up launches the Space's apps and the bridge tags them
-  with `window.activities = [uuid]`. Display **roles** (main/left/right…) become
-  per-window placement (`sendClientToScreen`) at `windowAdded`, from the same role
-  resolution loft-niri does today (shared Rust code).
-- **Per-Space look:** wallpaper, dock set and theme key off the current activity
-  instead of named workspaces. The wallpaper path is the per-screen swap above.
-- **The shell's model:** `Compositor` gains `activities` / `currentActivity` and
-  windows gain `activities: [uuid]`. Under niri it reports no activities, and Spaces
-  keeps using loft-niri. `Spaces.qml` picks its engine from `Compositor.backend`.
-- **Backing out (§5):** activities Loft created stay in Plasma and are harmless there
-  (plasmashell shows them in its Activities switcher). `loft spaces prune` removes them.
+- **API:** `org.kde.ActivityManager /ActivityManager/Activities` (kactivitymanagerd
+  6.8.2): `ListActivities`, `ActivityName`, `ActivityIcon`, `AddActivity(name) → id`,
+  `RemoveActivity`, `SetActivityName`, `SetActivityIcon`, `CurrentActivity`. In the KWin
+  script: `workspace.activities`, `workspace.currentActivity` (settable),
+  `window.activities` (settable, `[]` = every Activity), `currentActivityChanged`,
+  `activitiesChanged`.
+- **The library stays loft-niri's.** Space documents, their validation and the writes
+  (`space save|patch|delete|reorder`) are files only and work without niri.
+  `space list --displays '[{name, identity, geometry}]'` resolves the display roles from
+  KWin's outputs instead of niri's (Settings → Spaces, per-Space wallpapers).
+- **Mapping** (`crates/loft-kwin/src/activities.rs`). After every reload of the list,
+  `Spaces.qml` sends the non-archived Spaces to loft-kwin (`{"cmd":"syncSpaces",
+  "spaces":[{id, name, icon, template}]}`), which makes kactivitymanagerd match and
+  answers `{"Spaces": {"map": {space: activity}, "activities", "current", "errors"}}`.
+  The map is `<state>/kwin-activities.json` (`{"spaces": {"<id>": {"activity": uuid,
+  "adopted"?: {name, icon}}}}`). The plan is a pure function with unit tests:
+  - a Space without an Activity gets one (`AddActivity`, then its icon);
+  - **the very first sync** (no map file yet) lets the first Space **adopt** the current
+    Activity, so the windows already open belong to a Space. Its old name and icon are
+    recorded. Later syncs never adopt;
+  - name and icon follow the document. Loft's icons are Nerd Font glyphs, which Plasma
+    can't draw, so the Activity gets a freedesktop icon: the document's `icon` if it is
+    already an icon name, else one per built-in / template (`main` → `user-desktop`,
+    `music` → `audio-x-generic`, `project` → `folder-development` …), else `activities`;
+  - a Space that's gone (deleted, archived) loses its Activity (`RemoveActivity`); an
+    adopted one gets its old name and icon back and is kept;
+  - an Activity removed in Plasma is forgotten and its Space gets a new one (the shell
+    re-syncs when a mapped Activity disappears, and whenever loft-kwin restarts).
+  Order isn't an Activity property: ⌘1…9 follow the library's order, as under niri.
+- **Switching.** `Spaces.focus` / `next` / `prev` (bar dots, the switcher, ⌃⌘← →, ⌘1…9)
+  set `workspace.currentActivity` through the bridge (`setActivity`), with loft-niri's
+  order and wrap-around. The **active Space** is the current Activity's
+  (`Spaces.deriveActivity`, "" on an Activity that isn't a Space's); a change fires
+  `activated`, so the island banner, per-Space dock / menu bar extras / Do Not Disturb
+  work as under niri. `bar.hidden` hides the bar on every display (an Activity spans
+  them all). Focusing a window of another Space (dock, switcher) switches to its
+  Activity first (bridge.js `focusWindow`).
+- **Moving a window:** `Spaces.moveWindow(space, window?, follow?)` → bridge.js
+  `setWindowActivities` (`w.activities = [uuid]`). From the window menus ("Move to
+  Space", Window menu and the app menu's move commands), ⌘⇧1…9 and `qs ipc call spaces
+  moveWindow <id|n>`. Windows report `kwin_activities`; the bar's dots and the switcher
+  count a Space's windows from it.
+- **Shortcuts.** spaces.kdl (niri) never reaches KWin, so `loft keys kwin render` adds
+  ⌘1…9 → `spaces focus N` and ⌘⇧1…9 → `spaces moveWindow N` (ids `spaces-focus-N`,
+  `spaces-movewindow-N`) after shell-binds and before the user's changes. ⌘ and Mod are
+  both Meta here, so **⌘⇧3/4/5 stay Capture** and "Move Window to Space 3–5" has no key
+  (use the menu). With Spaces off the shell steps KWin's desktops instead.
+- **Per-Space wallpaper:** one wallpaper per screen, swapped (crossfaded) on Activity
+  change: `Vibes.spaceWallpaper` takes the active Space's `wallpapers` for the screen's
+  most specific role, else the per-workspace choice made under niri for the workspace
+  the Space binds to that role. Nothing per-workspace beyond that (decided).
+- **Not under KWin** (niri-only, hidden there): "New Space from Current Desktop"
+  (captures niri workspaces), P3 spin-up / Open / gather (launching a Space's apps and
+  tagging them), display roles as window placement, and the per-role workspace lines in
+  Settings → Spaces (a card says "KDE Activity · every display · N windows" instead).
+- **Backing out (§5):** Activities Loft created stay in Plasma and are harmless there
+  (plasmashell shows them in its Activities switcher). `loft spaces prune [--dry-run]`
+  (= `loft-kwin spaces prune`) removes them, gives the adopted one its name and icon
+  back and deletes the map; `loft spaces activities` prints the map and the session's
+  Activities. Both use the session bus; `loft --dev` targets a dev session.
+- **Backing out while Loft runs:** `prune` refuses while `dev.loft.KWinBridge` has an
+  owner (Loft's shell with Spaces on would make them again at once); `--force` anyway.
+- **Windows of a removed Space:** KWin puts a window whose only Activity is removed on
+  **every** Activity (seen), so before a sync removes one, the shell moves that Space's
+  windows to the active Space (else the first).
+- **Tested** in a nested KWin 6.8.2 (§6, `--kwin-env LOFT_SPACES_DIR=<scratch>` — the
+  session otherwise inherits the real `LOFT_LIBRARY`) with kactivitymanagerd on the
+  session's bus, checked with `busctl` against `org.kde.ActivityManager` and a one-shot
+  KWin script printing each window's `activities`: the first sync adopted "Default" as
+  Main and made the built-ins' Activities; three new Spaces got three Activities;
+  switching from a bar dot, the switcher (↓ Enter), `spaces focus N|next|prev` (wraps)
+  and Settings → Spaces' Activate set the current Activity; `spaces moveWindow 8` and
+  the app menu's Move to Space moved KWrite's Activity without switching; a dock click on
+  it switched to its Space; a rename and deletes followed in kactivitymanagerd; deleting
+  the active Space with KWrite on it moved KWrite to Main; a Space's `wallpapers` showed
+  while it was active; Settings' reorder arrow changed ⌘N order; `prune` was refused
+  while the shell ran and with `--force` (Spaces off) left only "Default", named and
+  iconed as before, with the map gone. Not run: the ⌘1…9 kglobalaccel shortcuts
+  themselves (their command is the IPC call above; registration as in §4.5).
 
 ### 4.3 Loft's lock design in Plasma's locker
 
@@ -311,9 +375,8 @@ on `QT_PLUGIN_PATH`.
   inward triangles when maximized). Where Aurorae can't do what macOS does, it follows
   macOS: pointing at the button group (gaps included) shows all three glyphs and lights
   the beads of a background window too; the title is centred on the window, 13 px
-  semibold in the KDE title font's family; bottom corners are rounded. Not done: the
-  Option-key "+" on green (KWin gives decorations no modifier state, input.cpp builds
-  their hover events without it).
+  semibold in the KDE title font's family; bottom corners are rounded. Green shows the
+  full-screen arrows, or a "+" while Option (Alt) is held (below).
 - **Theme:** the `kdecoration` render unit (`cli/loft/render/kdecoration.py`,
   `templates/render/kdecoration.ini`) writes `<state>/current/kdecoration.ini` with only
   `[General] Appearance=light|dark` (the colors' polarity): the traffic lights are fixed
@@ -324,13 +387,48 @@ on `QT_PLUGIN_PATH`.
   `$XDG_STATE_HOME/loft`, else `~/.local/state/loft`, watches the file, `current/` and the
   state dir (the theme engine swaps the `current` link), and repaints open windows on
   change. Without the file it is Tahoe dark.
-- **Behavior is KWin's:** the buttons are KDecoration's own Close / Minimize / Maximize
-  (minimize is real, = Hide, §4.1; green toggles maximize, middle-click vertical,
-  right-click horizontal). Right-click on the bar opens KWin's window menu at the
-  pointer. Double-click on the bar zooms (maximizes) whatever KWin's title-bar action is,
-  as on macOS; drag and the other title-bar actions are KWin's settings.
-  Not done: fullscreen on a modifier+green, long-press green, and Loft's own window
-  menu through `dev.loft.KWinBridge`.
+- **Behavior is macOS's** (table in [WINDOW-DECORATIONS.md](WINDOW-DECORATIONS.md#under-kwin)):
+  red and yellow are KDecoration's Close / Minimize (minimize is real, = Hide, §4.1).
+  **Green** is full screen; with **Option** (Alt, PLAN.md §5: Loft's Option key) held it
+  zooms (KWin's maximize, both ways) and shows a "+" instead of the arrows, live as the key
+  goes down and up; the tooltip says "Enter Full Screen" / "Zoom". **Pressing and
+  holding** green (350 ms, as niri-loft) opens Loft's window menu under the bead, and the
+  release doesn't count as a click. **Right-click** on the bar (beads included) opens the
+  same menu at the pointer: Enter Full Screen, Zoom, Center, Arrange ▸ (halves, thirds,
+  quarters, fill, center, maximize, full screen), Move to Workspace ▸, Move to Display ▸ —
+  the shell's `trafficLightItems`, which niri-loft's bar opens too. Double-click on the
+  bar zooms whatever KWin's title-bar action is; drag and the other title-bar actions
+  are KWin's settings.
+  - **How** (`kdecoration/shell.{h,cpp}`): KDecoration has no request for full screen
+    and no way to reach Loft's menu, and the decoration doesn't know its window's id. It
+    calls `dev.loft.KWinBridge.TitleBar(json)` (`{"action": "fullscreen"|"menu"|"tileMenu",
+    "x", "y"` = decoration-local anchor, `"width", "height"` = the frame}`) on the session
+    bus; loft-kwin queues a `titleBar` command; the loft-bridge script takes the topmost
+    window under `workspace.cursorPos` whose frame is that size, toggles `fullScreen` or
+    sends `Event({"WindowActionsMenuRequested": {window, output, x, y, kind}})` back, which
+    loft-kwin prints for the shell (`KWin.qml` → `Compositor.windowActionsMenuRequested`,
+    as niri's event; `capabilities.titleBarEvents` is now on). Title-bar menus open down
+    and right from the point (`openContext` edge `"pointer"`), under niri too.
+  - **Without the shell** (no `dev.loft.KWinBridge` owner, watched with a
+    `QDBusServiceWatcher`, or the call fails within 1 s): green maximizes, and
+    right-click / hold show KWin's own window menu. loft-kwin is the shell's child, so the
+    name's owner means the shell runs. (loft-kwin now exits right after SIGTERM: tokio's
+    blocking stdin thread used to keep it alive without its bus name, so the shell never
+    restarted it.)
+  - **Option**: KWin builds decoration hover events without modifiers (`input.cpp`
+    `DecorationEventFilter`; presses do carry them) and a key alone sends the decoration
+    nothing. KWin's `InputRedirection` (a child of the application object) has
+    `keyboardModifiersChanged`: the plugin finds it by class name and connects by
+    signature, so it doesn't link KWin. Outside KWin (System Settings' previews) Option
+    never reads as held. The click itself also checks the press's own modifiers.
+  - **Arrange under KWin**: presets are several `geometryPercent` commands (width, height,
+    move) and a resize only shows in `frameGeometry` once the client acks it, so each
+    step used to start from the stale frame (Left Half came out at the old size). The
+    script now builds each step on the geometry it last asked for (kept 1 s).
+  - Not done: hover-and-hold (macOS Tahoe also opens the menu when the pointer rests on
+    green), Arrange through KWin's own quick tiles (its shortcut semantics combine with
+    the current tile and hop outputs), and a menu laid out like Tahoe's (tiles at the top
+    level instead of under Arrange ▸).
 - **Selected only while Loft runs** (§5): `loft-kwin-decoration apply` (the
   `ExecStartPost` of `loft-plasma-shell.service`) records the user's own kwinrc
   `[org.kde.kdecoration2] library` / `theme` in `<state>/kwin-decoration.prev` (a key
@@ -385,6 +483,14 @@ on `QT_PLUGIN_PATH`.
   QT_PLUGIN_PATH=<build>/lib/qt-6/plugins:$QT_PLUGIN_PATH` (first wins). Run `apply`
   once KWin is up, or call `org.kde.KWin.reconfigure` again: a reconfigure sent too
   early is lost and windows keep the old decoration.
+- **Title-bar behaviors tested** nested (KWin 6.8.2, kwrite, the branch's plugin and
+  loft-kwin via `--kwin-env QT_PLUGIN_PATH=… --kwin-env LOFT_KWIN_BIN=…`): hover green →
+  arrows, `keydown alt` without moving → "+", `keyup` → arrows; tooltips follow; click →
+  full screen; Option+click → maximized; hold 700 ms → the menu under the bead, release
+  does nothing more; Arrange ▸ Left Half → the left half of the working area; right-click
+  → the menu at the pointer; right-click on a background window's bar → Center moved that
+  window; with loft-kwin stopped → KWin's menu, and Loft's again once the shell restarted
+  it.
 - **Tested** nested (§6, plugin on `QT_PLUGIN_PATH`, scratch HOME): two foot windows,
   focus / unfocus, hover glyphs, the window menu, maximize / restore, minimize, close,
   a live theme swap (tokyonight → latte) and metric edits, and apply / revert with the
@@ -574,9 +680,250 @@ needed (checked on THEBATTLESHIP and in a nested session).
 Under the KWin backend, Capture.qml's screen shots and the frozen frames for area
 selection run `KWin.screenshotArgv()` instead of grim, and `Compositor.screenshotWindow`
 (`capabilities.windowScreenshot`) runs `shot window`, copies the PNG and emits
-`screenshotTaken`, like niri. Not done: **recording** (wf-recorder needs
-wlr-screencopy; KWin records through the ScreenCast portal or `zkde_screencast`), and
-window thumbnails (step 11, the same `shot window`).
+`screenshotTaken`, like niri. `--max PX` downscales so the longer side is at most PX.
+Window thumbnails are §4.8, recording §4.10.
+
+### 4.8 Window thumbnails through ScreenShot2
+
+**Done** (step 11). Under niri-loft each dock-preview card and switcher cell is a live
+`ScreencopyView` of its window. KWin has no toplevel capture protocol, so under KWin they
+are **stills**:
+
+```sh
+loft-kwin thumbs DIR MAX_PX UUID…   # one connection, a PNG per window: DIR/<uuid>.png
+# one line per window on stdout:
+# {"window":"{uuid}","path":"…","width":440,"height":246,"ms":16}  or  {"window":…,"error":…}
+```
+
+- `services/KWinThumbs.qml` runs it. Stills live in
+  `$XDG_RUNTIME_DIR/loft-kwin-thumbs/$WAYLAND_DISPLAY/`, at most 440 px on the longer
+  side (the cards are 196×124, the switcher cells at most 220 wide; ×2 for HiDPI). The
+  first batch of a shell run clears out the last run's (a restarted loft-kwin numbers
+  windows afresh). A window's still is deleted when the window closes.
+- **When:** no polling. `components/WindowThumb.qml` asks for a still when it becomes active
+  (the dock preview opening, the switcher's first press), then every 2 s while it stays
+  open. Cards that open together share one batch, and a still younger than 1 s is reused.
+  Also, once a window has been focused for 1.5 s, it gets a still if its last is older
+  than 10 s, so the switcher usually opens with pictures already there.
+- **Capabilities:** `windowThumbnails` (KWin true, niri false). `WindowCapture.canWindows`
+  is true under KWin through `KWinThumbs.enabled`, which turns on the switcher's
+  thumbnail cells and the dock preview's cards, and `WindowThumbs` (cropping display
+  stills) stays off. Under niri nothing changes: `WindowThumb` uses its ScreencopyView,
+  and the toplevel map only looks at `canToplevels`.
+- **What KWin 6.8.2 captures:** windows that are covered, on another desktop, and
+  **minimized** too (their last frame; checked in a nested session). A capture that fails
+  keeps the window's last still, and with none the card shows the app icon.
+- **Cost** (nested session, release build): a ~800×440 window takes 4–8 ms per window
+  (capture, convert, downscale, PNG), and the whole `thumbs` process for two windows
+  12–16 ms. A maximized 1600×894 window takes 16–28 ms (21–35 ms for the process); the
+  full-size `shot window` of it takes 18–24 ms. Well inside the switcher's 120 ms show
+  delay.
+
+### 4.9 Window commands, `loft mcp` and the overview under KWin
+
+**Done.** Spotlight's window commands, `loft mcp`'s window tools and `Compositor.overviewOpen`
+work under KWin, through one route: the shell's `loft-kwin` daemon.
+
+- **`loft-kwin send JSON`** hands one command to the running daemon over its D-Bus method
+  `dev.loft.KWinBridge.Command` (on `/Bridge`), the same as a line on its stdin. The
+  daemon runs it over KWin's D-Bus API (`toggleOverview`, `setDesktopName`, `switchLayout`)
+  or queues it for `bridge.js`. **Without a `window`, the script acts on the active
+  window.** New script commands: `moveToNextOutput` (the next screen in KWin's order,
+  wrapping, like niri's `move-window-to-monitor-next`), `moveToDesktopRelative {delta,
+  focus}` (no wrapping; follows the window unless `focus: false`), `focusOutput {output}`
+  (activates the topmost window there).
+- **`loft-kwin state`** prints the daemon's last state (`dev.loft.KWinBridge.State`): the
+  same niri-shaped JSON the shell gets, with `kwin_uuid` on windows and `kwin_desktop`
+  on workspaces.
+- loft-kwin is on the PATH of the shell and Spotlight (`loft-launcher`), and in
+  `home.packages` with `programs.loft.plasma.enable` (for `loft mcp` and terminals).
+
+**Spotlight** (`launcher/elephant-commands/builtin.go`). Each command's shell line picks
+niri or KWin when it runs (`$NIRI_SOCKET`, like Log Out):
+
+| Command | niri | KWin |
+|---|---|---|
+| Maximize Window | `maximize-column` | `toggleMaximize` (KWin's maximize) |
+| Fullscreen Window | `fullscreen-window` | `toggleFullscreen` |
+| Center Window | `center-column` | `center` (in the output's work area) |
+| Move Window to Next Display | `move-window-to-monitor-next` | `moveToNextOutput` |
+| Move Window to Next Workspace | `move-window-to-workspace-down` | `moveToDesktopRelative` +1, follows |
+| Close Window | `close-window` | `closeWindow` |
+| Overview | `toggle-overview` | `toggleOverview` (kglobalaccel `kwin/Overview`) |
+| Keyboard Shortcuts | `show-hotkey-overlay` | Loft's Settings → Keyboard Shortcuts (KDE has no overlay) |
+| Turn Off Displays | `power-off-monitors` | `kscreen-doctor --dpms off` (any input wakes them) |
+| Toggle Floating, Expand to Available Width, Cycle Window Width | niri | **hidden** (no tiling or columns; the menus hide Float the same way) |
+
+**`loft mcp`** (`cli/loft/mcptools.py`) picks the backend as `Compositor.qml` does
+(`$LOFT_COMPOSITOR`, else niri with `$NIRI_SOCKET`, else KWin when `XDG_CURRENT_DESKTOP` has
+KDE). Under KWin: windows, workspaces and outputs come from `loft-kwin state` (outputs carry
+no modes or scale); focus / close / move to workspace or display / fullscreen / maximize /
+center / focus workspace / focus output / overview go through `loft-kwin send` with the
+window's `kwin_uuid`; `toggle_overview open|close` checks `overview_open` first (KWin's
+Overview only toggles); `launch` and `spotlight_open` start the program themselves
+(detached, the server's environment); screenshots are `loft-kwin shot screen|window`
+(a window shot includes its title bar, on screen or not). `set_window_floating`,
+`maximize_column` and `set_column_width` answer with an error saying they're niri-only.
+
+**Overview state.** KWin has no signal for an effect starting or stopping, and its D-Bus
+`activeEffects` property has no change signal either. So `bridge.js` runs a 100 ms
+`QTimer` that calls `workspace.isEffectActive()` (in-process, a lookup in the loaded
+effects) for `overview` (Overview and Grid View, one effect in 6.8) and `windowview`
+(Present Windows), and pushes a snapshot only when that changes. loft-kwin passes it on
+as `overview_open`, `KWin.qml` sets `overviewOpen` from it, so the wallpapers, fullscreen
+chrome, previews and the dock's "Show All Windows" react as under niri. However the
+overview opens (shortcut, hot corner, gesture, Loft), the shell sees it within ~0.1 s.
+
+**Tested** in a nested KWin 6.8.2 (§6, two outputs, two desktops, kwrite): every command
+through `loft-kwin send` and Spotlight's exact shell lines (with `NIRI_SOCKET` unset), each
+checked in `loft-kwin state` (maximized / fullscreen flags, geometry, output, desktop,
+the window gone after close); overview via Loft, kglobalaccel `Overview`, `Grid View` and
+`Expose`, each showing up in the shell's `Compositor.overviewOpen` (`wswallpapers stats`)
+and going back to false; the MCP tools from `mcptools` against the session (a real window
+screenshot); `kscreen-doctor --dpms off` sends `org_kde_kwin_dpms.set(Off)` for both
+outputs, KWin's `kscreen` effect stayed active (and Overview refused to open) until pointer
+input woke them.
+
+Found while testing, not fixed here: `Displays.fullscreenOn` skips floating windows, and
+under KWin every window floats, so FullscreenChrome never sees a fullscreen window there.
+
+### 4.10 Screen recording through zkde_screencast
+
+**Done.** wf-recorder needs wlr-screencopy, which KWin doesn't have. `loft-kwin record`
+(crates/loft-kwin/src/record.rs) asks KWin for a screencast and records it:
+
+```sh
+loft-kwin record screen WL-0 out.mp4                       # one output, native resolution
+loft-kwin record area X Y W H out.mp4 [--scale S]          # global logical rect, S px per logical px
+loft-kwin record window '{uuid}' out.mp4                   # one window (its kwin_uuid), title bar included
+#   [--no-pointer] [--audio @DEFAULT_MONITOR@|default|SOURCE] [--fps 30]
+# SIGINT/SIGTERM: finish the file and exit 0. SIGTSTP / SIGCONT: pause / resume.
+```
+
+How: loft-kwin binds KWin's `zkde_screencast_unstable_v1` (the protocol KWin's own
+portal and Spectacle use; bindings from the `wayland-protocols-plasma` crate) and calls
+`stream_output`, `stream_region` (v3) or `stream_window` with the pointer embedded. KWin
+answers `created(node)` with a PipeWire node, and loft-kwin runs
+
+```
+gst-launch-1.0 -e pipewiresrc path=NODE keepalive-time=500 always-copy=true ! videorate ! 30 fps
+  ! videoconvert ! videoscale ! I420 (even width/height) ! x264enc veryfast, constant quality
+  ! h264parse ! mp4mux ! filesink        [+ pulsesrc ! avenc_aac ! mux.]
+```
+
+so the file is what wf-recorder makes under niri: H.264 (High, yuv420p) in MP4 with an
+optional AAC track, in the same `Recording_<date>.mp4` under `recordingDir`. The frame rate is
+constant (30), and `keepalive-time` repeats the last frame while KWin sends none (it only sends
+frames on damage). A region is cropped by KWin (`stream_region`), so area recordings need no crop
+in the encoder and can span outputs. An odd width or height loses one pixel (4:2:0).
+
+Why this route:
+
+| | dialog | extra daemon | area | window | verdict |
+|---|---|---|---|---|---|
+| `zkde_screencast` + gst-launch | none | none (gst-launch only while recording) | `stream_region`, by KWin | `stream_window` | **chosen** |
+| xdg-desktop-portal ScreenCast | always the first time; a restore token (`persist_mode` 2) can skip it later, but an invalid token (e.g. the output changed) brings the picker back | the portal (D-Bus activated) | crop in the encoder | via the picker | no: never reliably non-interactive |
+| `spectacle --record` | its own UI to pick the region and to stop | Spectacle | its own region picker | yes | no: its UI, its settings decide format and folder |
+
+KWin 6.8.2 let loft-kwin, an ordinary session client, bind `zkde_screencast` with no
+`X-KDE-Wayland-Interfaces` desktop entry (nested session), like ScreenShot2 (§4.7); its
+interface filter looks aimed at sandboxed clients (`wp_security_context_v1`). Should a later KWin restrict it again, loft-kwin needs a .desktop file whose `Exec`
+is its binary, with `X-KDE-Wayland-Interfaces=zkde_screencast_unstable_v1`.
+
+The Nix package wraps `loft-kwin` with exactly the GStreamer plugins this uses (`gstreamer`,
+`-base`, `-good`, `-ugly` for x264enc, `gst-libav` for avenc_aac, and PipeWire's
+pipewiresrc) on `GST_PLUGIN_SYSTEM_PATH_1_0`. PipeWire itself is the session's.
+
+The shell: `Recorder.start` runs `loft-kwin record …` instead of wf-recorder when
+`Compositor.backend` is `kwin` (Recorder.qml `kwinArgs`): the focused output, an area from
+the frozen-frame overlay (with the screen's `devicePixelRatio` as `--scale`), or a window.
+Audio modes map the same way (system → `--audio @DEFAULT_MONITOR@`, mic → `--audio
+default`, both → system in the file plus the separate mic track muxed afterwards, as under
+niri). Pause sends SIGTSTP, which loft-kwin passes on as SIGSTOP to gst-launch (wf-recorder
+takes SIGSTOP itself); the paused span stays in the file as a held frame. The island's live
+activity, the notification, the thumbnail and the recording editor are unchanged.
+`capabilities.windowRecording` (KWin only) adds **Record Focused Window** to the capture
+selector and IPC `capture recordWindow`; niri's recorder can't record one window, so niri
+doesn't show it.
+
+Tested in a nested session (`loft-dev --compositor kwin`, 1280×800, a foot window drawing a
+moving block and a frame counter): screen 5.000 s, 1280×800, 150 frames at 30 fps; area
+501×301 → 500×300; area at `--scale 2` → 600×400; window 1268×502 with its title bar,
+following the window's content; system audio (null sink monitor) and mic (a silent virtual
+source) as a stereo AAC track. Through the shell: `capture recordScreen`, pause, resume,
+`recorder stop` → the file in `~/Videos/Recordings`, the "Recording saved" notification and
+the thumbnail; `capture recordArea` + a drag on the overlay → `record area 200 150 501 301
+… --scale 1`; `capture recordWindow` → `record window {uuid}`. Frames extracted with ffmpeg
+showed the counter advancing and the block moving.
+
+Not done: hardware encoding (VA-API: `vah264enc` from gst-plugins-bad), and recording
+with KWin's cursor as metadata instead of embedded.
+
+### 4.11 Settings → Displays through KScreen
+
+**Done.** Under niri the Displays page reads `loft-niri outputs` and writes Loft's
+overrides through `loft-niri apply`. Under KWin it goes to KScreen instead, and Loft
+records nothing: KScreen applies a change and saves it in its own config, as System
+Settings does.
+
+```
+DisplaysPage / IdentifyOverlay ──▶ Displays.outputs / setOutputs / identify
+                                     ├─ niri: NiriSettings (loft-niri)
+                                     └─ KWin: KScreen.qml ──▶ loft-kwin displays [set JSON]
+                                                                 └─ kscreen-doctor -j, -o / output.<name>.…
+```
+
+- **Reading.** `loft-kwin displays` (crates/loft-kwin/src/displays.rs) prints loft-niri's
+  `outputs` records (name, modes with `WxH@R` strings, mode, scale, transform, logical
+  rect, enabled, VRR), so the page renders the same either way. In KScreen 6.8.2 the
+  `-j` JSON has the modes, current mode, position, scale, rotation and priority, but
+  not `enabled`, VRR or HDR, so those come from `-o`'s text (`enabled` / `disabled` /
+  `disable unsupported`, `Vrr: Never|Automatic|Always|incapable`, `HDR: …`, ANSI
+  stripped). Extra fields: `primary` (priority 1), `can_disable`, `vrr_policy`,
+  `hdr_supported`, `hdr_enabled`.
+- **Identities.** KScreen's output has no make/model/serial. `KScreen.qml` takes the
+  "Make Model Serial" the bridge already builds from KWin's screens (`state::identity`),
+  and keeps it for outputs that are off (they drop out of `workspace.screens`).
+  Outputs with no EDID (KWin's nested `WL-0`…) are their connector, as on niri.
+- **Writing.** `loft-kwin displays set '{"WL-1": {"scale": 1.5, "position": {"x": 0,
+  "y": 0}}}'` turns the page's staged changes into one atomic kscreen-doctor call:
+  `mode` → the KScreen mode id of that size with the nearest refresh, `scale`,
+  `position.x,y`, `transform` → `rotation.none|left|inverted|right|flipped…`
+  (wl_output 90 = KScreen left), `off` → `disable`/`enable` (enable first),
+  `vrr` → `vrrpolicy.automatic|never` (or a policy name), `hdr` → `hdr.enable|disable`,
+  `primary` → `primary`. Unknown outputs or fields are errors, not skipped. The page's
+  15 s Keep / Revert works as on niri: Revert applies the previous values again
+  (and gives the primary back to the display that had it); Keep has nothing to record.
+- **Refresh.** 6.8's kscreen-doctor runs KScreen's backend in-process, so there's no
+  `org.kde.KScreen` service to watch. The bridge pushes a snapshot when a screen's
+  `geometryChanged` / `scaleChanged` fires, `KWin.qml` emits `displayLayoutChanged`
+  when a screen's name, geometry or scale changed, and `KScreen.qml` re-reads on that,
+  on `outputsChanged`, on Quickshell's screens, after each apply and when the page
+  opens. No polling. A VRR or HDR change made in System Settings shows the next
+  time the page opens.
+- **Hidden under KWin** (`Displays.outputCaps`): Reset and "changed here" (no Loft
+  overrides). The "Use this display" switch is off for outputs KScreen can't disable.
+  **Shown only under KWin**: Main display (KDE) when two or more are on, HDR when
+  the display has it.
+- Brightness (Control Center, brightness keys) never used niri: brightnessctl and
+  ddcutil work the same under KWin.
+- `loft-kwin`'s Nix wrapper appends libkscreen's `bin` to PATH, so the system's
+  kscreen-doctor (matching the running KWin) wins when there is one.
+
+Tested in a nested session (`--output-count 2`, outputs `WL-0`/`WL-1`), checked each
+time with the session's `kscreen-doctor -j`: the page lists both; dragging WL-1 from
+below WL-0 to its right and Apply moved it to `1280,0`; a position changed with
+kscreen-doctor showed on the open page by itself; rotation 90° + Main display (KDE)
+applied together, Keep kept them, and the 15 s timeout of a later 180° + primary
+change put the rotation and the old primary back; Identify shows on both outputs.
+**Scale can't be tested nested**: KWin's nested outputs follow the host's scale
+(`loft-dev --kwin-scale`), so `output.WL-0.scale.1.5` succeeds and changes nothing.
+Nested outputs also have one mode, no VRR/HDR and can't be disabled ("Always on"), so
+mode, scale, VRR, HDR and on/off are covered by the unit tests (the kscreen-doctor
+arguments) only. Needs a check on real hardware.
+
+The arrangement drag also got `preventStealing`: the settings page's Flickable used to
+take the drag over (the page scrolled and the tile stayed half-moved), on niri too.
 
 ## 5. One Plasma session, two shells: switching and backing out
 
@@ -625,9 +972,10 @@ when Loft stops:
 | the decoration and button order (`[org.kde.kdecoration2] library/theme/ButtonsOnLeft/ButtonsOnRight` in kwinrc; GTK's `gtk-decoration-layout` follows via kded's gtkconfig) | `loft-kwin-decoration apply` (loft-plasma-shell's `ExecStartPost`) records the previous value in Loft's state dir and sets Loft's. `loft-kwin-decoration revert` (`ExecStopPost`) puts it back. Both run `org.kde.KWin.reconfigure` (§4.4) |
 | Loft's shortcuts (`loft-keys.js`, §4.5) and the keys taken from other shortcuts | `loft-plasma-shortcuts unload` (`ExecStopPost` of loft-plasma-shell): script unloaded, Loft's actions unregistered, taken keys given back from `<state>/kwin-shortcuts-taken.json` (plasmashell's start does the last part too) |
 | the tile-while-dragging modifier (`[Windows] TileWhileMovingModifier`, §4.6) | `loft-kwin-tile-modifier apply` / `revert`, recorded in `<state>/kwin-tile-modifier.prev` like the decoration. Only set with `programs.loft.plasma.kwinPackage` |
+| KWin's popup fade (`fadingpopups`: 150 ms in, 600 ms out on every popup, so Loft's menus seemed to grow out of a corner) | `loft-kwin` unloads it at start (runtime only, nothing written to kwinrc) and loads it again on exit; the effects it took are noted in `$XDG_RUNTIME_DIR/loft/kwin-effects-off`, so a restart after a crash still gives them back, and an effect the user had off stays off |
 | any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |
 | the lock screen | `PLASMA_DEFAULT_SHELL` only in KWin's environment, and only when the login is Loft's (`loft-plasma lock-env`, §4.3). Lock and unlock stay Plasma's either way |
-| activities created for Spaces | kept (harmless). `loft spaces prune` removes them |
+| activities created for Spaces (`<state>/kwin-activities.json`) | kept (harmless). `loft spaces prune` removes them and renames the adopted one back |
 
 Loft never writes `plasma-org.kde.plasma.desktop-appletsrc`, `plasmashellrc` or
 `kwinrulesrc`, so plasmashell comes back with your panels as you left them.
@@ -688,6 +1036,12 @@ What it took:
 - Plasma-session services that `startplasma-wayland` normally starts and this doesn't:
   ksmserver, powerdevil, the polkit agent, xdg-desktop-portal-kde (D-Bus activated anyway).
   Add them when a test needs them.
+- **A private PipeWire.** KWin's screencasts (`loft-kwin record`, §4.10) need PipeWire.
+  `kwin-run.sh` starts `pipewire`, `wireplumber` and `pipewire-pulse` in the session's runtime
+  dir before KWin, with no devices (WirePlumber's ALSA, bluez, V4L2 and libcamera monitors off,
+  no logind or device reservation) and two virtual nodes: a null sink (`loft-dev-sink`, the
+  default; its monitor is "system audio") and a silent source (`loft-dev-mic`). The user's own
+  PipeWire is never involved. Log: `<session dir>/pipewire.log`.
 - Still open: whether KWin's privileged-interface checks (ScreenShot2,
   plasma_window_management) can be relaxed for a dev session, or whether loft-kwin needs an
   installed .desktop file with `X-KDE-Wayland-Interfaces` /
@@ -707,9 +1061,11 @@ What it took:
    crash fallback, `loft-kwin-decoration apply/revert`.
 7. ✅ Decoration plugin (§4.4): `dev.loft.decoration`, `loft-kwin-decoration apply|revert`.
 8. ✅ Lock screen shell package (§4.3).
-9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). Display settings, recording.
-10. Spaces on Activities (§4.2).
-11. Window thumbnails through ScreenShot2.
+9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). ✅ Spotlight's window
+   commands, `loft mcp` and the overview state (§4.9). ✅ Recording through
+   zkde_screencast (§4.10). ✅ Display settings (§4.11).
+10. ✅ Spaces on Activities (§4.2).
+11. ✅ Window thumbnails through ScreenShot2 (§4.8).
 
 ## 8. Notes for the fleet flake (~/.flake, out of scope here)
 

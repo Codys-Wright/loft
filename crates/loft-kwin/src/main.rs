@@ -11,7 +11,23 @@
 //!   (applied by the script) or `setDesktopName` / `switchLayout` /
 //!   `toggleOverview` (done here over KWin's D-Bus API). EOF ends the daemon.
 //! - `loft-kwin shot …`: a screenshot through KWin's ScreenShot2 (src/shot.rs).
+//! - `loft-kwin send JSON`: one command to the running daemon, over its
+//!   `Command` D-Bus method (as if the shell wrote it on stdin). Without a
+//!   `window` the script acts on the active window (Spotlight's commands).
+//! - `loft-kwin state`: the daemon's last `State` (the same JSON the shell
+//!   gets), over its `State` method (`loft mcp` reads windows from it).
+//! - `loft-kwin thumbs DIR MAX UUID…`: small window stills for the dock
+//!   preview and the switcher (src/shot.rs, docs/KWIN.md §4.8).
+//! - `loft-kwin record …`: a screen recording through KWin's zkde_screencast
+//!   and PipeWire (src/record.rs).
+//! - `loft-kwin displays [set JSON]`: outputs through KScreen (src/displays.rs).
+//! - Spaces as Activities (src/activities.rs): stdin `syncSpaces` makes
+//!   kactivitymanagerd match the shell's Space list and answers
+//!   `{"Spaces": {"map": {space: activity}, …}}`; `loft-kwin spaces list|prune`.
 
+mod activities;
+mod displays;
+mod record;
 mod shot;
 mod state;
 
@@ -27,7 +43,7 @@ use tokio::sync::{Notify, mpsc};
 use zbus::zvariant::ObjectPath;
 use zbus::{Connection, Proxy, interface};
 
-const BUS_NAME: &str = "dev.loft.KWinBridge";
+pub(crate) const BUS_NAME: &str = "dev.loft.KWinBridge";
 const SCRIPT_NAME: &str = "loft-bridge";
 const SCRIPT: &str = include_str!("bridge.js");
 /// How long a NextCommands poll waits before answering "nothing" (well
@@ -69,6 +85,10 @@ impl Queue {
 
 struct Bridge {
     snapshots: mpsc::UnboundedSender<String>,
+    /// Commands from other processes (`loft-kwin send`), handled like stdin's.
+    commands: mpsc::UnboundedSender<Value>,
+    /// The last state emitted, as JSON ("" until the first snapshot).
+    state: Arc<Mutex<String>>,
     queue: Arc<Queue>,
 }
 
@@ -84,6 +104,97 @@ impl Bridge {
     async fn next_commands(&self) -> String {
         self.queue.take(POLL).await
     }
+
+    /// One command, as on stdin (`{"cmd": …}`); `loft-kwin send`.
+    async fn command(&self, json: String) -> zbus::fdo::Result<()> {
+        let cmd = parse_command(&json).map_err(zbus::fdo::Error::InvalidArgs)?;
+        self.commands
+            .send(cmd)
+            .map_err(|_| zbus::fdo::Error::Failed("loft-kwin is shutting down".into()))
+    }
+
+    /// The shell's current state (niri-shaped windows, workspaces, outputs,
+    /// overview_open), as JSON; `loft-kwin state`.
+    async fn state(&self) -> zbus::fdo::Result<String> {
+        let s = self.state.lock().unwrap().clone();
+        if s.is_empty() {
+            return Err(zbus::fdo::Error::Failed("no state from KWin yet".into()));
+        }
+        Ok(s)
+    }
+
+    /// From Loft's decoration (kdecoration/shell.cpp), in KWin: a title-bar
+    /// action, `{"action": "menu"|"tileMenu"|"fullscreen", "x", "y" (decoration-
+    /// local anchor), "width", "height" (the frame)}`. The script finds the
+    /// window under the pointer and does it. True = taken; false tells the
+    /// decoration to fall back to KWin's own behaviour.
+    async fn title_bar(&self, json: String) -> bool {
+        match title_bar_command(&json) {
+            Some(cmd) => {
+                self.queue.push(cmd);
+                true
+            }
+            None => {
+                eprintln!("loft-kwin: bad title-bar request {json:?}");
+                false
+            }
+        }
+    }
+
+    /// From the script: an event for the shell (one stdout line as is), e.g.
+    /// `{"WindowActionsMenuRequested": {"window", "output", "x", "y", "kind"}}`.
+    async fn event(&self, json: String) {
+        match serde_json::from_str::<Value>(&json) {
+            Ok(v) if v.is_object() => emit(&v),
+            _ => eprintln!("loft-kwin: bad event from the script {json:?}"),
+        }
+    }
+}
+
+/// A command line: a JSON object with a string `cmd`.
+fn parse_command(json: &str) -> Result<Value, String> {
+    let v: Value = serde_json::from_str(json).map_err(|e| format!("bad JSON: {e}"))?;
+    if !v["cmd"].is_string() {
+        return Err(format!("not a command (no \"cmd\"): {json}"));
+    }
+    Ok(v)
+}
+
+/// Talk to the running daemon (`send` / `state`): its bus name, not KWin's.
+async fn client(args: &[String]) -> Result<()> {
+    let conn = Connection::session().await.context("the session bus")?;
+    let p = Proxy::new(&conn, BUS_NAME, "/Bridge", BUS_NAME).await?;
+    let not_running = || format!("{BUS_NAME} isn't on the session bus (is Loft's shell running under KWin?)");
+    match args {
+        [verb, json] if verb == "send" => {
+            parse_command(json).map_err(anyhow::Error::msg)?;
+            let () = p.call("Command", &(json.as_str(),)).await.with_context(not_running)?;
+        }
+        [verb] if verb == "state" => {
+            let s: String = p.call("State", &()).await.with_context(not_running)?;
+            println!("{s}");
+        }
+        _ => anyhow::bail!("usage: loft-kwin send JSON | loft-kwin state"),
+    }
+    Ok(())
+}
+
+/// A decoration's title-bar request → the script's `titleBar` command.
+fn title_bar_command(json: &str) -> Option<Value> {
+    let req: Value = serde_json::from_str(json).ok()?;
+    let action = req["action"].as_str()?;
+    if !matches!(action, "menu" | "tileMenu" | "fullscreen") {
+        return None;
+    }
+    let num = |k: &str| req[k].as_f64().filter(|v| v.is_finite());
+    Some(json!({
+        "cmd": "titleBar",
+        "action": action,
+        "x": num("x")?,
+        "y": num("y")?,
+        "width": num("width")?,
+        "height": num("height")?,
+    }))
 }
 
 fn emit(v: &Value) {
@@ -103,6 +214,55 @@ async fn unload_script(conn: &Connection) {
     if let Ok(p) = kwin_proxy(conn, "/Scripting", "org.kde.kwin.Scripting").await {
         let _: zbus::Result<bool> = p.call("unloadScript", &(SCRIPT_NAME,)).await;
     }
+}
+
+/// KWin effects that animate Loft's own surfaces on top of Loft's motion:
+/// `fadingpopups` fades every popup in (150 ms) and out (600 ms), which shows
+/// a Loft menu's first frame before it's placed, so menus seem to grow out
+/// of a corner. niri animates none of them. Off while loft-kwin runs.
+const EFFECTS_OFF: &[&str] = &["fadingpopups"];
+
+/// Where we note the effects we unloaded, so a loft-kwin that restarts after
+/// a crash still gives them back on exit.
+fn effects_note() -> std::path::PathBuf {
+    let dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
+    std::path::Path::new(&dir).join("loft").join("kwin-effects-off")
+}
+
+async fn effects_off(conn: &Connection) {
+    let Ok(fx) = kwin_proxy(conn, "/Effects", "org.kde.kwin.Effects").await else { return };
+    let note = effects_note();
+    let mut off: Vec<String> = std::fs::read_to_string(&note)
+        .unwrap_or_default()
+        .lines()
+        .map(String::from)
+        .collect();
+    for name in EFFECTS_OFF {
+        let loaded: bool = fx.call("isEffectLoaded", &(*name,)).await.unwrap_or(false);
+        if loaded {
+            let _: zbus::Result<()> = fx.call("unloadEffect", &(*name,)).await;
+            if !off.iter().any(|n| n == name) {
+                off.push(name.to_string());
+            }
+        }
+    }
+    if !off.is_empty() {
+        let _ = std::fs::create_dir_all(note.parent().unwrap());
+        let _ = std::fs::write(&note, off.join("\n"));
+    }
+}
+
+/// Give back what effects_off took (only what it took: an effect the user
+/// had turned off stays off).
+async fn effects_restore(conn: &Connection) {
+    let note = effects_note();
+    let Ok(list) = std::fs::read_to_string(&note) else { return };
+    if let Ok(fx) = kwin_proxy(conn, "/Effects", "org.kde.kwin.Effects").await {
+        for name in list.lines().filter(|n| !n.is_empty()) {
+            let _: zbus::Result<bool> = fx.call("loadEffect", &(name,)).await;
+        }
+    }
+    let _ = std::fs::remove_file(&note);
 }
 
 async fn load_script(conn: &Connection) -> Result<()> {
@@ -152,6 +312,11 @@ async fn direct(conn: &Connection, cmd: &Value) -> Result<bool> {
             let () = p.call("invokeShortcut", &("Overview",)).await?;
             Ok(true)
         }
+        "syncSpaces" => {
+            let spaces: Vec<activities::SpaceInfo> = serde_json::from_value(cmd["spaces"].clone())?;
+            emit(&activities::sync(conn, &activities::state_dir(), &spaces).await?);
+            Ok(true)
+        }
         "switchLayout" => {
             let p = keyboard(conn).await?;
             let index = cmd["index"].as_u64().unwrap_or(0) as u32;
@@ -159,6 +324,15 @@ async fn direct(conn: &Connection, cmd: &Value) -> Result<bool> {
             Ok(true)
         }
         _ => Ok(false),
+    }
+}
+
+/// A command from stdin or `Command`: KWin's D-Bus API, else the script.
+async fn dispatch(conn: &Connection, queue: &Queue, cmd: Value) {
+    match direct(conn, &cmd).await {
+        Ok(true) => {}
+        Ok(false) => queue.push(cmd),
+        Err(e) => eprintln!("loft-kwin: {}: {e:#}", cmd["cmd"]),
     }
 }
 
@@ -200,22 +374,50 @@ async fn main() -> Result<()> {
     if args.first().is_some_and(|a| a == "shot") {
         return shot::run(&shot::parse(&args[1..])?).await;
     }
+    if args.first().is_some_and(|a| a == "send" || a == "state") {
+        return client(&args).await;
+    }
+    if args.first().is_some_and(|a| a == "thumbs") {
+        return shot::thumbs(&shot::parse_thumbs(&args[1..])?).await;
+    }
+    if args.first().is_some_and(|a| a == "record") {
+        return record::run(&record::parse(&args[1..])?).await;
+    }
+    if args.first().is_some_and(|a| a == "displays") {
+        return displays::run(&args[1..]);
+    }
+    if args.first().is_some_and(|a| a == "spaces") {
+        return activities::cli(&args[1..]).await;
+    }
     if args.first().is_some_and(|a| a == "--help" || a == "-h") {
         println!(
             "loft-kwin — Loft's KWin backend daemon\n\n\
              Loads the loft-bridge KWin script and relays: stdout {{\"State\"}} /\n\
              {{\"KeyboardLayouts\"}} / {{\"Error\"}} lines, stdin one command per line\n\
-             ({{\"cmd\":\"focusWindow\",\"window\":\"{{uuid}}\"}}, …). docs/KWIN.md."
+             ({{\"cmd\":\"focusWindow\",\"window\":\"{{uuid}}\"}}, …). docs/KWIN.md.\n\n\
+             loft-kwin send JSON                             one command to the running daemon (no window: the active one)\n\
+             loft-kwin state                                 the running daemon's state, as JSON\n\
+             loft-kwin shot screen|window|area|workspace …   a screenshot (ScreenShot2)\n\
+             loft-kwin thumbs DIR MAX_PX UUID…               window stills for the dock and switcher\n\
+             loft-kwin record screen|area|window …           a screen recording (zkde_screencast)\n\
+             loft-kwin displays [set JSON]                   outputs through KScreen\n\
+             loft-kwin spaces list                           Spaces ↔ Activities map\n\
+             loft-kwin spaces prune [--dry-run] [--force]    remove the Activities Loft made"
         );
         return Ok(());
     }
 
     let (snapshots_tx, mut snapshots) = mpsc::unbounded_channel::<String>();
+    let (commands_tx, mut commands) = mpsc::unbounded_channel::<Value>();
+    let state = Arc::new(Mutex::new(String::new()));
     let queue = Arc::new(Queue::default());
 
     let conn = match zbus::connection::Builder::session()?
         .name(BUS_NAME)?
-        .serve_at("/Bridge", Bridge { snapshots: snapshots_tx, queue: queue.clone() })?
+        .serve_at(
+            "/Bridge",
+            Bridge { snapshots: snapshots_tx, commands: commands_tx, state: state.clone(), queue: queue.clone() },
+        )?
         .build()
         .await
     {
@@ -230,6 +432,7 @@ async fn main() -> Result<()> {
         emit(&json!({ "Error": format!("{e:#}") }));
         return Err(e);
     }
+    effects_off(&conn).await;
 
     tokio::spawn(watch_layouts(conn.clone()));
 
@@ -248,7 +451,11 @@ async fn main() -> Result<()> {
         tokio::select! {
             Some(json) = snapshots.recv() => {
                 match serde_json::from_str::<state::Snapshot>(&json) {
-                    Ok(snap) => emit(&json!({ "State": model.update(&snap, now()) })),
+                    Ok(snap) => {
+                        let s = model.update(&snap, now());
+                        *state.lock().unwrap() = s.to_string();
+                        emit(&json!({ "State": s }));
+                    }
                     Err(e) => eprintln!("loft-kwin: bad snapshot: {e}"),
                 }
             }
@@ -259,19 +466,43 @@ async fn main() -> Result<()> {
                     continue;
                 }
                 match serde_json::from_str::<Value>(line) {
-                    Ok(cmd) => match direct(&conn, &cmd).await {
-                        Ok(true) => {}
-                        Ok(false) => queue.push(cmd),
-                        Err(e) => eprintln!("loft-kwin: {}: {e:#}", cmd["cmd"]),
-                    },
+                    Ok(cmd) => dispatch(&conn, &queue, cmd).await,
                     Err(e) => eprintln!("loft-kwin: bad command {line:?}: {e}"),
                 }
             }
+            Some(cmd) = commands.recv() => dispatch(&conn, &queue, cmd).await,
             _ = term.recv() => break,
             _ = tokio::signal::ctrl_c() => break,
         }
     }
 
     unload_script(&conn).await;
-    Ok(())
+    effects_restore(&conn).await;
+    // Exit now: tokio's stdin reader is a blocking thread that the runtime
+    // would wait for on shutdown, so after SIGTERM the process would linger
+    // without its bus name and the shell (which restarts loft-kwin when it
+    // exits) would never notice.
+    std::process::exit(0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn title_bar_requests() {
+        let cmd = title_bar_command(r#"{"action":"tileMenu","x":34,"y":27,"width":802,"height":641}"#).unwrap();
+        assert_eq!(cmd, json!({"cmd": "titleBar", "action": "tileMenu", "x": 34.0, "y": 27.0, "width": 802.0, "height": 641.0}));
+        assert!(title_bar_command(r#"{"action":"close","x":0,"y":0,"width":1,"height":1}"#).is_none());
+        assert!(title_bar_command(r#"{"action":"menu","x":0,"y":0}"#).is_none());
+        assert!(title_bar_command("not json").is_none());
+    }
+
+    #[test]
+    fn commands_need_a_cmd() {
+        assert_eq!(parse_command(r#"{"cmd":"toggleMaximize"}"#).unwrap()["cmd"], "toggleMaximize");
+        assert!(parse_command(r#"{"window":"x"}"#).unwrap_err().contains("no \"cmd\""));
+        assert!(parse_command(r#"{"cmd":1}"#).is_err());
+        assert!(parse_command("nope").unwrap_err().starts_with("bad JSON"));
+    }
 }

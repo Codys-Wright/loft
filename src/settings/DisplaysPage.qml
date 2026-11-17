@@ -9,8 +9,10 @@ import qs.services
 // Edits are staged, then applied together. Arrangement and VRR apply
 // directly; resolution, scale, rotation and turning a display off are first
 // applied live only, with 15 s to keep them before they revert (like macOS),
-// so a mode the monitor can't show undoes itself. Kept changes are recorded
-// by the output's Make/Model/Serial identity, never its connector.
+// so a mode the monitor can't show undoes itself. Under niri, kept changes
+// are recorded by the output's Make/Model/Serial identity, never its
+// connector; under KWin, KScreen applies and saves them (Displays.outputs /
+// setOutputs pick the backend).
 ColumnLayout {
     id: page
     spacing: 12
@@ -23,7 +25,8 @@ ColumnLayout {
     property var confirm: null
     property int countdown: 0
 
-    readonly property var outs: NiriSettings.outputs
+    readonly property var outs: Displays.outputs
+    readonly property var caps: Displays.outputCaps
     readonly property var sel: outs.find(o => o.name === selected) ?? null
     readonly property bool hasPending: Object.keys(pending).length > 0
 
@@ -63,7 +66,9 @@ ColumnLayout {
             scale: scale,
             transform: transform,
             enabled: p.off !== undefined ? !p.off : o.enabled,
-            vrr: p.vrr ?? o.vrr_enabled
+            vrr: p.vrr ?? o.vrr_enabled,
+            hdr: p.hdr ?? o.hdr_enabled ?? false,
+            primary: p.primary ?? o.primary ?? false
         };
     }
 
@@ -145,22 +150,35 @@ ColumnLayout {
             }
             if (p.vrr !== undefined) {
                 c.vrr = p.vrr;
-                prev.vrr = o.vrr_enabled;
+                // KScreen: the policy it had (never / automatic / always).
+                prev.vrr = o.vrr_policy ?? o.vrr_enabled;
+            }
+            if (p.hdr !== undefined) {
+                c.hdr = p.hdr;
+                prev.hdr = o.hdr_enabled;
+                needsConfirm = true;
+            }
+            if (p.primary === true && !o.primary) {
+                c.primary = true;
+                // Reverting makes the old primary display primary again.
+                const was = outs.find(x => x.primary);
+                if (was)
+                    previous[was.identity] = Object.assign({}, previous[was.identity] ?? {}, { primary: true });
             }
             // Turning it back off needs nothing else restored.
             if (prev.off === true)
                 previous[o.identity] = { off: true };
             else
-                previous[o.identity] = prev;
+                previous[o.identity] = Object.assign({}, previous[o.identity] ?? {}, prev);
             changes[o.identity] = c;
         }
         pending = {};
         if (!needsConfirm) {
-            NiriSettings.setOutputs(changes, true, true);
+            Displays.setOutputs(changes, true, true);
             return;
         }
-        // If niri refuses the change there's nothing to confirm.
-        NiriSettings.setOutputs(changes, true, false, r => {
+        // If the compositor refuses the change there's nothing to confirm.
+        Displays.setOutputs(changes, true, false, r => {
             if (!r.ok) {
                 confirmTimer.stop();
                 page.confirm = null;
@@ -174,14 +192,14 @@ ColumnLayout {
     function keep() {
         confirmTimer.stop();
         if (confirm)
-            NiriSettings.setOutputs(confirm.changes, false, true);
+            Displays.setOutputs(confirm.changes, false, true);
         confirm = null;
     }
 
     function revert() {
         confirmTimer.stop();
         if (confirm)
-            NiriSettings.setOutputs(confirm.previous, true, false);
+            Displays.setOutputs(confirm.previous, true, false);
         confirm = null;
     }
 
@@ -203,13 +221,13 @@ ColumnLayout {
             SettingsButton {
                 text: "Identify"
                 icon: "󰍹"
-                onClicked: NiriSettings.identify()
+                onClicked: Displays.identify()
             }
         }
 
         Text {
             Layout.fillWidth: true
-            text: page.outs.length === 0 ? "No outputs reported by niri (is $NIRI_SOCKET set?)" : "Drag displays to arrange them. Edges snap together."
+            text: page.outs.length === 0 ? (Displays.fromKWin ? "No outputs reported by KScreen (kscreen-doctor)" : "No outputs reported by niri (is $NIRI_SOCKET set?)") : "Drag displays to arrange them. Edges snap together." + (page.caps.record ? "" : " KDE remembers the arrangement.")
             color: Theme.subtext
             font.family: Theme.fontUi
             font.pixelSize: 11
@@ -332,7 +350,13 @@ ColumnLayout {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: tile.held ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                        // The settings page scrolls: keep the drag on the tile.
+                        preventStealing: true
                         property point start
+                        onCanceled: {
+                            tile.held = false;
+                            canvas.dragging = false;
+                        }
                         onPressed: mouse => {
                             page.selected = tile.modelData.name;
                             canvas.frozen = canvas.live;
@@ -451,7 +475,7 @@ ColumnLayout {
         readonly property var o: page.sel
         readonly property var e: o ? page.eff(o) : null
         readonly property string identity: o?.identity ?? ""
-        readonly property bool hasOverride: NiriSettings.outputOverrides[identity] !== undefined
+        readonly property bool hasOverride: Displays.overrides[identity] !== undefined
 
         PageHeader {
             title: details.o ? (details.o.description || details.o.name) : ""
@@ -472,7 +496,7 @@ ColumnLayout {
             SettingsButton {
                 visible: details.hasOverride
                 text: "Reset"
-                onClicked: NiriSettings.resetOutput(details.identity)
+                onClicked: Displays.resetOutputs([details.identity])
             }
         }
 
@@ -494,11 +518,11 @@ ColumnLayout {
 
         SettingsRow {
             label: "Use this display"
-            hint: details.e && !details.e.enabled ? "Off" : ""
+            hint: details.e && !details.e.enabled ? "Off" : details.o?.can_disable === false ? "Always on (this output can't be turned off)" : ""
             SettingsSwitch {
                 checked: details.e?.enabled ?? false
                 // Never turn off the last display that's on.
-                enabled: !(checked && page.rects.length <= 1)
+                enabled: !(checked && page.rects.length <= 1) && details.o?.can_disable !== false
                 onToggled: on => page.stage(details.o.name, { off: !on })
             }
         }
@@ -580,8 +604,35 @@ ColumnLayout {
         }
 
         SettingsRow {
+            label: "Main display (KDE)"
+            visible: page.caps.primary && page.outs.filter(o => o.enabled).length > 1
+            hint: "Where KDE puts new windows and its own panels"
+            enabled: details.e?.enabled ?? false
+            SettingsSwitch {
+                checked: details.e?.primary ?? false
+                // There's always one: pick another display to move it.
+                enabled: !checked
+                onToggled: on => {
+                    if (on)
+                        page.stage(details.o.name, { primary: true });
+                }
+            }
+        }
+
+        SettingsRow {
+            label: "HDR"
+            visible: page.caps.hdr && (details.o?.hdr_supported ?? false)
+            hint: "High dynamic range"
+            enabled: details.e?.enabled ?? false
+            SettingsSwitch {
+                checked: details.e?.hdr ?? false
+                onToggled: on => page.stage(details.o.name, { hdr: on })
+            }
+        }
+
+        SettingsRow {
             label: "Variable refresh rate"
-            hint: details.o?.vrr_supported ? "Adaptive sync (FreeSync / G-Sync compatible)" : "Not supported by this display"
+            hint: !details.o?.vrr_supported ? "Not supported by this display" : details.o?.vrr_policy === "always" ? "Always (adaptive sync everywhere)" : details.o?.vrr_policy ? "Automatic: adaptive sync for fullscreen apps" : "Adaptive sync (FreeSync / G-Sync compatible)"
             enabled: (details.o?.vrr_supported ?? false) && (details.e?.enabled ?? false)
             SettingsSwitch {
                 checked: details.e?.vrr ?? false
@@ -592,11 +643,11 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
-        visible: Object.keys(NiriSettings.outputOverrides).length > 0
+        visible: Object.keys(Displays.overrides).length > 0
 
         Text {
             Layout.fillWidth: true
-            text: `Display changes are saved for ${Object.keys(NiriSettings.outputOverrides).length} display(s), by make, model and serial.`
+            text: `Display changes are saved for ${Object.keys(Displays.overrides).length} display(s), by make, model and serial.`
             color: Theme.subtext
             font.family: Theme.fontUi
             font.pixelSize: 11
@@ -604,14 +655,14 @@ ColumnLayout {
         }
         SettingsButton {
             text: "Reset all displays"
-            onClicked: NiriSettings.apply({ reset_outputs: Object.keys(NiriSettings.outputOverrides) })
+            onClicked: Displays.resetOutputs(Object.keys(Displays.overrides))
         }
     }
 
     Text {
         Layout.fillWidth: true
-        visible: NiriSettings.error !== ""
-        text: NiriSettings.error
+        visible: Displays.error !== ""
+        text: Displays.error
         color: Theme.urgent
         font.family: Theme.fontUi
         font.pixelSize: 11

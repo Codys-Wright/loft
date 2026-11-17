@@ -1,8 +1,10 @@
 package main
 
 // The built-in commands: the session, Loft's panels and Settings pages, and a
-// curated handful of niri window actions (niri's own list, the niriactions
+// curated handful of window actions (niri's own list, the niriactions
 // provider, is ~130 raw actions including "quit" — still there under ";").
+// Under KDE (no $NIRI_SOCKET) the window actions go to KWin through
+// loft-kwin's bridge, and the niri-only ones (columns, tiling) are left out.
 
 import (
 	"fmt"
@@ -22,6 +24,32 @@ type command struct {
 	danger   bool   // power / session / data: logged instead of run in dry-run mode
 	delay    int    // ms to wait first (window actions: let Spotlight close)
 	note     func() string
+	niriOnly bool // no KWin equivalent: left out of the list under KDE
+}
+
+// onNiri: the session is niri's (else KDE/KWin). The commands' shell lines
+// check the same variable when they run.
+var onNiri = func() bool { return os.Getenv("NIRI_SOCKET") != "" }
+
+// either runs the niri line under niri and the KWin one otherwise.
+func either(niri, kwin string) string {
+	return `if [ -n "${NIRI_SOCKET:-}" ]; then ` + niri + `; else ` + kwin + `; fi`
+}
+
+// kwinAct: an action of loft-kwin's bridge (crates/loft-kwin/src/bridge.js)
+// on the active window, through the running shell's loft-kwin daemon.
+// `args` is extra JSON members, e.g. `"delta":1`.
+func kwinAct(cmd, args string) string {
+	j := `{"cmd":"` + cmd + `"`
+	if args != "" {
+		j += "," + args
+	}
+	return `loft-kwin send '` + j + `}'`
+}
+
+// niriOr: a niri window action, or the bridge's equivalent under KWin.
+func niriOr(niriAction, kwinCmd, kwinArgs string) string {
+	return either("niri msg action "+niriAction, kwinAct(kwinCmd, kwinArgs))
 }
 
 // Log Out ends the session the compositor runs: niri's quit, or Plasma's
@@ -40,7 +68,7 @@ func builtins() []*command {
 		{id: "emptytrash", title: "Empty Trash", kind: "System", icon: "user-trash-full", keywords: []string{"trash", "bin", "recycle"}, cmd: "gio trash --empty", confirm: true, danger: true, note: trashNote},
 		{id: "dnd", title: "Toggle Do Not Disturb", kind: "System", icon: "notifications-disabled", keywords: []string{"dnd", "do not disturb", "focus", "silence", "notifications"}, cmd: "{ipc} controlcenter toggleDnd"},
 		{id: "caffeine", title: "Toggle Keep Awake", kind: "System", icon: "caffeine", keywords: []string{"caffeine", "amphetamine", "keep awake", "inhibit idle", "no sleep"}, cmd: "{ipc} keepawake toggle"},
-		{id: "displaysoff", title: "Turn Off Displays", kind: "System", icon: "video-display", keywords: []string{"monitors off", "screen off", "blank"}, cmd: "niri msg action power-off-monitors", delay: 400},
+		{id: "displaysoff", title: "Turn Off Displays", kind: "System", icon: "video-display", keywords: []string{"monitors off", "screen off", "blank"}, cmd: either("niri msg action power-off-monitors", "kscreen-doctor --dpms off"), delay: 400},
 
 		// ── Loft ────────────────────────────────────────────────────────
 		{id: "controlcenter", title: "Control Center", kind: "Loft", icon: "preferences-system", keywords: []string{"quick settings"}, cmd: "{ipc} controlcenter toggle"},
@@ -69,18 +97,20 @@ func builtins() []*command {
 		{id: "phonehangup", title: "Hang Up iPhone Call", kind: "Loft", icon: "call-stop", keywords: []string{"end call", "hang up", "phone"}, cmd: "{ipc} phone hangup"},
 		{id: "help", title: "Spotlight Help", kind: "Loft", icon: "help-about", keywords: []string{"?", "help", "prefixes", "tips"}, query: "?"},
 
-		// ── Windows (niri) ──────────────────────────────────────────────
-		{id: "maximize", title: "Maximize Window", kind: "Window", icon: "window-maximize", keywords: []string{"zoom", "fill", "maximise"}, cmd: "niri msg action maximize-column", delay: 200},
-		{id: "fullscreen", title: "Fullscreen Window", kind: "Window", icon: "view-fullscreen", keywords: []string{"full screen", "enter fullscreen"}, cmd: "niri msg action fullscreen-window", delay: 200},
-		{id: "float", title: "Toggle Floating Window", kind: "Window", icon: "window-new", keywords: []string{"float", "tile", "floating"}, cmd: "niri msg action toggle-window-floating", delay: 200},
-		{id: "center", title: "Center Window", kind: "Window", icon: "format-justify-center", keywords: []string{"centre"}, cmd: "niri msg action center-column", delay: 200},
-		{id: "widen", title: "Expand Window to Available Width", kind: "Window", icon: "zoom-fit-best", keywords: []string{"fill width", "grow"}, cmd: "niri msg action expand-column-to-available-width", delay: 200},
-		{id: "presetwidth", title: "Cycle Window Width", kind: "Window", icon: "zoom-in", keywords: []string{"resize", "column width"}, cmd: "niri msg action switch-preset-column-width", delay: 200},
-		{id: "nextdisplay", title: "Move Window to Next Display", kind: "Window", icon: "video-display", keywords: []string{"other monitor", "move to monitor"}, cmd: "niri msg action move-window-to-monitor-next", delay: 200},
-		{id: "nextworkspace", title: "Move Window to Next Workspace", kind: "Window", icon: "go-down", keywords: []string{"move to workspace", "next desktop"}, cmd: "niri msg action move-window-to-workspace-down", delay: 200},
-		{id: "closewindow", title: "Close Window", kind: "Window", icon: "window-close", keywords: []string{"quit window"}, cmd: "niri msg action close-window", delay: 200},
-		{id: "overview", title: "Overview", kind: "Window", icon: "view-grid", keywords: []string{"mission control", "expose", "workspaces", "all windows"}, cmd: "niri msg action toggle-overview", delay: 200},
-		{id: "hotkeys", title: "Keyboard Shortcuts", kind: "Window", icon: "preferences-desktop-keyboard-shortcuts", keywords: []string{"hotkeys", "keybinds", "shortcuts"}, cmd: "niri msg action show-hotkey-overlay", delay: 200},
+		// ── Windows ─────────────────────────────────────────────────────
+		// KWin: the active window, through loft-kwin's bridge (docs/KWIN.md §4.8).
+		{id: "maximize", title: "Maximize Window", kind: "Window", icon: "window-maximize", keywords: []string{"zoom", "fill", "maximise"}, cmd: niriOr("maximize-column", "toggleMaximize", ""), delay: 200},
+		{id: "fullscreen", title: "Fullscreen Window", kind: "Window", icon: "view-fullscreen", keywords: []string{"full screen", "enter fullscreen"}, cmd: niriOr("fullscreen-window", "toggleFullscreen", ""), delay: 200},
+		{id: "float", title: "Toggle Floating Window", kind: "Window", icon: "window-new", keywords: []string{"float", "tile", "floating"}, cmd: "niri msg action toggle-window-floating", delay: 200, niriOnly: true},
+		{id: "center", title: "Center Window", kind: "Window", icon: "format-justify-center", keywords: []string{"centre"}, cmd: niriOr("center-column", "center", ""), delay: 200},
+		{id: "widen", title: "Expand Window to Available Width", kind: "Window", icon: "zoom-fit-best", keywords: []string{"fill width", "grow"}, cmd: "niri msg action expand-column-to-available-width", delay: 200, niriOnly: true},
+		{id: "presetwidth", title: "Cycle Window Width", kind: "Window", icon: "zoom-in", keywords: []string{"resize", "column width"}, cmd: "niri msg action switch-preset-column-width", delay: 200, niriOnly: true},
+		{id: "nextdisplay", title: "Move Window to Next Display", kind: "Window", icon: "video-display", keywords: []string{"other monitor", "move to monitor"}, cmd: niriOr("move-window-to-monitor-next", "moveToNextOutput", ""), delay: 200},
+		{id: "nextworkspace", title: "Move Window to Next Workspace", kind: "Window", icon: "go-down", keywords: []string{"move to workspace", "next desktop"}, cmd: niriOr("move-window-to-workspace-down", "moveToDesktopRelative", `"delta":1,"focus":true`), delay: 200},
+		{id: "closewindow", title: "Close Window", kind: "Window", icon: "window-close", keywords: []string{"quit window"}, cmd: niriOr("close-window", "closeWindow", ""), delay: 200},
+		{id: "overview", title: "Overview", kind: "Window", icon: "view-grid", keywords: []string{"mission control", "expose", "workspaces", "all windows"}, cmd: niriOr("toggle-overview", "toggleOverview", ""), delay: 200},
+		// KDE has no shortcut overlay: Loft's Keyboard Shortcuts page.
+		{id: "hotkeys", title: "Keyboard Shortcuts", kind: "Window", icon: "preferences-desktop-keyboard-shortcuts", keywords: []string{"hotkeys", "keybinds", "shortcuts"}, cmd: either("niri msg action show-hotkey-overlay", "{ipc} settings open keybinds"), delay: 200},
 	}
 
 	// Settings pages (src/settings/SettingsApp.qml) and the Control Center's
@@ -131,6 +161,15 @@ func builtins() []*command {
 			keywords: append([]string{"settings", "control center"}, p.kw...),
 			cmd:      "{ipc} controlcenter " + p.id,
 		})
+	}
+	if !onNiri() {
+		kept := c[:0]
+		for _, x := range c {
+			if !x.niriOnly {
+				kept = append(kept, x)
+			}
+		}
+		c = kept
 	}
 	return c
 }

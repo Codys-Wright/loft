@@ -234,6 +234,8 @@ Singleton {
             startPanorama(p.where === "screen" ? (screenFocused?.name ?? "") : p.where);
         else if (p.where === "area")
             freeze(p.kind);
+        else if (p.kind === "record" && p.where === "window")
+            recordWindow();
         else if (p.kind === "record")
             Recorder.start({
                 output: screenFocused?.name ?? ""
@@ -242,6 +244,20 @@ Singleton {
             shootWindow();
         else
             shootScreen();
+    }
+
+    // The focused window on its own (capabilities.windowRecording: KWin's
+    // stream_window, which follows the window as it moves).
+    function recordWindow() {
+        const w = Compositor.focusedWindow;
+        const uuid = Compositor.backend === "kwin" && w ? KWin.uuid(w.id) : "";
+        if (!(Compositor.capabilities.windowRecording ?? false) || uuid === "") {
+            failed("No window to record", "Focus a window first");
+            return;
+        }
+        Recorder.start({
+            window: uuid
+        });
     }
 
     // ── Screenshots ─────────────────────────────────────────────────────
@@ -327,7 +343,8 @@ Singleton {
         } else if (kind === "record") {
             const geo = `${Math.round(screen.x + rect.x)},${Math.round(screen.y + rect.y)} ${Math.round(rect.width)}x${Math.round(rect.height)}`;
             Recorder.start({
-                geometry: geo
+                geometry: geo,
+                scale: screen.devicePixelRatio ?? 1
             });
         } else if (kind === "scroll") {
             startScroll(screen, rect);
@@ -1005,6 +1022,10 @@ Singleton {
         }
         function recordScreen(): void {
             root.capture("record", "screen", 0);
+        }
+        // KWin only (capabilities.windowRecording): the focused window.
+        function recordWindow(): void {
+            root.capture("record", "window", 0);
         }
         function text(): void {
             root.capture("text", "area", 0);

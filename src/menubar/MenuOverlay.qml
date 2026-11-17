@@ -179,12 +179,13 @@ PanelWindow {
             items: MenuState.open ? MenuState.itemsAt(index) : []
             highlighted: MenuState.path[index]
 
-            // A context menu (the dock) opens away from its screen edge.
+            // A context menu (the dock) opens away from its screen edge; a
+            // title bar's ("pointer") down and right from the point, as macOS.
             readonly property var ctx: MenuState.context
             x: {
                 void root.titles.stamp; // re-evaluate after the titles move
                 if (!parentPanel && ctx) {
-                    const want = ctx.edge === "left" ? ctx.x + 8 : ctx.edge === "right" ? ctx.x - width - 8 : ctx.x - width / 2;
+                    const want = ctx.edge === "left" ? ctx.x + 8 : ctx.edge === "right" ? ctx.x - width - 8 : ctx.edge === "pointer" ? ctx.x : ctx.x - width / 2;
                     return Math.max(8, Math.min(want, root.width - width - 8));
                 }
                 if (!parentPanel)
@@ -192,7 +193,7 @@ PanelWindow {
                 const right = parentPanel.x + parentPanel.width - 4;
                 return right + width <= root.width - 8 ? right : Math.max(8, parentPanel.x - width + 4);
             }
-            y: parentPanel ? Math.max(2, Math.min(parentPanel.y + parentPanel.rowY(MenuState.path[index - 1]) - pad, root.height - height - 8)) : ctx ? Math.max(2, Math.min(ctx.edge === "bottom" ? ctx.y - root.barHeight - height - 8 : ctx.y - root.barHeight - height / 2, root.height - height - 8)) : 2
+            y: parentPanel ? Math.max(2, Math.min(parentPanel.y + parentPanel.rowY(MenuState.path[index - 1]) - pad, root.height - height - 8)) : ctx ? Math.max(2, Math.min(ctx.edge === "bottom" ? ctx.y - root.barHeight - height - 8 : ctx.edge === "pointer" ? ctx.y - root.barHeight + 2 : ctx.y - root.barHeight - height / 2, root.height - height - 8)) : 2
 
             onHovered: item => MenuState.highlight(index, item, true)
             onClicked: item => {

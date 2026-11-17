@@ -3,8 +3,12 @@
 - niri: read windows / workspaces / outputs; focus, move, float, fullscreen,
   maximize, column width, workspaces, overview, spawn — `niri msg` against
   $NIRI_SOCKET.
+- KWin (a Plasma session, no $NIRI_SOCKET): the same tools through the shell's
+  loft-kwin daemon (`loft-kwin state` / `loft-kwin send`, docs/KWIN.md §4.9);
+  the niri-only ones (tiling, columns) answer with an error that says so.
 - screenshots: an output (grim -o) or a window (grim -g for a visible
-  floating window, else niri's own render), PNG, downscaled to `max_width`.
+  floating window, else niri's own render), PNG, downscaled to `max_width`;
+  under KWin `loft-kwin shot` (KWin's ScreenShot2).
 - loft: window rules, themes, appearance, niri settings — the `loft` CLI in a
   subprocess (the same Python, the same --dev targeting).
 - shell: Quickshell IPC to the running Loft shell, limited to SHELL_ALLOW.
@@ -30,7 +34,8 @@ from pathlib import Path
 from .mcp import Image, Tool, ToolError
 
 INSTRUCTIONS = (
-    "Controls Cody's Loft desktop (niri scrolling compositor + Quickshell shell). Window and "
+    "Controls Cody's Loft desktop (niri scrolling compositor + Quickshell shell; or KDE's KWin, where "
+    "windows all float and the column/tiling tools answer with an error). Window and "
     "workspace ids come from list_windows / list_workspaces; ids are stable while a window lives. "
     "Prefer these structured tools over pixel coordinates. Screenshots are PNGs scaled to "
     "max_width; the accompanying JSON gives the logical region they cover. Toggle actions "
@@ -105,8 +110,35 @@ OUTPUT = r"^[A-Za-z0-9][A-Za-z0-9 ._+:-]{0,127}$"
 # ── environment and subprocesses ────────────────────────────────────────────
 
 
+def session() -> str:
+    """The compositor: "niri" or "kwin" (as Compositor.qml decides: $LOFT_COMPOSITOR,
+    else niri with $NIRI_SOCKET, else kwin when XDG_CURRENT_DESKTOP has KDE)."""
+    forced = os.environ.get("LOFT_COMPOSITOR", "")
+    if forced in ("niri", "kwin"):
+        return forced
+    if os.environ.get("NIRI_SOCKET"):
+        return "niri"
+    if "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").split(":"):
+        return "kwin"
+    return "niri"
+
+
+def kwin() -> bool:
+    return session() == "kwin"
+
+
+def kwin_bin() -> str:
+    return os.environ.get("LOFT_KWIN_BIN") or "loft-kwin"
+
+
 def env_problems() -> list[str]:
     out = []
+    if kwin():
+        if not shutil.which(kwin_bin()):
+            out.append(f"{kwin_bin()} is not on PATH (Loft's KWin backend; set LOFT_KWIN_BIN)")
+        if not os.environ.get("WAYLAND_DISPLAY"):
+            out.append("WAYLAND_DISPLAY is not set (start the server from the desktop session's environment)")
+        return out
     sock = os.environ.get("NIRI_SOCKET")
     if not sock:
         out.append("NIRI_SOCKET is not set (start the server from the desktop session's environment)")
@@ -157,19 +189,68 @@ def niri_action(*args: str) -> None:
     run(["niri", "msg", "action", *args])
 
 
+# ── KWin: the shell's loft-kwin daemon ──────────────────────────────────────
+
+
+def kwin_state() -> dict:
+    """The shell's KWin state (niri-shaped windows / workspaces, outputs, overview_open)."""
+    _need_session()
+    try:
+        return json.loads(run([kwin_bin(), "state"], timeout=5))
+    except ValueError as e:
+        raise ToolError(f"loft-kwin state: bad JSON ({e})") from None
+
+
+def kwin_send(cmd: dict) -> None:
+    """One action for loft-kwin's KWin script (crates/loft-kwin/src/bridge.js)."""
+    _need_session()
+    run([kwin_bin(), "send", json.dumps(cmd)], timeout=5)
+
+
+def _kwin_window_cmd(cmd: str, wid: int, **extra) -> dict:
+    w = _window(wid)
+    kwin_send({"cmd": cmd, "window": w["kwin_uuid"], **extra})
+    return w
+
+
+def _niri_only(what: str, instead: str = "") -> ToolError:
+    return ToolError(f"{what} is niri-only (KWin has no scrolling columns or tiling: its windows all float)" + (f"; {instead}" if instead else ""))
+
+
+def _kwin_focused_output(state: dict) -> str | None:
+    ws = next((w for w in state.get("workspaces", []) if w.get("is_focused")), None)
+    return ws.get("output") if ws else None
+
+
 # ── niri: reading ───────────────────────────────────────────────────────────
 
 
 def _outputs() -> dict[str, dict]:
+    if kwin():
+        # niri's shape, as far as KWin knows it (no modes; scale unknown).
+        out = {}
+        for o in kwin_state().get("outputs", []):
+            x, y, w, h = o.get("geometry") or [0, 0, 0, 0]
+            out[o["name"]] = {"name": o["name"], "identity": o.get("identity"), "logical": {"x": x, "y": y, "width": w, "height": h}}
+        return out
     return niri_json("outputs")
 
 
 def _workspaces() -> list[dict]:
+    if kwin():
+        return kwin_state().get("workspaces", [])
     return niri_json("workspaces")
 
 
 def _windows() -> list[dict]:
+    if kwin():
+        return kwin_state().get("windows", [])
     return niri_json("windows")
+
+
+def _identity(o: dict) -> str:
+    """niri's "Make Model Serial" (loft-kwin already gives it)."""
+    return o.get("identity") or " ".join(str(o.get(k) or "Unknown") for k in ("make", "model", "serial"))
 
 
 def _window(wid: int) -> dict:
@@ -184,10 +265,26 @@ def _output_name(name: str) -> str:
     if name in outs:
         return name
     for o in outs.values():  # "Make Model Serial" identity also works
-        ident = " ".join(str(o.get(k) or "Unknown") for k in ("make", "model", "serial"))
-        if name == ident:
+        if name == _identity(o):
             return o["name"]
     raise ToolError(f"no output {name!r}; outputs: {', '.join(sorted(outs))}")
+
+
+def _kwin_workspace(ref) -> dict:
+    """A workspace index (on the focused output) or name → loft-kwin's record."""
+    state = kwin_state()
+    wss = state.get("workspaces", [])
+    if isinstance(ref, int):
+        out = _kwin_focused_output(state)
+        for w in wss:
+            if w.get("idx") == ref and w.get("output") == out:
+                return w
+        raise ToolError(f"no workspace {ref} (KWin has {len({w.get('kwin_desktop') for w in wss})} desktops)")
+    for w in wss:
+        if w.get("name") == ref:
+            return w
+    names = sorted({w.get("name") for w in wss if w.get("name")})
+    raise ToolError(f"no workspace named {ref!r}; named workspaces: {', '.join(names) or 'none'}")
 
 
 def _workspace_ref(ref) -> str:
@@ -284,7 +381,7 @@ def list_outputs(a: dict) -> dict:
     out = []
     focused = None
     try:
-        focused = (niri_json("focused-output") or {}).get("name")
+        focused = _kwin_focused_output(kwin_state()) if kwin() else (niri_json("focused-output") or {}).get("name")
     except ToolError:
         pass
     for o in _outputs().values():
@@ -295,7 +392,7 @@ def list_outputs(a: dict) -> dict:
         out.append(
             {
                 "name": o.get("name"),
-                "identity": " ".join(str(o.get(k) or "Unknown") for k in ("make", "model", "serial")),
+                "identity": _identity(o),
                 "mode": mode,
                 "logical": o.get("logical"),  # x, y, width, height (logical px), scale, transform; null = off
                 "focused": o.get("name") == focused,
@@ -313,18 +410,29 @@ def _ok(**info) -> dict:
 
 
 def focus_window(a: dict) -> dict:
+    if kwin():
+        _kwin_window_cmd("focusWindow", a["id"])
+        return _ok(focused=a["id"])
     _window(a["id"])
     niri_action("focus-window", "--id", str(a["id"]))
     return _ok(focused=a["id"])
 
 
 def close_window(a: dict) -> dict:
+    if kwin():
+        w = _kwin_window_cmd("closeWindow", a["id"])
+        return _ok(closed=a["id"], app_id=w.get("app_id"), note="asked the app to close; it may show a save dialog")
     w = _window(a["id"])
     niri_action("close-window", "--id", str(a["id"]))
     return _ok(closed=a["id"], app_id=w.get("app_id"), note="asked the app to close; it may show a save dialog")
 
 
 def move_window_to_workspace(a: dict) -> dict:
+    if kwin():
+        w = _window(a["id"])
+        ws = _kwin_workspace(a["workspace"])
+        kwin_send({"cmd": "moveToDesktop", "window": w["kwin_uuid"], "desktop": ws["kwin_desktop"], "focus": bool(a.get("focus"))})
+        return _ok(window=a["id"], workspace=a["workspace"])
     _window(a["id"])
     ref = _workspace_ref(a["workspace"])
     niri_action("move-window-to-workspace", "--window-id", str(a["id"]), "--focus", "true" if a.get("focus") else "false", ref)
@@ -332,6 +440,11 @@ def move_window_to_workspace(a: dict) -> dict:
 
 
 def move_window_to_monitor(a: dict) -> dict:
+    if kwin():
+        w = _window(a["id"])
+        out = _output_name(a["output"])
+        kwin_send({"cmd": "moveToOutput", "window": w["kwin_uuid"], "output": out})
+        return _ok(window=a["id"], output=out)
     _window(a["id"])
     out = _output_name(a["output"])
     niri_action("move-window-to-monitor", "--id", str(a["id"]), out)
@@ -339,24 +452,34 @@ def move_window_to_monitor(a: dict) -> dict:
 
 
 def set_window_floating(a: dict) -> dict:
+    if kwin():
+        raise _niri_only("set_window_floating")
     _window(a["id"])
     niri_action("move-window-to-floating" if a["floating"] else "move-window-to-tiling", "--id", str(a["id"]))
     return _ok(window=a["id"], floating=a["floating"])
 
 
 def fullscreen_window(a: dict) -> dict:
+    if kwin():
+        _kwin_window_cmd("toggleFullscreen", a["id"])
+        return _ok(window=a["id"], toggled="fullscreen")
     _window(a["id"])
     niri_action("fullscreen-window", "--id", str(a["id"]))
     return _ok(window=a["id"], toggled="fullscreen")
 
 
 def maximize_window(a: dict) -> dict:
+    if kwin():
+        _kwin_window_cmd("toggleMaximize", a["id"])
+        return _ok(window=a["id"], toggled="maximized")
     _window(a["id"])
     niri_action("maximize-window-to-edges", "--id", str(a["id"]))
     return _ok(window=a["id"], toggled="maximized-to-edges")
 
 
 def maximize_column(a: dict) -> dict:
+    if kwin():
+        raise _niri_only("maximize_column", "maximize_window maximizes a window")
     _window(a["id"])
     niri_action("focus-window", "--id", str(a["id"]))
     niri_action("maximize-column")
@@ -364,6 +487,8 @@ def maximize_column(a: dict) -> dict:
 
 
 def set_column_width(a: dict) -> dict:
+    if kwin():
+        raise _niri_only("set_column_width", "shell_ipc_call arrange apply sizes a window")
     _window(a["id"])
     pct = round(a["proportion"] * 100, 2)
     niri_action("focus-window", "--id", str(a["id"]))
@@ -372,18 +497,28 @@ def set_column_width(a: dict) -> dict:
 
 
 def center_window(a: dict) -> dict:
+    if kwin():
+        _kwin_window_cmd("center", a["id"])
+        return _ok(window=a["id"])
     _window(a["id"])
     niri_action("center-window", "--id", str(a["id"]))
     return _ok(window=a["id"])
 
 
 def focus_workspace(a: dict) -> dict:
+    if kwin():
+        kwin_send({"cmd": "focusDesktop", "desktop": _kwin_workspace(a["workspace"])["kwin_desktop"]})
+        return _ok(workspace=a["workspace"])
     ref = _workspace_ref(a["workspace"])
     niri_action("focus-workspace", ref)
     return _ok(workspace=a["workspace"])
 
 
 def focus_output(a: dict) -> dict:
+    if kwin():
+        out = _output_name(a["output"])
+        kwin_send({"cmd": "focusOutput", "output": out})
+        return _ok(output=out, note="focuses the topmost window there (none: nothing changes)")
     out = _output_name(a["output"])
     niri_action("focus-monitor", out)
     return _ok(output=out)
@@ -391,6 +526,12 @@ def focus_output(a: dict) -> dict:
 
 def toggle_overview(a: dict) -> dict:
     state = a.get("state", "toggle")
+    if kwin():
+        # KWin's Overview only toggles: open/close check its state first.
+        is_open = bool(kwin_state().get("overview_open"))
+        if state == "toggle" or (state == "open") != is_open:
+            kwin_send({"cmd": "toggleOverview"})
+        return _ok(overview=state, was_open=is_open)
     niri_action({"toggle": "toggle-overview", "open": "open-overview", "close": "close-overview"}[state])
     return _ok(overview=state)
 
@@ -399,11 +540,26 @@ def launch(a: dict) -> dict:
     cmd = a["command"]
     if any("\0" in c for c in cmd):
         raise ToolError("command: NUL bytes are not allowed")
+    if kwin():
+        _spawn(cmd)
+        return _ok(spawned=cmd, note="started in the session; use list_windows to find its window")
     niri_action("spawn", "--", *cmd)
     return _ok(spawned=cmd, note="started by niri in the session; use list_windows to find its window")
 
 
+def _spawn(cmd: list[str]) -> None:
+    """Start a program detached, in this (the session's) environment: KWin has no spawn."""
+    _need_session()
+    exe = shutil.which(cmd[0])
+    if exe is None:
+        raise ToolError(f"{cmd[0]} is not on PATH")
+    subprocess.Popen([exe, *cmd[1:]], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
 def spotlight_open(a: dict) -> dict:
+    if kwin():
+        _spawn(["loft-launcher", "open"])
+        return _ok(opened="spotlight")
     niri_action("spawn", "--", "loft-launcher", "open")
     return _ok(opened="spotlight")
 
@@ -425,8 +581,25 @@ def _shrink(png: bytes, max_width: int) -> bytes:
     return run(["magick", "png:-", "-resize", f"{max_width}x>", "png:-"], input=png, timeout=30)
 
 
+def _kwin_shot(*target: str) -> bytes:
+    """`loft-kwin shot …` (KWin's ScreenShot2) → PNG bytes."""
+    with tempfile.TemporaryDirectory(prefix="loft-mcp-") as d:
+        path = Path(d) / "shot.png"
+        run([kwin_bin(), "shot", *target, str(path)], timeout=30)
+        return path.read_bytes()
+
+
 def screenshot_output(a: dict) -> Image:
     _need_session()
+    if kwin():
+        outs = _outputs()
+        name = _output_name(a["output"]) if a.get("output") else _kwin_focused_output(kwin_state())
+        lo = (outs.get(name) or {}).get("logical")
+        if not lo:
+            raise ToolError(f"no output {name!r}")
+        png = _shrink(_kwin_shot("screen", name), a.get("max_width", 1920))
+        w, h = png_size(png)
+        return Image(png, {"output": name, "region": [lo["x"], lo["y"], lo["width"], lo["height"]], "width": w, "height": h, "px_per_logical": round(w / max(lo["width"], 1), 4)})
     outs = _outputs()
     name = _output_name(a["output"]) if a.get("output") else (niri_json("focused-output") or {}).get("name")
     lo = (outs.get(name) or {}).get("logical")
@@ -444,6 +617,13 @@ def screenshot_window(a: dict) -> Image:
     _need_session()
     w = _window(a["id"])
     max_w = a.get("max_width", 1920)
+    if kwin():
+        # KWin renders the window alone (title bar included), on screen or not.
+        png = _shrink(_kwin_shot("window", w["kwin_uuid"]), max_w)
+        pw, ph = png_size(png)
+        workspaces = {x["id"]: x for x in _workspaces()}
+        rect = _window_rect(w, workspaces.get(w.get("workspace_id")), _outputs())
+        return Image(png, {"window": w["id"], "method": "kwin-screenshot2", "region": rect, "width": pw, "height": ph, "note": "includes the title bar; region is the window's frame"})
     outputs = _outputs()
     workspaces = {x["id"]: x for x in _workspaces()}
     ws = workspaces.get(w.get("workspace_id"))
@@ -842,19 +1022,19 @@ def tools(dev: bool = False) -> list[Tool]:
         T("close_window", "Ask a window to close (like clicking its close button; the app may prompt).", _obj({"id": WID}, ["id"]), close_window),
         T("move_window_to_workspace", "Move a window to a workspace (index or name); focus=true follows it.", _obj({"id": WID, "workspace": WS, "focus": {"type": "boolean"}}, ["id", "workspace"]), move_window_to_workspace),
         T("move_window_to_monitor", "Move a window to another display.", _obj({"id": WID, "output": OUT}, ["id", "output"]), move_window_to_monitor),
-        T("set_window_floating", "Make a window floating (true) or tiled (false).", _obj({"id": WID, "floating": {"type": "boolean"}}, ["id", "floating"]), set_window_floating),
+        T("set_window_floating", "Make a window floating (true) or tiled (false). niri only.", _obj({"id": WID, "floating": {"type": "boolean"}}, ["id", "floating"]), set_window_floating),
         T("fullscreen_window", "Toggle fullscreen for a window.", _obj({"id": WID}, ["id"]), fullscreen_window),
         T("maximize_window", "Toggle maximize-to-edges for a window (fills the output, keeps bar space off).", _obj({"id": WID}, ["id"]), maximize_window),
-        T("maximize_column", "Focus a window and toggle maximizing its column (full output width).", _obj({"id": WID}, ["id"]), maximize_column),
-        T("set_column_width", "Focus a window and set its column width as a proportion of the output (0.1-1).", _obj({"id": WID, "proportion": {"type": "number", "minimum": 0.1, "maximum": 1}}, ["id", "proportion"]), set_column_width),
+        T("maximize_column", "Focus a window and toggle maximizing its column (full output width). niri only.", _obj({"id": WID}, ["id"]), maximize_column),
+        T("set_column_width", "Focus a window and set its column width as a proportion of the output (0.1-1). niri only.", _obj({"id": WID, "proportion": {"type": "number", "minimum": 0.1, "maximum": 1}}, ["id", "proportion"]), set_column_width),
         T("center_window", "Center a window on its output (scrolls the view to it).", _obj({"id": WID}, ["id"]), center_window),
         T("focus_workspace", "Switch to a workspace by index (on the focused output) or name.", _obj({"workspace": WS}, ["workspace"]), focus_workspace),
         T("focus_output", "Move focus to a display.", _obj({"output": OUT}, ["output"]), focus_output),
-        T("toggle_overview", "Open, close or toggle niri's overview (all workspaces zoomed out).", _obj({"state": {"enum": ["toggle", "open", "close"]}}), toggle_overview),
+        T("toggle_overview", "Open, close or toggle the overview (niri's: all workspaces zoomed out; KWin's Overview effect).", _obj({"state": {"enum": ["toggle", "open", "close"]}}), toggle_overview),
         T("launch", "Start a program in the desktop session: command as argv list, e.g. [\"foot\", \"-e\", \"htop\"].", _obj({"command": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "string", "minLength": 1, "maxLength": 4096}}}, ["command"]), launch),
         T("spotlight_open", "Open Loft's Spotlight launcher on the focused display.", _obj({}), spotlight_open),
         T("screenshot_output", "Screenshot a display (default: the focused one) as a PNG, scaled to max_width.", _obj({"output": OUT, "max_width": MAXW}), screenshot_output, read_only=True),
-        T("screenshot_window", "Screenshot one window as a PNG, scaled to max_width (tiled/off-screen windows are rendered by niri).", _obj({"id": WID, "max_width": MAXW}, ["id"]), screenshot_window, read_only=True),
+        T("screenshot_window", "Screenshot one window as a PNG, scaled to max_width (tiled/off-screen windows are rendered by niri; KWin renders any window, title bar included).", _obj({"id": WID, "max_width": MAXW}, ["id"]), screenshot_window, read_only=True),
         *loft_tools(LoftCli(dev)),
         T("shell_ipc_list", "List the Loft shell's IPC targets and functions that shell_ipc_call may use, with signatures.", _obj({}), shell_ipc_list, read_only=True),
         T(

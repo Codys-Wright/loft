@@ -212,3 +212,58 @@ func TestDriveCommands(t *testing.T) {
 		t.Errorf("drives gone → no commands, got %d", len(got))
 	}
 }
+
+// Window commands under KDE: the KWin branch of each, and the niri-only ones
+// (columns, tiling) left out; under niri, all of them and niri's actions.
+func TestWindowCommandsPerCompositor(t *testing.T) {
+	saved := onNiri
+	defer func() { onNiri = saved }()
+	byID := func() map[string]*command {
+		m := map[string]*command{}
+		for _, c := range builtins() {
+			m[c.id] = c
+		}
+		return m
+	}
+
+	onNiri = func() bool { return true }
+	niri := byID()
+	for _, id := range []string{"float", "widen", "presetwidth"} {
+		if niri[id] == nil {
+			t.Errorf("niri: %s missing", id)
+		}
+	}
+	if !strings.Contains(niri["maximize"].cmd, "niri msg action maximize-column") {
+		t.Errorf("niri maximize: %s", niri["maximize"].cmd)
+	}
+
+	onNiri = func() bool { return false }
+	kde := byID()
+	for _, id := range []string{"float", "widen", "presetwidth"} {
+		if kde[id] != nil {
+			t.Errorf("KDE: %s should be hidden", id)
+		}
+	}
+	want := map[string]string{
+		"maximize":      `loft-kwin send '{"cmd":"toggleMaximize"}'`,
+		"fullscreen":    `loft-kwin send '{"cmd":"toggleFullscreen"}'`,
+		"center":        `loft-kwin send '{"cmd":"center"}'`,
+		"nextdisplay":   `loft-kwin send '{"cmd":"moveToNextOutput"}'`,
+		"nextworkspace": `loft-kwin send '{"cmd":"moveToDesktopRelative","delta":1,"focus":true}'`,
+		"closewindow":   `loft-kwin send '{"cmd":"closeWindow"}'`,
+		"overview":      `loft-kwin send '{"cmd":"toggleOverview"}'`,
+		"hotkeys":       `{ipc} settings open keybinds`,
+		"displaysoff":   `kscreen-doctor --dpms off`,
+	}
+	for id, w := range want {
+		c := kde[id]
+		if c == nil {
+			t.Errorf("KDE: %s missing", id)
+			continue
+		}
+		// Both branches in one line, picked by $NIRI_SOCKET when it runs.
+		if !strings.Contains(c.cmd, `if [ -n "${NIRI_SOCKET:-}" ]; then niri msg action `) || !strings.Contains(c.cmd, "; else "+w+"; fi") {
+			t.Errorf("%s: %s", id, c.cmd)
+		}
+	}
+}

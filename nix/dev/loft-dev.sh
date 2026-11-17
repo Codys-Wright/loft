@@ -325,6 +325,35 @@ run_kwin() {
   # Bluedevil's kded module would start obexd, which registers with the
   # real (system) bluez. Nothing a shell test needs.
   [ -f "$home/.config/kded6rc" ] || printf '[Module-bluedevil]\nautoload=false\n' > "$home/.config/kded6rc"
+  # The session's private PipeWire (kwin-run.sh): no hardware; a null sink
+  # and a silent source, so recordings with audio can be tested.
+  mkdir -p "$home/.config/wireplumber/wireplumber.conf.d" "$home/.config/pipewire/pipewire.conf.d"
+  cat > "$home/.config/wireplumber/wireplumber.conf.d/90-loft-dev.conf" <<'PW'
+wireplumber.profiles = {
+  main = {
+    monitor.alsa = disabled
+    monitor.alsa-midi = disabled
+    monitor.bluez = disabled
+    monitor.bluez.seat-monitoring = disabled
+    monitor.v4l2 = disabled
+    monitor.libcamera = disabled
+    support.logind = disabled
+    support.reserve-device = disabled
+  }
+}
+PW
+  cat > "$home/.config/pipewire/pipewire.conf.d/90-loft-dev.conf" <<'PW'
+context.objects = [
+  { factory = adapter
+    args = { factory.name = support.null-audio-sink node.name = loft-dev-sink
+             node.description = "loft-dev null sink" media.class = Audio/Sink
+             audio.position = [ FL FR ] } }
+  { factory = adapter
+    args = { factory.name = support.null-audio-sink node.name = loft-dev-mic
+             node.description = "loft-dev silent mic" media.class = Audio/Source/Virtual
+             audio.position = [ MONO ] } }
+]
+PW
 
   # Loft's state: the session dir, the theme rendered by the checkout.
   local loft_env=(
@@ -410,6 +439,19 @@ env -u DBUS_SESSION_BUS_ADDRESS -u WAYLAND_DISPLAY -u DISPLAY -u NIRI_SOCKET XDG
 echo "$!" > "$d/host.pid"
 for _ in $(seq 100); do [ -S "$d/host/wayland-1" ] && break; sleep 0.1; done
 [ -S "$d/host/wayland-1" ] || { echo "loft-dev: the headless host did not start (see $d/host.log)" >&2; exit 1; }
+# A private PipeWire with no devices (WirePlumber's ALSA/bluez/camera
+# monitors are off; a null sink and a silent source): KWin's screencasts (`loft-kwin record`)
+# and the shell's audio talk to it, never to the user's. Before KWin, which
+# connects at start.
+if command -v pipewire > /dev/null && command -v wireplumber > /dev/null; then
+  pw_env=(env -u DBUS_SESSION_BUS_ADDRESS -u WAYLAND_DISPLAY -u DISPLAY -u PIPEWIRE_REMOTE -u PULSE_SERVER
+    HOME="$d/home" XDG_CONFIG_HOME="$d/home/.config" XDG_STATE_HOME="$d/home/.local/state"
+    XDG_DATA_HOME="$d/home/.local/share" XDG_RUNTIME_DIR="$d/run")
+  "${pw_env[@]}" pipewire > "$d/pipewire.log" 2>&1 &
+  for _ in $(seq 50); do [ -S "$d/run/pipewire-0" ] && break; sleep 0.1; done
+  "${pw_env[@]}" wireplumber >> "$d/pipewire.log" 2>&1 &
+  if command -v pipewire-pulse > /dev/null; then "${pw_env[@]}" pipewire-pulse >> "$d/pipewire.log" 2>&1 & fi
+fi
 exec env -u DBUS_SESSION_BUS_ADDRESS -u DISPLAY -u NIRI_SOCKET -u WAYLAND_SOCKET -u SWAYSOCK \
   HOME="$d/home" XDG_CONFIG_HOME="$d/home/.config" XDG_DATA_HOME="$d/home/.local/share" \
   XDG_CACHE_HOME="$d/home/.cache" XDG_STATE_HOME="$d/home/.local/state" \

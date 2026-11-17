@@ -22,11 +22,19 @@ Singleton {
     readonly property var windows: Object.values(windowMap).sort((a, b) => a.id - b.id)
     readonly property var focusedWindow: windows.find(w => w.is_focused) ?? null
     readonly property var focusedWorkspace: workspaces.find(w => w.is_focused) ?? null
-    // KWin's Overview effect has no state to read; the toggle still works.
-    readonly property bool overviewOpen: false
+    // KWin's Overview / Grid View / Present Windows effect is running
+    // (loft-bridge asks KWin, docs/KWIN.md §4.9): wallpapers and the bar
+    // react as they do to niri's overview.
+    property bool overviewOpen: false
     property var keyboardLayouts: ({ names: [], current_idx: 0 })
     property var activities: []
     property string currentActivity: ""
+    // Spaces as Activities (docs/KWIN.md §4.2): space id → activity id, from
+    // loft-kwin's last `syncSpaces` (its map in <state>/kwin-activities.json),
+    // and kactivitymanagerd's activities [{ id, name, icon }].
+    property var spaceActivities: ({})
+    property var activityInfo: []
+    property bool spacesSynced: false
     // [{ name, geometry, identity ("Make Model Serial", niri's), model }]
     property var displays: []
 
@@ -38,19 +46,34 @@ Singleton {
             overview: true,
             // loft-kwin shot (KWin's ScreenShot2).
             windowScreenshot: true,
+            // Window stills for the dock preview and the switcher, through
+            // the same ScreenShot2 (KWinThumbs, docs/KWIN.md §4.8).
+            windowThumbnails: true,
+            // loft-kwin record window (KWin's zkde_screencast stream_window).
+            windowRecording: true,
             workspaceNames: true,
             perOutputWorkspaces: false,
-            titleBarEvents: false,
+            // Loft's decoration: right-click / held green → the window
+            // menu (windowActionsMenuRequested). Minimize is KWin's own.
+            titleBarEvents: true,
             configReload: false,
             // KWin puts its title bar (Loft's decoration) on the shell's own
             // windows too: WindowChrome leaves out its traffic lights.
-            serverDecorations: true
+            serverDecorations: true,
+            // Spaces are KDE Activities, one per Space (Spaces.qml).
+            spaces: true
         })
 
     signal outputsChanged
+    // A screen moved, was resized or rescaled (KScreen re-reads its outputs).
+    signal displayLayoutChanged
+    // Loft's decoration asked for the window menu (right-click on the bar,
+    // or green held): x, y logical within the output, as niri's event.
+    signal windowActionsMenuRequested(int id, string output, real x, real y)
     // A window screenshot of ours finished (screenshotWindow), path written.
     signal screenshotTaken(string path)
     property string outputKey: ""
+    property string layoutKey: ""
 
     // loft-kwin: the daemon below, and `loft-kwin shot …` for screenshots.
     readonly property string bin: Quickshell.env("LOFT_KWIN_BIN") || "loft-kwin"
@@ -111,12 +134,29 @@ Singleton {
             activities = s.activities ?? [];
             displays = s.outputs ?? [];
             currentActivity = s.current_activity ?? "";
+            overviewOpen = s.overview_open === true;
             available = true;
             const key = (s.outputs ?? []).map(o => o.name).sort().join(",");
             if (key !== outputKey) {
                 outputKey = key;
                 outputsChanged();
             }
+            const layout = (s.outputs ?? []).map(o => `${o.name}:${o.geometry}:${o.scale ?? 1}`).sort().join(",");
+            if (layout !== layoutKey) {
+                layoutKey = layout;
+                displayLayoutChanged();
+            }
+        } else if (msg.Spaces) {
+            spaceActivities = msg.Spaces.map ?? {};
+            activityInfo = msg.Spaces.activities ?? [];
+            spacesSynced = true;
+            for (const e of msg.Spaces.errors ?? [])
+                console.warn(`KWin: activities: ${e}`);
+        } else if (msg.WindowActionsMenuRequested) {
+            const e = msg.WindowActionsMenuRequested;
+            const w = windows.find(x => x.kwin_uuid === e.window);
+            if (w)
+                windowActionsMenuRequested(w.id, e.output ?? "", e.x, e.y);
         } else if (msg.KeyboardLayouts) {
             keyboardLayouts = msg.KeyboardLayouts;
         } else if (msg.Error) {
@@ -263,6 +303,17 @@ Singleton {
         send({ cmd: "setActivity", activity: activity });
     }
 
+    // Make kactivitymanagerd's activities match the spaces
+    // ([{ id, name, icon, template }]); answered with a Spaces line.
+    function syncSpaces(spaces) {
+        send({ cmd: "syncSpaces", spaces: spaces });
+    }
+
+    // Put a window on these activities ([] = all); follow: switch there too.
+    function setWindowActivities(id, activities, follow) {
+        windowCmd("setWindowActivities", id, { activities: activities, follow: follow === true });
+    }
+
     // Scrolling-layout columns: niri only (capabilities.columns).
     function maximizeColumn(id) {
         if (id !== undefined && id !== null)
@@ -301,6 +352,7 @@ Singleton {
             if (running)
                 return;
             root.available = false;
+            root.overviewOpen = false;
             // Crashed, or KWin wasn't ready yet: come back.
             if (root.wanted)
                 restart.start();

@@ -18,11 +18,14 @@ import Quickshell.Wayland
 // `screencopy`: a still of a whole display. Both are off where Quickshell's
 // buffer code would end the shell (dmabuf v3 only: niri on a software
 // renderer, e.g. headless test sessions without --gpu).
+// Under KWin (capabilities.windowThumbnails) windows are stills from KWin's
+// ScreenShot2 instead (KWinThumbs); WindowThumb picks the path.
 Singleton {
     id: root
 
     property var support: null
-    readonly property bool canWindows: support?.toplevel === true
+    readonly property bool canToplevels: support?.toplevel === true
+    readonly property bool canWindows: canToplevels || KWinThumbs.enabled
     readonly property bool canScreens: support?.screencopy === true
 
     Process {
@@ -45,7 +48,7 @@ Singleton {
     // keeps that order, so an app's windows sorted by id line up with its
     // Toplevels. Only evaluated while something shows a capture.
     readonly property var toplevels: {
-        if (!canWindows)
+        if (!canToplevels)
             return {};
         const byApp = {};
         for (const t of ToplevelManager.toplevels.values) {

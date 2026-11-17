@@ -120,8 +120,28 @@ Singleton {
     }
 
     // Absolute path (or "") of what a screen should show: its active workspace's.
+    // KWin with Spaces: the active space's own image for this display first.
     function wallpaperFor(screenName) {
-        return wallpaperAt(screenName, activeWorkspace(screenName));
+        return spaceWallpaper(screenName) || wallpaperAt(screenName, activeWorkspace(screenName));
+    }
+
+    // KWin (docs/KWIN.md §4.2): the screen's wallpaper while a Space (an
+    // Activity) is active: the space's `wallpapers` for the display's most
+    // specific role (SPACES.md §5), else the per-workspace choice made for
+    // the workspace the space binds to that role (under niri). One image per
+    // screen, swapped (crossfaded) on Activity switch. "" = no opinion.
+    // Under niri this stays with the workspaces, as before.
+    function spaceWallpaper(screenName) {
+        if (!Spaces.byActivity || !Spaces.enabled || !Spaces.active)
+            return "";
+        const doc = Spaces.active.doc ?? {};
+        const roles = Spaces.layout.find(d => d.name === screenName)?.roles ?? [];
+        for (const r of roles.concat(["*"])) {
+            const p = doc.wallpapers?.[r] || workspaceChoices[Spaces.active.displays?.[r] ?? ""];
+            if (typeof p === "string" && p !== "" && p !== "keep")
+                return p.startsWith("~/") ? Quickshell.env("HOME") + p.slice(1) : p;
+        }
+        return "";
     }
 
     function activeWorkspace(screenName) {

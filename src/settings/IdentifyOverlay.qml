@@ -13,9 +13,9 @@ PanelWindow {
     required property ShellScreen modelData
     screen: modelData
 
-    readonly property var info: NiriSettings.outputByName(modelData.name)
+    readonly property var info: Displays.outputByName(modelData.name)
 
-    visible: NiriSettings.identifying
+    visible: Displays.identifying
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "loft:identify"
     exclusionMode: ExclusionMode.Ignore

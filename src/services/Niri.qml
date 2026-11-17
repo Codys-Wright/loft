@@ -36,11 +36,17 @@ Singleton {
             minimize: false,
             overview: true,
             windowScreenshot: true,
+            // Compositor-served stills (KWin); niri's thumbnails are live
+            // captures (WindowCapture).
+            windowThumbnails: false,
+            windowRecording: false,
             workspaceNames: true,
             perOutputWorkspaces: true,
             titleBarEvents: true,
             configReload: true,
-            serverDecorations: false
+            serverDecorations: false,
+            // Spaces: named workspaces per output, activated by loft-niri.
+            spaces: true
         })
 
     // A screenshot was taken (niri's screenshot UI or actions); path may be "".

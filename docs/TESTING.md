@@ -141,6 +141,9 @@ What differs from niri sessions:
   `LOFT_DEV_OUTPUT_RECTS` (`WL-0=0,0,1600x1000+WL-1=…`). It sources in a shell
   (`set -a; . session.env`) to run KDE tools against the session (`qdbus org.kde.KWin …`,
   `kscreen-doctor -o`).
+- **A private PipeWire** with no devices (a null sink and a silent source) runs in the
+  session, for KWin's screencasts (`loft-kwin record`) and the shell's audio; never the
+  user's. Log: `<session dir>/pipewire.log` (KWIN.md §6).
 - `--output-count N`: N KWin outputs (`WL-0`, `WL-1`, …) of `--size`, side by side.
 - `--kwin-scale S`: fractional scaling (1.25, 1.5 …). The host output is scaled and KWin
   follows it (kscreen-doctor still reports 1); `--size` stays device pixels, so the

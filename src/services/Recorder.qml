@@ -4,9 +4,11 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Screen recording (wf-recorder, wlr-screencopy) of an output or a region
-// into ~/Videos/Recordings (the Capture module re-points `dir`). Shown as a
-// live activity in the island.
+// Screen recording of an output, a region or (KWin) a window into
+// ~/Videos/Recordings (the Capture module re-points `dir`). Shown as a live
+// activity in the island. niri: wf-recorder (wlr-screencopy). KWin, which
+// has no wlr-screencopy: `loft-kwin record` (KWin's zkde_screencast →
+// PipeWire → GStreamer, the same H.264 MP4; docs/KWIN.md §4.10).
 //
 // Audio: none | system (the default sink's monitor) | mic (the default
 // source) | both — system goes into the video by wf-recorder, the mic is
@@ -32,8 +34,13 @@ Singleton {
     readonly property string audioMode: audio !== "none" ? audio : withAudio ? "mic" : "none"
     property string micFile: ""
 
-    // opts: { output: name } or { geometry: "x,y WxH" } (logical, like
-    // slurp); default = the focused output.
+    // The running recording is loft-kwin's (pauses with SIGTSTP, which it
+    // passes on; wf-recorder takes SIGSTOP itself).
+    property bool viaKWin: false
+
+    // opts: { output: name } or { geometry: "x,y WxH" (logical, like slurp),
+    // scale: device pixels per logical pixel (KWin; default 1) } or
+    // { window: KWin uuid } (KWin only); default = the focused output.
     function start(opts) {
         if (active)
             return;
@@ -42,16 +49,19 @@ Singleton {
         paused = false;
         const o = opts ?? {};
         const screen = o.output ?? Compositor.focusedWorkspace?.output ?? "";
-        const args = ["wf-recorder", "-y"];
-        if (o.geometry)
-            args.push("-g", o.geometry);
-        else if (screen)
-            args.push("-o", screen);
-        if (audioMode === "system" || audioMode === "both")
-            args.push("--audio=@DEFAULT_MONITOR@");
-        else if (audioMode === "mic")
-            args.push("--audio");
-        args.push("-f", output);
+        viaKWin = Compositor.backend === "kwin";
+        const args = viaKWin ? kwinArgs(o, screen) : ["wf-recorder", "-y"];
+        if (!viaKWin) {
+            if (o.geometry)
+                args.push("-g", o.geometry);
+            else if (screen)
+                args.push("-o", screen);
+            if (audioMode === "system" || audioMode === "both")
+                args.push("--audio=@DEFAULT_MONITOR@");
+            else if (audioMode === "mic")
+                args.push("--audio");
+            args.push("-f", output);
+        }
         micFile = audioMode === "both" ? output.replace(/\.mp4$/, ".mic.wav") : "";
         proc.command = ["sh", "-c", 'mkdir -p "$1" && shift && exec "$@"', "sh", dir].concat(args);
         proc.running = true;
@@ -61,21 +71,39 @@ Singleton {
         }
     }
 
+    // `loft-kwin record screen|area|window … FILE [--scale S] [--audio SRC]`.
+    function kwinArgs(o, screen) {
+        const args = [KWin.bin, "record"];
+        const g = /^(-?\d+),(-?\d+) (\d+)x(\d+)$/.exec(o.geometry ?? "");
+        if (o.window)
+            args.push("window", o.window, output);
+        else if (g)
+            args.push("area", g[1], g[2], g[3], g[4], output, "--scale", String(o.scale ?? 1));
+        else
+            args.push("screen", screen || (Quickshell.screens[0]?.name ?? ""), output);
+        if (audioMode === "system" || audioMode === "both")
+            args.push("--audio", "@DEFAULT_MONITOR@");
+        else if (audioMode === "mic")
+            args.push("--audio", "default");
+        return args;
+    }
+
     function stop() {
         if (!active)
             return;
         if (paused)
-            pause(); // resume so wf-recorder can finalize on SIGINT
+            pause(); // resume so the recorder can finalize on SIGINT
         proc.signal(2); // SIGINT: wf-recorder finalizes the file
         if (mic.running)
             mic.signal(2);
     }
 
     // SIGSTOP/SIGCONT freeze the recorder; the clock stops with it.
+    // (loft-kwin: SIGTSTP, it stops its encoder.)
     function pause() {
         if (!active)
             return;
-        proc.signal(paused ? 18 : 19);
+        proc.signal(paused ? 18 : viaKWin ? 20 : 19);
         if (mic.running)
             mic.signal(paused ? 18 : 19);
         paused = !paused;
