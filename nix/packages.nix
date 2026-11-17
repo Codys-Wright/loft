@@ -498,8 +498,14 @@
 
         # walker + launcher/walker-set-query.patch: lets an elephant provider
         # replace the query text — how a !bang becomes a sub-search scope.
+        # + launcher/walker-instant.patch: the service connects to elephant
+        # and builds its window (renderer, styles, fonts) hidden at start, so
+        # the first open is as quick as the others (docs/KWIN.md §4.22).
         loft-walker = pkgs.walker.overrideAttrs (old: {
-          patches = (old.patches or [ ]) ++ [ ../launcher/walker-set-query.patch ];
+          patches = (old.patches or [ ]) ++ [
+            ../launcher/walker-set-query.patch
+            ../launcher/walker-instant.patch
+          ];
         });
 
         loft-launcher = pkgs.writeShellApplication {

@@ -1,0 +1,30 @@
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -804,6 +804,27 @@
+     init_app_state();
+     init_ui(app, dmenu, theme);
+ 
++    // Loft: the first open after the service starts is as quick as the
++    // others. Connect to elephant now (walker otherwise waits for its first
++    // open), and build the window's renderer, styles and fonts while it's
++    // hidden (a first show otherwise pays for them).
++    if is_service && !dmenu {
++        if has_elephant() {
++            thread::spawn(|| {
++                if let Err(e) = init_socket() {
++                    eprintln!("connecting to elephant: {e}");
++                }
++            });
++        }
++        with_window(|w| {
++            w.window.realize();
++            let _ = w.window.measure(gtk4::Orientation::Horizontal, -1);
++            let _ = w.window.measure(gtk4::Orientation::Vertical, -1);
++            // The icon theme's index, read on the first icon lookup.
++            let _ = gtk4::IconTheme::for_display(&WidgetExt::display(&w.window)).has_icon("application-x-executable");
++        });
++    }
++
+     listen_activation_socket(app.clone());
+     listen_niri_workspaces(app.clone());
+ }

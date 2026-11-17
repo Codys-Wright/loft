@@ -87,6 +87,34 @@ class FromShellBinds(unittest.TestCase):
         self.assertEqual(self.by_id["launcher-open"].command, ["loft-launcher", "open"])
         self.assertEqual(self.by_id["capture-toggle"].keys, "Meta+%")
 
+    def test_spotlight_keys_skip_the_unit(self):
+        # docs/KWIN.md §4.22: loft-kwin's dev.loft.Launcher, the unit as the fallback.
+        js = kwinkeys.render_js(self.actions)
+        self.assertIn('"Meta+Space", function () { loftLauncher("launcher-open", "open"); });', js)
+        emoji = next(a for a in self.actions if a.command == ["loft-launcher", "emoji"])
+        self.assertEqual(kwinkeys.launcher_mode(emoji), "emoji")
+        self.assertIn(f'loftLauncher("{emoji.id}", "emoji");', js)
+        self.assertIn('"NameHasOwner", "dev.loft.Launcher"', js)
+        self.assertIn("if (!ok) loftRun(id);", js)
+        # The action file stays, for the fallback.
+        with tempfile.TemporaryDirectory() as d:
+            kwinkeys.write(Path(d), self.actions)
+            self.assertEqual((Path(d) / "actions" / "launcher-open").read_text(), "exec loft-launcher open\n")
+
+    def test_launcher_mode(self):
+        A = kwinkeys.Action
+        self.assertEqual(kwinkeys.launcher_mode(A("x", "Meta+X", "t", "exec", ["/nix/bin/loft-launcher"])), "open")
+        self.assertEqual(kwinkeys.launcher_mode(A("x", "Meta+X", "t", "exec", ["loft-launcher", "help"])), "help")
+        self.assertIsNone(kwinkeys.launcher_mode(A("x", "Meta+X", "t", "exec", ["loft-launcher", "service"])))
+        self.assertIsNone(kwinkeys.launcher_mode(A("x", "Meta+X", "t", "exec", ["loft-launcher", "open", "x"])))
+        self.assertIsNone(kwinkeys.launcher_mode(A("x", "Meta+X", "t", "exec", ["walker"])))
+        self.assertIsNone(kwinkeys.launcher_mode(A("x", "Meta+X", "t", "kwin", js="f();")))
+
+    def test_launcher_modes_are_loft_launchers(self):
+        sh = (REPO / "launcher" / "loft-launcher.sh").read_text()
+        for mode in kwinkeys.LAUNCHER_MODES:
+            self.assertIn(f"\n  {mode})\n", sh)
+
     def test_quit_guard_falls_back_to_kwin(self):
         q = self.by_id["quit"]
         self.assertEqual(q.keys, "Meta+Q")
