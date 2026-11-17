@@ -18,7 +18,7 @@ until this is ready, keep the niri session.
 | Title bars | a **custom KWin decoration plugin** (KDecoration3, §4.4) |
 | Wallpapers | one per screen, swapped with the desktop/activity. No per-workspace surfaces |
 | Backing out | Loft and plasmashell must be **switchable**, live and at login, without leaving traces in each other (§5) |
-| Window thumbnails | **icons first**. Thumbnails later through `ScreenShot2` |
+| Window thumbnails | **icons first**. Thumbnails later through `ScreenShot2` (done, §4.8) |
 
 ## 1. What's already portable, and what isn't
 
@@ -88,7 +88,7 @@ niri. Nothing reads it yet. The KWin step gates menu items on it (e.g. MenuState
 |---|---|---|
 | Bar: `bar/Workspaces`, `StatusItems`, `menubar/MenuBarTitles`, `components/WindowChrome` | workspaces per output, focused window title, layouts, overview | port: desktops, focused title, `org.kde.keyboard` |
 | Menu bar + app menu: `menubar/MenuState`, `services/AppMenu`, `Arrange` | focused window, pid groups, close/float/fullscreen/move, hide = park on a `hidden-*` workspace | port. **Hide** becomes KWin minimize (decided): `hideApp`/`hideOthers`/`showAll` and the dock's unhide go through a `Compositor.setMinimized(id, bool)` the KWin backend adds, and the `hidden-*` parking stays niri-only. Column items off. Floating presets map to `frameGeometry` |
-| Dock: `dock/*`, `services/DockData`, `Previews`, `WindowCapture` | windows by app, move/close, workspace names, thumbnails | port windows and actions. Thumbnails fall back to icons (the path stock niri uses) until §4 capture exists |
+| Dock: `dock/*`, `services/DockData`, `Previews`, `WindowCapture` | windows by app, move/close, workspace names, thumbnails | port windows and actions. Thumbnails: stills through ScreenShot2 (§4.8) |
 | Switchers: `switcher/Switcher`, `SpaceSwitcher`, `palette/*` | window list by `focus_timestamp`, focus | port. The bridge stamps `focus_timestamp` on activation |
 | Launchpad, Spotlight, panels' "which screen": `Launchpad`, `Panels`, `Hud`, `Sound`, `clipboard/*`, … (~20 files) | `focusedWorkspace.output` | port: needs the focused window's output, or the cursor's |
 | Everyday / QuitGuard / QuitOnClose / KeepAwake / KeyRemaps / WindowRules (running check) | windows by pid / app_id, close | port |
@@ -181,7 +181,7 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 |---|---|
 | traffic-light title bars (`title-bar.patch`) | **Loft's own KDecoration3 plugin** (§4.4) |
 | per-workspace wallpaper surfaces (`workspace-layers.patch`) | off (decided). One wallpaper per screen, swapped on desktop/activity change (the existing stock-niri path), under KWin's slide effect |
-| window thumbnails (`toplevel-export.patch`) | **icons** (decided, the existing stock-niri fallback). Later stills via `ScreenShot2.CaptureWindow` (restricted: loft-kwin's .desktop needs `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2`) |
+| window thumbnails (`toplevel-export.patch`) | **done** (§4.8): stills through `ScreenShot2.CaptureWindow` (`loft-kwin thumbs`), taken when the dock preview or the switcher opens |
 | screen/area capture via grim | **done** (§4.7): `loft-kwin shot`, KWin's `ScreenShot2` |
 | keybinds (loft-niri → niri KDL binds) | kglobalaccel, **done** (§4.5): `loft-keys.js`, a KWin script of `registerShortcut`s generated from shell-binds + Settings → Keyboard Shortcuts, loaded while Loft's shell runs (§5) |
 | window rules (loft-niri window_rules.rs) | applied by loft-bridge.js at `windowAdded` while Loft runs, not written to `kwinrulesrc` (§5) |
@@ -574,9 +574,45 @@ needed (checked on THEBATTLESHIP and in a nested session).
 Under the KWin backend, Capture.qml's screen shots and the frozen frames for area
 selection run `KWin.screenshotArgv()` instead of grim, and `Compositor.screenshotWindow`
 (`capabilities.windowScreenshot`) runs `shot window`, copies the PNG and emits
-`screenshotTaken`, like niri. Not done: **recording** (wf-recorder needs
-wlr-screencopy; KWin records through the ScreenCast portal or `zkde_screencast`), and
-window thumbnails (step 11, the same `shot window`).
+`screenshotTaken`, like niri. `--max PX` downscales so the longer side is at most PX. Not
+done: **recording** (wf-recorder needs wlr-screencopy; KWin records through the
+ScreenCast portal or `zkde_screencast`). Window thumbnails are §4.8.
+
+### 4.8 Window thumbnails through ScreenShot2
+
+**Done** (step 11). Under niri-loft each dock-preview card and switcher cell is a live
+`ScreencopyView` of its window. KWin has no toplevel capture protocol, so under KWin they
+are **stills**:
+
+```sh
+loft-kwin thumbs DIR MAX_PX UUID…   # one connection, a PNG per window: DIR/<uuid>.png
+# one line per window on stdout:
+# {"window":"{uuid}","path":"…","width":440,"height":246,"ms":16}  or  {"window":…,"error":…}
+```
+
+- `services/KWinThumbs.qml` runs it. Stills live in
+  `$XDG_RUNTIME_DIR/loft-kwin-thumbs/$WAYLAND_DISPLAY/`, at most 440 px on the longer
+  side (the cards are 196×124, the switcher cells at most 220 wide; ×2 for HiDPI). The
+  first batch of a shell run clears out the last run's (a restarted loft-kwin numbers
+  windows afresh). A window's still is deleted when the window closes.
+- **When:** no polling. `components/WindowThumb.qml` asks for a still when it becomes active
+  (the dock preview opening, the switcher's first press), then every 2 s while it stays
+  open. Cards that open together share one batch, and a still younger than 1 s is reused.
+  Also, once a window has been focused for 1.5 s, it gets a still if its last is older
+  than 10 s, so the switcher usually opens with pictures already there.
+- **Capabilities:** `windowThumbnails` (KWin true, niri false). `WindowCapture.canWindows`
+  is true under KWin through `KWinThumbs.enabled`, which turns on the switcher's
+  thumbnail cells and the dock preview's cards, and `WindowThumbs` (cropping display
+  stills) stays off. Under niri nothing changes: `WindowThumb` uses its ScreencopyView,
+  and the toplevel map only looks at `canToplevels`.
+- **What KWin 6.8.2 captures:** windows that are covered, on another desktop, and
+  **minimized** too (their last frame; checked in a nested session). A capture that fails
+  keeps the window's last still, and with none the card shows the app icon.
+- **Cost** (nested session, release build): a ~800×440 window takes 4–8 ms per window
+  (capture, convert, downscale, PNG), and the whole `thumbs` process for two windows
+  12–16 ms. A maximized 1600×894 window takes 16–28 ms (21–35 ms for the process); the
+  full-size `shot window` of it takes 18–24 ms. Well inside the switcher's 120 ms show
+  delay.
 
 ## 5. One Plasma session, two shells: switching and backing out
 
@@ -709,7 +745,7 @@ What it took:
 8. ✅ Lock screen shell package (§4.3).
 9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). Display settings, recording.
 10. Spaces on Activities (§4.2).
-11. Window thumbnails through ScreenShot2.
+11. ✅ Window thumbnails through ScreenShot2 (§4.8).
 
 ## 8. Notes for the fleet flake (~/.flake, out of scope here)
 

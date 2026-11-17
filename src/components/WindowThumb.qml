@@ -10,6 +10,9 @@ import qs.services
 // while inactive, and the capture's buffers go when it stops. `ready` says
 // a picture is showing; callers show their icon fallback until then (or
 // when capture isn't available at all).
+// Under KWin the picture is a still from KWinThumbs (ScreenShot2), taken
+// when this becomes active and every `interval` ms (at least 2 s) after;
+// a capture that fails keeps the last still (else: not ready, the icon).
 Item {
     id: root
 
@@ -20,10 +23,46 @@ Item {
     property real radius: 8
 
     readonly property var toplevel: active && windowId >= 0 ? WindowCapture.toplevel(windowId) : null
-    readonly property bool ready: toplevel !== null && (view.item?.hasContent ?? false)
+    readonly property bool kwin: KWinThumbs.enabled
+    readonly property string still: kwin && active && windowId >= 0 ? KWinThumbs.url(windowId) : ""
+    readonly property bool stillReady: still !== "" && stillImage.status === Image.Ready
+    readonly property Item picture: toplevel !== null ? view.item : stillReady ? stillImage : null
+    readonly property bool ready: (toplevel !== null && (view.item?.hasContent ?? false)) || (toplevel === null && stillReady)
     // The picture's size inside this item.
-    readonly property real paintedWidth: view.item?.width ?? 0
-    readonly property real paintedHeight: view.item?.height ?? 0
+    readonly property real paintedWidth: toplevel !== null ? (view.item?.width ?? 0) : stillReady ? stillImage.width : 0
+    readonly property real paintedHeight: toplevel !== null ? (view.item?.height ?? 0) : stillReady ? stillImage.height : 0
+
+    // KWin: ask for a still (cards opening together share one batch).
+    function askStill() {
+        if (kwin && active && windowId >= 0)
+            KWinThumbs.request([windowId], 1000);
+    }
+    onActiveChanged: askStill()
+    onWindowIdChanged: askStill()
+    onKwinChanged: askStill()
+    Component.onCompleted: askStill()
+    Timer {
+        running: root.kwin && root.active && root.interval > 0
+        interval: Math.max(2000, root.interval)
+        repeat: true
+        onTriggered: KWinThumbs.request([root.windowId], 1500)
+    }
+
+    // Fitted, keeping the window's proportions (like the capture below).
+    Image {
+        id: stillImage
+        readonly property real k: implicitWidth > 0 && implicitHeight > 0 ? Math.min(root.width / implicitWidth, root.height / implicitHeight) : 0
+        anchors.centerIn: parent
+        width: implicitWidth * k
+        height: implicitHeight * k
+        source: root.still
+        cache: false
+        // A small local PNG: loading in place swaps stills without a gap.
+        asynchronous: false
+        smooth: true
+        mipmap: true
+        visible: false
+    }
 
     // Only made while capturing: merely creating a ScreencopyView sets up
     // Quickshell's buffer code, which ends the shell on a dmabuf-v3-only
@@ -44,7 +83,7 @@ Item {
     }
 
     Timer {
-        running: root.ready && root.interval > 0
+        running: root.toplevel !== null && root.ready && root.interval > 0
         interval: root.interval
         repeat: true
         onTriggered: view.item.captureFrame()
@@ -61,8 +100,10 @@ Item {
     }
     MultiEffect {
         visible: root.ready
-        source: view.item
-        anchors.fill: view
+        source: root.picture
+        anchors.centerIn: parent
+        width: root.paintedWidth
+        height: root.paintedHeight
         maskEnabled: true
         maskSource: mask
         maskThresholdMin: 0.5

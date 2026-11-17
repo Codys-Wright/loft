@@ -36,6 +36,9 @@ Singleton {
             minimize: false,
             overview: true,
             windowScreenshot: true,
+            // Compositor-served stills (KWin); niri's thumbnails are live
+            // captures (WindowCapture).
+            windowThumbnails: false,
             workspaceNames: true,
             perOutputWorkspaces: true,
             titleBarEvents: true,

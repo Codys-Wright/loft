@@ -39,8 +39,9 @@ Singleton {
     readonly property var impl: backend === "kwin" ? KWin : Niri
 
     // What the backend can do: { columns, floating, minimize, overview,
-    // windowScreenshot, workspaceNames, perOutputWorkspaces, titleBarEvents,
-    // configReload, serverDecorations }. Menus hide what's off;
+    // windowScreenshot, windowThumbnails, workspaceNames, perOutputWorkspaces,
+    // titleBarEvents, configReload, serverDecorations }. Menus hide what's off;
+    // windowThumbnails = window stills from the compositor (KWinThumbs);
     // serverDecorations = the compositor gives the shell's own windows a
     // title bar, so they don't draw traffic lights.
     readonly property var capabilities: impl.capabilities
