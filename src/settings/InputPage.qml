@@ -3,10 +3,14 @@ import QtQuick.Layouts
 import qs.services
 
 // Settings → Input: keyboard (XKB layout, key repeat), mouse and touchpad.
-// Values are niri's (NiriSettings); changes become runtime overrides.
+// Values are niri's (NiriSettings); changes become runtime overrides. Under
+// KWin only key repeat is here (KDE's kcminputrc, KdeInput); layouts, mouse
+// and trackpad are KDE's System Settings for now.
 ColumnLayout {
     id: page
     spacing: 12
+
+    readonly property bool kde: Compositor.backend === "kwin"
 
 
     readonly property var accelOptions: [
@@ -19,13 +23,14 @@ ColumnLayout {
         PageHeader {
             title: "Keyboard"
             SettingsButton {
-                visible: NiriSettings.anyOverridden("input.keyboard")
+                visible: !page.kde && NiriSettings.anyOverridden("input.keyboard")
                 text: "Reset"
                 onClicked: NiriSettings.unset("input.keyboard")
             }
         }
 
         NiriRow {
+            visible: !page.kde
             key: "input.keyboard.xkb.layout"
             extraHint: "XKB layouts, comma-separated (us,de)"
             SettingsTextField {
@@ -36,6 +41,7 @@ ColumnLayout {
         }
 
         NiriRow {
+            visible: !page.kde
             key: "input.keyboard.xkb.variant"
             SettingsTextField {
                 text: NiriSettings.value("input.keyboard.xkb.variant") ?? ""
@@ -45,6 +51,7 @@ ColumnLayout {
         }
 
         NiriRow {
+            visible: !page.kde
             key: "input.keyboard.xkb.options"
             SettingsTextField {
                 text: NiriSettings.value("input.keyboard.xkb.options") ?? ""
@@ -54,6 +61,7 @@ ColumnLayout {
         }
 
         NiriRow {
+            visible: !page.kde
             key: "input.keyboard.repeat-delay"
             SettingsSlider {
                 from: 150
@@ -66,6 +74,7 @@ ColumnLayout {
         }
 
         NiriRow {
+            visible: !page.kde
             key: "input.keyboard.repeat-rate"
             SettingsSlider {
                 from: 5
@@ -75,6 +84,41 @@ ColumnLayout {
                 value: NiriSettings.value("input.keyboard.repeat-rate") ?? 25
                 onCommitted: v => NiriSettings.set("input.keyboard.repeat-rate", Math.round(v))
             }
+        }
+
+        // KDE: kcminputrc, applied by KWin at once.
+        SettingsRow {
+            visible: page.kde
+            label: "Repeat delay"
+            hint: "KDE's keyboard setting (kcminputrc)"
+            SettingsSlider {
+                from: 150
+                to: 1000
+                step: 10
+                suffix: " ms"
+                value: KdeInput.repeatDelay
+                onCommitted: v => KdeInput.setRepeat(Math.round(v), KdeInput.repeatRate)
+            }
+        }
+
+        SettingsRow {
+            visible: page.kde
+            label: "Repeat rate"
+            hint: "KDE's keyboard setting (kcminputrc)"
+            SettingsSlider {
+                from: 5
+                to: 80
+                step: 1
+                suffix: " /s"
+                value: KdeInput.repeatRate
+                onCommitted: v => KdeInput.setRepeat(KdeInput.repeatDelay, Math.round(v))
+            }
+        }
+
+        SettingsRow {
+            visible: page.kde
+            label: "Layouts, mouse and trackpad"
+            hint: "In KDE's System Settings for now (Keyboard, Mouse, Touchpad)"
         }
     }
 
@@ -88,6 +132,7 @@ ColumnLayout {
         delegate: SettingsCard {
             id: dev
             required property var modelData
+            visible: !page.kde
             readonly property string prefix: `input.${modelData.id}.`
 
             PageHeader {

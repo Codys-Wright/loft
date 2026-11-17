@@ -156,6 +156,14 @@ Singleton {
             return false;
         const active = Compositor.windowMap[ws.active_window_id] ?? null;
         const column = active && !active.is_floating ? active.layout?.pos_in_scrolling_layout?.[0] : undefined;
+        // KWin has no tiling: every window counts as floating there, so the
+        // column test below never matches. Its windows say fullscreen outright.
+        if (Compositor.backend === "kwin")
+            return Compositor.windows.some(w => {
+                const acts = w.kwin_activities ?? [];
+                const here = acts.length === 0 || acts.includes(KWin.currentActivity);
+                return w.workspace_id === ws.id && w.is_fullscreen === true && !w.is_minimized && here;
+            });
         return Compositor.windows.some(w => {
             const size = w.layout?.tile_size;
             if (w.workspace_id !== ws.id || w.is_floating || !size || size[0] < screen.width - 1 || size[1] < screen.height - 1)
