@@ -3,7 +3,8 @@
   kde.colors         a KDE color scheme ("Loft"): the palette for KColorScheme
                      and the app palette (Dolphin's view is KColorScheme::View)
   kvantum.kvconfig   a Kvantum theme ("Loft"): translucent windows (the glass
-  kvantum.svg        niri blurs: Kvantum's own blur is off), opaque views,
+  kvantum.svg        niri blurs by rule; under KWin Kvantum asks for KWin's
+                     blur, `blurring`), opaque views,
                      rounded selection pills, flat toolbar buttons, the
                      palette's accent; every element Kvantum draws for Dolphin
                      is generated here, so nothing falls back to Kvantum's
@@ -15,7 +16,7 @@
   material  glass tint / opacity / blur → the window (sidebar) glass
   shape     control radius (buttons, pills), surface radius (menus)
 
-Nothing here is global: the `qt` hook (hooks.py) links these files in as the
+Nothing here is global (global mode is qtglobal.py): the `qt` hook (hooks.py) links these files in as the
 Kvantum theme `Loft` and the color scheme `Loft`, assigns the Kvantum theme
 to the apps listed in ~/.config/loft/qt.json only (kvantum.kvconfig
 [Applications]), and writes the style / scheme keys into those apps' own rc

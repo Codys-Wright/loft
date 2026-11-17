@@ -51,6 +51,11 @@ KWIN_OVERVIEW = "Overview"
 # (600 ms by default) and isn't caught; the shell drops it (Compositor.
 # shortcutRecent).
 REPEAT_GAP_MS = 250
+# KWin's window-operations menu (Alt+F3): Loft's window menu takes its keys
+# (WINDOW_MENU below, docs/KWIN.md §4.4 "Alt+F3").
+KWIN_WINDOW_OPS = "Window Operations Menu"
+WINDOW_MENU_ID = "window-menu"
+WINDOW_MENU_KEYS = "Alt+F3"
 
 # niri modifier → Qt. Qt's portable text orders them Meta, Ctrl, Alt, Shift.
 QT_MODS = {
@@ -445,6 +450,18 @@ def render_js(actions: list[Action]) -> str:
         "    loftLast[id] = now;",
         "    return true;",
         "}",
+        "// Loft's window menu for the active window (loft-kwin's bridge script",
+        "// opens it under the green bead); KWin's own when loft-kwin isn't there.",
+        "function loftWindowMenu() {",
+        '    callDBus("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",',
+        '        "NameHasOwner", "dev.loft.KWinBridge", function (has) {',
+        "            if (has)",
+        '                callDBus("dev.loft.KWinBridge", "/Bridge", "dev.loft.KWinBridge", "Command",',
+        '                    JSON.stringify({ cmd: "windowMenu" }));',
+        "            else",
+        "                workspace.slotWindowOperations();",
+        "        });",
+        "}",
     ]
     for a in actions:
         body = f"loftRun({_js_str(a.id)});" if a.kind == "exec" else a.js
@@ -507,13 +524,27 @@ def space_binds(binds: list[Bind]) -> list[Bind]:
     return out
 
 
+def window_menu_action(taken: set[str]) -> Action | None:
+    """Loft's window menu on KWin's Window Operations Menu key (Alt+F3; `claim`
+    moves it to whatever key that action has). None when a bind of the user's
+    already uses Alt+F3."""
+    if WINDOW_MENU_KEYS in taken:
+        return None
+    return Action(id=WINDOW_MENU_ID, keys=WINDOW_MENU_KEYS, text="Loft: Window Menu", kind="kwin",
+                  js="loftWindowMenu();", combo="Alt+F3")
+
+
 def build(binds_text: str, overrides: dict | None = None) -> tuple[list[Action], list[str]]:
     binds = parse_binds(binds_text)
     # After shell-binds, before the user's changes: a moved or disabled key wins.
     binds = binds + space_binds(binds)
     if overrides:
         binds = apply_overrides(binds, overrides)
-    return translate(binds)
+    actions, skipped = translate(binds)
+    wm = window_menu_action({a.keys for a in actions})
+    if wm is not None and wm.id not in {a.id for a in actions}:
+        actions.append(wm)
+    return actions, skipped
 
 
 # ── Keys other actions hold (record + revert) ───────────────────────────
@@ -587,12 +618,13 @@ def claim(bus, names: set[str], record: Path) -> list[dict]:
     other action that has one; append what was taken to `record` (an action
     already in it keeps its first, original keys). Returns the new entries."""
     infos = {path: bus.infos(path) for path in bus.components()}
+    taken = _read_record(record)
+    _adopt_window_ops_keys(bus, infos, names, taken)
     ours: set[int] = set()
     for rows in infos.values():
         for r in rows:
             if r[2] == "kwin" and r[0] in names:
                 ours.update(int(k) for k in r[6] if int(k))
-    taken = _read_record(record)
     known = {tuple(t["id"][:2]) for t in taken}
     new: list[dict] = []
     for rows in infos.values():
@@ -615,6 +647,32 @@ def claim(bus, names: set[str], record: Path) -> list[dict]:
         record.parent.mkdir(parents=True, exist_ok=True)
         record.write_text(json.dumps(taken, indent=2) + "\n")
     return new
+
+
+def _adopt_window_ops_keys(bus, infos: dict, names: set[str], taken: list[dict]) -> None:
+    """Loft's Window Menu gets the keys KWin's Window Operations Menu has (the
+    user may have moved it off Alt+F3), or had before an earlier claim took
+    them (the record). `infos` is updated so claim takes those keys next."""
+    ours_name = f"loft-{WINDOW_MENU_ID}"
+    if ours_name not in names:
+        return
+    mine = ops = None
+    for rows in infos.values():
+        for r in rows:
+            if r[2] == "kwin" and r[0] == ours_name:
+                mine = r
+            elif r[2] == "kwin" and r[0] == KWIN_WINDOW_OPS:
+                ops = r
+    if mine is None or ops is None:
+        return
+    rec = next((t for t in taken if t["id"][:2] == ["kwin", KWIN_WINDOW_OPS]), None)
+    want = [list(k) for k in rec["keys"]] if rec else bus.keys([ops[2], ops[0], ops[3], ops[1]])
+    if not want:
+        return  # the user cleared it: keep Alt+F3
+    if sorted(want) == sorted([int(k)] for k in mine[6] if int(k)):
+        return
+    bus.set_foreign([mine[2], mine[0], mine[3], mine[1]], want)
+    mine[6] = [k[0] for k in want]
 
 
 def release(bus, record: Path) -> list[dict]:

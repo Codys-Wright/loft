@@ -555,6 +555,7 @@
                   pkgs.imagemagick # loft media convert / watermark; `loft mcp` downscales screenshots
                   pkgs.grim # `loft mcp`: screenshot_output / screenshot_window
                   pkgs.wl-clipboard # `loft mcp`: keeps the clipboard text across niri's window render
+                  pkgs.systemd # busctl: `loft keys kwin`, `loft qt global`'s KConfig notifications
                 ]
               }
           '';

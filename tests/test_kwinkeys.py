@@ -276,3 +276,54 @@ class ClaimRelease(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+ALT_F3, META_F3 = 0x8000032, 0x10000032
+
+
+class WindowMenu(unittest.TestCase):
+    """KWin's Window Operations Menu (Alt+F3) opens Loft's window menu."""
+
+    def setUp(self):
+        self.bus = FakeBus()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.record = Path(self.tmp.name) / "taken.json"
+        self.names = {"loft-window-menu"}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_rendered_with_fallback(self):
+        actions, _ = kwinkeys.build(shell_binds())
+        wm = next(a for a in actions if a.id == "window-menu")
+        self.assertEqual((wm.keys, wm.kind), ("Alt+F3", "kwin"))
+        js = kwinkeys.render_js(actions)
+        self.assertIn('registerShortcut("loft-window-menu", "Loft: Window Menu", "Alt+F3", function () { loftWindowMenu(); });', js)
+        self.assertIn('JSON.stringify({ cmd: "windowMenu" })', js)
+        self.assertIn("workspace.slotWindowOperations();", js)
+
+    def test_a_user_bind_on_alt_f3_wins(self):
+        ov = {"binds": {"Alt+F3": {"action": "spawn", "args": ["foot"]}}}
+        actions, _ = kwinkeys.build(shell_binds(), ov)
+        self.assertFalse(any(a.id == "window-menu" for a in actions))
+
+    def test_claim_takes_alt_f3_and_release_gives_it_back(self):
+        self.bus.add("kwin", "Window Operations Menu", [[ALT_F3]])
+        self.bus.add("kwin", "loft-window-menu", [[ALT_F3]])
+        kwinkeys.claim(self.bus, self.names, self.record)
+        self.assertEqual(self.bus.seqs[("kwin", "Window Operations Menu")], [])
+        kwinkeys.release(self.bus, self.record)
+        self.assertEqual(self.bus.seqs[("kwin", "Window Operations Menu")], [[ALT_F3]])
+
+    def test_follows_a_moved_window_operations_key(self):
+        self.bus.add("kwin", "Window Operations Menu", [[META_F3]])
+        self.bus.add("kwin", "loft-window-menu", [[ALT_F3]])
+        kwinkeys.claim(self.bus, self.names, self.record)
+        self.assertEqual(self.bus.seqs[("kwin", "loft-window-menu")], [[META_F3]])
+        self.assertEqual(self.bus.seqs[("kwin", "Window Operations Menu")], [])
+        # A second claim (restart without release) still knows the original key.
+        self.bus.seqs[("kwin", "loft-window-menu")] = [[ALT_F3]]  # re-registered from the script
+        kwinkeys.claim(self.bus, self.names, self.record)
+        self.assertEqual(self.bus.seqs[("kwin", "loft-window-menu")], [[META_F3]])
+        kwinkeys.release(self.bus, self.record)
+        self.assertEqual(self.bus.seqs[("kwin", "Window Operations Menu")], [[META_F3]])
