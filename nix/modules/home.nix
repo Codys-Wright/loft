@@ -420,8 +420,7 @@
           fi
           ${releaseKwinShortcuts} || true
         }
-        case "''${1:-}" in
-          load)
+        load() {
             # At login this runs as KWin is still starting: its /Scripting
             # object exists before its methods do ("Cannot find
             # loadScript"), and one try left Plasma without Loft's keys.
@@ -446,12 +445,34 @@
             # another script, e.g. loft-kwin's bridge).
             ${qdbus} org.kde.KWin /Scripting org.kde.kwin.Scripting.start >/dev/null || exit 1
             ${lib.getExe sp.loft} keys kwin claim --names "$dir/names" --record ${lib.escapeShellArg kwinShortcutsTaken}
+        }
+        # One verb at a time: loft-kwin's `heal` (crates/loft-kwin/src/heal.rs)
+        # can come while the unit's load or unload runs.
+        ${pkgs.coreutils}/bin/mkdir -p "''${dir%/*}"
+        exec 9>"$dir.lock"
+        ${pkgs.util-linux}/bin/flock 9
+        case "''${1:-}" in
+          load)
+            load
+            ;;
+          heal)
+            # From loft-kwin (docs/KWIN.md §4.18) when KWin lost loft-keys:
+            # the same load, unless Loft unloaded it on purpose (no rendered
+            # script: `unload` ran) or Loft's shell is starting or stopping
+            # (its ExecStartPost loads it; its ExecStopPost unloads it).
+            [ -e "$dir/$script.js" ] || exit 0
+            systemctl --user is-active --quiet loft-plasma-shell.service || exit 0
+            [ "$(${qdbus} org.kde.KWin /Scripting org.kde.kwin.Scripting.isScriptLoaded "$script" 2>/dev/null)" = false ] || exit 0
+            echo "loft-plasma-shortcuts: KWin lost $script: loading it again"
+            load
             ;;
           unload)
+            # The rendered script first: from here on nothing heals it.
+            ${pkgs.coreutils}/bin/rm -f "$dir/$script.js"
             unload
             ${pkgs.coreutils}/bin/rm -rf "$dir"
             ;;
-          *) echo "usage: loft-plasma-shortcuts load|unload" >&2; exit 2 ;;
+          *) echo "usage: loft-plasma-shortcuts load|heal|unload" >&2; exit 2 ;;
         esac
       '';
       # What a shortcut runs: loft-plasma-key@<id>:<n>.service (the KWin
@@ -1245,6 +1266,9 @@
             Service.Environment = env ++ [
               "QS_DISABLE_CRASH_HANDLER=1"
               "LOFT_WM_KEY=meta"
+              # loft-kwin's healer reloads Loft's shortcuts through it
+              # (`heal`, docs/KWIN.md §4.18).
+              "LOFT_PLASMA_SHORTCUTS=${plasmaShortcuts}"
             ];
             # The same first-start theme as on niri.
             Service.ExecStartPre = config.systemd.user.services.loft-shell.Service.ExecStartPre;

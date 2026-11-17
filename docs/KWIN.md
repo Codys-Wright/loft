@@ -198,7 +198,8 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | WM key (Caps / Esc / Right Ctrl held → Right Alt = niri Mod) | **done**: the hold is a private xremap virtual modifier (F24) that sends **Meta** + the next key, so KWin's and Loft's Meta shortcuts are reachable (§4.5, `LOFT_WM_KEY=meta`) |
 
 **Off under KWin** (hidden with `Compositor.capabilities`): scrolling-column ops
-(Maximize Column, column-width presets, consume/expel, center visible), niri's motion
+(consume/expel, center visible; Maximize Column, preset widths and center column are
+KWin keys instead, §4.5), niri's motion
 and shape settings (KWin has its own animations), the niri sections of Settings
 (keybinds-as-KDL, window-rule KDL preview), and workspace-layer wallpapers. Columns are
 niri's by nature, so Settings hides their controls under KWin rather than showing dead
@@ -708,9 +709,10 @@ xremap that runs (then `XDG_CURRENT_DESKTOP` with KDE → meta). `loft keys show
 says which. Not covered: WM key + mouse (KWin's Meta+drag) and a WM-key hold
 alone (Cleaning Mode's "hold Esc" — the timer still ends it).
 
-**Window focus and move: Caps + H/J/K/L.** niri's window binds in `niri/base.kdl`
+**Window keys: Caps + H/J/K/L, F, ⇧F, C, W.** niri's window binds in `niri/base.kdl`
 are registered under KWin too (`kwinkeys.WINDOW_BINDS`, checked against base.kdl by
-`tests/test_kwinkeys.py`). Each one calls a KWin workspace slot from the script, so
+`tests/test_kwinkeys.py`). Each one is a call in the script, a KWin workspace slot or a
+few lines of the script's own (`loftFullscreen`, `loftCenter`, `loftPresetWidth`), so
 nothing goes through kglobalaccel's own KWin actions:
 
 | Keys (Caps held = Meta) | niri (base.kdl) | KWin |
@@ -719,6 +721,33 @@ nothing goes through kglobalaccel's own KWin actions:
 | Caps J / K, Caps ↓ / ↑ | focus-window-or-workspace-down / up | `slotSwitchWindowDown/Up` (Switch to Window Below/Above) |
 | Caps ⇧ H / L | move-column-left / right | `slotWindowQuickTileLeft/Right` |
 | Caps ⇧ J / K | move-window-down / up-or-to-workspace-down / up | `slotWindowQuickTileBottom/Top` |
+| Caps F | maximize-column | `slotWindowMaximize` (KWin's maximize toggle) |
+| Caps ⇧ F (and shell-binds' Caps ⌃ F) | fullscreen-window | the active window's `fullScreen`, toggled |
+| Caps C | center-column | centered in its output's work area, size kept (not for a maximized window) |
+| Caps W | switch-preset-column-width | the next of niri's preset widths, below |
+| Caps V | toggle-window-floating | **not bound**: every KWin window floats. KDE keeps Meta+V |
+
+**Caps W, preset widths.** The widths are niri's `preset-column-widths`: base.kdl's ⅓ ½ ⅔
+(`DEFAULT_PRESETS`, checked against base.kdl by the tests), or the user's from Settings
+(`<state>/overrides/niri.json` `layout.preset-column-widths`, a proportion or `{"fixed":
+px}`), rendered into the script as `LOFT_PRESETS`. A press gives the window the next preset
+wider than it is, as a fraction of its output's work area (`clientArea(MaximizeArea)`, so
+the bar and dock are left out), and wraps to the narrowest after the widest. Its height
+and vertical place stay. Horizontally: a window flush with the left or right edge of the
+work area (quick-tiled there with Caps ⇧ H / L, or sized there by an earlier Caps W)
+keeps that edge and grows from it; any other window is centered. Edge-anchoring by
+geometry rather than KWin's tile was picked so that repeated presses stay on the same
+side (resizing a tiled window takes it out of its tile). A maximized window comes out of
+maximize at the narrowest preset; a fullscreen one is left alone. niri's widths leave
+out its gaps; KWin has none, so ⅓ is a third of the work area exactly. A press while
+the last resize hasn't landed reads the size it asked for, as the bridge does.
+
+**Keys these take from KDE** (`claim`, given back by `release`): Meta+W is KWin's
+Overview (Toggle Overview) in stock Plasma. Loft's overview is still Caps O and ⌃↑
+(Mission Control), and KDE gets Meta+W back on unload. Stock KWin binds nothing on
+Meta+F, Meta+Shift+F or Meta+C (KWin's own Maximize is Meta+PgUp, Fullscreen has no
+key), so nothing is taken for them in a stock session. A user's own KDE shortcut on one
+of them is taken and given back the same way.
 
 KWin has no columns, so the semantics differ at the edges. Focus is directional and
 crosses outputs, and it stops at the last window, where niri's J/K go on to the next
@@ -767,6 +796,19 @@ and `release` gave KWin's Quick Tile keys back, and the desktop keys were never 
 The xremap side (Right ⌘ L, ⌘H → Meta+Ctrl+Alt+H) is checked only on the rendered
 config (`tests/test_keys.py`, `tests/test_parity.py`). xremap-kde never runs against
 input devices in tests.
+
+**Verified (F, ⇧F, C, W)** in a nested KWin 6.8.2 (`loft-dev --compositor kwin --shell
+loft`, 1600×1000, work area 0,30 1600×894), the branch's script loaded and claimed in the
+session, real key presses (`loft-input key super+…`) on a Konsole and a KWrite window,
+checked with `loft-kwin state`. Meta+F maximized (0,30 1600×894) and restored
+(378,247 910×498); Meta+Shift+F and Meta+Ctrl+F each went fullscreen (0,0 1600×1000) and
+back. Meta+C moved 910×498 to 345,228. Meta+W from 910 wide: 1067 at x=267, 533 at
+x=534, 800 at x=400, 1067 again. Tiled left (Meta+Shift+H, 0,30 800×894) then Meta+W:
+1067, 533, 800, all at x=0, height 894. Tiled right: 1067 at x=533, then 533 at x=1067.
+Maximized + Meta+W: 533 centered. Two presses 150 ms apart went two presets on. `claim`
+took Meta+W from KWin's Toggle Overview; unload + `release` gave it back
+(`Overview=Meta+W,Meta+W,Toggle Overview`), and kglobalshortcutsrc matched its copy
+from before the load.
 
 **Verified** in a nested KWin 6.8.2 (private bus, scratch HOME; a stand-in for
 systemd's `StartUnit` on the private bus that runs the real `loft-plasma-key`
@@ -1758,6 +1800,82 @@ Music, focused after the drop; with `loft-keys.js` loaded, tapping Meta+Q on a
 protected Konsole showed "Hold ⌘Q to quit Konsole" and kept it, holding 2 s quit it;
 Settings → Spaces & Windows → Window Rules showed KWrite's rule (Coding, 2 · Two,
 Right (WL-1), Follows).
+
+### 4.18 KWin scripts that heal themselves
+
+Two KWin scripts carry Loft under KWin: loft-kwin's **`loft-bridge`** (state and window
+commands, §3) and **`loft-keys`** (the shortcuts, §4.5). After a deploy on THEBATTLESHIP
+both were sometimes not loaded, or loaded and never started, while loft-kwin ran (most
+likely KWin's reused script ids, fixed by `Scripting.start`; #57). Neither ever came back
+on its own: the bridge is loaded once when loft-kwin starts, the keys once when Loft's
+shell unit starts. **Done:** loft-kwin watches both and loads them again
+(`crates/loft-kwin/src/heal.rs`).
+
+Every 5 s, while loft-kwin runs (= while Loft's shell runs):
+
+- **loft-bridge is gone** when KWin's `isScriptLoaded("loft-bridge")` is false, or when
+  it is loaded but silent: no `NextCommands` poll in flight and none for 25 s (a poll is
+  answered within 15 s and the script polls again at once, so a running bridge always
+  has one). loft-kwin then unloads and loads it as at start (`load_script`, with
+  `Scripting.start`) and turns KWin's popup fade off again (a new KWin has it on).
+- **loft-keys is gone** when `isScriptLoaded("loft-keys")` is false at two checks in a
+  row, while the rendered `$XDG_RUNTIME_DIR/loft/plasma-keys/loft-keys.js` exists and is
+  at least 10 s old (a fresh one means a `load` is running). loft-kwin then runs
+  `$LOFT_PLASMA_SHORTCUTS heal` (`loft-plasma-shell.service` sets it to the unit's own
+  `loft-plasma-shortcuts`). `heal` is the unit's `load` (unload, render, load, start,
+  `claim`), behind the same lock as `load` and `unload` (`flock` on
+  `…/plasma-keys.lock`), and only if, under that lock, the rendered script still exists,
+  `loft-plasma-shell.service` is **active** (not starting, not stopping) and KWin still
+  says it isn't loaded. Because it is the same load, the claim record stays right:
+  `unload` gives back what was taken and `claim` takes it again, also from a KWin that
+  restarted and reread kglobalshortcutsrc. Without `LOFT_PLASMA_SHORTCUTS` (a `loft-dev`
+  session) loft-kwin loads the rendered file itself (`loadScript` + `start`, no claim).
+- **Loaded but never started.** For loft-keys there's nothing to observe a dead script
+  by, so every 30 s while it is loaded loft-kwin calls `Scripting.start`, which starts
+  any loaded script that isn't running and leaves running ones alone.
+- **Rate limit:** at most one heal per script every 30 s. Each heal is one stderr line
+  (the shell logs loft-kwin's stderr), e.g. `loft-kwin: heal loft-bridge (loaded but
+  no poll for 25 s): reloaded`, `loft-kwin: heal loft-keys (not loaded in KWin):
+  loft-plasma-shortcuts heal`, or the same with `failed: …`.
+
+**Never against a deliberate unload.** `loft-plasma-shortcuts unload` (the unit's
+`ExecStopPost`: Loft stopping, `loft-plasma use plasma`, a crash) removes the rendered
+script **first**, under the lock. From then on there is nothing to heal, and loft-kwin is
+gone with the shell's cgroup by then anyway. loft-kwin itself marks itself stopping before
+it unloads its bridge on exit, so its healer can't put it back.
+
+**Restarts.** KWin restarting (`kwin_wayland --replace`, a crash): while KWin is away
+`isScriptLoaded` fails and nothing is done; the new KWin answers "not loaded" and both
+scripts come back at the next checks. The shell restarting: a new loft-kwin loads the
+bridge as it starts; the unit's stop and start unload and load the keys. loft-kwin
+restarting alone (the shell restarts it when it exits): the new one loads the bridge, and
+loft-keys is untouched.
+
+**Limits.** Healing needs loft-kwin: if it can't start at all (no session bus, its bus
+name taken), nothing heals. A loft-keys that loads but fails inside (a script error) looks
+loaded and isn't reloaded. The first heal comes 5–10 s (bridge) or 10–15 s (keys) after
+the loss, and a bridge that stopped polling is noticed only after 25 s.
+
+**Tested** in a nested KWin 6.8.2 (§6, `--shell loft`, the branch's loft-kwin; loft-keys
+rendered from the checkout, loaded and claimed in the session by a stand-in for the
+unit's `load`), every unload against the session's own KWin:
+
+| What | Back after | Then |
+|---|---|---|
+| `unloadScript loft-bridge` | 4 s | a new KWrite window reached `loft-kwin state`; `loft-kwin send center` moved it |
+| `loft-bridge` swapped for a script that never polls (the #57 case) | 39 s (`no poll for 25 s`) | `send geometryPercent` moved the window |
+| `unloadScript loft-keys` | 9 s | Meta+C, Meta+W, Meta+F worked |
+| both at once (what a KWin restart leaves) | bridge 2 s, keys 7 s | |
+| `loft-bridge` again 5 s later | 30 s after the previous heal (rate limit) | |
+| loft-kwin `SIGTERM` | new loft-kwin in 2 s, bridge loaded, keys untouched | Meta+C, Meta+Shift+F worked |
+| deliberate unload (stand-in `unload`: script file removed, then unloaded, released) | not reloaded in 45 s, no heal line | KDE's Overview had Meta+W again |
+
+The real `loft-plasma-shortcuts` (built from the fleet config with this checkout) was run
+in the session only for its early exits, as its `load` uses the real state dir: `heal`
+with no rendered script exits 0, and with one it waited for a held lock (2.7 s) and
+then exited 0 without loading, as no `loft-plasma-shell.service` is active there. **Not
+tested:** a real `kwin_wayland --replace` (the nested KWin owns the session; replacing it
+ends the test session) and the `heal` → `load` path under the user's systemd.
 
 ## 5. One Plasma session, two shells: switching and backing out
 
