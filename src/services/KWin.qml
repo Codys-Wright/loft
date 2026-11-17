@@ -29,10 +29,11 @@ Singleton {
     property var keyboardLayouts: ({ names: [], current_idx: 0 })
     property var activities: []
     property string currentActivity: ""
-    // Spaces are the user's KDE Activities (docs/KWIN.md §4.2), read-only:
+    // Spaces are the user's KDE Activities (docs/KWIN.md §4.2):
     // kactivitymanagerd's [{ id, name, icon, key, position }] in the order of
     // their "Switch to activity" keys (Meta+1…9, 0), else KDE's own order;
-    // loft-kwin sends it again on every change.
+    // loft-kwin sends it again on every change. editActivity changes them
+    // in KDE (crates/loft-kwin/src/manage.rs).
     property var activityList: []
     property bool activitiesLoaded: false
     property string activitiesError: ""
@@ -89,6 +90,11 @@ Singleton {
     // closeSpace's report: { space, activity, dryRun, windows: [{ app,
     // window, app_id, title }], notes }.
     signal spaceClosed(var report)
+    // editActivity's answer: { op, ok, id, name, error, notes }.
+    signal activityEdited(var report)
+    // After a rename: Loft settings and window rules that named the old
+    // name, relinked ({ id, old, name, docs, rules, notes }).
+    signal activityLinksFixed(var report)
     property string outputKey: ""
     property string layoutKey: ""
 
@@ -171,6 +177,12 @@ Singleton {
             if (msg.Activities.current)
                 currentActivity = msg.Activities.current;
             activitiesLoaded = true;
+        } else if (msg.ActivityEdit) {
+            if (!msg.ActivityEdit.ok)
+                console.warn(`KWin: activity ${msg.ActivityEdit.op}: ${msg.ActivityEdit.error}`);
+            activityEdited(msg.ActivityEdit);
+        } else if (msg.ActivityLinks) {
+            activityLinksFixed(msg.ActivityLinks);
         } else if (msg.SpaceOpened) {
             spaceOpened(msg.SpaceOpened);
         } else if (msg.SpaceClosed) {
@@ -346,6 +358,14 @@ Singleton {
 
     function setActivity(activity) {
         send({ cmd: "setActivity", activity: activity });
+    }
+
+    // Create, rename, re-icon, reorder or remove a KDE Activity:
+    // { op: "create", name, icon } | { op: "rename", activity, name } |
+    // { op: "icon", activity, icon } | { op: "reorder", order: [ids] } |
+    // { op: "remove", activity }. Answered with activityEdited.
+    function editActivity(edit) {
+        send(Object.assign({ cmd: "activity" }, edit));
     }
 
     // Ask for the Activities again (answered with an Activities line).

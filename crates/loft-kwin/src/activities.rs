@@ -1,6 +1,7 @@
 //! Spaces are the user's KDE Activities (docs/KWIN.md §4.2). KDE stays the
-//! source of truth: this module only **reads** kactivitymanagerd and never
-//! creates, renames, re-icons or removes an Activity.
+//! source of truth: this module **reads** kactivitymanagerd and kglobalaccel;
+//! creating, renaming, re-iconing, reordering and removing them is
+//! src/manage.rs, and every change goes to KDE (nothing of it is kept here).
 //!
 //! The shell asks with `{"cmd":"activities"}` and gets one line back:
 //!
@@ -34,14 +35,14 @@ use serde_json::{Value, json};
 use zbus::zvariant::ObjectPath;
 use zbus::{Connection, MatchRule, MessageStream, Proxy};
 
-const SERVICE: &str = "org.kde.ActivityManager";
+pub const SERVICE: &str = "org.kde.ActivityManager";
 const PATH: &str = "/ActivityManager/Activities";
-const IFACE: &str = "org.kde.ActivityManager.Activities";
+pub const IFACE: &str = "org.kde.ActivityManager.Activities";
 const MAP_FILE: &str = "kwin-activities.json";
 /// kglobalaccel's component for kactivitymanagerd's shortcuts, and the
 /// action name of "Switch to activity …" (kactivitymanagerd's
 /// `switch-to-activity-<uuid>`).
-const KGA: &str = "org.kde.kglobalaccel";
+pub const KGA: &str = "org.kde.kglobalaccel";
 const KGA_COMPONENT: &str = "/component/ActivityManager";
 const SWITCH_PREFIX: &str = "switch-to-activity-";
 
@@ -55,11 +56,18 @@ pub struct Activity {
     pub key: String,
     /// The digit of that key (1…9, 0), if it is on one: `spaces focus N`.
     pub position: Option<u32>,
+    /// The key (a Qt int) that gives it its position: its "slot", which
+    /// reordering hands to another Activity (manage.rs).
+    #[serde(skip)]
+    pub slot: Option<i32>,
+    /// Every key of its "Switch to activity" shortcut (Qt ints).
+    #[serde(skip)]
+    pub keys: Vec<i32>,
 }
 
 // ── Order ────────────────────────────────────────────────────────────────
 
-const META: i32 = 0x1000_0000;
+pub const META: i32 = 0x1000_0000;
 const SHIFT: i32 = 0x0200_0000;
 const CTRL: i32 = 0x0400_0000;
 const ALT: i32 = 0x0800_0000;
@@ -90,13 +98,13 @@ pub fn key_text(k: i32) -> String {
 }
 
 /// The digit of a key combination (Meta+1 → 1), if its key is one.
-fn digit(k: i32) -> Option<u32> {
+pub fn digit(k: i32) -> Option<u32> {
     let base = k & !MODS;
     (0x30..=0x39).contains(&base).then(|| (base - 0x30) as u32)
 }
 
 /// Sort rank of a digit: 1…9 first, then 0 (as on the keyboard).
-fn rank(d: u32) -> u32 {
+pub fn rank(d: u32) -> u32 {
     if d == 0 { 10 } else { d }
 }
 
@@ -120,7 +128,8 @@ pub fn order(listed: Vec<(String, String, String)>, keys: &HashMap<String, Vec<i
             let position = best.and_then(digit);
             let key = best.map(key_text).unwrap_or_default();
             let sort = position.map(rank).unwrap_or(u32::MAX);
-            (sort, i, Activity { id, name, icon, key, position })
+            let slot = position.and(best);
+            (sort, i, Activity { id, name, icon, key, position, slot, keys: ks })
         })
         .collect();
     out.sort_by_key(|(sort, i, _)| (*sort, *i));
@@ -131,6 +140,7 @@ pub fn order(listed: Vec<(String, String, String)>, keys: &HashMap<String, Vec<i
         if let Some(p) = a.position {
             if seen.contains(&p) {
                 a.position = None;
+                a.slot = None;
             } else {
                 seen.push(p);
             }
@@ -160,9 +170,18 @@ fn key_ints(v: &zbus::zvariant::Value<'_>) -> Vec<i32> {
     }
 }
 
-/// activity id → the keys of its "Switch to activity" shortcut, from
-/// kglobalaccel (empty when it or the component isn't there).
-pub async fn switch_keys(conn: &Connection) -> HashMap<String, Vec<i32>> {
+/// kglobalaccel's record of one "Switch to activity" action: its id as
+/// `setForeignShortcutKeys` takes it (component, action, and their friendly
+/// names) and its keys.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Shortcut {
+    pub action_id: Vec<String>,
+    pub keys: Vec<i32>,
+}
+
+/// activity id → its "Switch to activity" shortcut, from kglobalaccel
+/// (empty when it or the component isn't there).
+pub async fn shortcuts(conn: &Connection) -> HashMap<String, Shortcut> {
     let mut out = HashMap::new();
     let Ok(path) = ObjectPath::try_from(KGA_COMPONENT) else { return out };
     let Ok(p) = Proxy::new(conn, KGA, path, "org.kde.kglobalaccel.Component").await else {
@@ -176,16 +195,25 @@ pub async fn switch_keys(conn: &Connection) -> HashMap<String, Vec<i32>> {
         return out;
     };
     let Some(zbus::zvariant::Value::Array(rows)) = args.fields().first() else { return out };
+    let text = |v: Option<&zbus::zvariant::Value<'_>>| match v {
+        Some(zbus::zvariant::Value::Str(s)) => s.as_str().to_string(),
+        _ => String::new(),
+    };
     for r in rows.iter() {
         let zbus::zvariant::Value::Structure(r) = r else { continue };
         let f = r.fields();
-        let Some(zbus::zvariant::Value::Str(action)) = f.first() else { continue };
-        let Some(id) = action.as_str().strip_prefix(SWITCH_PREFIX) else { continue };
-        if let Some(keys) = f.get(6) {
-            out.insert(id.to_string(), key_ints(keys));
-        }
+        let action = text(f.first());
+        let Some(id) = action.strip_prefix(SWITCH_PREFIX) else { continue };
+        let keys = f.get(6).map(key_ints).unwrap_or_default();
+        let action_id = vec![text(f.get(2)), action.clone(), text(f.get(3)), text(f.get(1))];
+        out.insert(id.to_string(), Shortcut { action_id, keys });
     }
     out
+}
+
+/// activity id → the keys of its "Switch to activity" shortcut.
+pub async fn switch_keys(conn: &Connection) -> HashMap<String, Vec<i32>> {
+    shortcuts(conn).await.into_iter().map(|(id, s)| (id, s.keys)).collect()
 }
 
 // ── kactivitymanagerd ────────────────────────────────────────────────────
@@ -208,6 +236,13 @@ pub async fn list(p: &Proxy<'_>) -> Result<(Vec<(String, String, String)>, Strin
     }
     let current: String = p.call("CurrentActivity", &()).await.unwrap_or_default();
     Ok((out, current))
+}
+
+/// The Activities in Loft's order, and the current one.
+pub async fn current(conn: &Connection) -> Result<(Vec<Activity>, String)> {
+    let p = proxy(conn).await?;
+    let (listed, current) = list(&p).await?;
+    Ok((order(listed, &switch_keys(conn).await), current))
 }
 
 /// The shell's `{"Activities": …}` line.

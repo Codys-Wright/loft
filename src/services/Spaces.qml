@@ -35,10 +35,12 @@ import Quickshell.Io
 // index reloaded.
 //
 // Under KWin (docs/KWIN.md §4.2) the Spaces ARE the user's KDE Activities,
-// and KDE stays the source of truth: Loft never creates, renames, re-icons
-// or removes one. The list is kactivitymanagerd's (loft-kwin reads it and
-// sends it again on every change, `Compositor.activityList`), in the order
-// of their KDE "Switch to activity" keys (Meta+1…9, then 0), else KDE's.
+// and KDE stays the source of truth. The list is kactivitymanagerd's
+// (loft-kwin reads it and sends it again on every change,
+// `Compositor.activityList`), in the order of their KDE "Switch to
+// activity" keys (Meta+1…9, then 0), else KDE's. Settings and `loft spaces`
+// create, rename, re-icon, reorder (= hand those keys to the new order) and
+// remove Activities in KDE itself (editActivity → loft-kwin, manage.rs).
 // A library document attaches Loft's extras (dock, menu bar, Focus,
 // wallpapers, apps and display roles) to an Activity only when it names it:
 // `"activity": "<id or name>"` (Settings → Spaces links one). Without one
@@ -117,9 +119,27 @@ Singleton {
         const n = (a.name ?? "").toLowerCase();
         return library.find(s => !s.archived && s.doc?.activity === a.id) ?? library.find(s => !s.archived && typeof s.doc?.activity === "string" && n !== "" && s.doc.activity.toLowerCase() === n) ?? null;
     }
+    // KWin: the icons Settings offers for an Activity — KDE's (freedesktop)
+    // name, which Plasma shows, and the glyph the bar draws for it.
+    readonly property var activityIcons: [
+        { kde: "activities", glyph: "󰕰" },
+        { kde: "user-home", glyph: "󰋜" },
+        { kde: "audio-x-generic", glyph: "󰝚" },
+        { kde: "video-x-generic", glyph: "󰕧" },
+        { kde: "utilities-terminal", glyph: "󰅩" },
+        { kde: "applications-games", glyph: "󰊗" },
+        { kde: "applications-graphics", glyph: "󰏫" },
+        { kde: "preferences-system", glyph: "󰒓" },
+        { kde: "internet-mail", glyph: "󰭹" },
+        { kde: "applications-office", glyph: "󰃖" },
+        { kde: "folder", glyph: "󰉋" }
+    ]
     // A glyph for an Activity without Loft settings (the bar draws Nerd
     // Font glyphs, not freedesktop icons), from its KDE icon or name.
     function glyphFor(a) {
+        const known = activityIcons.find(i => i.kde === a.icon);
+        if (known)
+            return known.glyph;
         const t = `${a.icon ?? ""} ${a.name ?? ""}`.toLowerCase();
         const by = [[/music|audio/, "󰝚"], [/video|movie|film/, "󰕧"], [/cod|develop|program|terminal/, "󰅩"], [/gam/, "󰊗"], [/edit|graphic|photo|draw/, "󰏫"], [/config|setting|system|prefer/, "󰒓"], [/mail|chat|comm|internet/, "󰭹"], [/work|office|task/, "󰃖"]];
         for (const [re, g] of by)
@@ -814,10 +834,21 @@ Singleton {
     }
 
     // Move a space up (-1) or down (+1) in Mod+N order.
-    // KWin: the order is KDE's (its "Switch to activity" keys), not Loft's.
+    // KWin: the order is the Activities' "Switch to activity" keys, so the
+    // keys move (loft-kwin hands the digits in use to the new order).
     function move(id, delta) {
-        if (byActivity)
+        if (byActivity) {
+            const acts = spaces.map(s => s.activity);
+            const a = activityOf[id] ?? id;
+            const i = acts.indexOf(a);
+            const j = i + delta;
+            if (i < 0 || j < 0 || j >= acts.length)
+                return;
+            acts.splice(i, 1);
+            acts.splice(j, 0, a);
+            editActivity({ op: "reorder", order: acts });
             return;
+        }
         const ids = spaces.map(s => s.id);
         const i = ids.indexOf(id);
         const j = i + delta;
@@ -892,6 +923,68 @@ Singleton {
             niri: false,
             displays: {}
         }, done);
+    }
+
+    // ── KWin: managing the Activities (crates/loft-kwin/src/manage.rs) ──
+    // edit: { op: "create", name, icon } | { op: "rename", activity, name }
+    // | { op: "icon", activity, icon } | { op: "reorder", order: [ids] } |
+    // { op: "remove", activity }; done(answer: { ok, id, error, notes }).
+    // The Activities' list follows by itself (loft-kwin reports changes).
+    property int activityTag: 0
+    property var activityDone: ({})
+    property string activityError: ""
+    readonly property bool activityBusy: Object.keys(activityDone).length > 0
+    function editActivity(edit, done) {
+        if (!byActivity)
+            return;
+        const tag = `shell-${++activityTag}`;
+        const d = Object.assign({}, activityDone);
+        d[tag] = done ?? null;
+        activityDone = d;
+        Compositor.impl.editActivity(Object.assign({ tag: tag }, edit));
+        activityStuck.restart();
+    }
+    // A loft-kwin that never answers (an older one) mustn't keep Settings busy.
+    Timer {
+        id: activityStuck
+        interval: 15000
+        onTriggered: if (root.activityBusy) {
+            root.activityDone = {};
+            root.activityError = "loft-kwin didn't answer (is it older than this shell?)";
+        }
+    }
+    // Windows only on this Activity (a removed Activity's go to its
+    // neighbour; the rest just leave it).
+    function ownWindows(activity) {
+        return Compositor.windows.filter(w => (w.kwin_activities ?? []).length === 1 && w.kwin_activities[0] === activity);
+    }
+    // Names compare like loft-kwin's (case, spaces, - and _ ignored).
+    function sameName(a, b) {
+        const n = s => String(s ?? "").toLowerCase().replace(/[\s_-]+/g, "");
+        return n(a) !== "" && n(a) === n(b);
+    }
+    Connections {
+        target: root.byActivity ? KWin : null
+        function onActivityEdited(r) {
+            const tag = r.tag ?? "";
+            if (!(tag in root.activityDone))
+                return;
+            const done = root.activityDone[tag];
+            const d = Object.assign({}, root.activityDone);
+            delete d[tag];
+            root.activityDone = d;
+            root.activityError = r.ok ? "" : (r.error ?? "That didn't work");
+            if (r.ok && (r.notes ?? []).length > 0)
+                root.reportNotes("", r.notes);
+            if (done)
+                done(r);
+        }
+        // A rename relinked Loft settings or window rules: read them again.
+        function onActivityLinksFixed(r) {
+            root.reload();
+            if ((r.docs ?? []).length + (r.rules ?? []).length > 0)
+                root.reportNotes(r.name, r.notes ?? []);
+        }
     }
 
     // ── The index ───────────────────────────────────────────────────────
