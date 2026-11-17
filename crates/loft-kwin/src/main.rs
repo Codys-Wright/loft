@@ -216,6 +216,55 @@ async fn unload_script(conn: &Connection) {
     }
 }
 
+/// KWin effects that animate Loft's own surfaces on top of Loft's motion:
+/// `fadingpopups` fades every popup in (150 ms) and out (600 ms), which shows
+/// a Loft menu's first frame before it's placed, so menus seem to grow out
+/// of a corner. niri animates none of them. Off while loft-kwin runs.
+const EFFECTS_OFF: &[&str] = &["fadingpopups"];
+
+/// Where we note the effects we unloaded, so a loft-kwin that restarts after
+/// a crash still gives them back on exit.
+fn effects_note() -> std::path::PathBuf {
+    let dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
+    std::path::Path::new(&dir).join("loft").join("kwin-effects-off")
+}
+
+async fn effects_off(conn: &Connection) {
+    let Ok(fx) = kwin_proxy(conn, "/Effects", "org.kde.kwin.Effects").await else { return };
+    let note = effects_note();
+    let mut off: Vec<String> = std::fs::read_to_string(&note)
+        .unwrap_or_default()
+        .lines()
+        .map(String::from)
+        .collect();
+    for name in EFFECTS_OFF {
+        let loaded: bool = fx.call("isEffectLoaded", &(*name,)).await.unwrap_or(false);
+        if loaded {
+            let _: zbus::Result<()> = fx.call("unloadEffect", &(*name,)).await;
+            if !off.iter().any(|n| n == name) {
+                off.push(name.to_string());
+            }
+        }
+    }
+    if !off.is_empty() {
+        let _ = std::fs::create_dir_all(note.parent().unwrap());
+        let _ = std::fs::write(&note, off.join("\n"));
+    }
+}
+
+/// Give back what effects_off took (only what it took: an effect the user
+/// had turned off stays off).
+async fn effects_restore(conn: &Connection) {
+    let note = effects_note();
+    let Ok(list) = std::fs::read_to_string(&note) else { return };
+    if let Ok(fx) = kwin_proxy(conn, "/Effects", "org.kde.kwin.Effects").await {
+        for name in list.lines().filter(|n| !n.is_empty()) {
+            let _: zbus::Result<bool> = fx.call("loadEffect", &(name,)).await;
+        }
+    }
+    let _ = std::fs::remove_file(&note);
+}
+
 async fn load_script(conn: &Connection) -> Result<()> {
     let dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
     let dir = std::path::Path::new(&dir).join("loft");
@@ -383,6 +432,7 @@ async fn main() -> Result<()> {
         emit(&json!({ "Error": format!("{e:#}") }));
         return Err(e);
     }
+    effects_off(&conn).await;
 
     tokio::spawn(watch_layouts(conn.clone()));
 
@@ -427,6 +477,7 @@ async fn main() -> Result<()> {
     }
 
     unload_script(&conn).await;
+    effects_restore(&conn).await;
     // Exit now: tokio's stdin reader is a blocking thread that the runtime
     // would wait for on shutdown, so after SIGTERM the process would linger
     // without its bus name and the shell (which restarts loft-kwin when it

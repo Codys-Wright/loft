@@ -681,7 +681,7 @@
           # matches the running KWin) when on PATH, else libkscreen's.
           # `loft-kwin record` (src/record.rs) runs gst-launch-1.0 on KWin's
           # PipeWire screencast node: pipewiresrc (pipewire), videorate /
-          # videoconvert / videoscale (base), x264enc (ugly), mp4mux /
+          # videoconvert / videoscale (base), x264enc (ugly), h264parse (bad), mp4mux /
           # pulsesrc (good), avenc_aac (libav). Only these plugins, so the
           # system's GStreamer set stays out.
           nativeBuildInputs = [ pkgs.makeWrapper ];
@@ -693,6 +693,7 @@
                 gst.gst-plugins-base
                 gst.gst-plugins-good
                 gst.gst-plugins-ugly
+                gst.gst-plugins-bad
                 gst.gst-libav
                 pkgs.pipewire
               ];
