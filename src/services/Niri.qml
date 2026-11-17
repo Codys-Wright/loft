@@ -40,7 +40,9 @@ Singleton {
             perOutputWorkspaces: true,
             titleBarEvents: true,
             configReload: true,
-            serverDecorations: false
+            serverDecorations: false,
+            // Spaces: named workspaces per output, activated by loft-niri.
+            spaces: true
         })
 
     // A screenshot was taken (niri's screenshot UI or actions); path may be "".

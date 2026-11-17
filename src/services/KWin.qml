@@ -27,6 +27,12 @@ Singleton {
     property var keyboardLayouts: ({ names: [], current_idx: 0 })
     property var activities: []
     property string currentActivity: ""
+    // Spaces as Activities (docs/KWIN.md §4.2): space id → activity id, from
+    // loft-kwin's last `syncSpaces` (its map in <state>/kwin-activities.json),
+    // and kactivitymanagerd's activities [{ id, name, icon }].
+    property var spaceActivities: ({})
+    property var activityInfo: []
+    property bool spacesSynced: false
     // [{ name, geometry, identity ("Make Model Serial", niri's), model }]
     property var displays: []
 
@@ -44,7 +50,9 @@ Singleton {
             configReload: false,
             // KWin puts its title bar (Loft's decoration) on the shell's own
             // windows too: WindowChrome leaves out its traffic lights.
-            serverDecorations: true
+            serverDecorations: true,
+            // Spaces are KDE Activities, one per Space (Spaces.qml).
+            spaces: true
         })
 
     signal outputsChanged
@@ -117,6 +125,12 @@ Singleton {
                 outputKey = key;
                 outputsChanged();
             }
+        } else if (msg.Spaces) {
+            spaceActivities = msg.Spaces.map ?? {};
+            activityInfo = msg.Spaces.activities ?? [];
+            spacesSynced = true;
+            for (const e of msg.Spaces.errors ?? [])
+                console.warn(`KWin: activities: ${e}`);
         } else if (msg.KeyboardLayouts) {
             keyboardLayouts = msg.KeyboardLayouts;
         } else if (msg.Error) {
@@ -261,6 +275,17 @@ Singleton {
 
     function setActivity(activity) {
         send({ cmd: "setActivity", activity: activity });
+    }
+
+    // Make kactivitymanagerd's activities match the spaces
+    // ([{ id, name, icon, template }]); answered with a Spaces line.
+    function syncSpaces(spaces) {
+        send({ cmd: "syncSpaces", spaces: spaces });
+    }
+
+    // Put a window on these activities ([] = all); follow: switch there too.
+    function setWindowActivities(id, activities, follow) {
+        windowCmd("setWindowActivities", id, { activities: activities, follow: follow === true });
     }
 
     // Scrolling-layout columns: niri only (capabilities.columns).

@@ -11,7 +11,11 @@
 //!   (applied by the script) or `setDesktopName` / `switchLayout` /
 //!   `toggleOverview` (done here over KWin's D-Bus API). EOF ends the daemon.
 //! - `loft-kwin shot …`: a screenshot through KWin's ScreenShot2 (src/shot.rs).
+//! - Spaces as Activities (src/activities.rs): stdin `syncSpaces` makes
+//!   kactivitymanagerd match the shell's Space list and answers
+//!   `{"Spaces": {"map": {space: activity}, …}}`; `loft-kwin spaces list|prune`.
 
+mod activities;
 mod shot;
 mod state;
 
@@ -27,7 +31,7 @@ use tokio::sync::{Notify, mpsc};
 use zbus::zvariant::ObjectPath;
 use zbus::{Connection, Proxy, interface};
 
-const BUS_NAME: &str = "dev.loft.KWinBridge";
+pub(crate) const BUS_NAME: &str = "dev.loft.KWinBridge";
 const SCRIPT_NAME: &str = "loft-bridge";
 const SCRIPT: &str = include_str!("bridge.js");
 /// How long a NextCommands poll waits before answering "nothing" (well
@@ -152,6 +156,11 @@ async fn direct(conn: &Connection, cmd: &Value) -> Result<bool> {
             let () = p.call("invokeShortcut", &("Overview",)).await?;
             Ok(true)
         }
+        "syncSpaces" => {
+            let spaces: Vec<activities::SpaceInfo> = serde_json::from_value(cmd["spaces"].clone())?;
+            emit(&activities::sync(conn, &activities::state_dir(), &spaces).await?);
+            Ok(true)
+        }
         "switchLayout" => {
             let p = keyboard(conn).await?;
             let index = cmd["index"].as_u64().unwrap_or(0) as u32;
@@ -200,12 +209,18 @@ async fn main() -> Result<()> {
     if args.first().is_some_and(|a| a == "shot") {
         return shot::run(&shot::parse(&args[1..])?).await;
     }
+    if args.first().is_some_and(|a| a == "spaces") {
+        return activities::cli(&args[1..]).await;
+    }
     if args.first().is_some_and(|a| a == "--help" || a == "-h") {
         println!(
             "loft-kwin — Loft's KWin backend daemon\n\n\
              Loads the loft-bridge KWin script and relays: stdout {{\"State\"}} /\n\
              {{\"KeyboardLayouts\"}} / {{\"Error\"}} lines, stdin one command per line\n\
-             ({{\"cmd\":\"focusWindow\",\"window\":\"{{uuid}}\"}}, …). docs/KWIN.md."
+             ({{\"cmd\":\"focusWindow\",\"window\":\"{{uuid}}\"}}, …). docs/KWIN.md.\n\n\
+             loft-kwin shot screen|window|area|workspace …   a screenshot (ScreenShot2)\n\
+             loft-kwin spaces list                           Spaces ↔ Activities map\n\
+             loft-kwin spaces prune [--dry-run] [--force]    remove the Activities Loft made"
         );
         return Ok(());
     }

@@ -102,6 +102,24 @@ class FromShellBinds(unittest.TestCase):
         for a in self.actions:
             self.assertRegex(a.id, r"^[a-z0-9-]+$")  # a systemd instance name, a file name
 
+    def test_space_binds(self):
+        """Spaces under KWin: ⌘1…9 focus, ⌘⇧1…9 move the focused window, through
+        the shell's IPC (no spaces.kdl). ⌘⇧3/4/5 stay Capture (Super = Mod here)."""
+        go = self.by_id["spaces-focus-3"]
+        self.assertEqual(go.keys, "Meta+3")
+        self.assertEqual(go.text, "Loft: Go to Space 3")
+        self.assertEqual(go.command[-3:], ["spaces", "focus", "3"])
+        self.assertEqual(go.command[:9], ["timeout", "-k", "1", "5", "/qs", "ipc", "--path", "/src", "call"])
+        mv = self.by_id["spaces-movewindow-1"]
+        self.assertEqual(mv.keys, "Meta+!")
+        self.assertEqual(mv.command[-3:], ["spaces", "moveWindow", "1"])
+        self.assertNotIn("spaces-movewindow-5", self.by_id)
+        self.assertEqual(self.by_id["capture-toggle"].keys, "Meta+%")
+        self.assertTrue(any(s.startswith("Mod+Shift+5:") for s in self.skipped))
+        # The user's changes still win: a disabled ⌘2 is gone.
+        actions, _ = kwinkeys.build(shell_binds(), {"binds": {"Mod+2": {"disabled": True}}})
+        self.assertNotIn("spaces-focus-2", {a.id for a in actions})
+
     def test_twin_without_title_is_named(self):
         """XF86LaunchA has hotkey-overlay-title=null: it takes Mod+Shift+A's."""
         self.assertEqual(self.by_id["launchpad-toggle-2"].text, "Loft: Launchpad")

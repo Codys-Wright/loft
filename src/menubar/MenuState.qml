@@ -558,6 +558,8 @@ Singleton {
         if (AppMenu.pref("moveCommands")) {
             items.push(sep("s-move"));
             items.push({ key: "workspace", label: "Move to Workspace", enabled: true, submenu: true, children: workspaceItems(w) });
+            if (Spaces.enabled && Spaces.byActivity)
+                items.push({ key: "space", label: "Move to Space", enabled: true, submenu: true, children: spaceItems(w) });
             const displays = displayItems(w);
             items.push({ key: "display", label: "Move to Display", enabled: displays.length > 0, submenu: displays.length > 0, children: displays });
         }
@@ -722,7 +724,20 @@ Singleton {
         return ws.name ? `${ws.idx}  ${ws.name}` : `Workspace ${ws.idx}`;
     }
 
-    function workspaceItems(w) {
+    // KWin: Spaces are Activities; the window goes to the space's (and
+    // stays there: the space you're in doesn't change).
+    function spaceItems(w) {
+        return Spaces.spaces.map(s => ({
+                    key: `space-${s.id}`,
+                    label: s.name,
+                    enabled: !!Spaces.activityOf[s.id],
+                    toggle: "radio",
+                    checked: (w.kwin_activities ?? []).includes(Spaces.activityOf[s.id]),
+                    run: () => Spaces.moveWindow(s.id, w.id, false)
+                }));
+    }
+
+        function workspaceItems(w) {
         const here = Compositor.workspaces.find(x => x.id === w.workspace_id);
         const out = here?.output ?? "";
         const outputs = [...new Set(Compositor.workspaces.map(x => x.output ?? ""))];
@@ -841,6 +856,8 @@ Singleton {
             items.push({ key: "arrange", label: "Arrange", enabled: true, submenu: true, children: Arrange.items(w) });
         items.push(sep("s-move"));
         items.push({ key: "workspace", label: "Move to Workspace", enabled: true, submenu: true, children: workspaceItems(w) });
+        if (Spaces.enabled && Spaces.byActivity)
+            items.push({ key: "space", label: "Move to Space", enabled: true, submenu: true, children: spaceItems(w) });
         const displays = displayItems(w);
         items.push({ key: "display", label: "Move to Display", enabled: displays.length > 0, submenu: displays.length > 0, children: displays });
         return items;

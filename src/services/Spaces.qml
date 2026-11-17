@@ -34,7 +34,18 @@ import Quickshell.Io
 // Afterwards spaces.kdl is re-rendered (once spaces are in use) and the
 // index reloaded.
 //
-// IPC: spaces focus <id|n> | next | prev | list | active | switcher | reload.
+// Under KWin (docs/KWIN.md §4.2) each Space is a KDE Activity instead: the
+// library and its editing stay loft-niri's (files only), but after every
+// reload the space list goes to loft-kwin (`Compositor.syncSpaces`), which
+// creates / renames / removes Activities to match and keeps the space ↔
+// activity map. Activation is `SetCurrentActivity` (through the bridge), the
+// active space is the current Activity's, a window moves to a Space by
+// setting its activities, and the layout's roles come from KWin's outputs
+// (`space list --displays`). Workspace names, spaces.kdl, render / ensure /
+// gather and P3's spin-up are niri-only.
+//
+// IPC: spaces focus <id|n> | next | prev | moveWindow <id|n> | list | active
+// | switcher | reload.
 Singleton {
     id: root
 
@@ -51,9 +62,17 @@ Singleton {
         return lib === "none" || lib === "off" ? "" : `${lib}/Spaces`;
     }
 
-    // niri only for now (loft-niri); under KWin, Spaces become Activities
-    // (docs/KWIN.md §4.2).
-    readonly property bool enabled: Features.on("spaces") && Compositor.backend === "niri"
+    // niri: named workspaces (loft-niri); KWin: one Activity per Space.
+    readonly property bool enabled: Features.on("spaces") && !!Compositor.capabilities.spaces
+    readonly property bool byActivity: Compositor.backend === "kwin"
+    // KWin: space id → activity id (loft-kwin's map), and back.
+    readonly property var activityOf: Compositor.spaceActivities
+    function spaceOfActivity(activity) {
+        for (const [id, a] of Object.entries(activityOf))
+            if (a === activity)
+                return id;
+        return "";
+    }
 
     // Every space, in order: { id, name, icon, order, position (1…9 or
     // null), template, archived, displays: { role: workspace | "keep" },
@@ -106,15 +125,42 @@ Singleton {
     // The space's workspaces that are on `output` right now (usually one;
     // several when a display folded into this one, §3.3).
     function workspacesOf(spaceId, output) {
+        if (byActivity)
+            return [];
         return Compositor.workspaces.filter(w => w.name && owners[w.name] === spaceId && (output === undefined || w.output === output));
     }
 
     // Workspaces of `output` that no space owns (`hidden-*` parking excluded).
     function unownedOn(output) {
+        if (byActivity)
+            return [];
         return Compositor.workspacesOn(output).filter(w => !(w.name && owners[w.name] !== undefined) && !(w.name ?? "").startsWith("hidden-"));
     }
 
+    // The space's windows (on `output`, if given). KWin: the windows of its
+    // Activity; a window on every Activity belongs to none.
+    function windowsOf(spaceId, output) {
+        if (!byActivity) {
+            const ids = workspacesOf(spaceId, output).map(w => w.id);
+            return Compositor.windows.filter(w => ids.includes(w.workspace_id));
+        }
+        const a = activityOf[spaceId];
+        if (!a)
+            return [];
+        return Compositor.windows.filter(w => (w.kwin_activities ?? []).includes(a) && (output === undefined || Compositor.workspaceMap[w.workspace_id]?.output === output));
+    }
+
+    // The space `output` shows: niri, the owner of its active workspace;
+    // KWin, the active space (an Activity spans every display).
+    function shownOn(output) {
+        if (byActivity)
+            return activeId;
+        return ownerOf(Compositor.workspaces.find(w => w.output === output && w.is_active)?.name);
+    }
+
     function windowCount(spaceId) {
+        if (byActivity)
+            return windowsOf(spaceId).length;
         const ids = workspacesOf(spaceId).map(w => w.id);
         return Compositor.windows.filter(w => ids.includes(w.workspace_id)).length;
     }
@@ -131,6 +177,10 @@ Singleton {
     function derive() {
         if (!loaded || settling)
             return;
+        if (byActivity) {
+            deriveActivity();
+            return;
+        }
         const main = Displays.mainScreen?.name ?? "";
         const mainWs = Compositor.workspaces.find(w => w.output === main && w.is_active);
         const id = ownerOf(mainWs?.name) || ownerOf(Compositor.focusedWorkspace?.name) || activeId;
@@ -148,6 +198,23 @@ Singleton {
         apply();
     }
 
+    // KWin: the current Activity's space ("" on an Activity that isn't one).
+    function deriveActivity() {
+        if (!Compositor.spacesSynced)
+            return;
+        const id = spaceOfActivity(Compositor.currentActivity);
+        if (id === activeId || (id !== "" && !find(id)))
+            return;
+        const prev = active;
+        activeId = id;
+        if (prev !== null && active !== null) {
+            activated(active, prev);
+            if (!Features.on("island"))
+                Sound.announced(active.icon || "󰕰", active.name);
+        }
+        apply();
+    }
+
     Timer {
         id: quiet
         interval: 140
@@ -158,6 +225,22 @@ Singleton {
         target: Compositor
         function onWorkspaceMapChanged() {
             quiet.restart();
+        }
+        function onCurrentActivityChanged() {
+            quiet.restart();
+        }
+        function onSpaceActivitiesChanged() {
+            quiet.restart();
+        }
+        // An Activity of a space was removed in Plasma: make a new one.
+        function onActivitiesChanged() {
+            if (root.byActivity && root.enabled && Object.values(root.activityOf).some(a => !Compositor.activities.includes(a)))
+                root.sync();
+        }
+        // loft-kwin (re)started: sync once it's there.
+        function onAvailableChanged() {
+            if (Compositor.available)
+                root.sync();
         }
     }
     onOwnersChanged: quiet.restart()
@@ -180,6 +263,8 @@ Singleton {
     function barHiddenOn(output) {
         if (!enabled || !active?.doc?.bar?.hidden)
             return false;
+        if (byActivity)
+            return true;
         const ws = Compositor.workspaces.find(w => w.output === output && w.is_active);
         return !!ws && ownerOf(ws.name) === active.id;
     }
@@ -227,6 +312,10 @@ Singleton {
     property var queue: []
 
     function run(args) {
+        if (byActivity) {
+            runActivity(args);
+            return;
+        }
         queue = queue.concat([["loft-niri", "--json", "space"].concat(args)]);
         if (!runner.running)
             next();
@@ -254,6 +343,51 @@ Singleton {
         const s = find(key);
         if (s)
             run(["focus", s.id]);
+    }
+
+    // KWin: focus / next / prev as Activity switches (loft-niri's order and
+    // wrap-around, plan::step). Asking for the active space does nothing.
+    function runActivity(args) {
+        const list = spaces;
+        let s = null;
+        if (args[0] === "focus")
+            s = find(args[1]);
+        else if (args[0] === "next" || args[0] === "prev") {
+            if (list.length === 0)
+                return;
+            const i = list.findIndex(x => x.id === activeId);
+            const n = list.length;
+            s = list[i < 0 ? (args[0] === "next" ? 0 : n - 1) : (i + (args[0] === "next" ? 1 : n - 1)) % n];
+        }
+        if (!s)
+            return;
+        const a = activityOf[s.id];
+        if (!a) {
+            lastError = `the space “${s.name}” has no Activity yet`;
+            console.warn(`Spaces: ${lastError}`);
+            sync();
+            return;
+        }
+        lastError = "";
+        Compositor.setActivity(a);
+    }
+
+    // Move a window (default: the focused one) to a space, without
+    // following it unless `follow`. niri: loft-niri's move-window (the
+    // focused window only); KWin: the window's activities.
+    function moveWindow(key, windowId, follow) {
+        const s = find(key);
+        if (!s || !enabled)
+            return;
+        if (!byActivity) {
+            run(["move-window", s.id]);
+            return;
+        }
+        const id = windowId ?? Compositor.focusedWindow?.id;
+        const a = activityOf[s.id];
+        if (id === undefined || id === null || !a)
+            return;
+        Compositor.setWindowActivities(id, [a], follow === true);
     }
 
     // ⌃←/→ (Mod+Ctrl+Left/Right). With Spaces off, niri's workspaces are
@@ -396,7 +530,7 @@ Singleton {
     // spaces.kdl follows the documents (binds by id, workspaces, rules),
     // once spaces are in use; then the index.
     function afterWrite() {
-        if (!enabled || renderer.running) {
+        if (!enabled || byActivity || renderer.running) {
             reload();
             return;
         }
@@ -436,12 +570,41 @@ Singleton {
 
     // ── The index ───────────────────────────────────────────────────────
     function reload() {
-        lister.running = true;
+        // KWin: roles from KWin's outputs (niri isn't there to ask).
+        lister.command = ["loft-niri", "space", "list", "--json", "--archived"].concat(byActivity ? ["--displays", JSON.stringify(Compositor.impl.displays ?? [])] : []);
+        if (lister.running)
+            relist = true;
+        else
+            lister.running = true;
     }
+    property bool relist: false
+
+    // KWin: Activities follow the (non-archived) spaces. The windows of a
+    // space that's gone (deleted, archived) move to the active space (else
+    // the first) first: KWin would put them on every Activity once theirs is
+    // removed.
+    function sync() {
+        if (!byActivity || !enabled || !loaded)
+            return;
+        const keep = spaces.find(s => s.id === activeId && activityOf[s.id]) ?? spaces.find(s => activityOf[s.id]);
+        for (const [sid, a] of Object.entries(activityOf)) {
+            if (!keep || spaces.some(s => s.id === sid))
+                continue;
+            for (const w of Compositor.windows)
+                if ((w.kwin_activities ?? []).length === 1 && w.kwin_activities[0] === a)
+                    Compositor.setWindowActivities(w.id, [activityOf[keep.id]], false);
+        }
+        Compositor.syncSpaces(spaces.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    icon: s.icon ?? "",
+                    template: s.template ?? null
+                })));
+    }
+    onEnabledChanged: sync()
 
     Process {
         id: lister
-        command: ["loft-niri", "space", "list", "--json", "--archived"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -451,11 +614,16 @@ Singleton {
                     root.layout = v.layout ?? [];
                     root.templates = v.templates ?? [];
                     root.loaded = true;
+                    root.sync();
                     quiet.restart();
                 } catch (e) {
                     console.warn(`Spaces: can't read the space list: ${e}`);
                 }
             }
+        }
+        onExited: if (root.relist) {
+            root.relist = false;
+            root.reload();
         }
     }
 
@@ -464,7 +632,8 @@ Singleton {
     Process {
         id: probe
         command: ["loft-niri", "space", "open", "--help"]
-        onExited: code => root.canOpen = code === 0
+        // Spin-up (P3) is niri's for now.
+        onExited: code => root.canOpen = code === 0 && !root.byActivity
     }
 
     Component.onCompleted: {
@@ -485,6 +654,12 @@ Singleton {
         id: rerender
         interval: 800
         onTriggered: {
+            if (root.byActivity) {
+                // KWin: only the roles change (Settings → Spaces, wallpapers).
+                if (root.enabled)
+                    root.reload();
+                return;
+            }
             if (!root.enabled || renderer.running)
                 return;
             renderer.command = ["sh", "-c", '[ -f "$1" ] || exit 0; loft-niri space render || exit; [ -n "$2" ] || exit 0; loft-niri space ensure "$2"; loft-niri space gather "$2"; exit 0', "loft-spaces", root.spacesKdl, root.activeId];
@@ -537,6 +712,10 @@ Singleton {
         function prev(): void {
             root.step(-1);
         }
+        // The focused window to a space (⌘⇧1…9 under KWin), staying here.
+        function moveWindow(space: string): void {
+            root.moveWindow(space);
+        }
         function list(): string {
             return JSON.stringify(root.spaces.map(s => ({
                         id: s.id,
@@ -544,7 +723,8 @@ Singleton {
                         icon: s.icon,
                         position: s.position,
                         active: s.id === root.activeId,
-                        displays: s.displays
+                        displays: s.displays,
+                        activity: root.activityOf[s.id] ?? null
                     })));
         }
         function active(): string {

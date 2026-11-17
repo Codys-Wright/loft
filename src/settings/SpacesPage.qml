@@ -133,7 +133,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: "A space switches every display at once: its workspace on each display role, or keeps what a display shows. ⌘1…9 activate spaces in this order, ⌃⌘← → step through them, ⌃⌘S opens the switcher."
+            text: Spaces.byActivity ? "A space switches every display at once: each space is a KDE Activity with its own windows. ⌘1…9 activate spaces in this order, ⌘⇧1…9 move the focused window to one, ⌃⌘← → step through them, ⌃⌘S opens the switcher." : "A space switches every display at once: its workspace on each display role, or keeps what a display shows. ⌘1…9 activate spaces in this order, ⌃⌘← → step through them, ⌃⌘S opens the switcher."
             color: Theme.subtext
             font.family: Theme.fontUi
             font.pixelSize: 12
@@ -160,6 +160,8 @@ ColumnLayout {
                 }
             }
             SettingsButton {
+                // Captures niri's workspaces per display.
+                visible: !Spaces.byActivity
                 text: "New Space from Current Desktop"
                 icon: "󰍹"
                 primary: page.form === "capture"
@@ -417,9 +419,21 @@ ColumnLayout {
                 color: Theme.glassBorder
             }
 
+            // KWin: the space is an Activity, on every display.
+            Text {
+                Layout.fillWidth: true
+                visible: Spaces.byActivity && !card.editing
+                readonly property int windows: Spaces.windowCount(card.modelData.id)
+                text: Spaces.activityOf[card.modelData.id] ? `KDE Activity · every display${card.isActive ? " · showing" : ""}${windows > 0 ? ` · ${windows} window${windows === 1 ? "" : "s"}` : ""}` : "no Activity yet"
+                color: Theme.subtext
+                font.family: Theme.fontUi
+                font.pixelSize: 11
+                elide: Text.ElideRight
+            }
+
             // One line per display role: role → workspace → where it is now.
             Repeater {
-                model: card.editing ? [] : card.roles
+                model: card.editing || Spaces.byActivity ? [] : card.roles
 
                 delegate: RowLayout {
                     id: line

@@ -40,9 +40,10 @@ Singleton {
 
     // What the backend can do: { columns, floating, minimize, overview,
     // windowScreenshot, workspaceNames, perOutputWorkspaces, titleBarEvents,
-    // configReload, serverDecorations }. Menus hide what's off;
+    // configReload, serverDecorations, spaces }. Menus hide what's off;
     // serverDecorations = the compositor gives the shell's own windows a
-    // title bar, so they don't draw traffic lights.
+    // title bar, so they don't draw traffic lights; spaces = Spaces work
+    // (niri: named workspaces via loft-niri; KWin: one Activity per Space).
     readonly property var capabilities: impl.capabilities
 
     Component.onCompleted: {
@@ -66,6 +67,10 @@ Singleton {
     // KDE Activities (KWin only; empty under niri).
     readonly property var activities: backend === "kwin" ? KWin.activities : []
     readonly property string currentActivity: backend === "kwin" ? KWin.currentActivity : ""
+    // Spaces as Activities (KWin, docs/KWIN.md §4.2): space id → activity id
+    // once loft-kwin synced them (spacesSynced), else {}.
+    readonly property var spaceActivities: backend === "kwin" ? KWin.spaceActivities : ({})
+    readonly property bool spacesSynced: backend === "kwin" && KWin.spacesSynced
 
     function workspacesOn(output) {
         return impl.workspacesOn(output);
@@ -234,6 +239,18 @@ Singleton {
     // KDE Activities (KWin).
     function setActivity(activity) {
         impl.setActivity(activity);
+    }
+
+    // KWin: one Activity per Space ([{ id, name, icon, template }]).
+    function syncSpaces(spaces) {
+        if (backend === "kwin")
+            KWin.syncSpaces(spaces);
+    }
+
+    // KWin: move a window to these activities ([] = all); follow switches too.
+    function setWindowActivities(id, activities, follow) {
+        if (backend === "kwin")
+            KWin.setWindowActivities(id, activities, follow);
     }
 
     // ── Actions: scrolling-layout columns (capabilities.columns) ─────────
