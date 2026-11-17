@@ -451,5 +451,75 @@ class ZoomRenderTest(unittest.TestCase):
             self.assertEqual(capture.zoomed_name(src), f"{td}/in-zoomed-2.mp4")
 
 
+
+class JoinCommandTest(unittest.TestCase):
+    def test_concat_copies_when_sizes_match(self):
+        cmd = capture.concat_command("/t/l.txt", "/t/o.mp4", [(640, 360), (640, 360)])
+        self.assertEqual(cmd[cmd.index("-c") + 1], "copy")
+        self.assertIn("-map", cmd)
+        self.assertEqual(cmd[-1], "/t/o.mp4")
+
+    def test_concat_reencodes_to_the_first_size(self):
+        cmd = capture.concat_command("/t/l.txt", "/t/o.mp4", [(640, 360), (320, 240)])
+        vf = cmd[cmd.index("-vf") + 1]
+        self.assertTrue(vf.startswith("scale=640:360:"), vf)
+        self.assertIn("pad=640:360", vf)
+        self.assertNotIn("copy", cmd)
+
+    def test_list_quotes(self):
+        self.assertEqual(capture.concat_list(["/a/it's.mp4"]), "file '/a/it'\\''s.mp4'\n")
+
+
+@unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "needs ffmpeg")
+class JoinPartsTest(unittest.TestCase):
+    def make(self, path, seconds, size="320x240", audio=True):
+        args = ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc=size={size}:rate=30:duration={seconds}"]
+        if audio:
+            args += ["-f", "lavfi", "-i", f"sine=duration={seconds}", "-c:a", "aac"]
+        subprocess.run(args + ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-shortest", path], check=True)
+
+    def duration(self, path):
+        return capture.probe(path)["duration"]
+
+    def test_parts_join_without_the_pauses(self):
+        with tempfile.TemporaryDirectory() as d:
+            a, b, c = (f"{d}/r.part{i}.mp4" for i in (1, 2, 3))
+            self.make(a, 2)
+            self.make(b, 1)
+            Path(c).write_bytes(b"")  # a part whose recorder failed at once
+            out = f"{d}/r.mp4"
+            res = capture.join_parts(out, [(a, None), (b, None), (c, None)])
+            self.assertEqual(res["parts"], 2)
+            self.assertAlmostEqual(self.duration(out), 3.0, delta=0.2)
+            self.assertEqual(sorted(os.listdir(d)), ["r.mp4"])
+
+    def test_one_part_is_renamed_and_mics_are_muxed(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = f"{d}/r.part1.mp4"
+            self.make(a, 1)
+            mic = f"{d}/r.mic1.wav"
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=duration=1", mic], check=True)
+            out = f"{d}/r.mp4"
+            capture.join_parts(out, [(a, mic)])
+            r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", out], capture_output=True, text=True)
+            self.assertEqual(r.stdout.split(), ["video", "audio", "audio"])
+            self.assertEqual(sorted(os.listdir(d)), ["r.mp4"])
+
+    def test_sizes_that_differ_are_reencoded(self):
+        with tempfile.TemporaryDirectory() as d:
+            a, b = f"{d}/r.part1.mp4", f"{d}/r.part2.mp4"
+            self.make(a, 1, "320x240")
+            self.make(b, 1, "200x100")
+            out = f"{d}/r.mp4"
+            capture.join_parts(out, [(a, None), (b, None)])
+            info = capture.probe(out)
+            self.assertEqual((info["width"], info["height"]), (320, 240))
+            self.assertAlmostEqual(info["duration"], 2.0, delta=0.2)
+
+    def test_nothing_recorded(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(SystemExit):
+                capture.join_parts(f"{d}/r.mp4", [(f"{d}/missing.mp4", None)])
+
 if __name__ == "__main__":
     unittest.main()
