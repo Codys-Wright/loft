@@ -20,16 +20,14 @@
 //!   preview and the switcher (src/shot.rs, docs/KWIN.md §4.8).
 //! - `loft-kwin record …`: a screen recording through KWin's zkde_screencast
 //!   and PipeWire (src/record.rs).
-
-mod record;
 //! - `loft-kwin displays [set JSON]`: outputs through KScreen (src/displays.rs).
-
-mod displays;
 //! - Spaces as Activities (src/activities.rs): stdin `syncSpaces` makes
 //!   kactivitymanagerd match the shell's Space list and answers
 //!   `{"Spaces": {"map": {space: activity}, …}}`; `loft-kwin spaces list|prune`.
 
 mod activities;
+mod displays;
+mod record;
 mod shot;
 mod state;
 
@@ -124,6 +122,33 @@ impl Bridge {
         }
         Ok(s)
     }
+
+    /// From Loft's decoration (kdecoration/shell.cpp), in KWin: a title-bar
+    /// action, `{"action": "menu"|"tileMenu"|"fullscreen", "x", "y" (decoration-
+    /// local anchor), "width", "height" (the frame)}`. The script finds the
+    /// window under the pointer and does it. True = taken; false tells the
+    /// decoration to fall back to KWin's own behaviour.
+    async fn title_bar(&self, json: String) -> bool {
+        match title_bar_command(&json) {
+            Some(cmd) => {
+                self.queue.push(cmd);
+                true
+            }
+            None => {
+                eprintln!("loft-kwin: bad title-bar request {json:?}");
+                false
+            }
+        }
+    }
+
+    /// From the script: an event for the shell (one stdout line as is), e.g.
+    /// `{"WindowActionsMenuRequested": {"window", "output", "x", "y", "kind"}}`.
+    async fn event(&self, json: String) {
+        match serde_json::from_str::<Value>(&json) {
+            Ok(v) if v.is_object() => emit(&v),
+            _ => eprintln!("loft-kwin: bad event from the script {json:?}"),
+        }
+    }
 }
 
 /// A command line: a JSON object with a string `cmd`.
@@ -152,32 +177,6 @@ async fn client(args: &[String]) -> Result<()> {
         _ => anyhow::bail!("usage: loft-kwin send JSON | loft-kwin state"),
     }
     Ok(())
-    /// From Loft's decoration (kdecoration/shell.cpp), in KWin: a title-bar
-    /// action, `{"action": "menu"|"tileMenu"|"fullscreen", "x", "y" (decoration-
-    /// local anchor), "width", "height" (the frame)}`. The script finds the
-    /// window under the pointer and does it. True = taken; false tells the
-    /// decoration to fall back to KWin's own behaviour.
-    async fn title_bar(&self, json: String) -> bool {
-        match title_bar_command(&json) {
-            Some(cmd) => {
-                self.queue.push(cmd);
-                true
-            }
-            None => {
-                eprintln!("loft-kwin: bad title-bar request {json:?}");
-                false
-            }
-        }
-    }
-
-    /// From the script: an event for the shell (one stdout line as is), e.g.
-    /// `{"WindowActionsMenuRequested": {"window", "output", "x", "y", "kind"}}`.
-    async fn event(&self, json: String) {
-        match serde_json::from_str::<Value>(&json) {
-            Ok(v) if v.is_object() => emit(&v),
-            _ => eprintln!("loft-kwin: bad event from the script {json:?}"),
-        }
-    }
 }
 
 /// A decoration's title-bar request → the script's `titleBar` command.
@@ -347,10 +346,12 @@ async fn main() -> Result<()> {
              Loads the loft-bridge KWin script and relays: stdout {{\"State\"}} /\n\
              {{\"KeyboardLayouts\"}} / {{\"Error\"}} lines, stdin one command per line\n\
              ({{\"cmd\":\"focusWindow\",\"window\":\"{{uuid}}\"}}, …). docs/KWIN.md.\n\n\
-             loft-kwin send JSON   one command to the running daemon (no window: the active one)\n\
-             loft-kwin state       the running daemon's state, as JSON\n\
-             loft-kwin shot …      a screenshot through KWin's ScreenShot2"
+             loft-kwin send JSON                             one command to the running daemon (no window: the active one)\n\
+             loft-kwin state                                 the running daemon's state, as JSON\n\
              loft-kwin shot screen|window|area|workspace …   a screenshot (ScreenShot2)\n\
+             loft-kwin thumbs DIR MAX_PX UUID…               window stills for the dock and switcher\n\
+             loft-kwin record screen|area|window …           a screen recording (zkde_screencast)\n\
+             loft-kwin displays [set JSON]                   outputs through KScreen\n\
              loft-kwin spaces list                           Spaces ↔ Activities map\n\
              loft-kwin spaces prune [--dry-run] [--force]    remove the Activities Loft made"
         );
@@ -445,11 +446,6 @@ mod tests {
         assert!(title_bar_command(r#"{"action":"menu","x":0,"y":0}"#).is_none());
         assert!(title_bar_command("not json").is_none());
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 
     #[test]
     fn commands_need_a_cmd() {
