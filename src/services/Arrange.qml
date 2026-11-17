@@ -36,6 +36,15 @@ Singleton {
             fill: { label: "Fill", rect: [0, 0, 100, 100] }
         })
 
+    // Arranging several windows at once (macOS's Fill & Arrange): this
+    // window takes the first rect, the most recently focused others on its
+    // workspace the rest.
+    readonly property var groupLayouts: ({
+            leftRight: { label: "Arrange Left & Right", presets: ["leftHalf", "rightHalf"] },
+            topBottom: { label: "Arrange Top & Bottom", presets: ["topHalf", "bottomHalf"] },
+            quarters: { label: "Arrange in Quarters", presets: ["topLeft", "topRight", "bottomLeft", "bottomRight"] }
+        })
+
     // Tiled: column widths in %.
     readonly property var columnPresets: ({
             third: { label: "One Third", width: 100 / 3 },
@@ -103,6 +112,51 @@ Singleton {
             return true;
         }
         return false;
+    }
+
+    // The other windows on `w`'s workspace, most recently focused first.
+    function others(w) {
+        const ts = x => x.focus_timestamp ? x.focus_timestamp.secs * 1e9 + x.focus_timestamp.nanos : 0;
+        return Compositor.windows.filter(x => x.id !== w.id && x.workspace_id === w.workspace_id && !x.is_minimized).sort((a, b) => ts(b) - ts(a) || b.id - a.id);
+    }
+
+    // Apply a group layout: `w` first, then others(w).
+    function arrange(name, w) {
+        const g = groupLayouts[name];
+        if (!g || !w)
+            return false;
+        const ws = [w].concat(others(w)).slice(0, g.presets.length);
+        if (ws.length < g.presets.length)
+            return false;
+        ws.forEach((x, i) => apply(g.presets[i], x));
+        Compositor.focusWindow(w.id);
+        return true;
+    }
+
+    // ── Tile rows (macOS 26's green-button menu) ─────────────────────────
+    // A row of small screen icons, each showing where the window goes:
+    // { key, tiles: [{ key, label, rects: [[x, y, w, h] %, …] (the first is
+    // this window's, the rest other windows'), enabled, run }] }.
+    function tile(w, name) {
+        const f = floatPresets[name];
+        return { key: `tile-${name}`, label: f.label, rects: [f.rect], enabled: true, run: () => root.apply(name, w) };
+    }
+
+    function tileRows(w) {
+        if (!w)
+            return [];
+        const n = others(w).length + 1;
+        const group = name => {
+            const g = groupLayouts[name];
+            return { key: `tile-${name}`, label: g.label, rects: g.presets.map(p => floatPresets[p].rect), enabled: n >= g.presets.length, run: () => root.arrange(name, w) };
+        };
+        return [
+            { key: "tiles-h-move", label: "Move & Resize", enabled: false, header: true, tipGroup: "move" },
+            { key: "tiles-halves", tipGroup: "move", enabled: true, tiles: ["leftHalf", "rightHalf", "topHalf", "bottomHalf"].map(x => tile(w, x)) },
+            { key: "tiles-quarters", tipGroup: "move", enabled: true, tiles: ["topLeft", "topRight", "bottomLeft", "bottomRight"].map(x => tile(w, x)) },
+            { key: "tiles-h-fill", label: "Fill & Arrange", enabled: false, header: true, tipGroup: "fill" },
+            { key: "tiles-fill", tipGroup: "fill", enabled: true, tiles: [tile(w, "fill"), { key: "tile-center", label: "Center", rects: [[20, 15, 60, 70]], enabled: true, run: () => root.apply("center", w) }, group("leftRight"), group("topBottom"), group("quarters")] }
+        ];
     }
 
     // ── Menu items (MenuState's shape) ───────────────────────────────────

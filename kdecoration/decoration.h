@@ -4,8 +4,9 @@
 //
 // Behaviour is macOS's (docs/WINDOW-DECORATIONS.md, "Under KWin"): red
 // closes, yellow minimizes (KWin's own actions); green is full screen, or
-// zoom (maximize) with Option held, and pressing and holding it opens Loft's
-// window menu (tiling, displays) at the button; a right-click on the bar
+// zoom (maximize) with Option held, and pressing and holding it, or resting
+// the pointer on it, opens Loft's window menu (tiling, displays) at the
+// button; a right-click on the bar
 // opens that menu at the pointer. Loft's shell does the full screen and the
 // menu (shell.h); without it, green maximizes and the menu is KWin's.
 #pragma once
@@ -78,13 +79,25 @@ public:
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void hoverEnterEvent(QHoverEvent *event) override;
+    void hoverMoveEvent(QHoverEvent *event) override;
+    void hoverLeaveEvent(QHoverEvent *event) override;
 
 private:
     // Green only.
+    void restFrom(const QPointF &pos);
     void zoomClicked();
     void held();
+    void rested();
 
     QTimer *m_hold = nullptr; // press and hold → the window menu
+    QTimer *m_rest = nullptr; // the pointer resting on green → the window menu
+    // Where the pointer was when the menu last opened: closing the menu
+    // re-enters the bead at the same spot, which mustn't open it again until
+    // the pointer moves.
+    QPointF m_menuAt;
+    bool m_menuShown = false;
+    QPointF m_pointer;
     bool m_heldOpened = false; // that release isn't a click
     bool m_pressOption = false; // Option was down at the press
 };

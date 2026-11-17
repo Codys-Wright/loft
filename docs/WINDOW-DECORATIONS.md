@@ -177,12 +177,21 @@ macOS and as the niri bar above, through the shell:
 | click green | toggle full screen (through loft-kwin's bridge) |
 | Option (Alt) + click green | zoom: KWin's maximize, both ways |
 | hover green | the full-screen arrows; with Option held, "+" (follows the key live) |
+| rest the pointer on green (600 ms) | the shell's window menu under the bead, as macOS 26; leaving first cancels, and once closed it waits for the pointer to move |
 | press and hold green (350 ms) | the shell's window menu under the bead |
 | right-click the bar (beads included) | the shell's window menu at the pointer |
 | double-click the bar | zoom |
 
 The menu is the same one niri's bar opens (`MenuState.trafficLightItems`); it
-opens down and right from the point, as macOS's. Without Loft's shell (no
+opens down and right from the point, as macOS's, and is laid out like Tahoe's:
+two rows of tile icons first (**Move & Resize**: left / right / top / bottom
+half, the four quarters; **Fill & Arrange**: fill, center, and this window with
+the most recently focused others on its workspace left & right, top & bottom or
+in quarters — dimmed without enough windows), the hovered or arrow-keyed tile
+named on its row's header; then Enter Full Screen, Zoom (niri: Maximize Column,
+Float / Tile and, for a tiled window, Column ▸ with the column choices), Move to
+Display ▸, Move to Workspace ▸ (and Move to Space ▸). niri's bar has no rest
+timer (that's niri-loft's input code); hold or right-click there. Without Loft's shell (no
 `dev.loft.KWinBridge` on the bus), green maximizes and the menus are KWin's.
 
 ## Where it lives in niri 26.04

@@ -12,6 +12,7 @@
 #include <QGuiApplication>
 #include <QHash>
 #include <QHoverEvent>
+#include <QLineF>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -369,6 +370,9 @@ namespace
 // How long green is held before the menu opens (niri-loft's title bar: the
 // same ~350 ms).
 constexpr int HoldMs = 350;
+// How long the pointer rests on green before the menu opens, as macOS 26
+// does (Tahoe's menu shows after ~0.6 s; leaving the bead first cancels).
+constexpr int RestMs = 600;
 } // namespace
 
 Button::Button(DecorationButtonType type, Decoration *decoration, QObject *parent)
@@ -386,6 +390,10 @@ Button::Button(DecorationButtonType type, Decoration *decoration, QObject *paren
     m_hold->setSingleShot(true);
     m_hold->setInterval(HoldMs);
     connect(m_hold, &QTimer::timeout, this, &Button::held);
+    m_rest = new QTimer(this);
+    m_rest->setSingleShot(true);
+    m_rest->setInterval(RestMs);
+    connect(m_rest, &QTimer::timeout, this, &Button::rested);
     // KDecoration's tooltip says "Maximize": say what green does now
     // (connected after the base class's, so this text wins).
     auto tip = [this] {
@@ -411,6 +419,7 @@ void Button::mousePressEvent(QMouseEvent *event)
         // KWin passes the modifiers with presses (not with hovers).
         m_pressOption = (event->modifiers() & Qt::AltModifier) || Shell::self()->optionHeld();
         m_heldOpened = false;
+        m_rest->stop();
         m_hold->start();
     }
 }
@@ -430,7 +439,58 @@ void Button::held()
         return;
     }
     m_heldOpened = true;
+    m_menuShown = true;
+    m_menuAt = m_pointer;
     // Under the bead, like macOS's menu.
+    deco->showWindowMenu(QStringLiteral("tileMenu"), QPointF(geometry().left(), geometry().bottom()));
+}
+
+// Rest: from entering green (or moving on it after its menu closed);
+// leaving it or pressing cancels. Only with the shell: KWin's own menu
+// doesn't open on hover.
+void Button::restFrom(const QPointF &pos)
+{
+    m_pointer = pos;
+    if (!m_rest || isPressed() || !Shell::self()->online()) {
+        return;
+    }
+    if (m_menuShown && QLineF(pos, m_menuAt).length() <= 3) {
+        return; // back from the menu, not moved yet
+    }
+    m_menuShown = false;
+    if (!m_rest->isActive()) {
+        m_rest->start();
+    }
+}
+
+void Button::hoverEnterEvent(QHoverEvent *event)
+{
+    KDecoration3::DecorationButton::hoverEnterEvent(event);
+    restFrom(event->position());
+}
+
+void Button::hoverMoveEvent(QHoverEvent *event)
+{
+    KDecoration3::DecorationButton::hoverMoveEvent(event);
+    restFrom(event->position());
+}
+
+void Button::hoverLeaveEvent(QHoverEvent *event)
+{
+    KDecoration3::DecorationButton::hoverLeaveEvent(event);
+    if (m_rest) {
+        m_rest->stop();
+    }
+}
+
+void Button::rested()
+{
+    auto *deco = static_cast<Decoration *>(decoration());
+    if (!deco || !isHovered() || isPressed() || !Shell::self()->online()) {
+        return;
+    }
+    m_menuShown = true;
+    m_menuAt = m_pointer;
     deco->showWindowMenu(QStringLiteral("tileMenu"), QPointF(geometry().left(), geometry().bottom()));
 }
 

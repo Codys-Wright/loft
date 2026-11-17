@@ -11,7 +11,10 @@ import qs.services
 // `icon` (a Nerd Font glyph; Golden Gate puts icons only on a few common
 // actions), `swatch` ([colors…]: a tiny palette chip), `thumb` (an image
 // url: a small rounded thumbnail), `header: true` (a non-selectable group
-// heading). `maxHeight` > 0 makes a taller list scroll (wheel, keyboard,
+// heading), `tiles: [{key, label, rects: [[x,y,w,h] %…], enabled, run}]`
+// (a row of small screen icons, macOS 26's green-button menu: the first
+// rect is the window, the rest other windows; the hovered or arrow-keyed
+// tile's label shows on the header with the same `tipGroup`). `maxHeight` > 0 makes a taller list scroll (wheel, keyboard,
 // or hovering the arrows at either end).
 GlassSurface {
     id: panel
@@ -37,11 +40,14 @@ GlassSurface {
         rowItems = items;
     }
     function signature(list) {
-        return JSON.stringify((list ?? []).map(i => [MenuState.keyOf(i), i.label ?? "", i.enabled !== false, i.checked === true, i.toggle ?? "", i.submenu === true, i.separator === true, i.header === true, i.icon ?? "", i.swatch ?? null, i.thumb ?? "", i.shortcut ?? null]));
+        return JSON.stringify((list ?? []).map(i => [MenuState.keyOf(i), i.label ?? "", i.enabled !== false, i.checked === true, i.toggle ?? "", i.submenu === true, i.separator === true, i.header === true, i.icon ?? "", i.swatch ?? null, i.thumb ?? "", i.shortcut ?? null, (i.tiles ?? []).map(t => [t.key, t.enabled !== false])]));
     }
     property int level: 0
     // Key of the highlighted row (MenuState.path[level]).
     property var highlighted
+    // The highlighted tile, if a tile row is highlighted.
+    readonly property var litTiles: rowItems.find(i => i.tiles && MenuState.keyOf(i) === highlighted) ?? null
+    readonly property var litTile: litTiles ? litTiles.tiles[Math.min(MenuState.tileIndex, litTiles.tiles.length - 1)] : null
 
     signal hovered(var item)
     signal clicked(var item)
@@ -125,10 +131,13 @@ GlassSurface {
                     readonly property bool lit: !sep && on && MenuState.keyOf(modelData) === panel.highlighted
                     readonly property string shortcut: AppMenu.formatShortcut(modelData.shortcut)
                     readonly property bool header: modelData.header === true
+                    readonly property var tiles: modelData.tiles ?? null
+                    // A header over a tile row: the lit tile's name on the right.
+                    readonly property string tip: header && panel.litTile && panel.litTiles.tipGroup === modelData.tipGroup ? panel.litTile.label : ""
 
                     Layout.fillWidth: true
-                    implicitHeight: sep ? 9 : header ? 24 : modelData.thumb ? 34 : 26
-                    implicitWidth: sep ? 0 : (header ? 10 : panel.labelX) + label.implicitWidth + (shortcut !== "" ? 32 + keys.implicitWidth : 0) + (modelData.submenu ? 28 : 0) + 10
+                    implicitHeight: sep ? 9 : tiles ? 32 : header ? 24 : modelData.thumb ? 34 : 26
+                    implicitWidth: sep ? 0 : tiles ? 8 + tiles.length * 40 + 8 : (header ? 10 : panel.labelX) + label.implicitWidth + (shortcut !== "" ? 32 + keys.implicitWidth : 0) + (modelData.submenu ? 28 : 0) + (header && modelData.tipGroup ? 150 : 0) + 10
 
                     Rectangle {
                         visible: row.sep
@@ -144,10 +153,88 @@ GlassSurface {
                     }
 
                     Rectangle {
-                        visible: !row.sep
+                        visible: !row.sep && !row.tiles
                         anchors.fill: parent
                         radius: 6
                         color: row.lit ? Theme.accent : "transparent"
+                    }
+
+                    // Tile icons: a little screen each, the window's place filled.
+                    Row {
+                        visible: row.tiles !== null
+                        x: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 4
+
+                        Repeater {
+                            model: row.tiles ?? []
+                            delegate: Rectangle {
+                                id: tileItem
+                                required property var modelData
+                                required property int index
+                                readonly property bool on: modelData.enabled !== false
+                                readonly property bool tileLit: row.lit && on && Math.min(MenuState.tileIndex, row.tiles.length - 1) === index
+                                readonly property color fg: tileLit ? Theme.bg : Theme.text
+
+                                width: 36
+                                height: 30
+                                radius: 7
+                                color: tileLit ? Theme.accent : "transparent"
+                                opacity: on ? 1 : 0.35
+
+                                Rectangle {
+                                    id: screenIcon
+                                    anchors.centerIn: parent
+                                    width: 26
+                                    height: 18
+                                    radius: 4
+                                    color: "transparent"
+                                    border.width: 1.3
+                                    border.color: Theme.withAlpha(tileItem.fg, 0.75)
+
+                                    Repeater {
+                                        model: tileItem.modelData.rects ?? []
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            required property int index
+                                            readonly property real iw: screenIcon.width - 5
+                                            readonly property real ih: screenIcon.height - 5
+                                            x: 2.5 + iw * modelData[0] / 100 + 0.6
+                                            y: 2.5 + ih * modelData[1] / 100 + 0.6
+                                            width: Math.max(1, iw * modelData[2] / 100 - 1.2)
+                                            height: Math.max(1, ih * modelData[3] / 100 - 1.2)
+                                            radius: 1.5
+                                            color: index === 0 ? tileItem.fg : Theme.withAlpha(tileItem.fg, 0.4)
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onEntered: if (tileItem.on) {
+                                        MenuState.tileIndex = tileItem.index;
+                                        panel.hovered(row.modelData);
+                                    }
+                                    onClicked: if (tileItem.on)
+                                        panel.clicked(tileItem.modelData)
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: row.tip !== ""
+                        anchors {
+                            right: parent.right
+                            rightMargin: 10
+                            verticalCenter: parent.verticalCenter
+                            verticalCenterOffset: 2
+                        }
+                        text: row.tip
+                        color: Theme.subtext
+                        font.family: Theme.fontUi
+                        font.pixelSize: 11
                     }
 
                     // Leading picture: icon, palette swatch or thumbnail.
@@ -290,7 +377,7 @@ GlassSurface {
 
                     MouseArea {
                         anchors.fill: parent
-                        enabled: !row.sep
+                        enabled: !row.sep && !row.tiles
                         hoverEnabled: true
                         onEntered: if (row.on)
                             panel.hovered(row.modelData)

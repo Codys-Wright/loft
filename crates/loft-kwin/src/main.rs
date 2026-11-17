@@ -440,6 +440,13 @@ async fn main() -> Result<()> {
     effects_off(&conn).await;
 
     tokio::spawn(watch_layouts(conn.clone()));
+    // GStreamer's first run after an update scans every plugin (~10 s), and
+    // auto's encoder probe takes a moment: do both now, so the first
+    // recording starts at once (record.rs).
+    tokio::spawn(async {
+        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+        record::warm_up().await;
+    });
 
     let mut model = state::Model::new();
     // Display identities spell the vendor out like niri (LOFT_PNP_IDS: set
