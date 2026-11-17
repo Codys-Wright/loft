@@ -13,7 +13,7 @@ until this is ready, keep the niri session.
 | Question | Decision |
 |---|---|
 | Hide under KWin | KWin **minimize**, not parking on a hidden workspace |
-| Spaces under KWin | **the user's own KDE Activities**, read-only; KDE's virtual desktops inside them (§4.2, revised 2026-11-16) |
+| Spaces under KWin | **the user's own KDE Activities**, managed in KDE from Loft (create, rename, icon, order = their ⌘ keys, remove); KDE's virtual desktops inside them (§4.2, revised 2026-11-16, managed 2026-11-17) |
 | Lock screen | Plasma's locker (KWin has no `ext-session-lock`), **with Loft's lock design** as a shell package (§4.3) |
 | Title bars | a **custom KWin decoration plugin** (KDecoration3, §4.4) |
 | Wallpapers | one per screen, swapped with the desktop/activity. No per-workspace surfaces |
@@ -96,7 +96,7 @@ under niri (`spaces`: Spaces work; under KWin they are Activities, §4.2). Nothi
 | Wallpapers: `WorkspaceWallpapers`, `VideoWallpapers`, `Vibes` | active workspace per output, overview | per-workspace wallpaper **surfaces** off (they need niri-loft's patch). The "one wallpaper per screen, swapped on switch" fallback works |
 | Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **KDE Activities** (decided, §4.2). Off until that lands |
 | Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | **done** (§4.11): `Displays.outputs` / `setOutputs` → `KScreen.qml` → `loft-kwin displays` (kscreen-doctor) |
-| Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **the user's KDE Activities**, read-only (done, §4.2) |
+| Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **the user's KDE Activities**, managed in KDE (done, §4.2) |
 | Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | KWin-native: `kscreen-doctor -j` / KScreen D-Bus |
 | Title-bar events (`windowMinimizeRequested`, `windowActionsMenuRequested`) | niri-loft's traffic lights | not needed: KWin decorations minimize and open the window menu themselves |
 | `configLoaded` (NiriSettings, WindowRules) | niri reloaded its KDL | `org.kde.KWin.reloadConfig` after writing kwinrc / kwinrulesrc |
@@ -192,7 +192,7 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | outputs / Displays page | **done** (§4.11): `kscreen-doctor -j` + `-o`, applied with `kscreen-doctor output.…`; identities from the bridge's screens |
 | overview (`toggle-overview`) | KWin's Overview effect |
 | lock screen (`WlSessionLock`) | Plasma's locker with **Loft's lock design** (§4.3) |
-| Spaces (named niri workspaces per output) | **the user's KDE Activities**, read-only (§4.2) |
+| Spaces (named niri workspaces per output) | **the user's KDE Activities**, managed in KDE (§4.2) |
 | idle (swayidle on niri.service) | PowerDevil (Plasma's own idle and DPMS) |
 | xremap per-app remaps (`xremap.niri`) | **done**: `loft-plasma-keys.service` runs `xremap.kde` (its KWin script reports the focused window's `resourceClass`, the Wayland app id) on the same config (§4.5) |
 | WM key (Caps / Esc / Right Ctrl held → Right Alt = niri Mod) | **done**: the hold is a private xremap virtual modifier (F24) that sends **Meta** + the next key, so KWin's and Loft's Meta shortcuts are reachable (§4.5, `LOFT_WM_KEY=meta`) |
@@ -222,9 +222,10 @@ decoration's minimize button and Loft's Hide then mean the same thing.
 **Done** (step 10, reworked 2026-11-16). An Activity is a set of windows (plus its own
 wallpaper and settings) that switches as one across **every** display. That is what a Space
 is (SPACES.md §1), so under KWin **the user's own KDE Activities are Loft's Spaces**, and
-**KDE stays the source of truth**: Loft never creates, renames, re-icons or removes an
-Activity, and never takes KDE's keys for them. Virtual desktops stay KWin's, *inside* the
-Activity: ⌃← → step them, as ⌃← → step Spaces on macOS.
+**KDE stays the source of truth**: Loft creates, renames, re-icons, reorders and removes
+Activities only in KDE itself (below, "Managing them"), keeps no list of its own, and binds
+none of KDE's keys for them. Virtual desktops stay KWin's, *inside* the Activity: ⌃← → step
+them, as ⌃← → step Spaces on macOS.
 
 Why not one Activity per library Space (what step 10 did first): on a real session the
 library (Main, Music, Video, Communication …, written for niri) didn't match the user's
@@ -233,7 +234,7 @@ Meta+1…6 off "Switch to activity" for Spaces that had no Activity yet, so ⌘N
 and the first sync would have renamed the current Activity and added duplicates. Decision
 (Cody, 2026-11-16): KDE's Activities are the Spaces; KDE's virtual desktops live inside them.
 
-- **The list** (`crates/loft-kwin/src/activities.rs`, read-only). loft-kwin reads
+- **The list** (`crates/loft-kwin/src/activities.rs`). loft-kwin reads
   kactivitymanagerd (`org.kde.ActivityManager /ActivityManager/Activities`:
   `ListActivities`, `ActivityName`, `ActivityIcon`, `CurrentActivity`) and kglobalaccel's
   `/component/ActivityManager` (`allShortcutInfos`, actions `switch-to-activity-<uuid>`),
@@ -247,7 +248,12 @@ and the first sync would have renamed the current Activity and added duplicates.
   kactivitymanagerd's order (`order()`, unit-tested). A digit two Activities share keeps
   its position on the first. That order is the bar's dots, the switcher, Settings →
   Spaces, `spaces next/prev`, and `spaces focus N` / `moveWindow N` (N = the digit: the
-  Activity KDE's Meta+N switches to). Reordering is KDE's (change the shortcuts).
+  Activity KDE's Meta+N switches to). KDE keeps no order of its own: kactivitymanagerd's
+  `ListActivities` and plasma-activities sort by name, Plasma's activity switcher
+  (plasma-desktop's `SortedActivitiesModel`) by last use. The keys are the only order KDE
+  stores, so Loft's order is them, and reordering moves them (below). Plasma's switcher
+  keeps its own recency order; Caps+N (Meta+N through the keyboard layer, §4.5) follows
+  Loft's.
 - **Spaces.qml** (`byActivity`): `all` = one space per Activity: `{id, name, icon, kdeIcon,
   key, position, activity, linked, displays, startup, doc}`. The name is always KDE's; the
   icon is a Nerd Font glyph guessed from KDE's icon name or the Activity's name (the bar
@@ -286,9 +292,54 @@ and the first sync would have renamed the current Activity and added duplicates.
   change: a linked document's `wallpapers` for the screen's most specific role, else the
   per-workspace choice made under niri for the workspace it binds to that role. A plain
   Activity keeps the current wallpaper.
-- **Not under KWin:** New Space / templates in Settings (a new Space is a new Activity,
-  made in Plasma), reordering, renaming (Plasma's), archive, workspace names and the
-  apps' column order / widths (niri's; the editor hides them).
+- **Managing them** (`crates/loft-kwin/src/manage.rs`). Settings → Spaces & Windows →
+  Spaces: **New Activity** (name + icon), click a card's name to rename it, **Icon**,
+  the ↑ ↓ arrows, **Remove…**; `loft spaces new|rename|icon|move|order|remove`
+  (= `loft-kwin spaces …`, an Activity by name in any case, its ⌘ digit or its id). The
+  shell sends loft-kwin `{"cmd": "activity", "op": "create"|"rename"|"icon"|"reorder"|
+  "remove", …}` and gets `{"ActivityEdit": {op, ok, id, name, error, notes, tag}}`; the
+  CLI goes through the running daemon's `Activity` D-Bus method, or straight to KDE when
+  there is none. Everything lands in KDE: names and icons through kactivitymanagerd
+  (`AddActivity`, `SetActivityName`, `SetActivityIcon`, `RemoveActivity`), keys through
+  kglobalaccel (`setForeignShortcutKeys` on `ActivityManager`'s
+  `switch-to-activity-<uuid>`), so Plasma and its shortcuts page show the same.
+  - **Create**: a name no other Activity has (compared without case, spaces, `-`, `_`), an
+    icon (a freedesktop name: the picker offers the ones the bar has a glyph for, the
+    field takes any, e.g. `zed`), and the **first free digit** (Meta+1…9, then Meta+0). It
+    lands at that digit's place in the order; with all ten taken it gets none and goes
+    last.
+  - **Reorder**: the digit keys in use ("slots") go to the Activities in their new order,
+    so a gap or the user's Meta+0 stays where it is (moving System Configuration to the
+    front of 1…6, 0 gives it Meta+1, shifts the rest, and Meta+0 goes to the last). An
+    Activity moved in among them from the key-less ones takes a free digit, so nobody
+    loses a key. Its other keys stay. The keys are set in two passes (every Activity that
+    changes loses its slot first): kglobalaccel lets two actions have one key but grabs it
+    only for the first. A digit another component also has (KWin's *Zoom to Actual Size*
+    has Meta+0 in a fresh profile) is reported ("Meta+0 is also KWin: Zoom to Actual Size;
+    KDE may run that instead"), not taken.
+  - **Rename**: the card's name becomes a field (Enter saves, Esc cancels). After any
+    rename (Loft's, the CLI's or Plasma's: the daemon compares each report with the last)
+    loft-kwin relinks what named the old name (`fix_links`, written through loft-niri):
+    library documents whose `activity` was the old name now carry the Activity's id, and
+    window rules whose `open-on-activity` was the old name (loosely) open on the new one
+    (`loft-niri apply`; a Nix-seeded rule gets a runtime value that wins over the seed).
+    The shell reloads the library on `{"ActivityLinks"}` and says what it relinked in the
+    island. `loft open --activity` and `spaces focus` take names at the time they run;
+    everything Loft keeps refers to the id. kactivitymanagerd keeps the shortcut's old
+    friendly text ("Switch to activity "Coding"") until it restarts; the key still works.
+  - **Remove** asks first, saying what happens: KWin takes the Activity off every window
+    (`Activities::slotRemoved`), and a window that was only on it would end up on **every**
+    Activity (an empty list means all), so loft-kwin first moves those to the Activity's
+    neighbour in Loft's order (the next one, the previous for the last). If it is the
+    current one Loft switches to that neighbour (kactivitymanagerd would pick the next by
+    name). Loft settings linked to it stay in the library (Add Loft Settings… → Use “…”
+    gives them to another Activity), window rules that open on it wait for an Activity of
+    that name, and its digit becomes free for the next new Activity; the others keep
+    their keys. kactivitymanagerd refuses to remove the last Activity, and so does Loft.
+    Without Loft's shell (`loft-kwin spaces remove` with no daemon) the windows aren't
+    moved and it says so.
+- **Not under KWin:** templates in Settings, archive, workspace names and the apps'
+  column order / widths (niri's; the editor hides them).
 - **Documents made for an Activity stay out of niri.** One library serves both sessions.
   A document whose settings exist only for a KDE Activity would otherwise be an extra
   niri Space (a ⌘ number with nothing on it, or a captured Activity's apps showing up as
@@ -329,6 +380,31 @@ and the first sync would have renamed the current Activity and added duplicates.
   restored "Default", removed Video, ignored a stale entry and touched nothing else. The
   shortcut load (§4.5) with an old record of six ActivityManager entries gave all six back
   and didn't take them again.
+- **Managing, tested** (2026-11-17, nested KWin 6.8.2, kactivitymanagerd and kglobalaccel
+  on the session's bus, scratch `LOFT_LIBRARY`; each result read back from the session's
+  `org.kde.ActivityManager` and `/component/ActivityManager`): `loft-kwin spaces new` made
+  Music, Coding, Gaming, Editing and System Configuration (Meta+1…5 in turn), `move Default
+  1` gave the key-less Default Meta+1 and shifted the rest without dropping any key, and
+  System Configuration was given Meta+0 by hand, as on the user's profile. In Settings:
+  **New Activity** "Writing" with the pencil icon got `applications-graphics` and Meta+6
+  (before System Configuration's Meta+0); renaming Coding to "Code" by clicking its name
+  kept its id and Meta+3, relinked a library document linked by the name "coding" to the
+  id (the card stayed linked, the island said so) and turned a KWrite rule's
+  `open-on-activity: Coding` into `Code`; the ↑ on Code swapped Meta+2/Meta+3 with Music,
+  and real key presses (`loft-input key super+N`) then switched Meta+2 → Code, Meta+3 →
+  Music, Meta+6 → Writing, Meta+4 → Gaming, Meta+1 → Default; **Icon** on Music set
+  `video-x-generic` and the card's glyph followed; **Remove…** on the current Editing,
+  with a KWrite only there, said "Its 1 window moves to “Writing”, and Loft switches
+  there. ⌘5 becomes free …", and Remove left five Activities, Writing current, the KWrite
+  on Writing alone, the others' keys unchanged and Editing's shortcut gone. `loft spaces
+  new Video Edit` (the Python CLI) took the free Meta+5; `rename "video edit" Film`, then
+  `remove Film` refused without `--yes` off a terminal and removed with it; `new MUSIC`
+  was refused (a name taken). Moving System Configuration to the front gave it Meta+1 and
+  Editing Meta+0, with the note that Meta+0 is also KWin's *Zoom to Actual Size* (a fresh
+  profile's; Meta+0 then doesn't switch, as above). Not run: a rename made in Plasma's own
+  settings (the same report diff handles it), a Nix-seeded rule, and the niri session
+  (the niri paths in Spaces.qml and the page are unchanged; New Activity, Rename, Icon
+  and Remove… show only under KWin).
 
 ### 4.3 Loft's lock design in Plasma's locker
 
@@ -1993,7 +2069,7 @@ when Loft stops:
 | Alt+F3 (KWin's Window Operations Menu, §4.4) | taken by Loft's `loft-window-menu` shortcut through the same claim / release as the others |
 | any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |
 | the lock screen | `PLASMA_DEFAULT_SHELL` only in KWin's environment, and only when the login is Loft's (`loft-plasma lock-env`, §4.3). Lock and unlock stay Plasma's either way |
-| KDE Activities | never written: Spaces are the user's Activities, read-only (§4.2). Activities an older Loft build created (`<state>/kwin-activities.json`) are kept (harmless); `loft spaces prune` removes those and renames an adopted one back |
+| KDE Activities | written only when you ask (Settings → Spaces, `loft spaces new`, `rename` …, §4.2): the change is KDE's own and stays when you back out. Activities an older Loft build created (`<state>/kwin-activities.json`) are kept (harmless); `loft spaces prune` removes those and renames an adopted one back |
 
 Loft never writes `plasma-org.kde.plasma.desktop-appletsrc`, `plasmashellrc` or
 `kwinrulesrc`, so plasmashell comes back with your panels as you left them.
