@@ -838,10 +838,12 @@ hard-coded (KWin 6.8.2, `src/window.cpp`):
   (`MoveResizeFilter::keyboardKey` in `src/input.cpp`). Releasing the key mid-drag takes
   effect at the next pointer motion. The patch keeps all of that.
 
-**The patches.** `loft-kwin-patched` carries two, both off until a kwinrc key is set and
-both applying to 6.7.5 and 6.8.2: this one, and
+**The patches.** `loft-kwin-patched` carries three, all applying to 6.7.5 and 6.8.2. Two
+are off until a kwinrc key is set: this one, and
 `nix/kwin/client-window-menu-service.patch` ([Windows] `ClientWindowMenuService`: the
-window menus apps with their own title bars ask for go to Loft, §4.4).
+window menus apps with their own title bars ask for go to Loft, §4.4). The third,
+`nix/kwin/unique-script-ids.patch`, is always on: a KWin script id is never handed out
+twice, so a client churning throwaway scripts (kdotool) can't stop Loft's (§4.18).
 
 **The patch** (`nix/kwin/tile-while-moving-modifier.patch`, ~30 lines, upstreamable):
 a kcfg entry `[Windows] TileWhileMovingModifier` = `Shift` (default) | `Alt` | `Ctrl` |
@@ -1878,6 +1880,38 @@ with no rendered script exits 0, and with one it waited for a held lock (2.7 s) 
 then exited 0 without loading, as no `loft-plasma-shell.service` is active there. **Not
 tested:** a real `kwin_wayland --replace` (the nested KWin owns the session; replacing it
 ends the test session) and the `heal` → `load` path under the user's systemd.
+
+**The cause, fixed in KWin: reused script ids.** Stock KWin (6.7, 6.8) gives a new
+script the id `scripts.size()` (`Scripting::loadScript`, `src/scripting/scripting.cpp`)
+and exports it at `/Scripting/Script<id>`. Once any script is removed, the next load
+gets an id that a script loaded after it still has. That load's `registerObject` fails
+silently, and the client calling `run`/`stop` on "its" id reaches the other script.
+kdotool (OpenDeck's KWin backend) loads, runs, stops and unloads a throwaway script
+several times a second. So whenever loft-bridge or loft-keys loaded while one of those
+was in flight (at login, after a heal), kdotool's next `stop` stopped Loft's script.
+`loft-kwin-patched` carries `nix/kwin/unique-script-ids.patch` (always on, 6.7.5 and
+6.8.2). Ids come from a counter that only grows for the life of KWin. `stop` and
+`unloadScript` take the script's path off the bus at once, so a stale id fails with
+`UnknownObject` and never reaches another script. A failed `registerObject` is logged.
+The D-Bus API is unchanged (`loadScript` still returns an int, `-1` = already loaded),
+so kdotool, Plasma, loft-kwin and `loft-plasma-shortcuts` work as before. With the
+patched KWin the heal above is a **fallback** (a KWin restart, a script error), and
+**OpenDeck can come back**. On a stock KWin (`plasma.kwinPackage = null`), Loft still
+relies on the heal.
+
+Tested in a nested session (§6, `--shell loft`), with stock KWin 6.8.2 and then the fleet's
+patched 6.8.2. Deterministic case: load X, A, B; unload X; load T; `Script<T>.stop`.
+Churn: 3–4 kdotool-style workers (`loadScript` a temp file, `Script<id>.run`, `.stop`,
+`unloadScript`, ~4/s each) for 60 s, while a script A and a loft-keys stand-in were
+loaded mid-churn and reloaded every 15 s:
+
+| | stock 6.8.2 | patched 6.8.2 |
+|---|---|---|
+| X, A, B = 1, 2, 3; X unloaded; T gets | 3 (B's): `stop` on it stopped B | 4: B stays loaded |
+| `run` on X's old path | `UnknownObject` (nothing reuses 1 yet) | `UnknownObject` |
+| churn: ids handed out twice | 5 ids, 202 kdotool loads on an id a Loft-side script had | none in 655 + 524 loads |
+| churn: A missing | 27 of 60 s | 0 (beyond the second before its first load) |
+| churn: loft-bridge | missing 33 of 60 s, a heal on top of the one for the deliberate unload at t=3 | only the deliberate unload's heal; run 2 (no unload): 0 heals |
 
 ### 4.19 Menus in every app: GTK, Electron and Qt in the shell's look
 
