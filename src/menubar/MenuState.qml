@@ -24,6 +24,8 @@ Singleton {
     property string screen: ""
     property int current: -1
     property var path: []
+    // The highlighted tile of a highlighted tile row (Arrange.tileRows).
+    property int tileIndex: 0
     property int depth: 0
     // "menu" | "about" | "confirm" | "extra" (a status item's panel)
     property string mode: "menu"
@@ -283,6 +285,7 @@ Singleton {
         screen = screenName;
         current = -2;
         path = [];
+        tileIndex = 0;
         depth = 1;
         mode = "menu";
         altHeld = alt === true;
@@ -451,7 +454,9 @@ Singleton {
                 break;
             }
         case Qt.Key_Right:
-            if (cur && cur.submenu && selectable(cur)) {
+            if (cur && cur.tiles) {
+                tileIndex = Math.min(cur.tiles.length - 1, tileIndex + 1);
+            } else if (cur && cur.submenu && selectable(cur)) {
                 highlight(level, cur, true);
                 const sub = itemsAt(level + 1);
                 const f = nextSelectable(sub, -1, 1);
@@ -461,7 +466,9 @@ Singleton {
                 step(1);
             break;
         case Qt.Key_Left:
-            if (depth > 1) {
+            if (cur && cur.tiles && tileIndex > 0) {
+                tileIndex -= 1;
+            } else if (depth > 1) {
                 depth -= 1;
                 path = path.slice(0, depth);
             } else
@@ -476,14 +483,16 @@ Singleton {
                 const f = nextSelectable(sub, -1, 1);
                 if (f >= 0)
                     path = path.concat([keyOf(sub[f])]);
-            } else if (cur)
+            } else if (cur && cur.tiles)
+                trigger(cur.tiles[Math.min(tileIndex, cur.tiles.length - 1)]);
+            else if (cur)
                 trigger(cur);
             break;
         default:
             // Type to select: mnemonic first, then the first letter.
             if (event.text && event.text.length === 1 && /\S/.test(event.text)) {
                 const t = event.text.toLowerCase();
-                const match = x => selectable(x) && ((x.mnemonic ?? "").toLowerCase() === t || x.label.toLowerCase().startsWith(t));
+                const match = x => selectable(x) && ((x.mnemonic ?? "").toLowerCase() === t || (x.label ?? "").toLowerCase().startsWith(t));
                 let n = -1;
                 for (let k = 1; k <= items.length; k++) {
                     const j = ((i < 0 ? -1 : i) + k + items.length) % items.length;
@@ -838,11 +847,19 @@ Singleton {
         }
     }
 
-    // macOS's green-button menu: full screen, tiling, moving.
+    // macOS 26's green-button menu: the tiling choices first, as rows of
+    // tile icons (Move & Resize: halves and quarters; Fill & Arrange: fill,
+    // center, and this window with the others on its workspace), then full
+    // screen and zoom, then moving. niri's tiled windows keep their column
+    // choices under Column ▸ (the tiles float them).
     function trafficLightItems(w) {
         if (!w)
             return [];
         const items = [];
+        if (Features.on("arrange")) {
+            items.push(...Arrange.tileRows(w));
+            items.push(sep("s-tiles"));
+        }
         items.push({ key: "fullscreen", label: "Enter Full Screen", enabled: true, shortcut: niriShortcut("fullscreen-window"), run: () => Compositor.toggleFullscreen(w.id) });
         if (Compositor.capabilities.columns)
             items.push({ key: "maximize", label: "Maximize Column", enabled: !w.is_floating, shortcut: niriShortcut("maximize-column"), run: () => {
@@ -852,15 +869,16 @@ Singleton {
             items.push({ key: "maximize", label: "Zoom", enabled: true, run: () => Compositor.maximizeToEdges(w.id) });
         if (Compositor.capabilities.floating)
             items.push({ key: "float", label: w.is_floating ? "Tile Window" : "Float Window", enabled: true, shortcut: niriShortcut("toggle-window-floating"), run: () => Compositor.toggleFloating(w.id) });
-        items.push({ key: "center", label: "Center", enabled: true, shortcut: niriShortcut("center-column"), run: () => Compositor.centerWindow(w.id) });
-        if (Features.on("arrange"))
-            items.push({ key: "arrange", label: "Arrange", enabled: true, submenu: true, children: Arrange.items(w) });
+        if (!Features.on("arrange"))
+            items.push({ key: "center", label: "Center", enabled: true, shortcut: niriShortcut("center-column"), run: () => Compositor.centerWindow(w.id) });
+        if (Features.on("arrange") && Compositor.capabilities.columns && !w.is_floating)
+            items.push({ key: "arrange", label: "Column", enabled: true, submenu: true, children: Arrange.items(w) });
         items.push(sep("s-move"));
+        const displays = displayItems(w);
+        items.push({ key: "display", label: "Move to Display", enabled: displays.length > 0, submenu: displays.length > 0, children: displays });
         items.push({ key: "workspace", label: "Move to Workspace", enabled: true, submenu: true, children: workspaceItems(w) });
         if (Spaces.enabled && Spaces.byActivity)
             items.push({ key: "space", label: "Move to Space", enabled: true, submenu: true, children: spaceItems(w) });
-        const displays = displayItems(w);
-        items.push({ key: "display", label: "Move to Display", enabled: displays.length > 0, submenu: displays.length > 0, children: displays });
         return items;
     }
 
