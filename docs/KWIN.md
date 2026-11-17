@@ -13,7 +13,7 @@ until this is ready, keep the niri session.
 | Question | Decision |
 |---|---|
 | Hide under KWin | KWin **minimize**, not parking on a hidden workspace |
-| Spaces under KWin | **KDE Activities**: one Activity per Space (§4.2) |
+| Spaces under KWin | **the user's own KDE Activities**, read-only; KDE's virtual desktops inside them (§4.2, revised 2026-11-16) |
 | Lock screen | Plasma's locker (KWin has no `ext-session-lock`), **with Loft's lock design** as a shell package (§4.3) |
 | Title bars | a **custom KWin decoration plugin** (KDecoration3, §4.4) |
 | Wallpapers | one per screen, swapped with the desktop/activity. No per-workspace surfaces |
@@ -96,7 +96,7 @@ under niri (`spaces`: Spaces work; under KWin they are Activities, §4.2). Nothi
 | Wallpapers: `WorkspaceWallpapers`, `VideoWallpapers`, `Vibes` | active workspace per output, overview | per-workspace wallpaper **surfaces** off (they need niri-loft's patch). The "one wallpaper per screen, swapped on switch" fallback works |
 | Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **KDE Activities** (decided, §4.2). Off until that lands |
 | Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | **done** (§4.11): `Displays.outputs` / `setOutputs` → `KScreen.qml` → `loft-kwin displays` (kscreen-doctor) |
-| Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **KDE Activities**, one per Space (done, §4.2) |
+| Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **the user's KDE Activities**, read-only (done, §4.2) |
 | Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | KWin-native: `kscreen-doctor -j` / KScreen D-Bus |
 | Title-bar events (`windowMinimizeRequested`, `windowActionsMenuRequested`) | niri-loft's traffic lights | not needed: KWin decorations minimize and open the window menu themselves |
 | `configLoaded` (NiriSettings, WindowRules) | niri reloaded its KDL | `org.kde.KWin.reloadConfig` after writing kwinrc / kwinrulesrc |
@@ -192,7 +192,7 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | outputs / Displays page | **done** (§4.11): `kscreen-doctor -j` + `-o`, applied with `kscreen-doctor output.…`; identities from the bridge's screens |
 | overview (`toggle-overview`) | KWin's Overview effect |
 | lock screen (`WlSessionLock`) | Plasma's locker with **Loft's lock design** (§4.3) |
-| Spaces (named niri workspaces per output) | **KDE Activities** (§4.2) |
+| Spaces (named niri workspaces per output) | **the user's KDE Activities**, read-only (§4.2) |
 | idle (swayidle on niri.service) | PowerDevil (Plasma's own idle and DPMS) |
 | xremap per-app remaps (`xremap.niri`) | **done**: `loft-plasma-keys.service` runs `xremap.kde` (its KWin script reports the focused window's `resourceClass`, the Wayland app id) on the same config (§4.5) |
 | WM key (Caps / Esc / Right Ctrl held → Right Alt = niri Mod) | **done**: the hold is a private xremap virtual modifier (F24) that sends **Meta** + the next key, so KWin's and Loft's Meta shortcuts are reachable (§4.5, `LOFT_WM_KEY=meta`) |
@@ -210,91 +210,103 @@ and the dock's unhide clear it, and `MenuState.hidden` is derived from `w.minimi
 The window record gains an `is_minimized` field (always false under niri). The
 decoration's minimize button and Loft's Hide then mean the same thing.
 
-### 4.2 Spaces = KDE Activities
+### 4.2 Spaces = your KDE Activities
 
-**Done** (step 10). An Activity is a set of windows (plus its own desktops, wallpaper
-and settings) that switches as one across **every** display. That is what a Space is
-(SPACES.md §1), without having to activate several per-output workspaces together.
+**Done** (step 10, reworked 2026-11-16). An Activity is a set of windows (plus its own
+wallpaper and settings) that switches as one across **every** display. That is what a Space
+is (SPACES.md §1), so under KWin **the user's own KDE Activities are Loft's Spaces**, and
+**KDE stays the source of truth**: Loft never creates, renames, re-icons or removes an
+Activity, and never takes KDE's keys for them. Virtual desktops stay KWin's, *inside* the
+Activity: ⌃← → step them, as ⌃← → step Spaces on macOS.
 
-- **API:** `org.kde.ActivityManager /ActivityManager/Activities` (kactivitymanagerd
-  6.8.2): `ListActivities`, `ActivityName`, `ActivityIcon`, `AddActivity(name) → id`,
-  `RemoveActivity`, `SetActivityName`, `SetActivityIcon`, `CurrentActivity`. In the KWin
-  script: `workspace.activities`, `workspace.currentActivity` (settable),
-  `window.activities` (settable, `[]` = every Activity), `currentActivityChanged`,
-  `activitiesChanged`.
-- **The library stays loft-niri's.** Space documents, their validation and the writes
-  (`space save|patch|delete|reorder`) are files only and work without niri.
-  `space list --displays '[{name, identity, geometry}]'` resolves the display roles from
-  KWin's outputs instead of niri's (Settings → Spaces, per-Space wallpapers).
-- **Mapping** (`crates/loft-kwin/src/activities.rs`). After every reload of the list,
-  `Spaces.qml` sends the non-archived Spaces to loft-kwin (`{"cmd":"syncSpaces",
-  "spaces":[{id, name, icon, template}]}`), which makes kactivitymanagerd match and
-  answers `{"Spaces": {"map": {space: activity}, "activities", "current", "errors"}}`.
-  The map is `<state>/kwin-activities.json` (`{"spaces": {"<id>": {"activity": uuid,
-  "adopted"?: {name, icon}}}}`). The plan is a pure function with unit tests:
-  - a Space without an Activity gets one (`AddActivity`, then its icon);
-  - **the very first sync** (no map file yet) lets the first Space **adopt** the current
-    Activity, so the windows already open belong to a Space. Its old name and icon are
-    recorded. Later syncs never adopt;
-  - name and icon follow the document. Loft's icons are Nerd Font glyphs, which Plasma
-    can't draw, so the Activity gets a freedesktop icon: the document's `icon` if it is
-    already an icon name, else one per built-in / template (`main` → `user-desktop`,
-    `music` → `audio-x-generic`, `project` → `folder-development` …), else `activities`;
-  - a Space that's gone (deleted, archived) loses its Activity (`RemoveActivity`); an
-    adopted one gets its old name and icon back and is kept;
-  - an Activity removed in Plasma is forgotten and its Space gets a new one (the shell
-    re-syncs when a mapped Activity disappears, and whenever loft-kwin restarts).
-  Order isn't an Activity property: ⌘1…9 follow the library's order, as under niri.
-- **Switching.** `Spaces.focus` / `next` / `prev` (bar dots, the switcher, ⌃⌘← →, ⌘1…9)
-  set `workspace.currentActivity` through the bridge (`setActivity`), with loft-niri's
-  order and wrap-around. The **active Space** is the current Activity's
-  (`Spaces.deriveActivity`, "" on an Activity that isn't a Space's); a change fires
-  `activated`, so the island banner, per-Space dock / menu bar extras / Do Not Disturb
-  work as under niri. `bar.hidden` hides the bar on every display (an Activity spans
-  them all). Focusing a window of another Space (dock, switcher) switches to its
-  Activity first (bridge.js `focusWindow`).
+Why not one Activity per library Space (what step 10 did first): on a real session the
+library (Main, Music, Video, Communication …, written for niri) didn't match the user's
+Activities (Default, Music, Coding, Gaming, Editing, System Configuration), Loft took
+Meta+1…6 off "Switch to activity" for Spaces that had no Activity yet, so ⌘N did nothing,
+and the first sync would have renamed the current Activity and added duplicates. Decision
+(Cody, 2026-11-16): KDE's Activities are the Spaces; KDE's virtual desktops live inside them.
+
+- **The list** (`crates/loft-kwin/src/activities.rs`, read-only). loft-kwin reads
+  kactivitymanagerd (`org.kde.ActivityManager /ActivityManager/Activities`:
+  `ListActivities`, `ActivityName`, `ActivityIcon`, `CurrentActivity`) and kglobalaccel's
+  `/component/ActivityManager` (`allShortcutInfos`, actions `switch-to-activity-<uuid>`),
+  and sends the shell `{"Activities": {"activities": [{id, name, icon, key, position}],
+  "current"}}` at start, on `{"cmd": "activities"}`, and again after every
+  `org.kde.ActivityManager.Activities` signal (added, removed, renamed, re-iconed, current
+  changed), every kglobalaccel `yourShortcutsChanged`, and when kactivitymanagerd
+  (re)starts (debounced 150 ms).
+- **Order:** the Activities whose "Switch to activity" key is on a digit, by that digit
+  (Meta+1 … Meta+9, then Meta+0; `position` = the digit), then the rest in
+  kactivitymanagerd's order (`order()`, unit-tested). A digit two Activities share keeps
+  its position on the first. That order is the bar's dots, the switcher, Settings →
+  Spaces, `spaces next/prev`, and `spaces focus N` / `moveWindow N` (N = the digit: the
+  Activity KDE's Meta+N switches to). Reordering is KDE's (change the shortcuts).
+- **Spaces.qml** (`byActivity`): `all` = one space per Activity: `{id, name, icon, kdeIcon,
+  key, position, activity, linked, displays, startup, doc}`. The name is always KDE's; the
+  icon is a Nerd Font glyph guessed from KDE's icon name or the Activity's name (the bar
+  draws glyphs, not freedesktop icons). `spaces focus` takes an id, the digit, an Activity
+  id or a name (any case).
+- **Loft's extras attach by link only.** A library document (SPACES.md §2) whose
+  `"activity"` is the Activity's id or name (any case) gives that Activity its dock, menu
+  bar extras, `bar.hidden`, Focus, `wallpapers`, apps and display roles (§4.13); the space
+  then has the document's id. **No document → a plain Activity**: switching, the bar,
+  Move to Space and its windows all work; no extras, nothing started. Settings → Spaces
+  links one (a card's **Add Loft Settings…**: new settings, or "Use “Music”" for a library
+  document no Activity has yet), **Edit** / **Unlink** / **Remove Settings…** it later;
+  **Save This Activity's Apps** (§4.13's capture) writes a document linked to the current
+  Activity. Linking only writes the document (`loft-niri space save|patch`); the Activity
+  isn't touched. Under niri the `activity` field is ignored.
+- **Switching.** KDE's own "Switch to activity" shortcuts do ⌘1…9 / ⌘0 (Loft binds none of
+  them, §4.5). The bar's dots, the switcher, Settings' Activate and `spaces
+  focus|next|prev` set `workspace.currentActivity` through the bridge (`setActivity`), with
+  wrap-around. The **active Space** is the current Activity's (`Spaces.deriveActivity`); a
+  change fires `activated` (island banner, per-Space dock / menu bar / DND). Focusing a
+  window of another Activity (dock, switcher) switches to it first (bridge.js
+  `focusWindow`).
 - **Moving a window:** `Spaces.moveWindow(space, window?, follow?)` → bridge.js
-  `setWindowActivities` (`w.activities = [uuid]`). From the window menus ("Move to
-  Space", Window menu and the app menu's move commands), ⌘⇧1…9 and `qs ipc call spaces
-  moveWindow <id|n>`. Windows report `kwin_activities`; the bar's dots and the switcher
-  count a Space's windows from it.
-- **Shortcuts.** spaces.kdl (niri) never reaches KWin, so `loft keys kwin render` adds
-  ⌘1…9 → `spaces focus N` and ⌘⇧1…9 → `spaces moveWindow N` (ids `spaces-focus-N`,
-  `spaces-movewindow-N`) after shell-binds and before the user's changes. ⌘ and Mod are
-  both Meta here, so **⌘⇧3/4/5 stay Capture** and "Move Window to Space 3–5" has no key
-  (use the menu). With Spaces off the shell steps KWin's desktops instead.
+  `setWindowActivities` (`w.activities = [uuid]`), from Window ▸ Move to Space, the app
+  menu, ⌘⇧1…9 / ⌘⇧0 (when KDE binds nothing there, §4.5) and `qs ipc call spaces
+  moveWindow <n|id|name>`.
+- **Virtual desktops inside the Activity.** KWin's desktops are global, a window belongs to
+  an Activity *and* a desktop, so each Activity shows its own windows on each desktop.
+  ⌃← → reach KWin as Meta+Ctrl+← → (the keyboard layer's `mac-parity` group), which KWin's
+  own *Switch One Desktop to the Left/Right* has by default; Loft doesn't bind them under
+  KWin any more. ⌃⇧← → become Meta+Ctrl+Shift+← → (Plasma only), KWin's *Window One
+  Desktop to the Left/Right* (moves the window and follows it). The bar shows the desktops
+  after a divider when there is more than one (the current one highlighted, filled when the
+  current Activity has windows there; click to switch) and the pill says "Coding · 2".
 - **Per-Space wallpaper:** one wallpaper per screen, swapped (crossfaded) on Activity
-  change: `Vibes.spaceWallpaper` takes the active Space's `wallpapers` for the screen's
-  most specific role, else the per-workspace choice made under niri for the workspace
-  the Space binds to that role. Nothing per-workspace beyond that (decided).
-- **Not under KWin** (niri-only, hidden there): "New Space from Current Desktop"
-  (captures niri workspaces), P3 spin-up / Open / gather (launching a Space's apps and
-  tagging them), display roles as window placement, and the per-role workspace lines in
-  Settings → Spaces (a card says "KDE Activity · every display · N windows" instead).
-- **Backing out (§5):** Activities Loft created stay in Plasma and are harmless there
-  (plasmashell shows them in its Activities switcher). `loft spaces prune [--dry-run]`
-  (= `loft-kwin spaces prune`) removes them, gives the adopted one its name and icon
-  back and deletes the map; `loft spaces activities` prints the map and the session's
-  Activities. Both use the session bus; `loft --dev` targets a dev session.
-- **Backing out while Loft runs:** `prune` refuses while `dev.loft.KWinBridge` has an
-  owner (Loft's shell with Spaces on would make them again at once); `--force` anyway.
-- **Windows of a removed Space:** KWin puts a window whose only Activity is removed on
-  **every** Activity (seen), so before a sync removes one, the shell moves that Space's
-  windows to the active Space (else the first).
-- **Tested** in a nested KWin 6.8.2 (§6, `--kwin-env LOFT_SPACES_DIR=<scratch>` — the
-  session otherwise inherits the real `LOFT_LIBRARY`) with kactivitymanagerd on the
-  session's bus, checked with `busctl` against `org.kde.ActivityManager` and a one-shot
-  KWin script printing each window's `activities`: the first sync adopted "Default" as
-  Main and made the built-ins' Activities; three new Spaces got three Activities;
-  switching from a bar dot, the switcher (↓ Enter), `spaces focus N|next|prev` (wraps)
-  and Settings → Spaces' Activate set the current Activity; `spaces moveWindow 8` and
-  the app menu's Move to Space moved KWrite's Activity without switching; a dock click on
-  it switched to its Space; a rename and deletes followed in kactivitymanagerd; deleting
-  the active Space with KWrite on it moved KWrite to Main; a Space's `wallpapers` showed
-  while it was active; Settings' reorder arrow changed ⌘N order; `prune` was refused
-  while the shell ran and with `--force` (Spaces off) left only "Default", named and
-  iconed as before, with the map gone. Not run: the ⌘1…9 kglobalaccel shortcuts
-  themselves (their command is the IPC call above; registration as in §4.5).
+  change: a linked document's `wallpapers` for the screen's most specific role, else the
+  per-workspace choice made under niri for the workspace it binds to that role. A plain
+  Activity keeps the current wallpaper.
+- **Not under KWin:** New Space / templates in Settings (a new Space is a new Activity,
+  made in Plasma), reordering, renaming (Plasma's), archive.
+- **Older Loft builds' Activities.** Step 10 at first kept `<state>/kwin-activities.json`
+  (`{"spaces": {"<id>": {"activity", "adopted"?: {name, icon}}}}`). Nothing writes it now.
+  `loft spaces prune [--dry-run]` (= `loft-kwin spaces prune`) undoes **only what it
+  records**: removes the Activities those builds created and gives an adopted one its old
+  name and icon back, then deletes the file; with no file it does nothing. `loft spaces
+  activities` prints the Activities in Loft's order (plus the old map, if any). Both use
+  the session bus; `loft --dev` targets a dev session.
+- **Tested** in a nested KWin 6.8.2 (§6, two outputs, `LOFT_LIBRARY` / `LOFT_SPACES_DIR`
+  scratch with the built-in library Main, Music, Video, Comms, Gaming, Task) with
+  kactivitymanagerd on the session's bus. Setup like the user's: Activities Default,
+  Music, Coding, Gaming, Editing, Ignition, System-Configuration created in a scrambled
+  order, "Switch to activity" keys Meta+1…6 and Meta+0. Results: no Activity renamed or
+  created and no map written; the bar, the switcher (⌘1…⌘6, ⌘0) and `spaces list` showed
+  them in key order, live through adds and a rename; real key presses (`loft-input key`)
+  Meta+3/4/1/2/6 switched to Coding/Gaming/Default/Music/Ignition and the shell's active
+  Space followed; Meta+0 did too once KWin's stock *Zoom to Actual Size* (also Meta+0 in a
+  fresh profile, and the winner) had its key cleared, as on a profile where Meta+0 was
+  given to an Activity; Meta+Ctrl+→ →, ← stepped desktops 1→2→3→2 inside Default;
+  Meta+Ctrl+Shift+← moved KWrite to desktop 2 and followed, the Activity unchanged;
+  `spaces moveWindow 2` put KWrite on Music while Default stayed current; `spaces focus
+  coding | next | 0` switched; the bar showed "Default · 2" and the desktop cells; linking
+  (`activity: "Music"` by name, a new `coding` document by id) showed both as linked with
+  Edit / Open; `prune` with an old map (an adopted Default renamed Main, a made Video)
+  restored "Default", removed Video, ignored a stale entry and touched nothing else. The
+  shortcut load (§4.5) with an old record of six ActivityManager entries gave all six back
+  and didn't take them again.
 
 ### 4.3 Loft's lock design in Plasma's locker
 
@@ -567,6 +579,22 @@ on `QT_PLUGIN_PATH`.
    Attention (Meta+Ctrl+A), System Settings (Meta+I), Emoji Selector (Meta+.),
    Spectacle region recording (Meta+Shift+R), and KWin's Window Operations Menu (Alt+F3,
 which Loft's window menu takes, §4.4).
+   Plasma that is 12 actions: KWin's Walk Through Windows (Meta+Tab), Close Window
+   (Alt+F4), Switch One Desktop ↑ ↓ (Meta+Ctrl+↑/↓: ⌃↑ Mission Control, ⌃↓ App
+   Exposé), Switch Window ← → (Meta+Alt+←/→), Present Windows (Meta+F10),
+   Activate Window Demanding Attention (Meta+Ctrl+A), System Settings (Meta+I),
+   Emoji Selector (Meta+.), Spectacle region recording (Meta+Shift+R).
+   **KDE's Activities and desktops stay KDE's** (§4.2): Loft binds neither ⌘1…9 /
+   ⌘0 (kactivitymanagerd's "Switch to activity") nor ⌃⌘← → (`spaces prev/next`;
+   KWin's Switch One Desktop to the Left/Right keeps Meta+Ctrl+←/→, `KDE_OWNED_IPC`),
+   and claim never takes a key from the `ActivityManager` component
+   (`PROTECTED_COMPONENTS`): if a key of Loft's is one of those, KDE keeps it.
+   ⌘⇧1…9 / ⌘⇧0 (Move Window to Space N) **yield**: when another action has that
+   key, Loft's gets no key instead of taking it (`YIELD_PREFIXES`; the window menu's
+   Move to Space still works). A record from an older Loft that took ActivityManager
+   keys is put right at the next load: unload's `release` gives everything back, and
+   `claim` also gives back (and drops from the record) any ActivityManager entry it
+   finds first (`give_back_protected`).
 4. **unload**: unload the script, `unregister` every name in `names`, give the
    recorded keys back (`release`). kglobalshortcutsrc ends up as it was before
    (checked by diffing it in a nested session). If the session ended without a
@@ -1261,6 +1289,68 @@ theme, a running KWrite (and its context menu) re-skinned live; tokyonight → l
 the `qt` hook re-skinned it again (`kvantum-dark` → `kvantum`); `stop`, and the Settings
 switch off: Kvantum's file byte for byte as before and kdeglobals as before except the
 `[KFileDialog Settings]` Kate's dialog wrote itself; the record gone.
+### 4.13 A Space's apps under KWin: spin-up, display roles, capture
+
+**Done.** What §4.2 left niri-only, on Activities.
+
+- **Which app goes where:** `loft-niri space specs <space> --displays JSON` (pure, no
+  niri) resolves the Space's apps on KWin's outputs the way spin-up does under niri
+  (`roles::resolve` + `apps::specs`, `crates/loft-niri/src/spaces/kwin.rs`) and prints
+  each with the **display** its role is on: `{app, role, display, exec, cwd, launch,
+  open, width, match: {appId, title, cwd}}`. A role no display has folds onto main's
+  (`stack`, `columns`) or is skipped (`skip`, in `notes`).
+- **Opening** (`crates/loft-kwin/src/spinup.rs`): the shell sends those to loft-kwin,
+  `{"cmd": "openSpace", "space", "activity", "apps", "notes", "focus"}`. loft-kwin
+  - **finds** each app's window among the windows **of the Space's Activity** (the
+    `match` regexes and cwd, all that are given; without `match`, an app id equal to the
+    command's name or ending in `.name`: `konsole` → `org.kde.konsole`). Each window
+    counts once. A window on every Activity or on another Space's is never taken, so
+    two Spaces with the same app each get their own (niri's claims do this there);
+  - **places** a found window on another display on its role's (`moveToOutput`), as
+    niri's spin-up moves a window back to its workspace;
+  - **starts** what's missing (`launch` not off) in its own process group, then sends
+    the script `expectWindow` {pid, app id pattern, title, activity, output, open,
+    ttl 20 s}. bridge.js, on `windowAdded`, takes the first window with that pid
+    (else matching the app id / title), sets its activities to the Space's, sends it to
+    the display (`workspace.sendClientToScreen`) and maximizes / fullscreens it if the
+    app says `open`. The window is placed as it maps, before the shell sees it;
+  - doesn't start an app again while its window is still coming (20 s), so two Opens in
+    a row don't duplicate it;
+  - answers `{"SpaceOpened": {space, activity, apps: [{app, display, window, spawn}],
+    notes}}`; the notes become an island banner (as `space open`'s under niri).
+- **When:** like niri. The first activation of a Space in the shell's life
+  (`startup: first-activate`, the default; `Spaces.persist.opened`), **Open** in
+  Settings → Spaces (switch + find + place + start), and `startup: login` Spaces once the
+  Activities and the library are loaded (started in their Activity without switching:
+  the script assigns the window's Activity, not the current one). Only Activities with
+  Loft settings (a linked document, §4.2) have apps; a plain Activity starts nothing. A shell restart forgets
+  what was opened; the next activation then finds the running apps and starts nothing.
+  No systemd scopes (niri's spin-up uses them to tell an app's windows apart): matching
+  is by pid at start, then by app id / title / cwd.
+- **Save This Activity's Apps** (New Space from Current Desktop under niri): `space
+  capture --displays JSON --windows JSON` takes the current Activity's windows (not
+  minimized, not Loft's own) instead of niri's: per display, left to right, with `exec`
+  from `/proc/<pid>/cmdline`, the `appId` match, and `open: maximized` for a maximized
+  window (else its width share, which only niri uses). The new document is then **linked
+  to the current Activity** (`"activity": <id>`, §4.2) and marked opened for this session;
+  nothing moves and the Activity isn't touched. An Activity that already has Loft settings
+  is refused (edit or unlink those first). (Before the 2026-11-16 rework this made a new
+  Activity and moved the windows into it.)
+- **IPC:** `spaces open <id|n>`, `spaces capture <name>` (besides Settings → Spaces).
+- **Tested** in a nested KWin 6.8.2 with two outputs (`--output-count 2`, WL-0 = main,
+  WL-1 = right) and kactivitymanagerd, a scratch library with Main and Work (KWrite on
+  `main`, Konsole on `right` without a `match`), checked with `loft-kwin state` and
+  loft-shot: the first `spaces focus work` started both in Work's Activity, KWrite on
+  WL-0 and Konsole on WL-1; focusing Main and Work again and two `spaces open work` in a
+  row started nothing; with Konsole moved to WL-0 and KWrite closed, Open moved Konsole
+  back to WL-1 and started only KWrite; `openSpace` without focus from Main started
+  KWrite in Work's Activity while Main stayed current; with Dolphin on WL-0 and a
+  maximized Kate on WL-1 in Main, `spaces capture Desk` wrote Desk (Dolphin on `main`,
+  Kate on `right`, `open: maximized`), made its Activity, moved both windows into it and
+  switched there; closing Kate and Open Desk started Kate maximized on WL-1. Not run:
+  `startup: login` at a real login (its path, `openSpace` without focus, was), and real
+  hardware with mixed sizes and a portrait display (roles come from the same code as
+  `space list --displays`, unit-tested).
 
 ## 5. One Plasma session, two shells: switching and backing out
 
@@ -1314,7 +1404,7 @@ when Loft stops:
 | Alt+F3 (KWin's Window Operations Menu, §4.4) | taken by Loft's `loft-window-menu` shortcut through the same claim / release as the others |
 | any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |
 | the lock screen | `PLASMA_DEFAULT_SHELL` only in KWin's environment, and only when the login is Loft's (`loft-plasma lock-env`, §4.3). Lock and unlock stay Plasma's either way |
-| activities created for Spaces (`<state>/kwin-activities.json`) | kept (harmless). `loft spaces prune` removes them and renames the adopted one back |
+| KDE Activities | never written: Spaces are the user's Activities, read-only (§4.2). Activities an older Loft build created (`<state>/kwin-activities.json`) are kept (harmless); `loft spaces prune` removes those and renames an adopted one back |
 
 Loft never writes `plasma-org.kde.plasma.desktop-appletsrc`, `plasmashellrc` or
 `kwinrulesrc`, so plasmashell comes back with your panels as you left them.

@@ -159,6 +159,10 @@
         "Super_L-Space": "Super_L-Space",
         "Super_L-h": "Super_R-h",
         "Super_L-m": "Super_R-m"
+      },
+      "plasmaRemap": {
+        "Ctrl-Shift-Left": "Ctrl-Shift-Super_L-Left",
+        "Ctrl-Shift-Right": "Ctrl-Shift-Super_L-Right"
       }
     },
     {

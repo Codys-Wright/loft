@@ -72,12 +72,23 @@ def xremap_pair(b: dict) -> tuple[str, str]:
         if mods != ["Cmd"]:
             raise ValueError(f"{b['id']}: via super takes Cmd+key, not {b['mac']!r}")
         return src, f"Super_R-{k}"
-    raise ValueError(f"{b['id']}: via must be ctrl, cmd or super, not {via!r}")
+    if via == "kde":
+        # Plasma only: KWin's own shortcut, the physical keys plus Meta.
+        if not plasma_only(b) or "Cmd" in mods:
+            raise ValueError(f"{b['id']}: via kde is a `session: plasma` bind without Cmd")
+        return src, "-".join([XREMAP_MOD[m] for m in mods] + ["Super_L", k])
+    raise ValueError(f"{b['id']}: via must be ctrl, cmd, super or kde, not {via!r}")
+
+
+def plasma_only(b: dict) -> bool:
+    """A bind only a Plasma session gets (KWin's own shortcut, no niri bind)."""
+    return b.get("session") == "plasma"
 
 
 def xremap_group(data: dict) -> dict:
-    remap = dict(xremap_pair(b) for b in data["binds"])
-    return {
+    remap = dict(xremap_pair(b) for b in data["binds"] if not plasma_only(b))
+    plasma = dict(xremap_pair(b) for b in data["binds"] if plasma_only(b))
+    group = {
         "id": GROUP_ID,
         "name": "macOS system shortcuts → Loft (⌃←/→/↑/↓, ⌃⌘…, ⌘H/M)",
         "section": "keymap",
@@ -93,6 +104,11 @@ def xremap_group(data: dict) -> dict:
         "exact_match": True,
         "remap": dict(sorted(remap.items())),
     }
+    if plasma:
+        # Merged into `remap` under Plasma only (keys.for_wm_key): ⌃⇧←/→ move
+        # the window a desktop, KWin's Window One Desktop to the Left/Right.
+        group["plasmaRemap"] = dict(sorted(plasma.items()))
+    return group
 
 
 def _action(run: dict) -> str:
@@ -118,6 +134,8 @@ def niri_binds(data: dict) -> list[str]:
     out = []
     for b in data["binds"]:
         xremap_pair(b)  # validates mac / via
+        if plasma_only(b):
+            continue
         out.append(f"    // {b['mac']}: {b['macName']}")
         out.append(_line(b["niri"], b, b["title"]))
         if b["via"] == "cmd":

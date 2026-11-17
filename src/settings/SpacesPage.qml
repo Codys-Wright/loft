@@ -9,11 +9,18 @@ import qs.services
 //
 // Creating and editing: New Space (name + icon), New <template> (a Project:
 // its parameters), New Space from Current Desktop (what each display shows
-// now, `loft-niri space capture`), and per space the editor (SpaceEditor:
-// name, icon, displays, dock, menu bar, Focus, startup, delete / archive),
+// now, `loft-niri space capture`; KWin: the current Activity's windows),
+// and per space the editor (SpaceEditor: name, icon, displays, dock, menu
+// bar, Focus, startup, delete / archive),
 // moving up / down (the ⌘N order). Writes go through Spaces → `loft-niri
 // space save|patch|delete|reorder`, validated against the whole library
 // before anything is written.
+//
+// KWin: the cards are the user's KDE Activities, in the order of their KDE
+// "Switch to activity" keys (no reordering here; names and icons are
+// KDE's). Each can have Loft settings: a library document linked to it
+// (Link… an existing one, or new ones), edited, unlinked or removed here.
+// Linking only writes the document; the Activity is never touched.
 ColumnLayout {
     id: page
     spacing: 12
@@ -43,7 +50,7 @@ ColumnLayout {
     // An id no space (or workspace) has yet.
     function freshId(name) {
         const stem = slug(name) || "space";
-        const taken = id => Spaces.all.some(s => s.id === id || Object.values(s.displays ?? {}).includes(id));
+        const taken = id => Spaces.library.concat(Spaces.all).some(s => s.id === id || Object.values(s.displays ?? {}).includes(id));
         if (!taken(stem))
             return stem;
         for (let n = 2;; n++)
@@ -87,6 +94,11 @@ ColumnLayout {
                 }
             }, finish);
         } else if (form === "capture") {
+            // KWin: named like the current Activity unless given a name.
+            if (name === "" && Spaces.byActivity) {
+                Spaces.capture(Compositor.activityList.find(a => a.id === Compositor.currentActivity)?.name ?? "Activity", formIcon, finish);
+                return;
+            }
             if (name === "") {
                 formError = "Give the space a name";
                 return;
@@ -133,7 +145,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: Spaces.byActivity ? "A space switches every display at once: each space is a KDE Activity with its own windows. ⌘1…9 activate spaces in this order, ⌘⇧1…9 move the focused window to one, ⌃⌘← → step through them, ⌃⌘S opens the switcher." : "A space switches every display at once: its workspace on each display role, or keeps what a display shows. ⌘1…9 activate spaces in this order, ⌃⌘← → step through them, ⌃⌘S opens the switcher."
+            text: Spaces.byActivity ? "Your spaces are your KDE Activities (System Settings → Activities): each switches every display at once. Their order and ⌘ numbers are KDE's “Switch to activity” shortcuts, ⌘⇧N moves the focused window to one, ⌃← → switch the virtual desktops inside it (⌃⇧← → take the window along), ⌃⌘S opens the switcher. Loft adds a dock, menu bar, Focus, wallpapers or apps to an Activity only when you give it Loft settings here." : "A space switches every display at once: its workspace on each display role, or keeps what a display shows. ⌘1…9 activate spaces in this order, ⌃⌘← → step through them, ⌃⌘S opens the switcher."
             color: Theme.subtext
             font.family: Theme.fontUi
             font.pixelSize: 12
@@ -144,6 +156,8 @@ ColumnLayout {
             Layout.fillWidth: true
             spacing: 8
             SettingsButton {
+                // KWin: new spaces are new KDE Activities, made in Plasma.
+                visible: !Spaces.byActivity
                 text: "New Space"
                 icon: "󰐕"
                 primary: page.form === "new"
@@ -153,6 +167,7 @@ ColumnLayout {
                 model: Spaces.templates
                 delegate: SettingsButton {
                     required property var modelData
+                    visible: !Spaces.byActivity
                     text: `New ${modelData.name ?? modelData.id}`
                     icon: modelData.icon ?? ""
                     primary: page.form === modelData.id
@@ -160,9 +175,9 @@ ColumnLayout {
                 }
             }
             SettingsButton {
-                // Captures niri's workspaces per display.
-                visible: !Spaces.byActivity
-                text: "New Space from Current Desktop"
+                // niri: each display's workspace; KWin: the current
+                // Activity's windows, per display.
+                text: Spaces.byActivity ? "Save This Activity's Apps" : "New Space from Current Desktop"
                 icon: "󰍹"
                 primary: page.form === "capture"
                 onClicked: page.openForm("capture")
@@ -178,7 +193,7 @@ ColumnLayout {
             Text {
                 Layout.fillWidth: true
                 visible: page.form === "capture"
-                text: "Each display's current workspace becomes this space's workspace on that display, with its windows as the space's apps (in column order, with their widths). Displays showing nothing are kept. Activating the space gathers the windows; Open starts the ones that aren't running."
+                text: Spaces.byActivity ? "The windows of the current Activity become its Loft settings' apps, on the display role each one is on (left to right). Nothing moves, and the Activity itself isn't changed. Open (or its first activation in a session) starts the ones that aren't running." : "Each display's current workspace becomes this space's workspace on that display, with its windows as the space's apps (in column order, with their widths). Displays showing nothing are kept. Activating the space gathers the windows; Open starts the ones that aren't running."
                 color: Theme.subtext
                 font.family: Theme.fontUi
                 font.pixelSize: 11
@@ -191,7 +206,7 @@ ColumnLayout {
                 SettingsTextField {
                     implicitWidth: 240
                     text: page.formName
-                    placeholder: page.form === "capture" ? "e.g. Writing" : "e.g. Design"
+                    placeholder: page.form === "capture" ? (Spaces.byActivity ? "the Activity's name" : "e.g. Writing") : "e.g. Design"
                     onEdited: t => page.formName = t
                     onCommitted: t => page.formName = t
                 }
@@ -298,7 +313,7 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: Spaces.loaded && Spaces.spaces.length === 0
         horizontalAlignment: Text.AlignHCenter
-        text: "No spaces — is loft-niri on PATH?"
+        text: Spaces.byActivity ? `No KDE Activities${Compositor.impl.activitiesError ? ": " + Compositor.impl.activitiesError : " (is kactivitymanagerd running?)"}` : "No spaces — is loft-niri on PATH?"
         color: Theme.subtext
         font.family: Theme.fontUi
         font.pixelSize: 13
@@ -325,8 +340,9 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 12
 
-                // Move up / down in ⌘N order.
+                // Move up / down in ⌘N order (KWin: KDE's order).
                 ColumnLayout {
+                    visible: !Spaces.byActivity
                     spacing: 0
                     Repeater {
                         model: [{ glyph: "󰅃", delta: -1 }, { glyph: "󰅀", delta: 1 }]
@@ -389,7 +405,7 @@ ColumnLayout {
 
                     Text {
                         Layout.fillWidth: true
-                        text: [card.modelData.position ? `⌘${card.modelData.position}` : "", card.modelData.template ? `from ${card.modelData.template}` : "", card.modelData.id].filter(s => s).join("  ·  ")
+                        text: Spaces.byActivity ? [card.modelData.key ? card.modelData.key.replace("Meta+", "⌘") : "no KDE shortcut", card.modelData.linked ? `Loft settings: ${card.modelData.id}` : "no Loft settings"].join("  ·  ") : [card.modelData.position ? `⌘${card.modelData.position}` : "", card.modelData.template ? `from ${card.modelData.template}` : "", card.modelData.id].filter(s => s).join("  ·  ")
                         color: Theme.subtext
                         font.family: Theme.fontUi
                         font.pixelSize: 11
@@ -398,11 +414,33 @@ ColumnLayout {
                 }
 
                 SettingsButton {
+                    visible: !Spaces.byActivity || card.modelData.linked
                     text: card.editing ? "Done" : "Edit"
                     onClicked: page.selected = card.editing ? "" : card.modelData.id
                 }
+                // KWin, a plain Activity: give it Loft settings, new or one
+                // of the library's that no Activity has yet.
+                SettingsSelect {
+                    visible: Spaces.byActivity && !card.modelData.linked
+                    implicitWidth: 170
+                    placeholder: "Add Loft Settings…"
+                    current: null
+                    enabled: !Spaces.writing
+                    options: [{ value: "", label: "New settings" }].concat(Spaces.library.filter(d => !d.archived && !Spaces.all.some(x => x.linked && x.id === d.id)).map(d => ({ value: d.id, label: `Use “${d.name}”` })))
+                    onActivated: v => {
+                        const act = card.modelData.activity;
+                        const done = r => {
+                            if (r.ok)
+                                page.selected = r.id ?? v;
+                        };
+                        if (v === "")
+                            Spaces.linkNew(act, done);
+                        else
+                            Spaces.link(v, act, done);
+                    }
+                }
                 SettingsButton {
-                    visible: Spaces.canOpen
+                    visible: Spaces.canOpen && (!Spaces.byActivity || card.modelData.linked)
                     text: "Open"
                     onClicked: Spaces.open(card.modelData.id)
                 }
@@ -424,7 +462,7 @@ ColumnLayout {
                 Layout.fillWidth: true
                 visible: Spaces.byActivity && !card.editing
                 readonly property int windows: Spaces.windowCount(card.modelData.id)
-                text: Spaces.activityOf[card.modelData.id] ? `KDE Activity · every display${card.isActive ? " · showing" : ""}${windows > 0 ? ` · ${windows} window${windows === 1 ? "" : "s"}` : ""}` : "no Activity yet"
+                text: `KDE Activity · every display${card.isActive ? " · showing" : ""}${windows > 0 ? ` · ${windows} window${windows === 1 ? "" : "s"}` : ""}`
                 color: Theme.subtext
                 font.family: Theme.fontUi
                 font.pixelSize: 11

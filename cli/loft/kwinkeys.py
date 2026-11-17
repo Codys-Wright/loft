@@ -504,24 +504,42 @@ def write(out: Path, actions: list[Action]) -> None:
     )
 
 
+# Spaces under KWin are the user's KDE Activities (docs/KWIN.md §4.2), and
+# KDE's own keys for them stay KDE's: Meta+1…9/0 are kactivitymanagerd's
+# "Switch to activity" shortcuts, Meta+Ctrl+←/→ (what ⌃←/→ sends through the
+# keyboard layer) KWin's "Switch One Desktop to the Left/Right" — the virtual
+# desktops inside the Activity, as ⌃←/→ steps Spaces on macOS. So Loft binds
+# neither here, and never takes a key from these components.
+KDE_OWNED_IPC = (["spaces", "prev"], ["spaces", "next"])
+PROTECTED_COMPONENTS = {"ActivityManager"}
+# Loft actions that give their key up when another action has it, instead of
+# taking it: ⌘⇧N (move to Space N) is only Loft's where KDE binds nothing.
+YIELD_PREFIXES = ("loft-spaces-movewindow-",)
+
+
 def space_binds(binds: list[Bind]) -> list[Bind]:
     """Spaces under KWin (docs/KWIN.md §4.2): niri gets Mod+1…9 / Mod+Shift+1…9
-    from loft-niri's spaces.kdl, which KWin never sees. Here they go to the
-    shell (`spaces focus N`, `spaces moveWindow N`), with the IPC command of
-    shell-binds' own `spaces` binds (Mod+Ctrl+Left/Right). The shell steps the
-    workspaces instead while Spaces is off, so nothing is lost then."""
+    from loft-niri's spaces.kdl, which KWin never sees. Here Mod+1…9 (switch)
+    stay KDE's own "Switch to activity" shortcuts; only Mod+Shift+1…9, 0 go to
+    the shell (`spaces moveWindow N`: the Space whose KDE key is Meta+N), with
+    the IPC command of shell-binds' own `spaces` binds. Each yields to a KDE
+    action that has the same key (`claim`)."""
     proto = next((b for b in binds if b.action == "spawn" and (_ipc_args(b.args) or [""])[0] == "spaces"), None)
     if proto is None:
         return []
     ipc = _ipc_args(proto.args) or []
     prefix = proto.args[: len(proto.args) - len(ipc)]
-    out = []
-    for n in range(1, 10):
-        out.append(Bind(combo=f"Mod+{n}", action="spawn", args=[*prefix, "spaces", "focus", str(n)],
-                        title=f"Go to Space {n}", origin="spaces"))
-        out.append(Bind(combo=f"Mod+Shift+{n}", action="spawn", args=[*prefix, "spaces", "moveWindow", str(n)],
-                        title=f"Move Window to Space {n}", origin="spaces"))
-    return out
+    return [
+        Bind(combo=f"Mod+Shift+{n}", action="spawn", args=[*prefix, "spaces", "moveWindow", str(n)],
+             title=f"Move Window to Space {n}", origin="spaces")
+        for n in [*range(1, 10), 0]
+    ]
+
+
+def kde_owned(b: Bind) -> bool:
+    """A shell bind that KDE does itself under KWin (⌃←/→: desktops)."""
+    ipc = _ipc_args(b.args) if b.action == "spawn" else None
+    return bool(ipc) and any(ipc[: len(k)] == list(k) for k in KDE_OWNED_IPC)
 
 
 def window_menu_action(taken: set[str]) -> Action | None:
@@ -536,6 +554,8 @@ def window_menu_action(taken: set[str]) -> Action | None:
 
 def build(binds_text: str, overrides: dict | None = None) -> tuple[list[Action], list[str]]:
     binds = parse_binds(binds_text)
+    kde = [f"{b.combo}: KDE's own here (desktops inside the Activity)" for b in binds if kde_owned(b)]
+    binds = [b for b in binds if not kde_owned(b)]
     # After shell-binds, before the user's changes: a moved or disabled key wins.
     binds = binds + space_binds(binds)
     if overrides:
@@ -544,7 +564,7 @@ def build(binds_text: str, overrides: dict | None = None) -> tuple[list[Action],
     wm = window_menu_action({a.keys for a in actions})
     if wm is not None and wm.id not in {a.id for a in actions}:
         actions.append(wm)
-    return actions, skipped
+    return actions, kde + skipped
 
 
 # ── Keys other actions hold (record + revert) ───────────────────────────
@@ -613,36 +633,74 @@ def _read_record(path: Path) -> list[dict]:
     return [r for r in data if isinstance(r, dict) and isinstance(r.get("id"), list)] if isinstance(data, list) else []
 
 
+def give_back_protected(bus, record: Path) -> list[dict]:
+    """Older Loft builds took KDE's activity keys (ActivityManager's "Switch to
+    activity …") for their own Spaces: give those back and drop them from the
+    record, so the next release can't take them away again either."""
+    taken = _read_record(record)
+    back = [t for t in taken if t["id"][0] in PROTECTED_COMPONENTS]
+    if not back:
+        return []
+    for t in back:
+        try:
+            bus.set_foreign(t["id"], [list(k) for k in t.get("keys", [])])
+        except Exception as e:  # keep going: the others must get theirs
+            print(f"loft keys kwin: couldn't give {t['id'][:2]} its keys back: {e}")
+    rest = [t for t in taken if t["id"][0] not in PROTECTED_COMPONENTS]
+    if rest:
+        record.write_text(json.dumps(rest, indent=2) + "\n")
+    elif record.exists():
+        record.unlink()
+    return back
+
+
+def _is_default_context(r) -> bool:
+    return r[4] in ("", "default")
+
+
 def claim(bus, names: set[str], record: Path) -> list[dict]:
     """Take Loft's keys (those of the `kwin` actions in `names`) off every
     other action that has one; append what was taken to `record` (an action
-    already in it keeps its first, original keys). Returns the new entries."""
+    already in it keeps its first, original keys). Returns the new entries.
+
+    Never from PROTECTED_COMPONENTS (KDE's Activities): a key one of those
+    has stays theirs (and KDE's action wins it). A Loft action in
+    YIELD_PREFIXES whose key another action has gives its key up instead."""
+    give_back_protected(bus, record)
     infos = {path: bus.infos(path) for path in bus.components()}
     taken = _read_record(record)
     _adopt_window_ops_keys(bus, infos, names, taken)
+    rows = [r for rs in infos.values() for r in rs]
+    is_ours = lambda r: r[2] == "kwin" and r[0] in names  # noqa: E731
+    held: set[int] = {int(k) for r in rows if not is_ours(r) and _is_default_context(r) for k in r[6] if int(k)}
+    kde: set[int] = {int(k) for r in rows if r[2] in PROTECTED_COMPONENTS for k in r[6] if int(k)}
     ours: set[int] = set()
-    for rows in infos.values():
-        for r in rows:
-            if r[2] == "kwin" and r[0] in names:
-                ours.update(int(k) for k in r[6] if int(k))
+    for r in rows:
+        if not is_ours(r):
+            continue
+        keys = {int(k) for k in r[6] if int(k)}
+        if r[0].startswith(YIELD_PREFIXES) and keys & held:
+            bus.set_foreign([r[2], r[0], r[3], r[1]], [])
+            print(f"left {r[1]} without a key: another shortcut has it")
+            continue
+        ours.update(keys - kde)
     known = {tuple(t["id"][:2]) for t in taken}
     new: list[dict] = []
-    for rows in infos.values():
-        for r in rows:
-            action, friendly, comp, comp_friendly, context = r[0], r[1], r[2], r[3], r[4]
-            if (comp == "kwin" and action in names) or not ours.intersection(int(k) for k in r[6]):
-                continue
-            if context not in ("", "default"):
-                continue
-            aid = [comp, action, comp_friendly, friendly]
-            keys = bus.keys(aid)
-            keep = [k for k in keys if not (len(k) == 1 and k[0] in ours)]
-            entry = {"id": aid, "keys": keys}
-            if tuple(aid[:2]) not in known:
-                taken.append(entry)
-                known.add(tuple(aid[:2]))
-            new.append(entry)
-            bus.set_foreign(aid, keep)
+    for r in rows:
+        action, friendly, comp, comp_friendly = r[0], r[1], r[2], r[3]
+        if is_ours(r) or comp in PROTECTED_COMPONENTS or not ours.intersection(int(k) for k in r[6]):
+            continue
+        if not _is_default_context(r):
+            continue
+        aid = [comp, action, comp_friendly, friendly]
+        keys = bus.keys(aid)
+        keep = [k for k in keys if not (len(k) == 1 and k[0] in ours)]
+        entry = {"id": aid, "keys": keys}
+        if tuple(aid[:2]) not in known:
+            taken.append(entry)
+            known.add(tuple(aid[:2]))
+        new.append(entry)
+        bus.set_foreign(aid, keep)
     if new:
         record.parent.mkdir(parents=True, exist_ok=True)
         record.write_text(json.dumps(taken, indent=2) + "\n")

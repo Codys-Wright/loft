@@ -186,6 +186,15 @@ enum SpaceCmd {
     Gather { space: String },
     /// Which window is which app of the space (changes nothing).
     Apps { space: String },
+    /// The space's apps on a layout, each with the display its role
+    /// resolves to (KWin sessions, docs/KWIN.md §4.13; nothing is started).
+    Specs {
+        space: String,
+        /// The displays, instead of asking niri:
+        /// `[{"name", "identity", "geometry": [x, y, w, h]}]`.
+        #[arg(long)]
+        displays: Option<String>,
+    },
     /// Open the spaces whose `startup` is `login` (session autostart).
     Startup,
     /// Create / move the space's workspaces where they belong; no switching.
@@ -241,6 +250,14 @@ enum SpaceCmd {
         id: Option<String>,
         #[arg(long)]
         save: bool,
+        /// KWin sessions (docs/KWIN.md §4.13): the displays, as for `list`,
+        /// instead of asking niri. Needs `--windows`.
+        #[arg(long, requires = "windows")]
+        displays: Option<String>,
+        /// KWin sessions: the current Activity's windows, `[{"app_id",
+        /// "pid", "output", "geometry": [x, y, w, h], "maximized"}]`.
+        #[arg(long, requires = "displays")]
+        windows: Option<String>,
     },
     /// spaces → <state>/overrides/spaces.kdl (validated, swapped, reloaded).
     Render {
@@ -967,6 +984,7 @@ fn space_cmd(
                     json!({
                         "id": s.id, "name": s.name, "icon": s.icon, "order": s.order,
                         "position": pos, "template": s.template, "archived": s.archived,
+                        "startup": s.startup,
                         "displays": displays, "doc": s.doc,
                     })
                 })
@@ -1044,6 +1062,31 @@ fn space_cmd(
         SpaceCmd::Apps { space } => {
             let r = launch::inspect(find(&space)?, &lopts(main))?;
             print(j, &serde_json::to_value(&r)?, || r.text());
+        }
+        SpaceCmd::Specs { space, displays } => {
+            let s = find(&space)?;
+            let ds = match displays.as_deref() {
+                Some(text) => displays_from_json(text)?,
+                None => live::read_state(main.clone())?.displays,
+            };
+            let home = std::env::var("HOME").unwrap_or_default();
+            let v = loft_niri::spaces::kwin::specs(s, &ds, main.as_deref(), &home);
+            print(j, &v, || {
+                v["apps"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|a| {
+                        format!(
+                            "{:12} {:10} → {}",
+                            a["app"].as_str().unwrap_or(""),
+                            a["role"].as_str().unwrap_or(""),
+                            a["display"].as_str().unwrap_or("—")
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            });
         }
         SpaceCmd::Startup => {
             let rs = launch::startup(&cat, &lopts(main))?;
@@ -1135,8 +1178,9 @@ fn space_cmd(
                         .collect::<Result<Vec<_>>>()?;
                     edit::reorder(&dir, &env, &ids)?
                 }
-                SpaceCmd::Capture { name, icon, id, .. } => {
-                    let doc = capture_doc(&cat, paths, main.clone(), &name, &icon, id)?;
+                SpaceCmd::Capture { name, icon, id, displays, windows, .. } => {
+                    let kwin = displays.zip(windows);
+                    let doc = capture_doc(&cat, paths, main.clone(), &name, &icon, id, kwin)?;
                     edit::save(&dir, &env, doc, false)?
                 }
                 _ => unreachable!(),
@@ -1150,8 +1194,8 @@ fn space_cmd(
                     .join("\n")
             });
         }
-        SpaceCmd::Capture { name, icon, id, save: false } => {
-            let doc = capture_doc(&cat, paths, main.clone(), &name, &icon, id)?;
+        SpaceCmd::Capture { name, icon, id, save: false, displays, windows } => {
+            let doc = capture_doc(&cat, paths, main.clone(), &name, &icon, id, displays.zip(windows))?;
             println!("{}", serde_json::to_string_pretty(&doc)?);
         }
         SpaceCmd::Render {
@@ -1266,6 +1310,8 @@ fn capture_doc(
     name: &str,
     icon: &str,
     id: Option<String>,
+    // KWin: (displays, windows) as JSON, instead of niri's state.
+    kwin: Option<(String, String)>,
 ) -> Result<Value> {
     use loft_niri::spaces::{edit, launch, live};
     let name = name.trim();
@@ -1275,8 +1321,14 @@ fn capture_doc(
     let id = id.unwrap_or_else(|| edit::fresh_id(cat, name));
     edit::validate_id(&id)?;
     let opts = launch::Opts::from_env(&paths.state, main.clone());
-    let st = live::read_state(main)?;
-    let wins = launch::windows(&opts, false)?;
+    let (st, wins) = match kwin {
+        Some((displays, windows)) => {
+            let ws: Vec<loft_niri::spaces::kwin::KWinWindow> = serde_json::from_str(&windows)
+                .context("--windows: expected [{app_id, pid, output, geometry: [x, y, w, h], maximized}]")?;
+            loft_niri::spaces::kwin::capture_state(displays_from_json(&displays)?, &ws, main)
+        }
+        None => (live::read_state(main)?, launch::windows(&opts, false)?),
+    };
     let proc_root = opts.proc_root.clone();
     let cmds = move |pid: i32| edit::command_of(&proc_root, pid);
     Ok(edit::capture(&st, &wins, &cmds, &id, name, icon))

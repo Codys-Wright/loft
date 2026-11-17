@@ -21,9 +21,12 @@
 //! - `loft-kwin record …`: a screen recording through KWin's zkde_screencast
 //!   and PipeWire (src/record.rs).
 //! - `loft-kwin displays [set JSON]`: outputs through KScreen (src/displays.rs).
-//! - Spaces as Activities (src/activities.rs): stdin `syncSpaces` makes
-//!   kactivitymanagerd match the shell's Space list and answers
-//!   `{"Spaces": {"map": {space: activity}, …}}`; `loft-kwin spaces list|prune`.
+//! - Spaces are the user's KDE Activities (src/activities.rs), read-only:
+//!   stdin `activities` answers `{"Activities": {"activities": [{id, name,
+//!   icon, key, position}], "current"}}` in KDE's "Switch to activity" key
+//!   order, sent again on every change; `loft-kwin spaces list|prune`.
+//!   stdin `openSpace` starts a Space's missing apps in its Activity, on
+//!   their roles' displays (src/spinup.rs), answered with `{"SpaceOpened"}`.
 //! - stdout `{"Shortcut": {"name": "loft-…", "state": "pressed"|"repeated"|
 //!   "released"}}`: Loft's global shortcuts held and let go (src/keys.rs).
 
@@ -33,6 +36,7 @@ mod input;
 mod keys;
 mod record;
 mod shot;
+mod spinup;
 mod state;
 
 use std::collections::VecDeque;
@@ -319,9 +323,11 @@ async fn direct(conn: &Connection, cmd: &Value) -> Result<bool> {
             let () = p.call("invokeShortcut", &("Overview",)).await?;
             Ok(true)
         }
-        "syncSpaces" => {
-            let spaces: Vec<activities::SpaceInfo> = serde_json::from_value(cmd["spaces"].clone())?;
-            emit(&activities::sync(conn, &activities::state_dir(), &spaces).await?);
+        // Spaces are the user's Activities: read them, never write them
+        // (src/activities.rs). `syncSpaces` is what older shells sent; it
+        // gets the same read-only answer.
+        "activities" | "syncSpaces" => {
+            emit(&activities::report(conn).await);
             Ok(true)
         }
         "switchLayout" => {
@@ -334,8 +340,92 @@ async fn direct(conn: &Connection, cmd: &Value) -> Result<bool> {
     }
 }
 
+/// What `openSpace` keeps between calls: the last state, and the apps
+/// started recently whose window hasn't shown up ((space, app) → when).
+struct Spin {
+    state: Arc<Mutex<String>>,
+    starting: Mutex<std::collections::HashMap<(String, String), std::time::Instant>>,
+}
+
+/// `openSpace` (src/spinup.rs): find, place, start; queue the script's
+/// commands; report.
+fn open_space(queue: &Queue, spin: &Spin, cmd: &Value) -> Value {
+    let space = cmd["space"].as_str().unwrap_or("").to_string();
+    let activity = cmd["activity"].as_str().unwrap_or("").to_string();
+    let mut notes: Vec<String> = cmd["notes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|n| n.as_str().map(String::from))
+        .collect();
+    let apps: Vec<spinup::AppReq> = match serde_json::from_value(cmd["apps"].clone()) {
+        Ok(a) => a,
+        Err(e) => return json!({ "SpaceOpened": { "space": space, "apps": [], "notes": [format!("bad apps: {e}")] } }),
+    };
+    if cmd["focus"].as_bool() == Some(true) && !activity.is_empty() {
+        queue.push(json!({ "cmd": "setActivity", "activity": activity }));
+    }
+    let matchers: Vec<Option<spinup::Matcher>> = apps
+        .iter()
+        .map(|a| match spinup::Matcher::new(a) {
+            Ok(m) => Some(m),
+            Err(e) => {
+                notes.push(format!("{}: {e}", a.app));
+                None
+            }
+        })
+        .collect();
+    let state: Value = serde_json::from_str(&spin.state.lock().unwrap()).unwrap_or(Value::Null);
+    let wins = spinup::windows_from_state(&state, Some(std::path::Path::new("/proc")));
+    let mut starting = spin.starting.lock().unwrap();
+    let ttl = Duration::from_millis(spinup::EXPECT_MS);
+    starting.retain(|_, t| t.elapsed() < ttl);
+    let recent: std::collections::BTreeSet<String> =
+        starting.keys().filter(|(s, _)| *s == space).map(|(_, a)| a.clone()).collect();
+    let mut rows = Vec::new();
+    for step in spinup::plan(&apps, &matchers, &wins, &activity, &recent) {
+        use spinup::Step;
+        let (i, window, spawn) = match step {
+            Step::Found { app, uuid, move_to } => {
+                starting.remove(&(space.clone(), apps[app].app.clone()));
+                if let Some(output) = move_to {
+                    queue.push(json!({ "cmd": "moveToOutput", "window": uuid, "output": output }));
+                }
+                (app, Some(uuid), None)
+            }
+            Step::Starting { app } => (app, None, Some("starting")),
+            Step::Missing { app } => {
+                notes.push(format!("{} isn't open, and has no command to start it", apps[app].app));
+                (app, None, None)
+            }
+            Step::Spawn { app } => {
+                let a = &apps[app];
+                match spinup::spawn(a) {
+                    Ok(pid) => {
+                        if let Some(m) = &matchers[app] {
+                            queue.push(spinup::expect_cmd(a, m, &activity, Some(pid)));
+                        }
+                        starting.insert((space.clone(), a.app.clone()), std::time::Instant::now());
+                        (app, None, Some("started"))
+                    }
+                    Err(e) => {
+                        notes.push(format!("{}: starting `{}`: {e}", a.app, a.exec.join(" ")));
+                        (app, None, None)
+                    }
+                }
+            }
+        };
+        rows.push(json!({ "app": apps[i].app, "display": apps[i].display, "window": window, "spawn": spawn }));
+    }
+    json!({ "SpaceOpened": { "space": space, "activity": activity, "apps": rows, "notes": notes } })
+}
+
 /// A command from stdin or `Command`: KWin's D-Bus API, else the script.
-async fn dispatch(conn: &Connection, queue: &Queue, cmd: Value) {
+async fn dispatch(conn: &Connection, queue: &Queue, spin: &Spin, cmd: Value) {
+    if cmd["cmd"] == "openSpace" {
+        emit(&open_space(queue, spin, &cmd));
+        return;
+    }
     match direct(conn, &cmd).await {
         Ok(true) => {}
         Ok(false) => queue.push(cmd),
@@ -412,8 +502,8 @@ async fn main() -> Result<()> {
              loft-kwin record screen|area|window …           a screen recording (zkde_screencast)\n\
              loft-kwin displays [set JSON]                   outputs through KScreen\n\
              loft-kwin input [set JSON]                      keyboard layouts (kxkbrc), mouse and trackpad (KWin's InputDevice)\n\
-             loft-kwin spaces list                           Spaces ↔ Activities map\n\
-             loft-kwin spaces prune [--dry-run] [--force]    remove the Activities Loft made"
+             loft-kwin spaces list                           the Activities (= Spaces), in Loft's order\n\
+             loft-kwin spaces prune [--dry-run]              undo what older Loft builds did to Activities"
         );
         return Ok(());
     }
@@ -447,6 +537,7 @@ async fn main() -> Result<()> {
 
     tokio::spawn(watch_layouts(conn.clone()));
     tokio::spawn(keys::watch(conn.clone(), emit));
+    tokio::spawn(activities::watch(conn.clone(), emit));
     // GStreamer's first run after an update scans every plugin (~10 s), and
     // auto's encoder probe takes a moment: do both now, so the first
     // recording starts at once (record.rs).
@@ -463,6 +554,7 @@ async fn main() -> Result<()> {
         Ok(text) => model.pnp = state::parse_pnp_ids(&text),
         Err(e) => eprintln!("loft-kwin: no PNP ids ({pnp_path}: {e}); display vendors stay as ids"),
     }
+    let spin = Spin { state: state.clone(), starting: Mutex::default() };
     let mut stdin = BufReader::new(tokio::io::stdin()).lines();
     let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
 
@@ -485,11 +577,11 @@ async fn main() -> Result<()> {
                     continue;
                 }
                 match serde_json::from_str::<Value>(line) {
-                    Ok(cmd) => dispatch(&conn, &queue, cmd).await,
+                    Ok(cmd) => dispatch(&conn, &queue, &spin, cmd).await,
                     Err(e) => eprintln!("loft-kwin: bad command {line:?}: {e}"),
                 }
             }
-            Some(cmd) = commands.recv() => dispatch(&conn, &queue, cmd).await,
+            Some(cmd) = commands.recv() => dispatch(&conn, &queue, &spin, cmd).await,
             _ = term.recv() => break,
             _ = tokio::signal::ctrl_c() => break,
         }

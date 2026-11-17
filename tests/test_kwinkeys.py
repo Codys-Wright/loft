@@ -10,6 +10,8 @@ digit or symbol is its symbol without Shift.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import shlex
 import tempfile
@@ -123,22 +125,31 @@ class FromShellBinds(unittest.TestCase):
             self.assertRegex(a.id, r"^[a-z0-9-]+$")  # a systemd instance name, a file name
 
     def test_space_binds(self):
-        """Spaces under KWin: ⌘1…9 focus, ⌘⇧1…9 move the focused window, through
-        the shell's IPC (no spaces.kdl). ⌘⇧3/4/5 stay Capture (Super = Mod here)."""
-        go = self.by_id["spaces-focus-3"]
-        self.assertEqual(go.keys, "Meta+3")
-        self.assertEqual(go.text, "Loft: Go to Space 3")
-        self.assertEqual(go.command[-3:], ["spaces", "focus", "3"])
-        self.assertEqual(go.command[:9], ["timeout", "-k", "1", "5", "/qs", "ipc", "--path", "/src", "call"])
+        """Spaces under KWin are KDE's Activities: ⌘1…9 stay KDE's "Switch to
+        activity" keys (Loft binds none), ⌘⇧1…9, 0 move the focused window
+        through the shell's IPC. ⌘⇧3/4/5 stay Capture (Super = Mod here)."""
+        self.assertFalse(any(a.id.startswith("spaces-focus-") for a in self.actions))
+        self.assertFalse(any(a.keys in {f"Meta+{n}" for n in range(10)} for a in self.actions))
         mv = self.by_id["spaces-movewindow-1"]
         self.assertEqual(mv.keys, "Meta+!")
         self.assertEqual(mv.command[-3:], ["spaces", "moveWindow", "1"])
+        self.assertEqual(mv.command[:9], ["timeout", "-k", "1", "5", "/qs", "ipc", "--path", "/src", "call"])
+        self.assertEqual(self.by_id["spaces-movewindow-0"].keys, "Meta+)")
         self.assertNotIn("spaces-movewindow-5", self.by_id)
         self.assertEqual(self.by_id["capture-toggle"].keys, "Meta+%")
         self.assertTrue(any(s.startswith("Mod+Shift+5:") for s in self.skipped))
-        # The user's changes still win: a disabled ⌘2 is gone.
-        actions, _ = kwinkeys.build(shell_binds(), {"binds": {"Mod+2": {"disabled": True}}})
-        self.assertNotIn("spaces-focus-2", {a.id for a in actions})
+        # The user's changes still win: a disabled ⌘⇧2 is gone.
+        actions, _ = kwinkeys.build(shell_binds(), {"binds": {"Mod+Shift+2": {"disabled": True}}})
+        self.assertNotIn("spaces-movewindow-2", {a.id for a in actions})
+
+    def test_ctrl_arrows_are_kdes_desktops(self):
+        """⌃←/→ (Meta+Ctrl+←/→ through the keyboard layer) are KWin's own
+        Switch One Desktop to the Left/Right here: Loft doesn't bind them."""
+        self.assertNotIn("Meta+Ctrl+Left", {a.keys for a in self.actions})
+        self.assertNotIn("Meta+Ctrl+Right", {a.keys for a in self.actions})
+        self.assertFalse(any((a.command or [])[-2:] in (["spaces", "prev"], ["spaces", "next"]) for a in self.actions))
+        # ⌃↑ (Mission Control) is still Loft's.
+        self.assertIn("Meta+Ctrl+Up", {a.keys for a in self.actions})
 
     def test_twin_without_title_is_named(self):
         """XF86LaunchA has hotkey-overlay-title=null: it takes Mod+Shift+A's."""
@@ -221,6 +232,7 @@ class FakeBus:
 
 
 META_TAB, ALT_TAB, META_I, ALT_F4, META_A = 0x11000001, 0x8000001, 0x10000049, 0x9000033, 0x10000041
+META_1 = 0x10000031
 
 
 class ClaimRelease(unittest.TestCase):
@@ -272,6 +284,51 @@ class ClaimRelease(unittest.TestCase):
     def test_nothing_to_take_writes_no_record(self):
         kwinkeys.claim(self.bus, {"loft-controlcenter-toggle"}, self.record)
         self.assertFalse(self.record.exists())
+
+    def test_never_takes_kdes_activity_keys(self):
+        """Even if Loft binds a key "Switch to activity" has, KDE keeps it."""
+        self.bus.add("ActivityManager", "switch-to-activity-abc", [[META_1]], friendly='Switch to activity "Default"')
+        self.bus.add("kwin", "loft-custom", [[META_1]])
+        kwinkeys.claim(self.bus, self.names | {"loft-custom"}, self.record)
+        self.assertEqual(self.bus.seqs[("ActivityManager", "switch-to-activity-abc")], [[META_1]])
+        rec = json.loads(self.record.read_text())
+        self.assertFalse(any(t["id"][0] == "ActivityManager" for t in rec))
+
+    def test_activity_keys_taken_before_are_given_back(self):
+        """The user's record from an older Loft lists six ActivityManager
+        entries: the next claim gives them back and doesn't take them again;
+        the other entries stay recorded."""
+        acts = [(f"switch-to-activity-{n}", 0x10000030 + n) for n in range(1, 7)]
+        for action, _ in acts:
+            self.bus.add("ActivityManager", action, [])  # taken: no key now
+        old = [{"id": ["ActivityManager", a, "Activity Manager", f"Switch to activity {a}"], "keys": [[k]]} for a, k in acts]
+        old.append({"id": ["kwin", "Walk Through Windows", "KWin", "Walk Through Windows"], "keys": [[ALT_TAB], [META_TAB]]})
+        self.record.parent.mkdir(parents=True)
+        self.record.write_text(json.dumps(old))
+        self.bus.seqs[("kwin", "Walk Through Windows")] = [[ALT_TAB]]
+        kwinkeys.claim(self.bus, self.names, self.record)
+        for action, k in acts:
+            self.assertEqual(self.bus.seqs[("ActivityManager", action)], [[k]])
+        rec = json.loads(self.record.read_text())
+        self.assertNotIn("ActivityManager", [t["id"][0] for t in rec])
+        self.assertEqual([t for t in rec if t["id"][1] == "Walk Through Windows"][0]["keys"], [[ALT_TAB], [META_TAB]])
+        # And a second claim (Loft restarted) leaves them alone.
+        kwinkeys.claim(self.bus, self.names, self.record)
+        self.assertEqual(self.bus.seqs[("ActivityManager", "switch-to-activity-1")], [[0x10000031]])
+
+    def test_move_to_space_yields_to_a_kde_key(self):
+        """⌘⇧N (move to Space N) gives its key up when KDE binds it to
+        something else, instead of taking it."""
+        meta_excl = 0x10000021  # Meta+!
+        self.bus.add("kwin", "Window to Desktop 1", [[meta_excl]])
+        self.bus.add("kwin", "loft-spaces-movewindow-1", [[meta_excl]])
+        self.bus.add("kwin", "loft-spaces-movewindow-2", [[0x10000040]])  # Meta+@: free
+        names = self.names | {"loft-spaces-movewindow-1", "loft-spaces-movewindow-2"}
+        with contextlib.redirect_stdout(io.StringIO()):
+            kwinkeys.claim(self.bus, names, self.record)
+        self.assertEqual(self.bus.seqs[("kwin", "Window to Desktop 1")], [[meta_excl]])
+        self.assertEqual(self.bus.seqs[("kwin", "loft-spaces-movewindow-1")], [])
+        self.assertEqual(self.bus.seqs[("kwin", "loft-spaces-movewindow-2")], [[0x10000040]])
 
 
 if __name__ == "__main__":

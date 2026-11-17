@@ -1,14 +1,14 @@
 """`loft spaces`: Spaces outside the shell (docs/SPACES.md, docs/KWIN.md §4.2).
 
-Under KWin each Space is a KDE Activity, made by loft-kwin and kept in
-<state>/kwin-activities.json (space id → activity id). Activities stay in Plasma
-when you go back to plasmashell (harmless, docs/KWIN.md §5); `prune` removes the
-ones Loft created and gives an adopted one (the Activity the first Space took
-over) its old name and icon back:
+Under KWin the Spaces are the user's own KDE Activities, read from
+kactivitymanagerd; Loft never creates, renames or removes one. Older Loft
+builds did (one Activity per library Space, kept in
+<state>/kwin-activities.json); `prune` undoes only what that file records —
+removes the Activities those builds created and gives an adopted one its old
+name and icon back — and touches no other Activity:
 
-  loft spaces activities            the map and kactivitymanagerd's activities (JSON)
-  loft spaces prune [--dry-run]     remove Loft's activities (refused while Loft's
-                                    shell runs, which would make them again; --force)
+  loft spaces activities            the Activities in Loft's order (JSON)
+  loft spaces prune [--dry-run]     undo what older Loft builds did to Activities
 
 Both run `loft-kwin spaces …` ($LOFT_KWIN_BIN) on the session bus, with the
 same state dir as the CLI (`loft --dev` targets the dev session's).
@@ -16,6 +16,7 @@ same state dir as the CLI (`loft --dev` targets the dev session's).
 
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -42,7 +43,7 @@ def run(state_dir, sub: str, *rest: str) -> int:
 
 
 def add_parser(top, state_dir_of) -> None:
-    p = top.add_parser("spaces", help="Spaces as KDE Activities under KWin: list or prune the ones Loft made (docs/KWIN.md §4.2)")
+    p = top.add_parser("spaces", help="Spaces under KWin are your KDE Activities: list them, or undo what older Loft builds did to them (docs/KWIN.md §4.2)")
     sub = p.add_subparsers(dest="spaces_cmd", required=True)
 
     def _go(sub_name, *flags):
@@ -58,9 +59,10 @@ def add_parser(top, state_dir_of) -> None:
 
         return fn
 
-    s = sub.add_parser("activities", help="the space ↔ activity map and the session's activities (JSON)")
+    s = sub.add_parser("activities", help="the session's Activities in Loft's order, with their KDE keys (JSON)")
     s.set_defaults(fn=_go("list"))
-    s = sub.add_parser("prune", help="remove the Activities Loft created for Spaces (an adopted one gets its name back)")
-    s.add_argument("-n", "--dry-run", action="store_true", help="say what would go, change nothing")
-    s.add_argument("-f", "--force", action="store_true", help="even while Loft's shell runs (it makes them again)")
-    s.set_defaults(fn=_go("prune", ("--dry-run", "dry_run"), ("--force", "force")))
+    s = sub.add_parser("prune", help="remove the Activities older Loft builds created (an adopted one gets its name back); no other Activity is touched")
+    s.add_argument("-n", "--dry-run", action="store_true", help="say what would change, change nothing")
+    # Accepted for old scripts; nothing refuses any more.
+    s.add_argument("-f", "--force", action="store_true", help=argparse.SUPPRESS)
+    s.set_defaults(fn=_go("prune", ("--dry-run", "dry_run")))

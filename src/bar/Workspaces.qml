@@ -26,6 +26,12 @@ import qs.services
 // name so the cells never move (hover a cell to see its name; click the
 // pill for the overview). Icons off: plain dots, no pill. Design from
 // javiiervm/dotfiles; data from niri.
+//
+// KWin: the space dots are the KDE Activities (every display at once), and
+// when there is more than one virtual desktop, the desktops follow the
+// divider — the current one highlighted, filled when the current Activity
+// has windows there (⌃← → step them, docs/KWIN.md §4.2). The pill says
+// "Coding · 2" then.
 Item {
     id: root
 
@@ -56,7 +62,8 @@ Item {
         if (spacesOn) {
             for (const s of Spaces.spaces)
                 out.push({ kind: "space", space: s, ws: null });
-            const loose = Spaces.unownedOn(output);
+            // KWin: the virtual desktops inside the current Activity.
+            const loose = Spaces.byActivity ? (workspaces.length > 1 ? workspaces : []) : Spaces.unownedOn(output);
             if (loose.length > 0) {
                 out.push({ kind: "divider" });
                 for (const w of loose)
@@ -103,7 +110,7 @@ Item {
     // What the pill shows: the space, or this display's workspace (its
     // name, or its number when it has none).
     readonly property string pillIcon: spacesOn ? (shown?.icon || "󰕰") : wsIcon(shownWs)
-    readonly property string pillText: spacesOn ? (shown?.name ?? "Spaces") : shownWs ? (shownWs.name || `${shownWs.idx}`) : ""
+    readonly property string pillText: spacesOn ? `${shown?.name ?? "Spaces"}${Spaces.byActivity && workspaces.length > 1 && activeWs ? ` · ${activeWs.idx}` : ""}` : shownWs ? (shownWs.name || `${shownWs.idx}`) : ""
 
     // The widest workspace label on this display.
     readonly property real wsLabelWidth: wsPill ? Math.max(...workspaces.map(w => labelMetrics.advanceWidth(w.name || `${w.idx}`)), 0) : 0
@@ -209,7 +216,10 @@ Item {
                     readonly property var mine: isSpace ? Spaces.workspacesOf(modelData.space.id, root.output) : modelData.ws ? [modelData.ws] : []
                     // KWin: the space's Activity's windows on this display.
                     readonly property var spaceWindows: isSpace && Spaces.byActivity ? Spaces.windowsOf(modelData.space.id, root.output) : null
-                    readonly property bool occupied: spaceWindows ? spaceWindows.length > 0 : mine.some(w => Compositor.windowsOn(w.id).length > 0)
+                    // KWin desktop cells: the current Activity's windows only.
+                    readonly property bool occupied: spaceWindows ? spaceWindows.length > 0 : mine.some(w => Compositor.windowsOn(w.id).some(x => !Spaces.byActivity || (x.kwin_activities ?? []).length === 0 || x.kwin_activities.includes(Compositor.currentActivity)))
+                    // KWin: the desktop shown now (the pacman sits on the Activity).
+                    readonly property bool current: Spaces.byActivity && root.spacesOn && !isSpace && !!modelData.ws?.is_active
                     readonly property bool urgent: spaceWindows ? spaceWindows.some(w => w.is_urgent) : mine.some(w => w.is_urgent)
                     readonly property bool here: spaceWindows ? true : mine.length > 0
                     // A named workspace's icon ("" = the dot glyphs).
@@ -240,7 +250,7 @@ Item {
                         visible: !dot.isDivider
                         anchors.fill: parent
                         radius: width / 2
-                        color: mouse.containsMouse ? Theme.withAlpha(root.fg, 0.14) : "transparent"
+                        color: dot.current ? Theme.withAlpha(root.fg, mouse.containsMouse ? 0.3 : 0.22) : mouse.containsMouse ? Theme.withAlpha(root.fg, 0.14) : "transparent"
 
                         Behavior on color {
                             ColorAnimation {

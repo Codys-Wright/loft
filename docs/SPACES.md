@@ -707,10 +707,25 @@ loft-niri space delete <id> | reorder <id>…            # the library keeps ≥
 loft-niri space capture --name N [--icon I] [--id ID] [--save]   # New Space from Current Desktop
 ```
 
-Under KWin (a Plasma session) a Space is a KDE Activity instead of named workspaces:
-loft-niri still owns the library (`space list --displays JSON` takes KWin's outputs),
-loft-kwin keeps the Activities in step, and `loft spaces activities | prune [--dry-run]`
-lists / removes them. See [KWIN.md §4.2](KWIN.md#42-spaces--kde-activities).
+Under KWin (a Plasma session) the Spaces are **the user's own KDE Activities**, read
+from kactivitymanagerd and never changed by Loft, in the order of their KDE "Switch to
+activity" keys (Meta+1…9, then 0); KDE's virtual desktops live inside them (⌃← →). A
+library document attaches its settings (dock, menu bar, Focus, wallpapers, apps and
+display roles) to an Activity only when it names it, `"activity": "<id or name>"`
+(Settings → Spaces links one); without one an Activity is a plain Space. loft-niri still
+owns the library (`space list --displays JSON` takes KWin's outputs); `loft spaces
+activities` lists the Activities and `loft spaces prune [--dry-run]` undoes what older
+Loft builds did to them. See [KWIN.md §4.2](KWIN.md#42-spaces--your-kde-activities).
+Spin-up, Open and Save This Activity's Apps (capture) work for linked Activities
+([§4.13](KWIN.md#413-a-spaces-apps-under-kwin-spin-up-display-roles-capture)):
+
+```
+loft-niri space specs <id> [--displays JSON]           # its apps, each with its role's display
+loft-niri space capture … --displays JSON --windows JSON   # capture KWin's windows, not niri's
+```
+
+loft-kwin's `openSpace` finds the apps' windows in the Space's Activity, moves them to
+their roles' displays and starts the missing ones there.
 
 The `loft space …` Python commands above (and the Spotlight provider) are not written
 yet; Settings → Spaces and the shell use `loft-niri` directly. Writes refuse any change
