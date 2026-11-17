@@ -27,6 +27,12 @@ recording zooms.
                clicks that change the UI, typing — and propose zoom segments
   zoom render  export a recording with zoom segments (and an optional trim)
                as a new file; the original is never touched
+  join     one recording from the segments a paused recording left
+           (Recorder.qml records each stretch between pauses into its own
+           file, so a pause is a cut, not a held frame): each part's mic
+           track (audio "both") is muxed in first, then the parts are
+           concatenated (stream copy; re-encoded to the first part's size
+           when a part's differs, e.g. a window recorded at another size)
 
 Why zooms come from the video: niri 26.04's IPC doesn't report the pointer,
 and Wayland only tells a client where the pointer is while it is over that
@@ -48,6 +54,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import select
 import shutil
 import subprocess
@@ -709,6 +716,88 @@ def auto_zoom(src: str, zoom: float = 2.0) -> dict:
     return {"duration": info["duration"], "width": info["width"], "height": info["height"], "segments": segments_from_activity(events, info["duration"], zoom)}
 
 
+# ── Joining a paused recording's parts ─────────────────────────────────
+
+
+def mux_mic_command(video: str, mic: str, out: str) -> list[str]:
+    """The video's own tracks plus the mic as a second audio track (as the
+    shell did for an unpaused recording)."""
+    return [
+        "ffmpeg", "-v", "error", "-y", "-i", video, "-i", mic,
+        "-map", "0:v", "-map", "0:a?", "-map", "1:a", "-c:v", "copy", "-c:a", "aac",
+        "-metadata:s:a:0", "title=System", "-metadata:s:a:1", "title=Microphone", out,
+    ]  # fmt: skip
+
+
+def concat_list(paths: list[str]) -> str:
+    """ffmpeg's concat demuxer list (single quotes escaped its way)."""
+    return "".join("file '{}'\n".format(str(Path(p).resolve()).replace("'", "'\\''")) for p in paths)
+
+
+def concat_command(listfile: str, out: str, sizes: list[tuple[int, int]]) -> list[str]:
+    """Concatenate the listed parts: stream copy when every part has the same
+    frame size, else re-encode to the first part's size (letterboxed)."""
+    cmd = ["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", listfile, "-map", "0"]
+    if len(set(sizes)) <= 1:
+        return cmd + ["-c", "copy", "-movflags", "+faststart", out]
+    w, h = sizes[0]
+    vf = f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:-1:-1,setsar=1"
+    return cmd + ["-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart", out]
+
+
+def join_parts(out: str, parts: list[tuple[str, str | None]]) -> dict:
+    """Join a recording's parts ((video, mic or None) in order) into `out`.
+    Parts with no video (a recorder that failed at once) are skipped; the
+    part files are removed once `out` is written."""
+    t = time.monotonic()
+    used: list[str] = []
+    sizes: list[tuple[int, int]] = []
+    leftovers: list[str] = []
+    for video, mic in parts:
+        if mic:
+            leftovers.append(mic)
+        if not os.path.exists(video) or os.path.getsize(video) == 0:
+            leftovers.append(video)
+            continue
+        try:
+            info = probe(video)
+        except SystemExit:
+            leftovers.append(video)
+            continue
+        if not info["width"]:
+            leftovers.append(video)
+            continue
+        if mic and os.path.exists(mic) and os.path.getsize(mic) > 0:
+            muxed = re.sub(r"\.mp4$", "", video) + ".muxing.mp4"
+            if subprocess.run(mux_mic_command(video, mic, muxed)).returncode == 0:
+                os.replace(muxed, video)
+            elif os.path.exists(muxed):
+                os.remove(muxed)
+        used.append(video)
+        sizes.append((info["width"], info["height"]))
+    if not used:
+        for f in leftovers:
+            if os.path.exists(f):
+                os.remove(f)
+        raise SystemExit("loft: no recorded parts to join")
+    if len(used) == 1:
+        os.replace(used[0], out)
+    else:
+        listfile = re.sub(r"\.mp4$", "", out) + ".parts.txt"
+        Path(listfile).write_text(concat_list(used))
+        try:
+            r = subprocess.run(concat_command(listfile, out, sizes))
+        finally:
+            os.remove(listfile)
+        if r.returncode != 0:
+            raise SystemExit(f"loft: joining {len(used)} parts into {out} failed")
+        leftovers += used
+    for f in leftovers:
+        if os.path.exists(f) and f != out:
+            os.remove(f)
+    return {"path": out, "parts": len(used), "seconds": round(time.monotonic() - t, 2)}
+
+
 # ── CLI ─────────────────────────────────────────────────────────────────
 
 
@@ -777,3 +866,16 @@ def add_parser(top) -> None:
         print(json.dumps({"path": out, "segments": len(segs), "seconds": round(time.monotonic() - t, 2)}))
 
     s.set_defaults(fn=_render)
+
+    s = sub.add_parser("join", help="one recording from a paused recording's parts (pauses are cuts)")
+    s.add_argument("out")
+    s.add_argument("parts", nargs="+", help="VIDEO or VIDEO:MIC (the part's microphone WAV), in order")
+
+    def _join(ctx, a):
+        parts = []
+        for p in a.parts:
+            video, _, mic = p.partition(".mp4:")
+            parts.append((video + ".mp4", mic or None) if _ else (p, None))
+        print(json.dumps(join_parts(a.out, parts)))
+
+    s.set_defaults(fn=_join)
