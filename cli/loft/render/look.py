@@ -243,6 +243,53 @@ def fonts(typography: dict) -> dict:
     return {"ui": t["ui"]["family"] or "sans-serif", "mono": t["mono"]["family"] or "monospace", "size": t["mono"]["size"]}
 
 
+# ── Menus in other toolkits ─────────────────────────────────────────────────
+#
+# The shell's own menus (src/menubar/MenuPanel.qml: the bar's menus, the
+# desktop and dock menus) as numbers other toolkits can draw: GTK 3 menus and
+# GTK 4 popover menus (gtk.css), Chromium / Electron context menus (which take
+# their colors from GTK's `menu` CSS nodes) and Qt menus (Kvantum).
+MENU = {
+    "radius": 12,  # MenuPanel.radius
+    "pad": 6,  # MenuPanel.pad: the rows' inset from the edge
+    "row_radius": 6,  # the highlighted row's pill
+    "row_height": 26,
+    "separator_inset": 8,
+    "separator_height": 9,  # the separator row, a 1 px line in its middle
+}
+
+
+def menu(colors: dict, material: dict) -> dict[str, str]:
+    """A menu's colors, from the shell's: the glass at MenuPanel's strength
+    (Theme.fillFor(1.9) at the theme's default, never under 72 % without
+    blur), its hairline, the accent pill with readable text, separators at
+    14 % text. `fill` is for a toolkit whose menus the compositor blurs
+    (Kvantum under KWin); `solid` is that glass over the theme's background,
+    opaque, for toolkits that can't ask for blur (GTK, Chromium)."""
+    p = palette(colors)
+    g = material["glass"]
+    blur_ = bool(material["blur"]["enabled"])
+    alpha = min(0.97, max(float(g["opacity"]) * 1.9, 0.0 if blur_ else 0.72))
+    tint = c.hex6(g["tint"])
+    on_accent = c.readable_on(p["accent"], p["bg"], p["text"])
+    return {
+        "alpha": c.num(round(alpha, 3)),
+        "fill": c.with_alpha(tint, alpha),
+        "solid": c.mix(p["bg"], tint, alpha),
+        "border": c.with_alpha(c.hex6(g.get("border", "#ffffff")), float(g.get("borderOpacity", 0.14 if dark(colors) else 0.6))),
+        "text": p["text"],
+        "subtext": p["subtext"],
+        "disabled": c.mix(p["subtext"], p["bg"], 0.35),
+        "hover": p["accent"],
+        "hover_fg": on_accent,
+        "separator": c.with_alpha(p["text"], 0.14),
+        # The separator over the solid fill, opaque: Chromium reads a
+        # separator's color without its alpha.
+        "separator_solid": c.mix(c.mix(p["bg"], tint, alpha), p["text"], 0.14),
+        "shadow": c.with_alpha("#000000", 0.32 if dark(colors) else 0.18),
+    }
+
+
 def palette_vars(name: str, colors: dict) -> dict[str, str]:
     """Template variables every palette consumer shares."""
     p = palette(colors)

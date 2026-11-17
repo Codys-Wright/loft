@@ -1452,6 +1452,8 @@ colour groups in the table, and `Kvantum/kvantum.kvconfig [General] theme`. If i
 them anyway after Loft's apply, Loft's record takes those values as the ones to restore,
 and the next theme change (or `loft qt global apply`) puts Loft's back.
 
+Menus in global mode (and everything else's menus) follow the shell's: §4.19.
+
 **Global mode tested** nested (KWin 6.8.2, scratch HOME; `loft qt global start|on|off|stop`
 run by hand where the units would): a BreezeClassic baseline (`plasma-apply-colorscheme`,
 `widgetStyle=Breeze`, Kvantum `theme=KvArc`); `on` → 109 kdeglobals keys + Kvantum's
@@ -1876,6 +1878,67 @@ with no rendered script exits 0, and with one it waited for a held lock (2.7 s) 
 then exited 0 without loading, as no `loft-plasma-shell.service` is active there. **Not
 tested:** a real `kwin_wayland --replace` (the nested KWin owns the session; replacing it
 ends the test session) and the `heal` → `load` path under the user's systemd.
+
+### 4.19 Menus in every app: GTK, Electron and Qt in the shell's look
+
+Real Loft-drawn menus inside other apps aren't possible on Linux: each toolkit draws its
+own context menus. Loft styles each toolkit's menus to look like the shell's own
+(`src/menubar/MenuPanel.qml`), from one set of numbers in `cli/loft/render/look.py`
+(`MENU`, `menu()`): 12 px radius, the theme's glass (`Theme.fillFor(1.9)`: the glass
+opacity × 1.9, at most 0.97, at least 0.72 without blur) with its hairline, rows inset
+6 px and 26 px tall, the highlighted row an accent pill (radius 6) with readable text
+(`on_accent`), separators a 1 px line at 14 % text, shortcuts in subtext.
+
+| Toolkit | Where | What matches | What can't |
+|---|---|---|---|
+| GTK 3 (context menus, menu bar menus: `menu`, `menuitem`, `.csd.popup decoration`) | the theme's `gtk.css` (`gtk` unit), imported by `~/.config/gtk-3.0/gtk.css` (`programs.loft.gtk`) | everything above; the shadow is the popup's CSD shadow | blur: GTK can't ask the compositor for it, so the glass is drawn opaque (the menu fill over the theme's background) |
+| GTK 4 / libadwaita (`popover.menu`, `modelbutton`) | the same `gtk.css`, imported by `gtk-4.0/gtk.css` | everything above | blur (as GTK 3) |
+| Chromium / Electron (tested: T3 Code, an Electron 43 app; VS Code, Brave and other Chromium apps work the same way, untested) | nothing app-side: Chromium's own `views` menus take their colors from GTK (`ui/gtk` color mixer: the `menu` node's background, `menu menuitem` text, `menuitem:hover` background and text, `menu separator`, `menuitem accelerator`, disabled text) | background, text, hover pill color and its text, separators, disabled and shortcut colors | radius, padding, row height, font, shadow and the hover pill's shape are Chromium's own (`MenuConfig`); no blur; no CSS reaches it. The menu colors are opaque on purpose: Chromium samples the node's background and can't blend it |
+| Qt / KDE (Kvantum: Dolphin with `programs.loft.qt`, every app with global mode §4.14) | the `qt` unit's `kvantum.kvconfig` / `kvantum.svg` | everything above, and real glass: the menu is translucent and Kvantum asks KWin to blur behind it (`popup_blurring`, `menu_blur_radius=10` rounds the blur region; `menu-shadow-hint-*` keep it off the shadow), an 8 px shadow (`menu_shadow_depth`, which also makes Kvantum draw the menu translucent so the corners are round), separators (`arrow-separator`: Kvantum draws a separator with the MenuItem *indicator* element, `menu_separator_height=9`) | rows are inset by the 12 px frame (Kvantum uses the corner size as the padding), not 6. Under niri there is no blur for Qt popups; the fill (≥ 0.72) keeps text legible |
+
+Nothing is needed per app: T3 Code's right-click menu followed with no flags and no
+`--gtk-version` (seen nested, below). Either GTK version Chromium loads reads Loft's
+file: `gtk-3.0/gtk.css` and `gtk-4.0/gtk.css` both import it.
+
+**When it shows.** GTK apps read `gtk.css` when they start, and Chromium reads the GTK
+colors at start (and when GTK's theme name changes), so after a theme change a running
+app shows the new menus once restarted. Qt apps in global mode re-skin live (the `qt`
+hook's style notification, §4.14); Dolphin in scoped mode at restart.
+
+**One switch?** No new switch. GTK and Electron menus come with `programs.loft.gtk`
+(on by default), which already themes GTK everywhere through home-manager's `gtk.css`;
+Loft writes no GTK setting there, so there is nothing to record or put back while Loft is
+the shell. Qt keeps **Theme all Qt apps** (§4.14), because that one changes the user's
+global KDE style and has to be undone when Loft isn't the shell.
+
+**For the fleet's MacTahoe module.** Nothing has to change for the menus: the user CSS
+wins over the forced `gtk.theme` (MacTahoe-Dark-blue), and Chromium reads the result.
+Worth changing:
+
+- `~/.config/gtk-4.0/gtk.css` imports MacTahoe's GTK 4 CSS *after* Loft's (home-manager
+  appends the `gtk.theme` / `gtk.gtk4.theme` import below `gtk4.extraCss`), so MacTahoe
+  wins every rule Loft writes with the same selector. Loft's menu rules carry
+  `:not(.loft-a)` to stay ahead, but the clean fix is to stop home-manager adding that
+  import (`gtk.gtk4.theme = null`, or not setting a GTK 4 theme) and let
+  `programs.loft.gtkBase` import MacTahoe *under* Loft, as it already does.
+- `gtk-application-prefer-dark-theme=true` and `MacTahoe-Dark-blue` are forced, so with a
+  light Loft theme GTK 3 apps keep MacTahoe's dark base outside what Loft overrides. The
+  menus are light either way (seen nested with latte); the rest would need the theme name
+  to follow the polarity, which a static home-manager value can't do.
+- Qt: turn on `programs.loft.qt.global` (or the Settings switch) for every KDE app's
+  menus, and have `mactahoe-apply` skip the keys listed in §4.14 while it's on.
+
+**Tested** nested (KWin 6.8.2, scratch HOME with the fleet's GTK files reproduced:
+`gtk-3.0/settings.ini` + `GTK_THEME=MacTahoe-Dark-blue`, `gtk-4.0/gtk.css` importing
+MacTahoe's GTK 4 CSS before and after Loft's; global Qt mode on), tokyonight and latte,
+"before" = main's render: gtk3-demo's entry menu (GTK 3), gnome-text-editor's text menu
+(GTK 4), a minimal Electron 43 app with a `Menu.popup` context menu, T3 Code's AppImage
+with a scratch `--user-data-dir` / `T3CODE_HOME` (its text-field menu), KWrite's editor
+menu (Qt), next to the shell's desktop menu. Before: MacTahoe's grey menus with #2E7CF7
+rows in GTK and Electron / T3 Code, square opaque Kvantum menus without separators in
+KWrite. After: all in the Loft theme's colors and accent with dark-on-accent (tokyonight)
+or white-on-accent (latte) text; KWrite's menu round, shadowed, blurred glass with
+separators.
 
 ## 5. One Plasma session, two shells: switching and backing out
 

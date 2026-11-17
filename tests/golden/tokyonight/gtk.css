@@ -656,3 +656,130 @@ window.nautilus-window .nautilus-grid-view child.activatable:selected,
 window.nautilus-file-chooser .nautilus-grid-view child.activatable:selected {
   outline-color: transparent;
 }
+
+
+/* ── Menus: the shell's own (src/menubar/MenuPanel.qml) ──────────────────
+ * Context menus, menu bar menus and popover menus look like the bar's and the
+ * desktop's menus: a 12 px panel of the theme's glass with its hairline,
+ * rows inset 6 px, the highlighted row an accent pill (radius
+ * 6 px), separators a 1 px line at 14 % text, shortcuts in subtext.
+ * GTK can't ask the compositor for blur, so the glass is drawn opaque: the
+ * shell's menu fill (alpha 0.855) over the theme's background.
+ *
+ * Chromium and Electron apps (Brave, VS Code, T3 Code…) draw their own context
+ * menus but take the colors from these nodes (GTK's `menu`, `menu > menuitem`
+ * and `:hover`, `menu > separator`, `menuitem accelerator`), which is why
+ * these stay opaque colors: Chromium samples the background, it can't blend. */
+
+/* GTK 3: GtkMenu (context menus, menu bar menus, combo box lists). */
+menu,
+.menu,
+.context-menu,
+.background.csd > menu,
+.background.popup > menu {
+  margin: 0;
+  padding: 6px;
+  border: none;
+  border-radius: 12px;
+  background-color: #1a1b26;
+  color: #c0caf5;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.141);
+}
+.csd.popup decoration,
+.popup decoration {
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.322), 0 0 0 1px rgba(0, 0, 0, 0.322);
+}
+menu > menuitem,
+.menu > menuitem,
+.context-menu > menuitem {
+  min-height: 20px;
+  min-width: 40px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  color: #c0caf5;
+  text-shadow: none;
+}
+menu > menuitem:hover,
+.menu > menuitem:hover,
+.context-menu > menuitem:hover {
+  background-color: #7aa2f7;
+  color: #1a1b26;
+}
+menu > menuitem:hover > arrow,
+menu > menuitem:hover accelerator,
+menu > menuitem:hover label {
+  color: #1a1b26;
+}
+menu > menuitem:disabled,
+menu > menuitem:disabled label,
+.menu > menuitem:disabled,
+.context-menu > menuitem:disabled {
+  color: #777c98;
+}
+menu > menuitem arrow {
+  color: #a9b1d6;
+}
+menuitem accelerator {
+  color: #a9b1d6;
+}
+menu > separator,
+.menu > separator,
+.context-menu > separator {
+  min-height: 1px;
+  margin: 4px 8px;
+  border: none;
+  background-color: #313443;
+}
+menu > arrow {
+  background-color: #1a1b26;
+  color: #a9b1d6;
+}
+
+/* GTK 4 / libadwaita (and GTK 3 popover menus): GtkPopoverMenu. */
+popover.menu > contents,
+popover.menu.background > contents:not(.loft-a) {
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.141);
+  border-radius: 12px;
+  background-color: #1a1b26;
+  color: #c0caf5;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.322);
+}
+popover.menu > arrow:not(.loft-a) {
+  border-color: rgba(255, 255, 255, 0.141);
+  background-color: #1a1b26;
+}
+popover.menu modelbutton:not(.loft-a) {
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: #c0caf5;
+}
+popover.menu modelbutton:focus:not(.loft-a) {
+  box-shadow: none;
+}
+popover.menu modelbutton:hover:not(.loft-a),
+popover.menu modelbutton:hover:focus:not(.loft-a),
+popover.menu modelbutton:selected:not(.loft-a) {
+  background-color: #7aa2f7;
+  color: #1a1b26;
+  box-shadow: none;
+}
+popover.menu modelbutton:hover arrow,
+popover.menu modelbutton:hover accelerator,
+popover.menu modelbutton:selected accelerator {
+  color: #1a1b26;
+}
+popover.menu modelbutton:disabled:not(.loft-a) {
+  color: #777c98;
+}
+popover.menu accelerator {
+  color: #a9b1d6;
+}
+popover.menu separator:not(.loft-a),
+popover.menu.background separator:not(.loft-a) {
+  min-height: 1px;
+  margin: 4px 8px;
+  background-color: rgba(192, 202, 245, 0.141);
+}

@@ -97,6 +97,9 @@ GHOSTTY_ADDED = (
 )
 
 
+GTK_MENUS_ADDED = "\n\n/* ── Menus: the shell's own"
+
+
 def without_additions(d: Path, into: Path) -> Path:
     """A copy of render dir `d` with phase B's additions taken out."""
     shutil.copytree(d, into, symlinks=False, copy_function=shutil.copyfile)
@@ -117,6 +120,9 @@ def without_additions(d: Path, into: Path) -> Path:
         kdl = kdl.replace(chunk, "    border {\n" if chunk.startswith("    border") else "")
     kdl = kdl.replace("    // shape.border: drawn or not, and how wide.\n", "    // Colors only: whether the border is drawn stays the base/consumer's call.\n")
     (into / "niri.kdl").write_text(kdl)
+    # unit `gtk`: menus like the shell's (GTK 3/4 menus, Chromium's), at the end.
+    css = (into / "gtk.css").read_text()
+    (into / "gtk.css").write_text(css.split(GTK_MENUS_ADDED)[0])
     for term in ("ghostty.conf",):
         f = into / term
         f.write_text(f.read_text().replace(GHOSTTY_ADDED, ""))
