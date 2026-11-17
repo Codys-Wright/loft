@@ -186,7 +186,7 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | window thumbnails (`toplevel-export.patch`) | **done** (§4.8): stills through `ScreenShot2.CaptureWindow` (`loft-kwin thumbs`), taken when the dock preview or the switcher opens |
 | screen/area capture via grim | **done** (§4.7): `loft-kwin shot`, KWin's `ScreenShot2` |
 | keybinds (loft-niri → niri KDL binds) | kglobalaccel, **done** (§4.5): `loft-keys.js`, a KWin script of `registerShortcut`s generated from shell-binds + Settings → Keyboard & Mouse → Keyboard Shortcuts, loaded while Loft's shell runs (§5) |
-| window rules (loft-niri window_rules.rs) | applied by loft-bridge.js at `windowAdded` while Loft runs, not written to `kwinrulesrc` (§5) |
+| window rules (loft-niri window_rules.rs) | **done** (§4.17): the same `window-rules` records, applied by loft-bridge.js as windows open (Activity, desktop, display role, full screen / maximized / size, keep above, follow) while Loft runs, never written to `kwinrulesrc` (§5); `loft open` places one launch's windows |
 | outputs / Displays page | `kscreen-doctor` (or KScreen D-Bus). Identities from its JSON |
 | overview (`toggle-overview`) | KWin's Overview effect; its state reaches the shell as `overviewOpen` (§4.9) |
 | outputs / Displays page | **done** (§4.11): `kscreen-doctor -j` + `-o`, applied with `kscreen-doctor output.…`; identities from the bridge's screens |
@@ -1368,12 +1368,15 @@ switch off: Kvantum's file byte for byte as before and kdeglobals as before exce
     two Spaces with the same app each get their own (niri's claims do this there);
   - **places** a found window on another display on its role's (`moveToOutput`), as
     niri's spin-up moves a window back to its workspace;
-  - **starts** what's missing (`launch` not off) in its own process group, then sends
-    the script `expectWindow` {pid, app id pattern, title, activity, output, open,
-    ttl 20 s}. bridge.js, on `windowAdded`, takes the first window with that pid
-    (else matching the app id / title), sets its activities to the Space's, sends it to
-    the display (`workspace.sendClientToScreen`) and maximizes / fullscreens it if the
-    app says `open`. The window is placed as it maps, before the shell sees it;
+  - **starts** what's missing (`launch` not off) in its own process group, then
+    expects its window the way `loft open` does (§4.17, `expectWindow` {pid, app id
+    pattern, title, activity, output, open, ttl 20 s, one window, `loose`}).
+    bridge.js, on `windowAdded`, takes the first window with that pid (else, `loose`,
+    matching the app id / title), sets its activities to the Space's, sends it to the
+    display (`workspace.sendClientToScreen`) and maximizes / fullscreens it if the app
+    says `open`. The window is placed as it maps, before the shell sees it; one that
+    a child process or a running instance opens instead is placed by loft-kwin's
+    process-tree check (§4.17);
   - doesn't start an app again while its window is still coming (20 s), so two Opens in
     a row don't duplicate it;
   - answers `{"SpaceOpened": {space, activity, apps: [{app, display, window, spawn}],
@@ -1476,6 +1479,143 @@ Two + Meta+2 kept desktop Two on Coding; `loft-kwin send setActivity` mid-drag c
 to Music; a window on every Activity stayed on every Activity; Escape after Meta+2 put
 the window back where the drag began, on Coding, focused. Stock KWin first, same steps:
 the window ended on the old Activity.
+
+### 4.17 Where windows open: window rules and `loft open`
+
+**Done.** "Activity Coding, desktop 2, the right display, full screen, wherever I am":
+Loft's per-app window rules work under KWin, and `loft open` does it for one launch
+(agent terminals and dev sessions, whose app id every other terminal shares).
+
+**One schema, both compositors.** The records stay loft-niri's `window-rules`
+(`<state>/overrides/niri.json`, Settings → Window Rules, `loft windows rule`), plus a
+Nix seed (`programs.loft.windowRules` → `~/.config/loft/window-rules.json`, merged
+under the runtime records field by field, `window_rules::with_seed`). New fields
+(`crates/loft-niri/src/window_rules.rs` has the table):
+
+| field | KWin | niri |
+|---|---|---|
+| `match-app-id`, `match-title`, `exclude-app-id`, `exclude-title` (regexes; with `match-app-id` the key is only the rule's name) | matched against the desktop file name and the Wayland app id / WM_CLASS, and the caption | `match` / `exclude` nodes |
+| `open-on-activity` | the user's KDE Activity **by name** (case, spaces, `-`, `_` ignored: "System-Configuration" = "System Configuration"), resolved when the window opens | ignored |
+| `open-on-desktop` | desktop number (1 = first) or name; `open-on-workspace` counts as a desktop name when this is unset | a name becomes `open-on-workspace`; a number is ignored (indexes shift) |
+| `open-on-output` | a connector, or a **display role** (`main`, `left`, `right-2`, `portrait`, `display-2` …, spaces/roles.rs on KWin's outputs) | the same, roles resolved on niri's live outputs when rendering |
+| `open-fullscreen` / `open-maximized` | `fullScreen` / `setMaximize(true, true)` | as before |
+| `open-size` (`1200x800`, `60%x80%`) | the frame size in the output's work area | `default-column-width` (unless set) + `default-window-height` |
+| `open-position` (`center` (default with a size), `left` / `right` = that half, `X,Y` in the work area) | frame position | ignored |
+| `keep-above` | `keepAbove` | ignored |
+| `follow` | true: switch to its Activity and desktop and focus it; false/unset: it lands there and you stay | `open-focused` |
+
+An Activity is never a Loft Space id here: Spaces are the user's own Activities
+(§4.2), so rules name them, and an Activity that doesn't exist yet is found once
+it does.
+
+**How (KWin).**
+
+```
+niri.json + window-rules.json ── loft-niri --json windows kwin-rules --displays [KWin's outputs]
+                                   → {rules (JS-ready regexes, roles → connectors), roles, sources}
+loft-kwin (src/placement.rs) ── setWindowRules {rules, activityNames} ──▶ loft-bridge.js
+   at start, when outputs or Activities change (activityNames: id → name from the same
+   {"Activities"} report the shell's Spaces come from, §4.2, so renames too),
+   when a source file's mtime changes (polled every 2 s), on {"cmd":"reloadWindowRules"}
+loft-bridge.js: windowAdded → expected window? (below) → every matching rule, later
+   wins per field (as niri's) → place(): activities, desktops, sendClientToScreen,
+   keepAbove, fullScreen / setMaximize / geometry, then follow
+   a window whose title or app id changes in its first 8 s is matched again (once)
+```
+
+There is one list of Activities: activities.rs's report (§4.2). loft-kwin keeps the
+last one for the rules' names and `expect`'s check, and passes it on to the shell
+(`KWin.activityList`), whose Settings page lists them by name. The state's windows gain
+`kwin_output`.
+
+**`loft open`** (`cli/loft/openwin.py`, MCP tool `open`):
+
+```sh
+loft open [--activity NAME] [--desktop N|NAME] [--monitor ROLE|CONNECTOR]
+          [--fullscreen | --maximized | --size WxH] [--position center|left|right|X,Y]
+          [--keep-above] [--follow] [--app-id REGEX] [--count N] [--ttl S] -- COMMAND…
+```
+
+It reads `loft-kwin state` first: no Loft shell under KWin, no such desktop, or an
+`--activity` / `--monitor` that isn't there (`loft-kwin expect` with `dryRun`, checked
+against loft-kwin's Activities and displays) is an error and **nothing starts**. Then the command starts detached in the caller's
+environment and directory (`systemd-run --user --scope`, else its own session), and
+`loft-kwin expect {pid, …}` (D-Bus `Expect`, answered with the connector it resolved)
+registers it:
+
+- bridge.js gets an `expectWindow` for the pid (placed in `windowAdded`, no flash);
+- loft-kwin checks every new window of later states: one whose process descends from
+  the pid (`/proc/PID/stat` parents), or, for 10 s, one of a process **older** than
+  the started one whose app id matches `--app-id` (default: ends in the command's
+  name), i.e. a running instance that took the request. It sends `placeWindow`.
+  A konsole you start yourself meanwhile is newer and not a descendant: left alone;
+- every such window for `--ttl` s (30) is placed, or the first `--count`.
+
+**One expectation for both launchers.** A Space's apps (`openSpace`, §4.15) and `loft
+open` go through the same path: loft-kwin's command loop holds the spin-up state and
+the expectations (`Places`, src/placement.rs), and `openSpace` registers each started
+app as an `expectWindow` with `tree` like `loft open`'s (one window, 20 s, the
+Activity by id, its role's connector, and `loose`: the script may also take the first
+new window matching its app id / title, as spin-up always did). bridge.js has one
+`expectWindow` (`pid`/`pids`, `appId`/`appIdFlags`, `title`, `activity` (id) or
+`activityName`, `desktop`, `output`, `open`, `size`, `position`, `keepAbove`,
+`follow`, `ttl`, `count` (default 1; 0 = all until ttl), `id`), placed by the rules'
+`place()`. Commands from stdin and from `loft-kwin send` / `expect` (D-Bus) share one
+handler; `expect` gets its answer (or the refusal) back.
+
+**niri.** Rules: the overlapping fields render into `overrides/niri.kdl` (table).
+`loft open`: niri IPC (`event-stream`, then `move-window-to-monitor`,
+`move-window-to-workspace --focus false`, `fullscreen-window`,
+`maximize-window-to-edges`, `set-window-width/height`, `focus-window` with
+`--follow`) for the first `--count` (1) window of the process tree, waiting up to
+`--ttl`; `--desktop` = workspace index on that display or a name; Activity, position
+and keep-above are reported as ignored. Unit-tested (the action lists), not yet run
+in a niri session.
+
+**Settings → Window Rules** (each app's editor, "Opens On"): Activity (the user's
+Activities by name, KWin), Desktop (KWin: number with its name; niri: named
+workspaces), Display (roles of the live layout with their connector, then
+connectors), Size, Position and Keep above (KWin), Switch to it when it opens,
+Only / Except titles matching; a "Nix" badge and row for seeded rules. Open floating
+and Column width are hidden under KWin (every window floats).
+
+**Backing out:** nothing is written to KDE; the rules live in the script and go
+when loft-kwin unloads it (§5).
+
+Two things learned on the way: KWin activates a new window (sometimes before
+`windowAdded`), so with `follow` off the script hands focus back to the window the
+user was in (a short history of recently focused windows "here", else the topmost
+one); and a window sized as it maps answers its first configure with its own size,
+so the geometry is asked again 200 and 800 ms later if it isn't what was asked. A
+size is capped to the output's work area (bar and dock struts). Apps that remember
+their window size (Konsole's `konsolestaterc`) reopen at it; that isn't a rule.
+
+**Tested** in a nested KWin 6.8.2 (§6: `--output-count 2 --size 1280x800`, scratch
+`LOFT_LIBRARY` / `LOFT_SPACES_DIR`), Activities Default, Music, Coding, Gaming made on
+the session's kactivitymanagerd and a second desktop "Two", checked with `loft-kwin
+state` and screenshots:
+
+- rule `org.kde.kwrite`: `open-on-activity=Coding open-on-desktop=2
+  open-on-output=right open-fullscreen=true follow=false`, sitting in Default /
+  desktop 1 with a konsole focused on WL-0: the new KWrite got `kwin_activities` =
+  Coding, desktop 2, `kwin_output` WL-1, fullscreen 1280×800; current Activity and
+  desktop stayed Default / 1, the konsole kept focus. With `follow=true` (picked up
+  from the file within the 2 s poll) the next KWrite switched the session to Coding /
+  desktop "Two", focused;
+- `loft open --activity Coding --desktop 2 --monitor right --size 1200x800 --
+  konsole`, then a plain konsole: the first on Coding / 2 / WL-1 at 1200×694 (the work
+  area's height), the plain one on Default / 1 / WL-0 at its own 910×498, focused; the
+  session never left Default / 1. `--activity music --desktop Two --monitor main
+  --maximized --follow`: Music / 2 / WL-0, maximized, switched there;
+- refused before starting anything: `--activity Nope` (lists the Activities),
+  `--monitor left` (lists the displays' roles), `--desktop 5` ("KWin has 2");
+- Settings → Window Rules under KWin showed KWrite's rule (Coding, "2 · Two",
+  "Right (WL-1)", Follows) and typing `60%x80%` in Size saved `open-size`.
+
+Not tested: the late-title re-match (no test), the running-instance fallback (a
+unit test only), `loft open` under niri (its action lists are unit-tested), and the
+Nix option beyond evaluating its type with the example and the module parsing.
+
 ## 5. One Plasma session, two shells: switching and backing out
 
 Requirements: both shells work in the same Plasma session, never run at once, can be

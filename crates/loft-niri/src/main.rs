@@ -326,6 +326,14 @@ enum WindowsCmd {
         #[command(flatten)]
         flags: RenderFlags,
     },
+    /// The rules that place windows, as loft-bridge.js applies them under
+    /// KWin (docs/KWIN.md §4.17): `{rules, roles, sources}`, with display
+    /// roles resolved on `--displays` (KWin's outputs, as `space list`).
+    KwinRules {
+        /// `[{"name", "identity", "geometry": [x, y, w, h]}]`.
+        #[arg(long)]
+        displays: Option<String>,
+    },
 }
 
 /// `FIELD=VALUE` from the command line: bools (on/off/true/false), numbers,
@@ -340,8 +348,19 @@ fn rule_value(field: &str, v: &str) -> Value {
         "off" | "false" | "no" => return Value::Bool(false),
         _ => {}
     }
-    if !matches!(field, "open-on-workspace" | "open-on-output")
-        && let Ok(f) = v.parse::<f64>()
+    if !matches!(
+        field,
+        "open-on-workspace" | "open-on-output" | "open-on-activity" | "open-size" | "open-position"
+            | "match-app-id" | "match-title" | "exclude-app-id" | "exclude-title"
+    ) && let Ok(i) = v.parse::<i64>()
+    {
+        return json!(i);
+    }
+    if !matches!(
+        field,
+        "open-on-workspace" | "open-on-output" | "open-on-activity" | "open-size" | "open-position"
+            | "match-app-id" | "match-title" | "exclude-app-id" | "exclude-title" | "open-on-desktop"
+    ) && let Ok(f) = v.parse::<f64>()
     {
         return json!(f);
     }
@@ -636,9 +655,11 @@ fn run(cli: Cli) -> Result<()> {
             let live = loft_niri::live_outputs();
             if dry_run {
                 let ov = Overrides::load(&paths.json)?;
+                let ov = loft_niri::window_rules::with_seed(&ov, &loft_niri::window_rules::load_seed(&loft_niri::window_rules::seed_path()));
                 let base = render::base_tree(entry, &paths);
                 let glass = loft_niri::window_rules::GlassTheme::load(&paths.state);
-                print!("{}", render::render_with(&ov, base.as_ref(), live.as_ref(), Some(&glass)));
+                let main = loft_niri::spaces::live::main_from_settings(&paths.state);
+                print!("{}", render::render_with(&ov, base.as_ref(), live.as_ref(), Some(&glass), main.as_deref()));
                 return Ok(());
             }
             let r = render::render_to_disk(
@@ -667,8 +688,16 @@ fn run(cli: Cli) -> Result<()> {
             use loft_niri::window_rules as wr;
             let listing = || -> Result<Value> {
                 let ov = Overrides::load(&paths.json)?;
+                let seed_path = wr::seed_path();
+                let seed = wr::load_seed(&seed_path);
                 let base = render::base_tree(entry, &paths);
-                Ok(wr::list(&ov, base.as_ref(), &wr::GlassTheme::load(&paths.state)))
+                let mut l = wr::list(&wr::with_seed(&ov, &seed), base.as_ref(), &wr::GlassTheme::load(&paths.state));
+                // The Nix seed's records (programs.loft.windowRules), and
+                // what is yours on top of them.
+                l["seed"] = json!({ "path": seed_path, "rules": seed });
+                l["runtime_rules"] = ov.0.get(wr::RULES).cloned().unwrap_or_else(|| json!({}));
+                l["kwin_fields"] = json!(wr::KWIN_FIELDS);
+                Ok(l)
             };
             let apply = |batch: Value, flags: RenderFlags| -> Result<Value> {
                 loft_niri::apply(&paths, &batch, opts(flags))
@@ -740,6 +769,23 @@ fn run(cli: Cli) -> Result<()> {
                         }
                         s
                     });
+                }
+                WindowsCmd::KwinRules { displays } => {
+                    let ov = Overrides::load(&paths.json)?;
+                    let seed_path = wr::seed_path();
+                    let ov = wr::with_seed(&ov, &wr::load_seed(&seed_path));
+                    let main = loft_niri::spaces::live::main_from_settings(&paths.state);
+                    let ds = match displays.as_deref() {
+                        Some(d) => displays_from_json(d)?,
+                        None => loft_niri::live_outputs().map(|o| loft_niri::spaces::roles::displays_from_niri(&o)).unwrap_or_default(),
+                    };
+                    let rs = loft_niri::spaces::roles::roles(&ds, main.as_deref());
+                    let v = json!({
+                        "rules": wr::kwin_rules(&ov, &rs),
+                        "roles": rs,
+                        "sources": [paths.json, seed_path],
+                    });
+                    print(j, &v, || serde_json::to_string_pretty(&v).unwrap_or_default());
                 }
                 WindowsCmd::Reset { app_id, flags } => {
                     let batch = match &app_id {
