@@ -89,13 +89,16 @@ pub struct KScreen {
     pub model: String,
     #[serde(default)]
     pub serial: String,
+    #[serde(default)]
+    pub scale: f64,
 }
 
 /// niri's display identity, "Make Model Serial" (what Loft's settings key
 /// displays by: wallpapers, roles, main display), from KWin's output info.
 /// niri spells the vendor out from the PNP id database and writes "Unknown"
 /// for a missing serial; KWin gives the PNP id, may prefix the model with
-/// the connector, and leaves the serial empty.
+/// the connector, and leaves the serial empty. With nothing known (virtual
+/// outputs: no EDID) it's the connector, as niri does.
 pub fn identity(screen: &KScreen, pnp: &HashMap<String, String>) -> String {
     let make = pnp
         .get(&screen.manufacturer)
@@ -103,8 +106,12 @@ pub fn identity(screen: &KScreen, pnp: &HashMap<String, String>) -> String {
         .unwrap_or_else(|| screen.manufacturer.clone());
     let prefix = format!("{}-", screen.name);
     let model = screen.model.strip_prefix(&prefix).unwrap_or(&screen.model);
-    let serial = if screen.serial.is_empty() { "Unknown" } else { &screen.serial };
-    format!("{make} {model} {serial}")
+    let model = if model == screen.name { "" } else { model };
+    if make.is_empty() && model.is_empty() && screen.serial.is_empty() {
+        return screen.name.clone();
+    }
+    let or_unknown = |s: &str| if s.is_empty() { "Unknown".to_string() } else { s.to_string() };
+    format!("{} {} {}", or_unknown(&make), or_unknown(model), or_unknown(&screen.serial))
 }
 
 /// hwdata's pnp.ids: "ACR\tAcer Technologies" lines.
@@ -278,6 +285,7 @@ impl Model {
                 "name": s.name,
                 "geometry": s.geometry,
                 "identity": identity(s, &self.pnp),
+                "scale": if s.scale > 0.0 { s.scale } else { 1.0 },
                 "model": s.model.strip_prefix(&format!("{}-", s.name)).unwrap_or(&s.model),
             })).collect::<Vec<_>>(),
             "activities": snap.activities,
@@ -348,6 +356,11 @@ mod tests {
         // Unknown vendor id: kept as is.
         let odd = KScreen { name: "HDMI-A-1".into(), manufacturer: "ZZZ".into(), model: "X".into(), serial: "1".into(), ..Default::default() };
         assert_eq!(identity(&odd, &pnp), "ZZZ X 1");
+        // No EDID (KWin's nested and virtual outputs): the connector, like niri.
+        let virt = KScreen { name: "WL-0".into(), model: "WL-0".into(), ..Default::default() };
+        assert_eq!(identity(&virt, &pnp), "WL-0");
+        let bare = KScreen { name: "Virtual-1".into(), ..Default::default() };
+        assert_eq!(identity(&bare, &pnp), "Virtual-1");
     }
 
     #[test]

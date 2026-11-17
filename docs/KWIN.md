@@ -95,7 +95,7 @@ niri. Nothing reads it yet. The KWin step gates menu items on it (e.g. MenuState
 | Capture: `capture/Capture`, `island/Island` | `screenshotWindow`, `screenshotTaken`, `shutter` | screen/area capture goes through grim today, which needs screencopy (KWin has none): switch to `org.kde.KWin.ScreenShot2` (§4) |
 | Wallpapers: `WorkspaceWallpapers`, `VideoWallpapers`, `Vibes` | active workspace per output, overview | per-workspace wallpaper **surfaces** off (they need niri-loft's patch). The "one wallpaper per screen, swapped on switch" fallback works |
 | Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **KDE Activities** (decided, §4.2). Off until that lands |
-| Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | KWin-native: `kscreen-doctor -j` / KScreen D-Bus |
+| Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | **done** (§4.8): `Displays.outputs` / `setOutputs` → `KScreen.qml` → `loft-kwin displays` (kscreen-doctor) |
 | Title-bar events (`windowMinimizeRequested`, `windowActionsMenuRequested`) | niri-loft's traffic lights | not needed: KWin decorations minimize and open the window menu themselves |
 | `configLoaded` (NiriSettings, WindowRules) | niri reloaded its KDL | `org.kde.KWin.reloadConfig` after writing kwinrc / kwinrulesrc |
 
@@ -187,6 +187,8 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | window rules (loft-niri window_rules.rs) | applied by loft-bridge.js at `windowAdded` while Loft runs, not written to `kwinrulesrc` (§5) |
 | outputs / Displays page | `kscreen-doctor` (or KScreen D-Bus). Identities from its JSON |
 | overview (`toggle-overview`) | KWin's Overview effect; its state reaches the shell as `overviewOpen` (§4.8) |
+| outputs / Displays page | **done** (§4.8): `kscreen-doctor -j` + `-o`, applied with `kscreen-doctor output.…`; identities from the bridge's screens |
+| overview (`toggle-overview`) | KWin's Overview effect |
 | lock screen (`WlSessionLock`) | Plasma's locker with **Loft's lock design** (§4.3) |
 | Spaces (named niri workspaces per output) | **KDE Activities** (§4.2) |
 | idle (swayidle on niri.service) | PowerDevil (Plasma's own idle and DPMS) |
@@ -756,6 +758,72 @@ showed the counter advancing and the block moving.
 Not done: hardware encoding (VA-API: `vah264enc` from gst-plugins-bad), and recording
 with KWin's cursor as metadata instead of embedded.
 
+### 4.8 Settings → Displays through KScreen
+
+**Done.** Under niri the Displays page reads `loft-niri outputs` and writes Loft's
+overrides through `loft-niri apply`. Under KWin it goes to KScreen instead, and Loft
+records nothing: KScreen applies a change and saves it in its own config, as System
+Settings does.
+
+```
+DisplaysPage / IdentifyOverlay ──▶ Displays.outputs / setOutputs / identify
+                                     ├─ niri: NiriSettings (loft-niri)
+                                     └─ KWin: KScreen.qml ──▶ loft-kwin displays [set JSON]
+                                                                 └─ kscreen-doctor -j, -o / output.<name>.…
+```
+
+- **Reading.** `loft-kwin displays` (crates/loft-kwin/src/displays.rs) prints loft-niri's
+  `outputs` records (name, modes with `WxH@R` strings, mode, scale, transform, logical
+  rect, enabled, VRR), so the page renders the same either way. In KScreen 6.8.2 the
+  `-j` JSON has the modes, current mode, position, scale, rotation and priority, but
+  not `enabled`, VRR or HDR, so those come from `-o`'s text (`enabled` / `disabled` /
+  `disable unsupported`, `Vrr: Never|Automatic|Always|incapable`, `HDR: …`, ANSI
+  stripped). Extra fields: `primary` (priority 1), `can_disable`, `vrr_policy`,
+  `hdr_supported`, `hdr_enabled`.
+- **Identities.** KScreen's output has no make/model/serial. `KScreen.qml` takes the
+  "Make Model Serial" the bridge already builds from KWin's screens (`state::identity`),
+  and keeps it for outputs that are off (they drop out of `workspace.screens`).
+  Outputs with no EDID (KWin's nested `WL-0`…) are their connector, as on niri.
+- **Writing.** `loft-kwin displays set '{"WL-1": {"scale": 1.5, "position": {"x": 0,
+  "y": 0}}}'` turns the page's staged changes into one atomic kscreen-doctor call:
+  `mode` → the KScreen mode id of that size with the nearest refresh, `scale`,
+  `position.x,y`, `transform` → `rotation.none|left|inverted|right|flipped…`
+  (wl_output 90 = KScreen left), `off` → `disable`/`enable` (enable first),
+  `vrr` → `vrrpolicy.automatic|never` (or a policy name), `hdr` → `hdr.enable|disable`,
+  `primary` → `primary`. Unknown outputs or fields are errors, not skipped. The page's
+  15 s Keep / Revert works as on niri: Revert applies the previous values again
+  (and gives the primary back to the display that had it); Keep has nothing to record.
+- **Refresh.** 6.8's kscreen-doctor runs KScreen's backend in-process, so there's no
+  `org.kde.KScreen` service to watch. The bridge pushes a snapshot when a screen's
+  `geometryChanged` / `scaleChanged` fires, `KWin.qml` emits `displayLayoutChanged`
+  when a screen's name, geometry or scale changed, and `KScreen.qml` re-reads on that,
+  on `outputsChanged`, on Quickshell's screens, after each apply and when the page
+  opens. No polling. A VRR or HDR change made in System Settings shows the next
+  time the page opens.
+- **Hidden under KWin** (`Displays.outputCaps`): Reset and "changed here" (no Loft
+  overrides). The "Use this display" switch is off for outputs KScreen can't disable.
+  **Shown only under KWin**: Main display (KDE) when two or more are on, HDR when
+  the display has it.
+- Brightness (Control Center, brightness keys) never used niri: brightnessctl and
+  ddcutil work the same under KWin.
+- `loft-kwin`'s Nix wrapper appends libkscreen's `bin` to PATH, so the system's
+  kscreen-doctor (matching the running KWin) wins when there is one.
+
+Tested in a nested session (`--output-count 2`, outputs `WL-0`/`WL-1`), checked each
+time with the session's `kscreen-doctor -j`: the page lists both; dragging WL-1 from
+below WL-0 to its right and Apply moved it to `1280,0`; a position changed with
+kscreen-doctor showed on the open page by itself; rotation 90° + Main display (KDE)
+applied together, Keep kept them, and the 15 s timeout of a later 180° + primary
+change put the rotation and the old primary back; Identify shows on both outputs.
+**Scale can't be tested nested**: KWin's nested outputs follow the host's scale
+(`loft-dev --kwin-scale`), so `output.WL-0.scale.1.5` succeeds and changes nothing.
+Nested outputs also have one mode, no VRR/HDR and can't be disabled ("Always on"), so
+mode, scale, VRR, HDR and on/off are covered by the unit tests (the kscreen-doctor
+arguments) only. Needs a check on real hardware.
+
+The arrangement drag also got `preventStealing`: the settings page's Flickable used to
+take the drag over (the page scrolled and the tile stayed half-moved), on niri too.
+
 ## 5. One Plasma session, two shells: switching and backing out
 
 Requirements: both shells work in the same Plasma session, never run at once, can be
@@ -895,6 +963,7 @@ What it took:
    commands, `loft mcp` and the overview state (§4.8). Display settings, recording.
 9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). ✅ Recording through
    zkde_screencast (§4.8). Display settings.
+9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). ✅ Display settings (§4.8). Recording.
 10. Spaces on Activities (§4.2).
 11. ✅ Window thumbnails through ScreenShot2 (§4.8).
 

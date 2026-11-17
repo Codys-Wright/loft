@@ -55,9 +55,12 @@ Singleton {
         })
 
     signal outputsChanged
+    // A screen moved, was resized or rescaled (KScreen re-reads its outputs).
+    signal displayLayoutChanged
     // A window screenshot of ours finished (screenshotWindow), path written.
     signal screenshotTaken(string path)
     property string outputKey: ""
+    property string layoutKey: ""
 
     // loft-kwin: the daemon below, and `loft-kwin shot …` for screenshots.
     readonly property string bin: Quickshell.env("LOFT_KWIN_BIN") || "loft-kwin"
@@ -124,6 +127,11 @@ Singleton {
             if (key !== outputKey) {
                 outputKey = key;
                 outputsChanged();
+            }
+            const layout = (s.outputs ?? []).map(o => `${o.name}:${o.geometry}:${o.scale ?? 1}`).sort().join(",");
+            if (layout !== layoutKey) {
+                layoutKey = layout;
+                displayLayoutChanged();
             }
         } else if (msg.KeyboardLayouts) {
             keyboardLayouts = msg.KeyboardLayouts;

@@ -22,6 +22,9 @@
 //!   and PipeWire (src/record.rs).
 
 mod record;
+//! - `loft-kwin displays [set JSON]`: outputs through KScreen (src/displays.rs).
+
+mod displays;
 mod shot;
 mod state;
 
@@ -277,6 +280,9 @@ async fn main() -> Result<()> {
     }
     if args.first().is_some_and(|a| a == "record") {
         return record::run(&record::parse(&args[1..])?).await;
+    }
+    if args.first().is_some_and(|a| a == "displays") {
+        return displays::run(&args[1..]);
     }
     if args.first().is_some_and(|a| a == "--help" || a == "-h") {
         println!(

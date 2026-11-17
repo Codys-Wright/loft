@@ -132,7 +132,9 @@ Scope {
             WindowRules.refresh();
         else if (section === "keyremaps")
             KeyRemaps.refresh();
-        else if (["displays", "input", "layout"].includes(section))
+        else if (section === "displays")
+            Displays.refreshOutputs();
+        else if (["input", "layout"].includes(section))
             NiriSettings.refresh();
     }
     onOpenChanged: refreshNiri()

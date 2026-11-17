@@ -701,6 +701,13 @@
                 --set GST_PLUGIN_SYSTEM_PATH_1_0 ${plugins} \
                 --unset GST_PLUGIN_PATH --unset GST_PLUGIN_PATH_1_0
             '';
+          # `loft-kwin displays` runs kscreen-doctor: the system's (it
+          # matches the running KWin) when on PATH, else this one.
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          postInstall = ''
+            wrapProgram $out/bin/loft-kwin --set-default LOFT_PNP_IDS ${pkgs.hwdata}/share/hwdata/pnp.ids \
+              --suffix PATH : ${pkgs.kdePackages.libkscreen}/bin
+          '';
           meta.mainProgram = "loft-kwin";
         };
 
