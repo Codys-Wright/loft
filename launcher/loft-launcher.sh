@@ -97,7 +97,7 @@ export GDK_BACKEND=wayland
 # CommandLine, what the `walker` client sends): ~20 ms from the key to the
 # window, where the walker client is a whole GTK start (50–270 ms) just to
 # forward it. GApplication parses options in the client, so they travel as
-# platform data. Fails (no service, or it hangs) → the caller runs walker.
+# platform data. Fails (no service, or it hangs) → the caller decides.
 #   ask [PROVIDER PLACEHOLDER]
 ask() {
   local opts=""
@@ -106,36 +106,57 @@ ask() {
     --method org.gtk.Application.CommandLine /dev/benz/walker/loft "[b'walker']" "{$opts}" >/dev/null 2>&1
 }
 
+# The service isn't on the bus: it may be starting (a deploy restarts it),
+# so wait for its name a moment and ask again. Only when it never comes does
+# walker start by itself — a cold start (a whole GTK start, then elephant's),
+# said in the journal. Never while the service is there: a walker started
+# then would take the service's D-Bus name, and the service would fail.
+#   ask_or_start [PROVIDER PLACEHOLDER] -- WALKER ARGS…
+ask_or_start() {
+  local ask_args=()
+  while [ "$1" != -- ]; do ask_args+=("$1"); shift; done
+  shift
+  ask "${ask_args[@]}" && return
+  if gdbus wait --session --timeout "${LOFT_LAUNCHER_WAIT:-5}" dev.benz.walker 2>/dev/null; then
+    ask "${ask_args[@]}" && return
+    echo "loft-launcher: walker's service is on the bus but doesn't answer; not starting a second walker" >&2
+    return 1
+  fi
+  echo "loft-launcher: walker's service isn't running (is loft-launcher service up?); starting walker cold" >&2
+  exec walker "$@"
+}
+
 case "${1:-open}" in
   service)
     prepare
     export XDG_CONFIG_DIRS="$dir${XDG_CONFIG_DIRS:+:$XDG_CONFIG_DIRS}"
+    # A socket left by an elephant that was killed would have walker connect
+    # to nothing until the new one listens.
+    rm -f "${XDG_RUNTIME_DIR:-/tmp}/elephant/elephant.sock"
     elephant &
     elephant_pid=$!
     trap 'kill $elephant_pid 2>/dev/null' EXIT INT TERM
-    # Give elephant a moment to open its socket before walker connects.
-    for _ in $(seq 1 50); do
-      [ -S "${XDG_RUNTIME_DIR:-/tmp}/elephant/elephant.sock" ] && break
-      sleep 0.1
-    done
+    # walker right away, not after elephant (which takes a second or two to
+    # load its providers): its D-Bus name is up at once, so a key pressed
+    # meanwhile reaches the service instead of starting a cold walker. The
+    # service connects to elephant when its socket appears, and builds its
+    # window hidden (launcher/walker-instant.patch), so the first open is as
+    # quick as the next.
     # gtk4-layer-shell must load before libwayland-client, or walker silently
     # falls back to a normal (tiled) window; nixpkgs' wrapper doesn't preload it.
     LD_PRELOAD="@LAYERSHELL@${LD_PRELOAD:+:$LD_PRELOAD}" walker --gapplication-service
     ;;
   open)
-    ask || exec walker
+    ask_or_start --
     ;;
   emoji)
-    ask symbols "Emoji & Symbols" ||
-      exec walker --provider symbols --placeholder "Emoji & Symbols"
+    ask_or_start symbols "Emoji & Symbols" -- --provider symbols --placeholder "Emoji & Symbols"
     ;;
   clipboard)
-    ask clipboard "Clipboard History" ||
-      exec walker --provider clipboard --placeholder "Clipboard History"
+    ask_or_start clipboard "Clipboard History" -- --provider clipboard --placeholder "Clipboard History"
     ;;
   help)
-    ask commands "Spotlight Help" ||
-      exec walker --provider commands --placeholder "Spotlight Help"
+    ask_or_start commands "Spotlight Help" -- --provider commands --placeholder "Spotlight Help"
     ;;
   *)
     echo "usage: loft-launcher [service|open|emoji|clipboard|help]" >&2

@@ -49,6 +49,10 @@
 //! - Keep Awake (src/idle.rs, docs/KWIN.md §4.20): stdin `keepAwake` holds
 //!   a PowerDevil inhibition on this connection, answered with
 //!   `{"KeepAwake"}`; added again when PowerDevil restarts.
+//! - Spotlight without a process per key (src/launcher.rs): `dev.loft.Launcher`
+//!   `Open(mode)` hands walker's service `loft-launcher MODE`'s command line.
+//! - Loads Loft's KWin effect `loft_instant` (src/instant.js) while it runs:
+//!   Spotlight and the shell's layer surfaces open and close unanimated.
 //! - Serves `org.kde.KWin.ClientWindowMenu` on `/WindowMenu` for Loft's patched
 //!   KWin: window menus apps with their own title bars ask for (docs/KWIN.md §4.4).
 
@@ -58,6 +62,7 @@ mod heal;
 mod idle;
 mod input;
 mod keys;
+mod launcher;
 mod motion;
 mod manage;
 mod placement;
@@ -419,6 +424,79 @@ async fn effects_restore(conn: &Connection) {
         }
     }
     let _ = std::fs::remove_file(&note);
+}
+
+/// Loft's own effect (src/instant.js, docs/KWIN.md §4.22): Spotlight and
+/// the shell's layer surfaces open and close without KWin's open/close
+/// animations, which still run for app windows.
+const INSTANT: &str = "loft_instant";
+const INSTANT_JS: &str = include_str!("instant.js");
+const INSTANT_METADATA: &str = r#"{
+    "KPackageStructure": "KWin/Effect",
+    "KPlugin": {
+        "Id": "loft_instant",
+        "Name": "Loft: instant shell surfaces",
+        "Description": "Spotlight and Loft's menus and panels open and close without an animation (loaded by loft-kwin while Loft runs)",
+        "Category": "Appearance",
+        "EnabledByDefault": false,
+        "License": "GPL"
+    },
+    "X-Plasma-API": "javascript"
+}
+"#;
+
+/// KWin finds scripted effects only by id, in `kwin/effects/` of its data
+/// dirs: the package goes to `$XDG_DATA_HOME/kwin/effects/loft_instant`.
+fn instant_dir() -> Option<std::path::PathBuf> {
+    let data = std::env::var_os("XDG_DATA_HOME")
+        .filter(|d| !d.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::Path::new(&h).join(".local/share")))?;
+    Some(data.join("kwin/effects").join(INSTANT))
+}
+
+fn write_instant(dir: &std::path::Path) -> std::io::Result<()> {
+    let code = dir.join("contents/code");
+    std::fs::create_dir_all(&code)?;
+    for (path, text) in [(dir.join("metadata.json"), INSTANT_METADATA), (code.join("main.js"), INSTANT_JS)] {
+        if std::fs::read_to_string(&path).ok().as_deref() != Some(text) {
+            std::fs::write(&path, text)?;
+        }
+    }
+    Ok(())
+}
+
+async fn instant_on(conn: &Connection) {
+    let Some(dir) = instant_dir() else { return };
+    if let Err(e) = write_instant(&dir) {
+        eprintln!("loft-kwin: can't install {INSTANT} in {}: {e}", dir.display());
+        return;
+    }
+    let Ok(fx) = kwin_proxy(conn, "/Effects", "org.kde.kwin.Effects").await else { return };
+    // Loaded again, so a changed main.js (a new Loft) takes.
+    let _: zbus::Result<()> = fx.call("unloadEffect", &(INSTANT,)).await;
+    // KWin finds effect packages through KPackage, which caches its listing
+    // for the first 20 s after KWin's first look (kpackage 6.31
+    // `maxCacheAge`): a package written meanwhile (a fresh HOME, the first
+    // run after an install) isn't found until then. A just-unloaded effect
+    // can also still count as loaded for a moment. So: try for 30 s.
+    for attempt in 0..60 {
+        match fx.call::<_, _, bool>("loadEffect", &(INSTANT,)).await {
+            Ok(true) => return,
+            Ok(false) if attempt < 59 => tokio::time::sleep(Duration::from_millis(500)).await,
+            Ok(false) => eprintln!("loft-kwin: KWin didn't load {INSTANT} (from {})", dir.display()),
+            Err(e) => {
+                eprintln!("loft-kwin: loading {INSTANT}: {e}");
+                return;
+            }
+        }
+    }
+}
+
+async fn instant_off(conn: &Connection) {
+    if let Ok(fx) = kwin_proxy(conn, "/Effects", "org.kde.kwin.Effects").await {
+        let _: zbus::Result<()> = fx.call("unloadEffect", &(INSTANT,)).await;
+    }
 }
 
 async fn load_script(conn: &Connection) -> Result<()> {
@@ -927,11 +1005,22 @@ async fn main() -> Result<()> {
         }
     };
 
+    // Spotlight for Loft's shortcuts (src/launcher.rs): its own name, so the
+    // keys script can tell the method is here.
+    let served = conn.object_server().at(launcher::PATH, launcher::Launcher { conn: conn.clone() }).await;
+    if let Err(e) = served.and(conn.request_name(launcher::BUS_NAME).await.map(drop)) {
+        eprintln!("loft-kwin: can't serve {}: {e}", launcher::BUS_NAME);
+    }
+
     if let Err(e) = load_script(&conn).await {
         emit(&json!({ "Error": format!("{e:#}") }));
         return Err(e);
     }
     effects_off(&conn).await;
+    {
+        let conn = conn.clone();
+        tokio::spawn(async move { instant_on(&conn).await });
+    }
 
     tokio::spawn(watch_layouts(conn.clone()));
     tokio::spawn(keys::watch(conn.clone(), emit));
@@ -1015,6 +1104,7 @@ async fn main() -> Result<()> {
     stopping.store(true, std::sync::atomic::Ordering::SeqCst);
     unload_script(&conn).await;
     effects_restore(&conn).await;
+    instant_off(&conn).await;
     // Exit now: tokio's stdin reader is a blocking thread that the runtime
     // would wait for on shutdown, so after SIGTERM the process would linger
     // without its bus name and the shell (which restarts loft-kwin when it

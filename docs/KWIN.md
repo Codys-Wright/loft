@@ -748,6 +748,7 @@ kglobalaccel `.desktop` components with `X-KDE-Shortcuts` are written into
 kglobalshortcutsrc for good and only picked up when kglobalaccel loads them;
 `org.kde.krunner`/KLauncher can't run an arbitrary command line (KLauncher is gone
 in KF6); `StartTransientUnit` needs `a(sv)` arguments that `callDBus` can't build.
+Spotlight's keys skip the unit: they ask loft-kwin's `dev.loft.Launcher` (§4.22).
 
 **Key names.** Mod and Super are both Meta (no ISO_Level3_Shift WM key under
 KWin; the keyboard layer's WM key sends Meta instead, below), so `Mod+X` and `Super+X` twins become one shortcut. niri keysyms map to
@@ -2195,6 +2196,83 @@ at Fast, 400 at Slow), also for the first write of a fresh HOME with no kdegloba
 Settings page open while System Settings changes the same keys (the page reads them again
 each time it's shown).
 
+### 4.22 Spotlight opens at once: no animation, no cold start
+
+**Done.** Under KWin Spotlight (walker) showed with KWin's open and close animation and
+sometimes took a long while: ~300 ms to ~1 s on the first open after the launcher
+restarted (every deploy), and a key pressed while it was starting broke it.
+
+**The animation was Scale's.** KWin types a layer surface by its namespace
+(`layershellv1window.cpp` `scopeToType`: `desktop`, `dock`, `notification`,
+`on-screen-display`, `dialog` …; anything else is `Normal`). walker's is `walker`
+(hard-coded in walker 2.17, `theme/mod.rs`), Loft's own are `loft:…`, so all are
+normal, managed windows, and Scale (Glide, Fade: whichever "Open and close" effect is
+picked, §4.21) animates them in and out. Seen in a nested session: `scale` in KWin's
+`activeEffects` for the whole open and close of walker and of the Control Center, and a
+half-faded Spotlight on a screenshot mid-open. A namespace KWin knows would change more
+than animations (a `dock` is kept above, stays on Show Desktop …), so instead loft-kwin
+installs and loads **its own effect, `loft_instant`** (`crates/loft-kwin/src/instant.js`,
+written to `$XDG_DATA_HOME/kwin/effects/loft_instant/`, loaded while loft-kwin runs,
+unloaded on exit). It grabs walker's and the shell's layer surfaces on open and close
+(`WindowAddedGrabRole` / `WindowClosedGrabRole`): that is how KWin effects tell each
+other to keep off a window, and Scale, Glide, Fade, Sliding popups and Fading popups all
+skip a grabbed window, or cancel what they started when the grab lands after them. It
+matches by window class (the client's executable: walker, quickshell) and only windows
+that can't be moved and skip the switcher, i.e. layer surfaces: Loft's Settings or the
+clipboard scratchpad, toplevels, still animate like any app. Checked with Scale, Glide and
+Fade each: Spotlight, Emoji & Symbols and the Control Center have no active effect on open
+or close, kwrite and Loft's Settings still have theirs. No KWin patch. KPackage caches
+KWin's effect list for its first 20 s, so in a fresh HOME the effect loads once that has
+passed (loft-kwin retries for 30 s).
+
+**The key path is one D-Bus hop.** Spotlight's keys in `loft-keys.js` (§4.5) no longer
+start `loft-plasma-key@…` (systemd: 15 ms median, 58 ms worst from Starting to Started on
+THEBATTLESHIP, then bash, `loft-launcher`, `gdbus`). They call
+`dev.loft.Launcher /Launcher Open(mode)` on loft-kwin (`crates/loft-kwin/src/launcher.rs`),
+which hands walker's service the command line `loft-launcher MODE` sends
+(`org.gtk.Application.CommandLine`; `callDBus` can't build its `oaaya{sv}` itself). The
+script first asks `NameHasOwner("dev.loft.Launcher")`: `callDBus` never calls back on an
+error, so a missing method would be a dead key. Without loft-kwin, or when walker doesn't
+take it (`false`), the unit runs as before. Modes: `open`, `emoji`, `clipboard`, `help`.
+
+**Warm from the start.** `loft-launcher service` now starts walker at once, beside
+elephant, instead of after elephant's socket (elephant loads its providers for 1–3 s): its
+D-Bus name is up in ~0.1 s. `launcher/walker-instant.patch` has the service connect to
+elephant at start (walker otherwise waits for its first open) and realize its window,
+styles, fonts and icon theme while hidden. Drawing a frame offscreen at start was tried too
+and measured no better. What's left on a first open is KWin's configure round trip and
+walker's first frame (~25 + ~80 ms in a trace).
+
+**No silent cold start.** Before, `ask || exec walker`: a key pressed while the service
+was starting ran a whole second walker, which took `dev.benz.walker`; the service then
+failed ("Unable to acquire bus name") and Spotlight stayed a walker without elephant until
+the next restart (reproduced in a nested session). Now `loft-launcher MODE` waits up to
+5 s for the service's name (`gdbus wait`, `LOFT_LAUNCHER_WAIT`), asks again, and refuses to
+start a second walker while the name is held. Only when no service ever appears does it
+start walker by itself, and it says so on stderr (the journal). niri's binds run the same
+`loft-launcher open`.
+
+**Measuring it.** `nix/dev/spotlight-timing.sh SESSION` in a KDE `loft-dev` session: a
+probe KWin script stamps each map and unmap with KWin's clock (as names in `NameHasOwner`
+calls, read with `dbus-monitor` on the session bus); per run it prints t0 → walker mapped
+(open) and the next trigger → unmapped (close). `--trigger key` sends Meta+Space through
+loft-input (the KWin shortcut; load `loft-keys.js` in the session first), `--trigger
+launcher` runs `loft-launcher open`. `--restart` restarts the launcher (in a unit bound to
+the session) and waits for walker's name, `SPOTLIGHT_TIMING_SETTLE=S` waits S s more;
+`--early` fires 200 ms after the restart. `SPOTLIGHT_TIMING_LAUNCHER` measures another
+build. Numbers from a nested session (KWin 6.8.2, GPU, 1600×1000), before → after:
+
+| | before | after |
+|---|---|---|
+| walker on the bus after a restart | 1.3–2.9 s | 105–200 ms |
+| first open after a restart (settled 3 s) | 282–315 ms (637–784 ms under load) | 62–167 ms |
+| key 200 ms after a restart | a cold walker; the service fails | 52–133 ms |
+| warm open, `loft-launcher open` | 17–40 ms median | 18–28 ms median |
+| warm open, Meta+Space (incl. loft-input's virtual key) | + systemd and bash | 37 ms median |
+| Scale / Glide / Fade on Spotlight or the Control Center | 200 ms in, 200 ms out (×speed) | none |
+
+Not tested on real hardware or the live desktop.
+
 ## 5. One Plasma session, two shells: switching and backing out
 
 Requirements: both shells work in the same Plasma session, never run at once, can be
@@ -2345,7 +2423,7 @@ What it took:
 8. ✅ Lock screen shell package (§4.3).
 9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). ✅ Spotlight's window
    commands, `loft mcp` and the overview state (§4.9). ✅ Recording through
-   zkde_screencast (§4.10). ✅ Display settings (§4.11).
+   zkde_screencast (§4.10). ✅ Display settings (§4.11). ✅ Spotlight at once (§4.22).
 10. ✅ Spaces on Activities (§4.2).
 11. ✅ Window thumbnails through ScreenShot2 (§4.8).
 

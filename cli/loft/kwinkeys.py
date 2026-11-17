@@ -8,7 +8,10 @@ systemd to start `loft-plasma-key@<id>:<n>.service` (StartUnit over D-Bus, a
 fresh instance per press so quick repeats aren't merged into one job). That
 template unit runs `<out>/actions/<id>`, a shell script with the bind's
 command. Actions niri does itself (toggle-overview, fullscreen-window,
-close-window) become KWin calls inside the script.
+close-window) become KWin calls inside the script. Spotlight's keys
+(`loft-launcher MODE`) skip the unit: loft-kwin's `dev.loft.Launcher` hands
+walker's service the command line, with the unit as the fallback
+(docs/KWIN.md §4.22).
 
 The script and its shortcuts exist only while Loft's shell runs: the
 loft-plasma-shell unit loads it after start and, on stop, unloads it and
@@ -56,6 +59,12 @@ KWIN_OVERVIEW = "Overview"
 # (600 ms by default) and isn't caught; the shell drops it (Compositor.
 # shortcutRecent).
 REPEAT_GAP_MS = 250
+# Spotlight's keys (`loft-launcher MODE`) skip the unit: the script asks
+# loft-kwin's `dev.loft.Launcher` (crates/loft-kwin/src/launcher.rs), which
+# hands walker's service the command line at once (docs/KWIN.md §4.22). The
+# modes it knows; any other loft-launcher command runs through the unit.
+LAUNCHER_MODES = ("open", "emoji", "clipboard", "help")
+LAUNCHER_BUS = "dev.loft.Launcher"
 # KWin's window-operations menu (Alt+F3): Loft's window menu takes its keys
 # (WINDOW_MENU below, docs/KWIN.md §4.4 "Alt+F3").
 KWIN_WINDOW_OPS = "Window Operations Menu"
@@ -523,6 +532,21 @@ def render_js(actions: list[Action], presets: list | None = None) -> str:
         "    loftLast[id] = now;",
         "    return true;",
         "}",
+        "// Spotlight: loft-kwin hands walker's service the command line (no",
+        "// process per key). callDBus never calls back on an error, so ask first",
+        "// whether loft-kwin's launcher is there; without it, or when walker",
+        "// didn't take it, the unit runs `loft-launcher MODE` as for any key.",
+        "function loftLauncher(id, mode) {",
+        '    callDBus("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",',
+        f'        "NameHasOwner", {_js_str(LAUNCHER_BUS)}, function (has) {{',
+        "            if (!has) {",
+        "                loftRun(id);",
+        "                return;",
+        "            }",
+        f'            callDBus({_js_str(LAUNCHER_BUS)}, "/Launcher", {_js_str(LAUNCHER_BUS)}, "Open", mode,',
+        "                function (ok) { if (!ok) loftRun(id); });",
+        "        });",
+        "}",
         "// Loft's window menu for the active window (loft-kwin's bridge script",
         "// opens it under the green bead); KWin's own when loft-kwin isn't there.",
         "function loftWindowMenu() {",
@@ -537,7 +561,11 @@ def render_js(actions: list[Action], presets: list | None = None) -> str:
         "}",
     ]
     for a in actions:
-        body = f"loftRun({_js_str(a.id)});" if a.kind == "exec" else a.js
+        mode = launcher_mode(a)
+        if mode is not None:
+            body = f"loftLauncher({_js_str(a.id)}, {_js_str(mode)});"
+        else:
+            body = f"loftRun({_js_str(a.id)});" if a.kind == "exec" else a.js
         if not a.repeat:
             body = f"if (loftOnce({_js_str(a.id)})) {{ {body} }}"
         elif a.cooldown_ms:
@@ -546,6 +574,17 @@ def render_js(actions: list[Action], presets: list | None = None) -> str:
             f"registerShortcut({_js_str(name_of(a))}, {_js_str(a.text)}, {_js_str(a.keys)}, function () {{ {body} }});"
         )
     return "\n".join(lines) + "\n"
+
+
+def launcher_mode(a: Action) -> str | None:
+    """`loft-launcher [MODE]` → MODE ("open" without one), for the modes
+    loft-kwin's launcher takes; None for anything else."""
+    if a.kind != "exec" or not a.command or Path(str(a.command[0])).name != "loft-launcher":
+        return None
+    if len(a.command) > 2:
+        return None
+    mode = str(a.command[1]) if len(a.command) == 2 else "open"
+    return mode if mode in LAUNCHER_MODES else None
 
 
 def name_of(a: Action) -> str:
