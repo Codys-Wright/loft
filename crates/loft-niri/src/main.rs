@@ -187,7 +187,7 @@ enum SpaceCmd {
     /// Which window is which app of the space (changes nothing).
     Apps { space: String },
     /// The space's apps on a layout, each with the display its role
-    /// resolves to (KWin sessions, docs/KWIN.md §4.13; nothing is started).
+    /// resolves to (KWin sessions, docs/KWIN.md §4.15; nothing is started).
     Specs {
         space: String,
         /// The displays, instead of asking niri:
@@ -250,7 +250,7 @@ enum SpaceCmd {
         id: Option<String>,
         #[arg(long)]
         save: bool,
-        /// KWin sessions (docs/KWIN.md §4.13): the displays, as for `list`,
+        /// KWin sessions (docs/KWIN.md §4.15): the displays, as for `list`,
         /// instead of asking niri. Needs `--windows`.
         #[arg(long, requires = "windows")]
         displays: Option<String>,

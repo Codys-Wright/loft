@@ -47,7 +47,7 @@ import Quickshell.Io
 // active space is the current Activity's, a window moves to a Space by
 // setting its activities, and the layout's roles come from KWin's outputs
 // (`space list --displays`). Workspace names, spaces.kdl, render / ensure /
-// gather are niri-only. Spin-up (P3) under KWin (§4.13), for a linked
+// gather are niri-only. Spin-up (P3) under KWin (§4.15), for a linked
 // Activity: on its first activation in a session (`startup:
 // first-activate`), on Open and at login (`startup: login`) the shell asks
 // `loft-niri space specs` for its apps on KWin's displays and hands them to
@@ -429,7 +429,7 @@ Singleton {
             spin(s, false);
     }
 
-    // ── Spin-up under KWin (docs/KWIN.md §4.13) ─────────────────────────
+    // ── Spin-up under KWin (docs/KWIN.md §4.15) ─────────────────────────
     // Spaces opened in this shell's life (a restart opens them again, which
     // finds what's running instead of starting it twice).
     function opened(id) {

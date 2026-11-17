@@ -717,7 +717,7 @@ owns the library (`space list --displays JSON` takes KWin's outputs); `loft spac
 activities` lists the Activities and `loft spaces prune [--dry-run]` undoes what older
 Loft builds did to them. See [KWIN.md §4.2](KWIN.md#42-spaces--your-kde-activities).
 Spin-up, Open and Save This Activity's Apps (capture) work for linked Activities
-([§4.13](KWIN.md#413-a-spaces-apps-under-kwin-spin-up-display-roles-capture)):
+([§4.15](KWIN.md#415-a-spaces-apps-under-kwin-spin-up-display-roles-capture)):
 
 ```
 loft-niri space specs <id> [--displays JSON]           # its apps, each with its role's display

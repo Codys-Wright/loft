@@ -143,7 +143,7 @@ for (const s of ["currentDesktopChanged", "screensChanged", "currentActivityChan
 // goes on with the window hidden on its old Activity and the drop leaves it
 // there (measured, KWin 6.8.2; "FIXME" in Workspace::
 // updateWindowVisibilityOnDesktopChange). Windows on every Activity ([]) are
-// already there. docs/KWIN.md §4.14.
+// already there. docs/KWIN.md §4.16.
 const carried = {};
 
 function carryMovingWindow() {
@@ -203,7 +203,7 @@ overviewTimer.timeout.connect(() => {
 });
 overviewTimer.start();
 
-// ── A Space's apps, as they appear (docs/KWIN.md §4.13) ─────────────────
+// ── A Space's apps, as they appear (docs/KWIN.md §4.15) ─────────────────
 // loft-kwin's openSpace started them and sent one `expectWindow` each: the
 // first new window of that pid (else matching the app id / title) goes to
 // the Space's Activity and its role's display, then is maximized or made

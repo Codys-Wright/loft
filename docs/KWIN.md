@@ -248,12 +248,12 @@ and the first sync would have renamed the current Activity and added duplicates.
   id or a name (any case).
 - **Loft's extras attach by link only.** A library document (SPACES.md §2) whose
   `"activity"` is the Activity's id or name (any case) gives that Activity its dock, menu
-  bar extras, `bar.hidden`, Focus, `wallpapers`, apps and display roles (§4.13); the space
+  bar extras, `bar.hidden`, Focus, `wallpapers`, apps and display roles (§4.15); the space
   then has the document's id. **No document → a plain Activity**: switching, the bar,
   Move to Space and its windows all work; no extras, nothing started. Settings → Spaces & Windows → Spaces
   links one (a card's **Add Loft Settings…**: new settings, or "Use “Music”" for a library
   document no Activity has yet), **Edit** / **Unlink** / **Remove Settings…** it later;
-  **Save This Activity's Apps** (§4.13's capture) writes a document linked to the current
+  **Save This Activity's Apps** (§4.15's capture) writes a document linked to the current
   Activity. Linking only writes the document (`loft-niri space save|patch`); the Activity
   isn't touched. Under niri the `activity` field is ignored.
 - **Switching.** KDE's own "Switch to activity" shortcuts do ⌘1…9 / ⌘0 (Loft binds none of
@@ -449,7 +449,7 @@ on `QT_PLUGIN_PATH`.
     `xdg_toplevel.show_window_menu` (GTK / libadwaita header bars on right-click,
     Chromium's CSD) and X11's `_GTK_SHOW_WINDOW_MENU` / `_NET_WM` window-menu requests go
     straight to KWin's `UserActionsMenu`; a KWin script can't intercept them (no signal),
-    so they keep KWin's menu (with the global Qt style, §4.13, in Loft's look after a
+    so they keep KWin's menu (with the global Qt style, §4.14, in Loft's look after a
     re-login). KWin's `[MouseBindings]` defaults put no window menu on Alt+click
     (Alt+right-drag resizes), and the Window Operations button (`M`) isn't in Loft's
     button order. Loft has no task manager.
@@ -1057,6 +1057,77 @@ arguments) only. Needs a check on real hardware.
 The arrangement drag also got `preventStealing`: the settings page's Flickable used to
 take the drag over (the page scrolled and the tile stayed half-moved), on niri too.
 
+### 4.12 Settings → Keyboard & Mouse through kxkbrc and KWin's InputDevice
+
+**Done.** Under niri the page writes `input.keyboard` / `input.mouse` / `input.touchpad`
+overrides through `loft-niri apply`. Under KWin the same controls write KDE's own
+settings, as System Settings does, and Loft records nothing:
+
+```
+InputPage ──▶ KdeInput.qml ─┬─ key repeat: kwriteconfig6 --notify kcminputrc [Keyboard]
+                            └─ loft-kwin input [set JSON]   (crates/loft-kwin/src/input.rs)
+                                 ├─ keyboard: kxkbrc [Layout] + KConfig ConfigChanged on /kxkbrc
+                                 └─ mouse / touchpad: org.kde.KWin /org/kde/KWin/InputDevice/<sysName>
+                                      Properties.Set (live) + kcminputrc [Libinput][vendor][product][name]
+```
+
+- **Layouts.** `{"keyboard": {"layout": "us,de", "variant": ",nodeadkeys", "options":
+  "caps:escape"}}` writes `LayoutList`, `VariantList` (padded to one entry per layout),
+  `Use` (false for an empty layout = the system default), `Options` and
+  `ResetOldOptions=true` (niri's options are the whole list, so they replace the
+  system's). KWin's `KeyboardLayout` watches kxkbrc with a `KConfigWatcher`
+  (kwin 6.8.2 `keyboard_layout.cpp`), so after the writes loft-kwin emits KConfig's
+  `org.kde.kconfig.notify.ConfigChanged` on `/kxkbrc` once, with every key, and KWin
+  rebuilds the keymap from a consistent file. Layout names are checked as XKB names
+  before anything is written. The bar's layout indicator follows through
+  `org.kde.keyboard` `layoutListChanged`, as before.
+- **Mouse and trackpad.** KWin exports each libinput device at
+  `/org/kde/KWin/InputDevice/<sysName>` (`org.kde.KWin.InputDevice`; the list is
+  `devicesSysNames` on `org.kde.KWin.InputDeviceManager`). A device is a trackpad when
+  `touchpad`, a mouse when `pointer` and not touch / tablet. Loft's niri keys map to:
+
+  | niri key | KWin property (supported when) | kcminputrc key |
+  |---|---|---|
+  | `accel-speed` | `pointerAcceleration` (`supportsPointerAcceleration`) | `PointerAcceleration` ("%.3f") |
+  | `accel-profile` | `pointerAccelerationProfileFlat` / `…Adaptive` = true (both `supports…`) | `PointerAccelerationProfile` (1 flat, 2 adaptive) |
+  | `natural-scroll` | `naturalScroll` (`supportsNaturalScroll`) | `NaturalScroll` |
+  | `scroll-factor` | `scrollFactor` (the property exists) | `ScrollFactor` |
+  | `left-handed` | `leftHanded` (`supportsLeftHanded`) | `LeftHanded` |
+  | `middle-emulation` (mouse) | `middleEmulation` (`supportsMiddleEmulation`) | `MiddleButtonEmulation` |
+  | `tap`, `drag` (trackpad) | `tapToClick`, `tapAndDrag` (`tapFingerCount` > 0) | `TapToClick`, `TapAndDrag` |
+  | `dwt` (trackpad) | `disableWhileTyping` (`supportsDisableWhileTyping`) | `DisableWhileTyping` |
+
+  Like niri's sections, one change goes to **every** device of that kind that supports
+  it. Setting the property applies it at once, and KWin itself writes it to kcminputrc
+  (`Device::writeEntry` in `backends/libinput/device.cpp`); loft-kwin writes the same key
+  to the same group (`[Libinput][vendor][product][name]`, as `Connection::applyDeviceConfig`
+  builds it) so it survives login either way. The page shows the first device's values
+  (niri has one value per section, KDE one per device) and only the rows some device
+  supports; the Mouse or Trackpad card is hidden when there's no such device. Scrolling
+  speed, left-handed, middle-click emulation and tap and drag are rows only KDE's page has.
+  Reset and "changed here" are hidden (no Loft overrides).
+- `loft-kwin input` prints `{keyboard: {layout, variant, options}, libinput, mouse,
+  touchpad, devices}`; `mouse` / `touchpad` are `{devices, supported, values}`. Bad
+  sections, keys or values are errors before anything is written. Its Nix wrapper adds
+  kconfig's `bin` after the system's PATH for kreadconfig6 / kwriteconfig6.
+- **Not done:** a device plugged in later keeps its own KDE settings (KDE's behaviour)
+  until the next change on the page. KDE's `[Libinput][Defaults][Pointer|Touchpad]`
+  would cover future devices, but it also changes what System Settings' Defaults
+  means, so Loft leaves it alone. KDE's scroll method, click method, button mapping
+  and tablet settings stay in System Settings.
+
+Tested in a nested session: `input set` with `us,de` / `,nodeadkeys` / `caps:escape`
+turned KWin's `org.kde.keyboard getLayoutsList` from `us` into `us` + "German (no dead
+keys)" at once, and an empty layout put it back to `us`; a control write of
+`LayoutList=us,fr` with plain `kwriteconfig6` (no notification) changed nothing until
+`input set` sent it. **The device half can't be tested nested**: KWin creates its libinput
+connection only with the DRM backend, so a nested KWin has no `/org/kde/KWin/InputDevice`
+(`input` reports `libinput: false`, and the page shows a "no mouse or trackpad" row and
+no cards). It's covered by unit tests (classification, support, the value mapping, the
+kcminputrc entries) and a D-Bus test against a fake `InputDeviceManager` + mouse over a
+socket pair (`devices_over_dbus`: listing, `GetAll`, `Properties.Set`). Needs a check on
+real hardware.
+
 ### 4.13 Held shortcuts: press, repeat and release
 
 Two Loft shortcuts are about holding a key: **⌘Q** (the quit guard, hold ~1 s to quit a
@@ -1134,142 +1205,7 @@ plasmashell's shortcuts. Seen once in the nested session: the wheel opened at th
 top-left corner, or on the pointer's previous position, instead of under the pointer
 (`RadialMenuWindow` takes `mouseX/mouseY` on the pointer's enter; likely the
 virtual-pointer races of §6); placement isn't part of this change.
-### 4.14 Dragging a window into another Space
-
-On macOS you can hold a window by its title bar, switch Space (⌃← →, ⌃1…9) and the window
-comes along. Under KWin a Space is an Activity (§4.2), and KWin doesn't do this for
-Activities. **Done**, in the bridge script, with stock KWin.
-
-**What KWin does during an interactive move** (measured in a nested KWin 6.8.2 with a probe
-script logging `interactiveMoveResizeStarted/Finished`, `activitiesChanged` and
-`currentActivityChanged`):
-
-- **Global shortcuts still fire.** `GlobalShortcutFilter` is installed before
-  `MoveResizeFilter` (`InputRedirection::setupInputFilters`, `src/input.cpp`), so KDE's
-  "Switch to activity" keys (Meta+1/2/3 in the test) switch the Activity mid-drag. Keys
-  that are no shortcut go to the move filter and are swallowed (§4.6).
-- **Activities: the window stays behind.** On the switch the held window is hidden (it is
-  on the old Activity only), the move goes on (`move` stays true, its geometry keeps
-  following the pointer) and the release finishes it on the **old** Activity: the reported
-  bug. KWin knows: `// FIXME: Keep Move/Resize window across activities` in
-  `Workspace::updateWindowVisibilityOnDesktopChange` (`src/workspace.cpp`).
-- **Virtual desktops: KWin carries it.** The same function puts the move/resize window on
-  the new desktop when it's on that output (`setDesktops({newDesktop})`). Measured:
-  Ctrl+Meta+→ mid-drag, the window's desktop became "Two" and it was dropped there.
-- **xremap** works on evdev events before KWin and doesn't know about moves. Its per-app
-  match uses the active window, which during a drag is the dragged one, as before it, so a
-  key that switches Activities normally switches them mid-drag too. Loft's keymap leaves
-  ⌘1…9 alone; ⌘0 becomes Ctrl+0 (reset zoom) in every app, drag or not.
-
-**The fix** (`carryMovingWindow`, `crates/loft-kwin/src/bridge.js`): on
-`workspace.currentActivityChanged`, a window with `move` set (an interactive move, not a
-resize) that isn't on the new Activity gets `activities = [current]`. It reappears at once
-under the pointer, the move continues, and the drop leaves it there. Its desktop and
-position are untouched (KWin's own desktop carry still applies). A window on every
-Activity (`[]`) is left so. Setting `workspace.activeWindow` during the move doesn't stick
-(the window stayed unfocused), so the carried window is focused when it's dropped
-(`interactiveMoveResizeFinished`, once), as on macOS. Escape cancels the move as usual:
-the window goes back to where the drag started, on the new Activity.
-
-It reacts to the Activity changing, not to a key, so every way of switching works: KDE's
-shortcuts, Loft's Spaces (⌘1…9, ⌃⌘← →, `setActivity` through the bridge, also tested), a
-D-Bus `SetCurrentActivity`. No KWin patch, nothing for xremap, and nothing changes under
-niri. It needs only the new loft-kwin (it loads the script when the shell starts it), no
-re-login.
-
-Options looked at and not needed: catching Meta+digit inside the move in the script (it
-can't see keys) or in loft-kwin/xremap with a D-Bus `SetCurrentActivity` (the shortcut
-already gets through), or a KWin patch for the FIXME (the script does the same thing from
-outside; worth upstreaming as a patch to `updateWindowVisibilityOnDesktopChange` some day).
-
-**Not covered:** switching by dragging onto a screen edge or onto the bar's Space
-indicator. During a move KWin keeps the pointer (`MoveResizeFilter`), so the bar sees no
-hover or drop. KWin's own "Switch desktop on edge: only when moving windows" (System
-Settings → Screen Edges) does it for virtual desktops, and the window comes along; for
-Activities it would need the bridge to watch the cursor during a move. Not done.
-
-**Tested** in a nested KWin 6.8.2 (§6) with kactivitymanagerd, Activities Default / Coding /
-Music on Meta+1/2/3 (kglobalaccel `ActivityManager` component) and a second desktop,
-loft-input holding the left button on a title bar: Konsole held on Default + Meta+2 → on
-Coding, still moving, dropped there and focused (`loft-kwin state`: `kwin_activities`
-[Coding]); one drag through Meta+3 then Meta+1 ended on Default; KWrite, not dragged,
-stayed on Default throughout, and a plain Meta+1 moved nothing; a held window on desktop
-Two + Meta+2 kept desktop Two on Coding; `loft-kwin send setActivity` mid-drag carried it
-to Music; a window on every Activity stayed on every Activity; Escape after Meta+2 put
-the window back where the drag began, on Coding, focused. Stock KWin first, same steps:
-the window ended on the old Activity.
-### 4.12 Settings → Keyboard & Mouse through kxkbrc and KWin's InputDevice
-
-**Done.** Under niri the page writes `input.keyboard` / `input.mouse` / `input.touchpad`
-overrides through `loft-niri apply`. Under KWin the same controls write KDE's own
-settings, as System Settings does, and Loft records nothing:
-
-```
-InputPage ──▶ KdeInput.qml ─┬─ key repeat: kwriteconfig6 --notify kcminputrc [Keyboard]
-                            └─ loft-kwin input [set JSON]   (crates/loft-kwin/src/input.rs)
-                                 ├─ keyboard: kxkbrc [Layout] + KConfig ConfigChanged on /kxkbrc
-                                 └─ mouse / touchpad: org.kde.KWin /org/kde/KWin/InputDevice/<sysName>
-                                      Properties.Set (live) + kcminputrc [Libinput][vendor][product][name]
-```
-
-- **Layouts.** `{"keyboard": {"layout": "us,de", "variant": ",nodeadkeys", "options":
-  "caps:escape"}}` writes `LayoutList`, `VariantList` (padded to one entry per layout),
-  `Use` (false for an empty layout = the system default), `Options` and
-  `ResetOldOptions=true` (niri's options are the whole list, so they replace the
-  system's). KWin's `KeyboardLayout` watches kxkbrc with a `KConfigWatcher`
-  (kwin 6.8.2 `keyboard_layout.cpp`), so after the writes loft-kwin emits KConfig's
-  `org.kde.kconfig.notify.ConfigChanged` on `/kxkbrc` once, with every key, and KWin
-  rebuilds the keymap from a consistent file. Layout names are checked as XKB names
-  before anything is written. The bar's layout indicator follows through
-  `org.kde.keyboard` `layoutListChanged`, as before.
-- **Mouse and trackpad.** KWin exports each libinput device at
-  `/org/kde/KWin/InputDevice/<sysName>` (`org.kde.KWin.InputDevice`; the list is
-  `devicesSysNames` on `org.kde.KWin.InputDeviceManager`). A device is a trackpad when
-  `touchpad`, a mouse when `pointer` and not touch / tablet. Loft's niri keys map to:
-
-  | niri key | KWin property (supported when) | kcminputrc key |
-  |---|---|---|
-  | `accel-speed` | `pointerAcceleration` (`supportsPointerAcceleration`) | `PointerAcceleration` ("%.3f") |
-  | `accel-profile` | `pointerAccelerationProfileFlat` / `…Adaptive` = true (both `supports…`) | `PointerAccelerationProfile` (1 flat, 2 adaptive) |
-  | `natural-scroll` | `naturalScroll` (`supportsNaturalScroll`) | `NaturalScroll` |
-  | `scroll-factor` | `scrollFactor` (the property exists) | `ScrollFactor` |
-  | `left-handed` | `leftHanded` (`supportsLeftHanded`) | `LeftHanded` |
-  | `middle-emulation` (mouse) | `middleEmulation` (`supportsMiddleEmulation`) | `MiddleButtonEmulation` |
-  | `tap`, `drag` (trackpad) | `tapToClick`, `tapAndDrag` (`tapFingerCount` > 0) | `TapToClick`, `TapAndDrag` |
-  | `dwt` (trackpad) | `disableWhileTyping` (`supportsDisableWhileTyping`) | `DisableWhileTyping` |
-
-  Like niri's sections, one change goes to **every** device of that kind that supports
-  it. Setting the property applies it at once, and KWin itself writes it to kcminputrc
-  (`Device::writeEntry` in `backends/libinput/device.cpp`); loft-kwin writes the same key
-  to the same group (`[Libinput][vendor][product][name]`, as `Connection::applyDeviceConfig`
-  builds it) so it survives login either way. The page shows the first device's values
-  (niri has one value per section, KDE one per device) and only the rows some device
-  supports; the Mouse or Trackpad card is hidden when there's no such device. Scrolling
-  speed, left-handed, middle-click emulation and tap and drag are rows only KDE's page has.
-  Reset and "changed here" are hidden (no Loft overrides).
-- `loft-kwin input` prints `{keyboard: {layout, variant, options}, libinput, mouse,
-  touchpad, devices}`; `mouse` / `touchpad` are `{devices, supported, values}`. Bad
-  sections, keys or values are errors before anything is written. Its Nix wrapper adds
-  kconfig's `bin` after the system's PATH for kreadconfig6 / kwriteconfig6.
-- **Not done:** a device plugged in later keeps its own KDE settings (KDE's behaviour)
-  until the next change on the page. KDE's `[Libinput][Defaults][Pointer|Touchpad]`
-  would cover future devices, but it also changes what System Settings' Defaults
-  means, so Loft leaves it alone. KDE's scroll method, click method, button mapping
-  and tablet settings stay in System Settings.
-
-Tested in a nested session: `input set` with `us,de` / `,nodeadkeys` / `caps:escape`
-turned KWin's `org.kde.keyboard getLayoutsList` from `us` into `us` + "German (no dead
-keys)" at once, and an empty layout put it back to `us`; a control write of
-`LayoutList=us,fr` with plain `kwriteconfig6` (no notification) changed nothing until
-`input set` sent it. **The device half can't be tested nested**: KWin creates its libinput
-connection only with the DRM backend, so a nested KWin has no `/org/kde/KWin/InputDevice`
-(`input` reports `libinput: false`, and the page shows a "no mouse or trackpad" row and
-no cards). It's covered by unit tests (classification, support, the value mapping, the
-kcminputrc entries) and a D-Bus test against a fake `InputDeviceManager` + mouse over a
-socket pair (`devices_over_dbus`: listing, `GetAll`, `Properties.Set`). Needs a check on
-real hardware.
-
-### 4.13 One Qt style for every app (global mode)
+### 4.14 One Qt style for every app (global mode)
 
 **Off by default.** `programs.loft.qt.global = true` (needs `programs.loft.qt.enable`,
 which installs Kvantum), or **Settings → Appearance → Theme all Qt apps**, which
@@ -1353,7 +1289,7 @@ theme, a running KWrite (and its context menu) re-skinned live; tokyonight → l
 the `qt` hook re-skinned it again (`kvantum-dark` → `kvantum`); `stop`, and the Settings
 switch off: Kvantum's file byte for byte as before and kdeglobals as before except the
 `[KFileDialog Settings]` Kate's dialog wrote itself; the record gone.
-### 4.13 A Space's apps under KWin: spin-up, display roles, capture
+### 4.15 A Space's apps under KWin: spin-up, display roles, capture
 
 **Done.** What §4.2 left niri-only, on Activities.
 
@@ -1416,6 +1352,70 @@ switch off: Kvantum's file byte for byte as before and kdeglobals as before exce
   hardware with mixed sizes and a portrait display (roles come from the same code as
   `space list --displays`, unit-tested).
 
+### 4.16 Dragging a window into another Space
+
+On macOS you can hold a window by its title bar, switch Space (⌃← →, ⌃1…9) and the window
+comes along. Under KWin a Space is an Activity (§4.2), and KWin doesn't do this for
+Activities. **Done**, in the bridge script, with stock KWin.
+
+**What KWin does during an interactive move** (measured in a nested KWin 6.8.2 with a probe
+script logging `interactiveMoveResizeStarted/Finished`, `activitiesChanged` and
+`currentActivityChanged`):
+
+- **Global shortcuts still fire.** `GlobalShortcutFilter` is installed before
+  `MoveResizeFilter` (`InputRedirection::setupInputFilters`, `src/input.cpp`), so KDE's
+  "Switch to activity" keys (Meta+1/2/3 in the test) switch the Activity mid-drag. Keys
+  that are no shortcut go to the move filter and are swallowed (§4.6).
+- **Activities: the window stays behind.** On the switch the held window is hidden (it is
+  on the old Activity only), the move goes on (`move` stays true, its geometry keeps
+  following the pointer) and the release finishes it on the **old** Activity: the reported
+  bug. KWin knows: `// FIXME: Keep Move/Resize window across activities` in
+  `Workspace::updateWindowVisibilityOnDesktopChange` (`src/workspace.cpp`).
+- **Virtual desktops: KWin carries it.** The same function puts the move/resize window on
+  the new desktop when it's on that output (`setDesktops({newDesktop})`). Measured:
+  Ctrl+Meta+→ mid-drag, the window's desktop became "Two" and it was dropped there.
+- **xremap** works on evdev events before KWin and doesn't know about moves. Its per-app
+  match uses the active window, which during a drag is the dragged one, as before it, so a
+  key that switches Activities normally switches them mid-drag too. Loft's keymap leaves
+  ⌘1…9 alone; ⌘0 becomes Ctrl+0 (reset zoom) in every app, drag or not.
+
+**The fix** (`carryMovingWindow`, `crates/loft-kwin/src/bridge.js`): on
+`workspace.currentActivityChanged`, a window with `move` set (an interactive move, not a
+resize) that isn't on the new Activity gets `activities = [current]`. It reappears at once
+under the pointer, the move continues, and the drop leaves it there. Its desktop and
+position are untouched (KWin's own desktop carry still applies). A window on every
+Activity (`[]`) is left so. Setting `workspace.activeWindow` during the move doesn't stick
+(the window stayed unfocused), so the carried window is focused when it's dropped
+(`interactiveMoveResizeFinished`, once), as on macOS. Escape cancels the move as usual:
+the window goes back to where the drag started, on the new Activity.
+
+It reacts to the Activity changing, not to a key, so every way of switching works: KDE's
+shortcuts, Loft's Spaces (⌘1…9, ⌃⌘← →, `setActivity` through the bridge, also tested), a
+D-Bus `SetCurrentActivity`. No KWin patch, nothing for xremap, and nothing changes under
+niri. It needs only the new loft-kwin (it loads the script when the shell starts it), no
+re-login.
+
+Options looked at and not needed: catching Meta+digit inside the move in the script (it
+can't see keys) or in loft-kwin/xremap with a D-Bus `SetCurrentActivity` (the shortcut
+already gets through), or a KWin patch for the FIXME (the script does the same thing from
+outside; worth upstreaming as a patch to `updateWindowVisibilityOnDesktopChange` some day).
+
+**Not covered:** switching by dragging onto a screen edge or onto the bar's Space
+indicator. During a move KWin keeps the pointer (`MoveResizeFilter`), so the bar sees no
+hover or drop. KWin's own "Switch desktop on edge: only when moving windows" (System
+Settings → Screen Edges) does it for virtual desktops, and the window comes along; for
+Activities it would need the bridge to watch the cursor during a move. Not done.
+
+**Tested** in a nested KWin 6.8.2 (§6) with kactivitymanagerd, Activities Default / Coding /
+Music on Meta+1/2/3 (kglobalaccel `ActivityManager` component) and a second desktop,
+loft-input holding the left button on a title bar: Konsole held on Default + Meta+2 → on
+Coding, still moving, dropped there and focused (`loft-kwin state`: `kwin_activities`
+[Coding]); one drag through Meta+3 then Meta+1 ended on Default; KWrite, not dragged,
+stayed on Default throughout, and a plain Meta+1 moved nothing; a held window on desktop
+Two + Meta+2 kept desktop Two on Coding; `loft-kwin send setActivity` mid-drag carried it
+to Music; a window on every Activity stayed on every Activity; Escape after Meta+2 put
+the window back where the drag began, on Coding, focused. Stock KWin first, same steps:
+the window ended on the old Activity.
 ## 5. One Plasma session, two shells: switching and backing out
 
 Requirements: both shells work in the same Plasma session, never run at once, can be
@@ -1464,7 +1464,7 @@ when Loft stops:
 | Loft's shortcuts (`loft-keys.js`, §4.5) and the keys taken from other shortcuts | `loft-plasma-shortcuts unload` (`ExecStopPost` of loft-plasma-shell): script unloaded, Loft's actions unregistered, taken keys given back from `<state>/kwin-shortcuts-taken.json` (plasmashell's start does the last part too) |
 | the tile-while-dragging modifier (`[Windows] TileWhileMovingModifier`, §4.6) | `loft-kwin-tile-modifier apply` / `revert`, recorded in `<state>/kwin-tile-modifier.prev` like the decoration. Only set with `programs.loft.plasma.kwinPackage` |
 | KWin's popup fade (`fadingpopups`: 150 ms in, 600 ms out on every popup, so Loft's menus seemed to grow out of a corner) | `loft-kwin` unloads it at start (runtime only, nothing written to kwinrc) and loads it again on exit; the effects it took are noted in `$XDG_RUNTIME_DIR/loft/kwin-effects-off`, so a restart after a crash still gives them back, and an effect the user had off stays off |
-| the global Qt style (`programs.loft.qt.global`, §4.13): kdeglobals `[KDE] widgetStyle`, `[General] ColorScheme` / `ColorSchemeHash`, the `[Colors:*]` / `[ColorEffects:*]` / `[WM]` keys of Loft's scheme; Kvantum's `[General] theme` | `loft qt global start` (`ExecStartPost`, only when on) records the user's values in `<state>/qt-global.prev`; `loft qt global stop` (`ExecStopPost`, and plasmashell's `ExecStartPre`) puts back every key still Loft's and deletes the ones that weren't set, with KConfig's change notification so running apps follow |
+| the global Qt style (`programs.loft.qt.global`, §4.14): kdeglobals `[KDE] widgetStyle`, `[General] ColorScheme` / `ColorSchemeHash`, the `[Colors:*]` / `[ColorEffects:*]` / `[WM]` keys of Loft's scheme; Kvantum's `[General] theme` | `loft qt global start` (`ExecStartPost`, only when on) records the user's values in `<state>/qt-global.prev`; `loft qt global stop` (`ExecStopPost`, and plasmashell's `ExecStartPre`) puts back every key still Loft's and deletes the ones that weren't set, with KConfig's change notification so running apps follow |
 | Alt+F3 (KWin's Window Operations Menu, §4.4) | taken by Loft's `loft-window-menu` shortcut through the same claim / release as the others |
 | any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |
 | the lock screen | `PLASMA_DEFAULT_SHELL` only in KWin's environment, and only when the login is Loft's (`loft-plasma lock-env`, §4.3). Lock and unlock stay Plasma's either way |

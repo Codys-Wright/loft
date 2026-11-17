@@ -725,7 +725,7 @@
               for a dark theme), `[General] ColorScheme=Loft` with the scheme's
               colour groups, and Kvantum's global `theme=Loft`. The previous
               values are recorded and put back when the shell stops (Plasma or
-              niri), so plain Plasma keeps its look (docs/KWIN.md §4.13). The
+              niri), so plain Plasma keeps its look (docs/KWIN.md §4.14). The
               default for Settings → Appearance → "Theme all Qt apps", which
               wins once used (`loft qt global on|off`).
             '';
@@ -1092,7 +1092,7 @@
                 ${lib.concatMapStrings (e: "export ${e}\n") env}
                 ${lib.getExe sp.loft} theme apply ${lib.escapeShellArg cfg.theme} || true
               ''}";
-              # Global Qt style under niri too (docs/KWIN.md §4.13): KDE apps
+              # Global Qt style under niri too (docs/KWIN.md §4.14): KDE apps
               # read kdeglobals at start; put back when the shell stops.
               Service.ExecStartPost = lib.optional cfg.qt.enable "-${qtGlobal "start"}";
               Service.ExecStopPost = [ "-${qtGlobal "stop"}" ];
@@ -1211,7 +1211,7 @@
               "-${lib.getExe sp.loft-kwin-decoration} apply"
               "-${plasmaShortcuts} load"
             ]
-            # Global Qt style (docs/KWIN.md §4.13): applies only when on.
+            # Global Qt style (docs/KWIN.md §4.14): applies only when on.
             ++ lib.optional cfg.qt.enable "-${qtGlobal "start"}"
             # Option-drag tiles (docs/KWIN.md §4.6).
             ++ lib.optional tileModifierOn "-${lib.getExe sp.loft-kwin-tile-modifier} apply ${cfg.plasma.tileModifier}";
@@ -1305,7 +1305,7 @@
             ExecStartPre=-${lib.getExe loftPlasma} lock-env
             EnvironmentFile=-%t/loft/plasma-lock.env
           ''
-          # Global Qt style (docs/KWIN.md §4.13): KWin reads its widget style
+          # Global Qt style (docs/KWIN.md §4.14): KWin reads its widget style
           # once, at start, so a Loft login applies it before KWin starts (the
           # shell's own start would come too late for KWin's menus). Plain
           # "Plasma" logins put back what a session that ended without a stop

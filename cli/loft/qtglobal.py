@@ -1,7 +1,7 @@
 """Global Qt style (programs.loft.qt.global, Settings → Appearance → "Theme all
 Qt apps"): while Loft is the shell, every Qt / KDE app uses Loft's Kvantum
 theme and color scheme, not only the apps programs.loft.qt lists
-(qtapps.py). docs/KWIN.md §4.13.
+(qtapps.py). docs/KWIN.md §4.14.
 
 What `apply` writes (and records, so `revert` can put it back):
 
@@ -352,7 +352,7 @@ def status(state_dir: Path) -> dict:
 
 
 def add_parser(qsub, state_dir_of) -> None:
-    g = qsub.add_parser("global", help="every Qt / KDE app in Loft's Kvantum theme + color scheme while Loft runs (docs/KWIN.md §4.13)")
+    g = qsub.add_parser("global", help="every Qt / KDE app in Loft's Kvantum theme + color scheme while Loft runs (docs/KWIN.md §4.14)")
     gsub = g.add_subparsers(dest="global_cmd", required=True)
 
     def runner(fn):
