@@ -311,9 +311,8 @@ on `QT_PLUGIN_PATH`.
   inward triangles when maximized). Where Aurorae can't do what macOS does, it follows
   macOS: pointing at the button group (gaps included) shows all three glyphs and lights
   the beads of a background window too; the title is centred on the window, 13 px
-  semibold in the KDE title font's family; bottom corners are rounded. Not done: the
-  Option-key "+" on green (KWin gives decorations no modifier state, input.cpp builds
-  their hover events without it).
+  semibold in the KDE title font's family; bottom corners are rounded. Green shows the
+  full-screen arrows, or a "+" while Option (Alt) is held (below).
 - **Theme:** the `kdecoration` render unit (`cli/loft/render/kdecoration.py`,
   `templates/render/kdecoration.ini`) writes `<state>/current/kdecoration.ini` with only
   `[General] Appearance=light|dark` (the colors' polarity): the traffic lights are fixed
@@ -324,13 +323,48 @@ on `QT_PLUGIN_PATH`.
   `$XDG_STATE_HOME/loft`, else `~/.local/state/loft`, watches the file, `current/` and the
   state dir (the theme engine swaps the `current` link), and repaints open windows on
   change. Without the file it is Tahoe dark.
-- **Behavior is KWin's:** the buttons are KDecoration's own Close / Minimize / Maximize
-  (minimize is real, = Hide, §4.1; green toggles maximize, middle-click vertical,
-  right-click horizontal). Right-click on the bar opens KWin's window menu at the
-  pointer. Double-click on the bar zooms (maximizes) whatever KWin's title-bar action is,
-  as on macOS; drag and the other title-bar actions are KWin's settings.
-  Not done: fullscreen on a modifier+green, long-press green, and Loft's own window
-  menu through `dev.loft.KWinBridge`.
+- **Behavior is macOS's** (table in [WINDOW-DECORATIONS.md](WINDOW-DECORATIONS.md#under-kwin)):
+  red and yellow are KDecoration's Close / Minimize (minimize is real, = Hide, §4.1).
+  **Green** is full screen; with **Option** (Alt, PLAN.md §5: Loft's Option key) held it
+  zooms (KWin's maximize, both ways) and shows a "+" instead of the arrows, live as the key
+  goes down and up; the tooltip says "Enter Full Screen" / "Zoom". **Pressing and
+  holding** green (350 ms, as niri-loft) opens Loft's window menu under the bead, and the
+  release doesn't count as a click. **Right-click** on the bar (beads included) opens the
+  same menu at the pointer: Enter Full Screen, Zoom, Center, Arrange ▸ (halves, thirds,
+  quarters, fill, center, maximize, full screen), Move to Workspace ▸, Move to Display ▸ —
+  the shell's `trafficLightItems`, which niri-loft's bar opens too. Double-click on the
+  bar zooms whatever KWin's title-bar action is; drag and the other title-bar actions
+  are KWin's settings.
+  - **How** (`kdecoration/shell.{h,cpp}`): KDecoration has no request for full screen
+    and no way to reach Loft's menu, and the decoration doesn't know its window's id. It
+    calls `dev.loft.KWinBridge.TitleBar(json)` (`{"action": "fullscreen"|"menu"|"tileMenu",
+    "x", "y"` = decoration-local anchor, `"width", "height"` = the frame}`) on the session
+    bus; loft-kwin queues a `titleBar` command; the loft-bridge script takes the topmost
+    window under `workspace.cursorPos` whose frame is that size, toggles `fullScreen` or
+    sends `Event({"WindowActionsMenuRequested": {window, output, x, y, kind}})` back, which
+    loft-kwin prints for the shell (`KWin.qml` → `Compositor.windowActionsMenuRequested`,
+    as niri's event; `capabilities.titleBarEvents` is now on). Title-bar menus open down
+    and right from the point (`openContext` edge `"pointer"`), under niri too.
+  - **Without the shell** (no `dev.loft.KWinBridge` owner, watched with a
+    `QDBusServiceWatcher`, or the call fails within 1 s): green maximizes, and
+    right-click / hold show KWin's own window menu. loft-kwin is the shell's child, so the
+    name's owner means the shell runs. (loft-kwin now exits right after SIGTERM: tokio's
+    blocking stdin thread used to keep it alive without its bus name, so the shell never
+    restarted it.)
+  - **Option**: KWin builds decoration hover events without modifiers (`input.cpp`
+    `DecorationEventFilter`; presses do carry them) and a key alone sends the decoration
+    nothing. KWin's `InputRedirection` (a child of the application object) has
+    `keyboardModifiersChanged`: the plugin finds it by class name and connects by
+    signature, so it doesn't link KWin. Outside KWin (System Settings' previews) Option
+    never reads as held. The click itself also checks the press's own modifiers.
+  - **Arrange under KWin**: presets are several `geometryPercent` commands (width, height,
+    move) and a resize only shows in `frameGeometry` once the client acks it, so each
+    step used to start from the stale frame (Left Half came out at the old size). The
+    script now builds each step on the geometry it last asked for (kept 1 s).
+  - Not done: hover-and-hold (macOS Tahoe also opens the menu when the pointer rests on
+    green), Arrange through KWin's own quick tiles (its shortcut semantics combine with
+    the current tile and hop outputs), and a menu laid out like Tahoe's (tiles at the top
+    level instead of under Arrange ▸).
 - **Selected only while Loft runs** (§5): `loft-kwin-decoration apply` (the
   `ExecStartPost` of `loft-plasma-shell.service`) records the user's own kwinrc
   `[org.kde.kdecoration2] library` / `theme` in `<state>/kwin-decoration.prev` (a key
@@ -385,6 +419,14 @@ on `QT_PLUGIN_PATH`.
   QT_PLUGIN_PATH=<build>/lib/qt-6/plugins:$QT_PLUGIN_PATH` (first wins). Run `apply`
   once KWin is up, or call `org.kde.KWin.reconfigure` again: a reconfigure sent too
   early is lost and windows keep the old decoration.
+- **Title-bar behaviors tested** nested (KWin 6.8.2, kwrite, the branch's plugin and
+  loft-kwin via `--kwin-env QT_PLUGIN_PATH=… --kwin-env LOFT_KWIN_BIN=…`): hover green →
+  arrows, `keydown alt` without moving → "+", `keyup` → arrows; tooltips follow; click →
+  full screen; Option+click → maximized; hold 700 ms → the menu under the bead, release
+  does nothing more; Arrange ▸ Left Half → the left half of the working area; right-click
+  → the menu at the pointer; right-click on a background window's bar → Center moved that
+  window; with loft-kwin stopped → KWin's menu, and Loft's again once the shell restarted
+  it.
 - **Tested** nested (§6, plugin on `QT_PLUGIN_PATH`, scratch HOME): two foot windows,
   focus / unfocus, hover glyphs, the window menu, maximize / restore, minimize, close,
   a live theme swap (tokyonight → latte) and metric edits, and apply / revert with the

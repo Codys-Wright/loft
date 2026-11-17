@@ -1,7 +1,13 @@
 // dev.loft.decoration: macOS 26 Tahoe's title bar (tahoe.h). Traffic lights
-// at the left (close / minimize / zoom, KWin's own actions), the title
-// centred on the window, rounded corners, Tahoe's outline and shadow; light
-// or dark with the Loft theme (config.h).
+// at the left, the title centred on the window, rounded corners, Tahoe's
+// outline and shadow; light or dark with the Loft theme (config.h).
+//
+// Behaviour is macOS's (docs/WINDOW-DECORATIONS.md, "Under KWin"): red
+// closes, yellow minimizes (KWin's own actions); green is full screen, or
+// zoom (maximize) with Option held, and pressing and holding it opens Loft's
+// window menu (tiling, displays) at the button; a right-click on the bar
+// opens that menu at the pointer. Loft's shell does the full screen and the
+// menu (shell.h); without it, green maximizes and the menu is KWin's.
 #pragma once
 
 #include "config.h"
@@ -11,6 +17,7 @@
 #include <KDecoration3/DecorationButtonGroup>
 
 #include <QElapsedTimer>
+#include <QTimer>
 #include <QVariantList>
 
 namespace Loft
@@ -38,6 +45,9 @@ public:
         return Config::self()->look();
     }
     bool maximized() const;
+    // Loft's window menu at `anchor` (decoration-local), or KWin's when the
+    // shell isn't there. `kind`: "menu" (right-click) or "tileMenu" (green held).
+    void showWindowMenu(const QString &kind, const QPointF &anchor);
 
 protected:
     void hoverEnterEvent(QHoverEvent *event) override;
@@ -64,6 +74,19 @@ class Button : public KDecoration3::DecorationButton
 public:
     Button(KDecoration3::DecorationButtonType type, Decoration *decoration, QObject *parent = nullptr);
     void paint(QPainter *painter, const QRectF &repaintArea) override;
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+
+private:
+    // Green only.
+    void zoomClicked();
+    void held();
+
+    QTimer *m_hold = nullptr; // press and hold → the window menu
+    bool m_heldOpened = false; // that release isn't a click
+    bool m_pressOption = false; // Option was down at the press
 };
 
 } // namespace Loft

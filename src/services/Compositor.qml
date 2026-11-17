@@ -120,6 +120,9 @@ Singleton {
         function onScreenshotTaken(path) {
             root.screenshotTaken(path);
         }
+        function onWindowActionsMenuRequested(id, output, x, y) {
+            root.windowActionsMenuRequested(id, output, x, y);
+        }
     }
 
     // ── Actions: any compositor ───────────────────────────────────────────
