@@ -29,6 +29,8 @@
 #                          [Windows] TileWhileMovingModifier: Option-drag tiles)
 #                          + nix/kwin/client-window-menu-service.patch ([Windows]
 #                          ClientWindowMenuService: apps' own window menus → Loft)
+#                          + nix/kwin/unique-script-ids.patch (a KWin script id is
+#                          never handed out twice, so kdotool can't stop Loft's)
 #   loft-kwin-tile-modifier  sets that key while Loft runs in Plasma, reverts after
 #   loft-kwin-window-menu  the same for ClientWindowMenuService
 #
@@ -840,11 +842,17 @@
         # its own title bar asks for (GTK / libadwaita, Chromium, X11's
         # _GTK_SHOW_WINDOW_MENU) goes to that D-Bus service (Loft's
         # dev.loft.KWinBridge), falling back to KWin's menu (docs/KWIN.md §4.4).
+        # + nix/kwin/unique-script-ids.patch: script ids (/Scripting/Script<id>)
+        # come from a counter that only grows, not scripts.size(), so a client
+        # that loads and unloads throwaway scripts (kdotool, OpenDeck) can't
+        # stop or rerun Loft's loft-bridge / loft-keys through a reused id.
+        # Always on: no key (docs/KWIN.md §4.18).
         loft-kwin-patched = pkgs.kdePackages.kwin.overrideAttrs (old: {
           pname = "loft-kwin-patched";
           patches = (old.patches or [ ]) ++ [
             ./kwin/tile-while-moving-modifier.patch
             ./kwin/client-window-menu-service.patch
+            ./kwin/unique-script-ids.patch
           ];
         });
 
