@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import qs.services
 
-// Settings → System: the System Monitor, menu bar readouts and alerts
-// (each card shows only while its module is on — Settings → Features).
+// Settings → General → Monitor & Alerts: the System Monitor, menu bar readouts and alerts
+// (each card shows only while its module is on — Settings → General → Features).
 ColumnLayout {
     id: page
     spacing: 12
@@ -261,7 +261,7 @@ ColumnLayout {
     Text {
         Layout.fillWidth: true
         visible: !Features.on("systemMonitor") && !Features.on("barReadouts") && !Features.on("alerts")
-        text: "The System Monitor, menu bar readouts and alerts are all switched off (Settings → Features)."
+        text: "The System Monitor, menu bar readouts and alerts are all switched off (Settings → General → Features)."
         color: Theme.subtext
         font.family: Theme.fontUi
         font.pixelSize: 12

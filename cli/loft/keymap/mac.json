@@ -159,6 +159,12 @@
         "Super_L-Space": "Super_L-Space",
         "Super_L-h": "Super_R-h",
         "Super_L-m": "Super_R-m"
+      },
+      "plasmaRemap": {
+        "Ctrl-Shift-Left": "Ctrl-Shift-Super_L-Left",
+        "Ctrl-Shift-Right": "Ctrl-Shift-Super_L-Right",
+        "Super_L-h": "Ctrl-Alt-Super_L-h",
+        "Super_L-m": "Ctrl-Alt-Super_L-m"
       }
     },
     {
@@ -414,6 +420,16 @@
         "Super_R-x": "Shift-comma",
         "Super_R-y": "y",
         "Super_R-z": "Shift-grave"
+      }
+    },
+    {
+      "id": "right-cmd",
+      "name": "Right ⌘ = the system's Super key (Right ⌘ L locks)",
+      "section": "keymap",
+      "description": "Left ⌘ is the macOS ⌘; Right ⌘ is never remapped to Ctrl and reaches the desktop as plain Super (KDE's Meta shortcuts and Loft's under Plasma, niri's Super binds). Right ⌘ L locks the screen, sent as ⌃⌘Q (Loft's Lock Screen on niri and Plasma), not as Meta+L (the WM key's focus right under Plasma). Comes after the symbols layer, which takes Right ⌘ over when on.",
+      "exact_match": true,
+      "remap": {
+        "Super_R-l": "Ctrl-Super_L-q"
       }
     },
     {

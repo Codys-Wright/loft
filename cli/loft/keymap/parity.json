@@ -1,5 +1,5 @@
 {
-  "$comment": "macOS keyboard parity (docs/PLAN.md §5, Option A): the macOS system shortcuts that Loft answers in niri, as data. `python3 -m loft.parity --write` (PYTHONPATH=cli) regenerates the block between the parity markers in niri/shell-binds.kdl.in and the `mac-parity` group in keymap/mac.json; tests/test_parity.py fails when they drift. The flake exposes this file as `lib.keyboardParity`, so voyager's nix-darwin config (fleet repo) can read the same table. `mac`: the keys as pressed on a Mac (Cmd, Opt, Ctrl, Shift). `niri`: the bind niri gets. `via` says how the physical keys reach that bind through xremap: `ctrl` — a plain Ctrl shortcut, re-sent with Right Alt added (Right Alt is niri's Mod via lv3:ralt_switch), so niri never binds a plain Ctrl+key and the Ctrl+arrows that xremap sends for ⌥←/→ (word navigation) still reach apps; `cmd` — passed through unchanged with exact match, so the ⌘→Ctrl app groups can't rewrite it, and bound twice (Mod: physical ⌘ with lv3:lwin_switch; Super: without); `super` — re-sent on Right Super, which stays plain Super, and bound as Super+key (so ⌘ isn't the WM key's Mod+key). `macHotkey`: the com.apple.symbolichotkeys id on voyager (where macOS itself does the shortcut).",
+  "$comment": "macOS keyboard parity (docs/PLAN.md §5, Option A): the macOS system shortcuts that Loft answers in niri, as data. `python3 -m loft.parity --write` (PYTHONPATH=cli) regenerates the block between the parity markers in niri/shell-binds.kdl.in and the `mac-parity` group in keymap/mac.json; tests/test_parity.py fails when they drift. The flake exposes this file as `lib.keyboardParity`, so voyager's nix-darwin config (fleet repo) can read the same table. `mac`: the keys as pressed on a Mac (Cmd, Opt, Ctrl, Shift). `niri`: the bind niri gets. `via` says how the physical keys reach that bind through xremap: `ctrl` — a plain Ctrl shortcut, re-sent with Right Alt added (Right Alt is niri's Mod via lv3:ralt_switch), so niri never binds a plain Ctrl+key and the Ctrl+arrows that xremap sends for ⌥←/→ (word navigation) still reach apps; `cmd` — passed through unchanged with exact match, so the ⌘→Ctrl app groups can't rewrite it, and bound twice (Mod: physical ⌘ with lv3:lwin_switch; Super: without); `super` — re-sent on Right Super, which stays plain Super, and bound as Super+key (so ⌘ isn't the WM key's Mod+key). `macHotkey`: the com.apple.symbolichotkeys id on voyager (where macOS itself does the shortcut). `session: plasma` with `via: kde`: only in a Plasma session (the group's `plasmaRemap`, merged by keys.for_wm_key), the physical keys re-sent with Meta added, for KWin's own shortcut `kde` (`kdeAction`); niri gets no bind for them. `kdeKeys`: under Plasma the shortcut's KWin key, when niri's would clash there (KWin sees Left and Right Super as one Meta, so `via super`'s Super+H would be the WM key's Meta+H, focus left): the physical keys are re-sent as these (the group's `plasmaRemap`) and kwinkeys registers the bind on them.",
   "wmKey": {
     "linux": "Caps Lock or Esc held (xremap dual-role → Right Alt), Right Alt, Right Ctrl held (right-ctrl-mod): niri Mod = ISO_Level3_Shift",
     "plasma": "the same holds as a private xremap virtual modifier (F24) that sends Meta + the next key; via ctrl adds Meta instead of Right Alt (cli/loft/keys.py, LOFT_WM_KEY=meta)",
@@ -24,7 +24,26 @@
       "niri": "Mod+Ctrl+Right",
       "via": "ctrl",
       "title": "Next Space",
-      "run": { "ipc": ["spaces", "next"] }
+      "run": { "ipc": ["spaces", "next"] },
+      "plasma": "KWin's own Switch One Desktop to the Left/Right (Meta+Ctrl+←/→; Loft doesn't bind ⌃←/→ under KWin, kwinkeys.KDE_OWNED_IPC): the virtual desktops inside the KDE Activity"
+    },
+    {
+      "id": "window-desktop-left",
+      "mac": "Ctrl+Shift+Left",
+      "macName": "Move the window one desktop left (Plasma)",
+      "session": "plasma",
+      "via": "kde",
+      "kde": "Meta+Ctrl+Shift+Left",
+      "kdeAction": "Window One Desktop to the Left"
+    },
+    {
+      "id": "window-desktop-right",
+      "mac": "Ctrl+Shift+Right",
+      "macName": "Move the window one desktop right (Plasma)",
+      "session": "plasma",
+      "via": "kde",
+      "kde": "Meta+Ctrl+Shift+Right",
+      "kdeAction": "Window One Desktop to the Right"
     },
     {
       "id": "mission-control",
@@ -90,7 +109,8 @@
       "niri": "Super+H",
       "via": "super",
       "title": "Hide App",
-      "run": { "ipc": ["appmenu", "hide"] }
+      "run": { "ipc": ["appmenu", "hide"] },
+      "kdeKeys": "Meta+Ctrl+Alt+H"
     },
     {
       "id": "minimize",
@@ -99,7 +119,8 @@
       "niri": "Super+M",
       "via": "super",
       "title": "Minimize Window (Hide)",
-      "run": { "ipc": ["appmenu", "minimize"] }
+      "run": { "ipc": ["appmenu", "minimize"] },
+      "kdeKeys": "Meta+Ctrl+Alt+M"
     },
     {
       "id": "quick-panel",

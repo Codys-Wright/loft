@@ -10,7 +10,7 @@ import qs.services
 // a search field, your favorite tools as a grid, then the latest clipboard
 // entries and your snippets. Typing filters everything (and finds any other
 // action of the catalog); arrows / Tab move, Enter runs, Esc closes, ⌃,
-// opens Settings → Quick Panel. A click outside closes it.
+// opens Settings → Desktop & Dock → Quick Panel. A click outside closes it.
 PanelWindow {
     id: root
 
@@ -281,7 +281,7 @@ PanelWindow {
                     }
                 }
 
-                // Edit (Settings → Quick Panel)
+                // Edit (Settings → Desktop & Dock → Quick Panel)
                 Rectangle {
                     implicitWidth: 26
                     implicitHeight: 26
@@ -315,7 +315,7 @@ PanelWindow {
                 Layout.bottomMargin: 10
                 visible: root.count === 0
                 horizontalAlignment: Text.AlignHCenter
-                text: root.query ? "No matches" : "Add tools in Settings → Quick Panel"
+                text: root.query ? "No matches" : "Add tools in Settings → Desktop & Dock → Quick Panel"
                 color: Theme.subtext
                 font.family: Theme.fontUi
                 font.pixelSize: 13

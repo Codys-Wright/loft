@@ -1,61 +1,273 @@
-//! Spaces as KDE Activities (docs/KWIN.md §4.2): one Activity per Space.
+//! Spaces are the user's KDE Activities (docs/KWIN.md §4.2). KDE stays the
+//! source of truth: this module only **reads** kactivitymanagerd and never
+//! creates, renames, re-icons or removes an Activity.
 //!
-//! The shell sends the Space list (`{"cmd":"syncSpaces","spaces":[{id, name,
-//! icon, template}]}`); this module makes kactivitymanagerd match it and keeps
-//! the `space id ↔ activity id` map in Loft's state dir
-//! (`<state>/kwin-activities.json`):
+//! The shell asks with `{"cmd":"activities"}` and gets one line back:
 //!
 //! ```json
-//! { "spaces": { "main": { "activity": "…uuid…", "adopted": { "name": "Default", "icon": "" } },
-//!               "music": { "activity": "…uuid…" } } }
+//! {"Activities": {"activities": [{"id": "…uuid…", "name": "Default", "icon": "activities",
+//!                                 "key": "Meta+1", "position": 1}, …],
+//!                 "current": "…uuid…", "error": null}}
 //! ```
 //!
-//! - A Space without an Activity gets a new one (`AddActivity`). The very
-//!   first sync (no map yet) lets the first Space **adopt** the current
-//!   Activity instead, so the windows already open belong to a Space; its
-//!   old name and icon are recorded in `adopted`.
-//! - A Space's name and icon follow the document (`SetActivityName`,
-//!   `SetActivityIcon`; Loft's glyph icons become a freedesktop icon name).
-//! - A Space that's gone (deleted, archived) loses its Activity
-//!   (`RemoveActivity`); an adopted one gets its old name and icon back and is
-//!   kept. So is an Activity the user removed in Plasma: its Space gets a new one.
-//! - `loft-kwin spaces prune` undoes it all: removes every Activity Loft
-//!   created, gives adopted ones back their name and icon, and deletes the map.
+//! in a stable order: the Activities with a KDE "Switch to activity" shortcut
+//! on a digit first, by that digit (1…9, then 0), then the rest in
+//! kactivitymanagerd's own order (`order`, pure and unit-tested). The same
+//! line is sent again whenever kactivitymanagerd says something changed
+//! (an Activity added, removed, renamed, re-iconed, the current one) or
+//! kglobalaccel's shortcuts changed (`watch`).
 //!
-//! The plan (`plan`) is pure and unit-tested; `sync` / `prune` run it over D-Bus.
+//! Older Loft builds made Activities to match Loft's Space library and kept a
+//! `space id → activity` map in `<state>/kwin-activities.json`. Nothing writes
+//! that file any more; `loft-kwin spaces prune` still undoes what it records
+//! (removes the Activities Loft created, gives an adopted one its old name and
+//! icon back) and touches nothing else.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use zbus::{Connection, Proxy};
+use zbus::zvariant::ObjectPath;
+use zbus::{Connection, MatchRule, MessageStream, Proxy};
 
 const SERVICE: &str = "org.kde.ActivityManager";
 const PATH: &str = "/ActivityManager/Activities";
 const IFACE: &str = "org.kde.ActivityManager.Activities";
 const MAP_FILE: &str = "kwin-activities.json";
+/// kglobalaccel's component for kactivitymanagerd's shortcuts, and the
+/// action name of "Switch to activity …" (kactivitymanagerd's
+/// `switch-to-activity-<uuid>`).
+const KGA: &str = "org.kde.kglobalaccel";
+const KGA_COMPONENT: &str = "/component/ActivityManager";
+const SWITCH_PREFIX: &str = "switch-to-activity-";
 
-/// A Space as the shell sends it.
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct SpaceInfo {
-    pub id: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub icon: String,
-    #[serde(default)]
-    pub template: Option<String>,
-}
-
-/// An Activity as kactivitymanagerd reports it.
+/// An Activity as kactivitymanagerd reports it, with its KDE shortcut.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Activity {
     pub id: String,
     pub name: String,
     pub icon: String,
+    /// "Switch to activity" key, QKeySequence text ("Meta+1"), "" without one.
+    pub key: String,
+    /// The digit of that key (1…9, 0), if it is on one: `spaces focus N`.
+    pub position: Option<u32>,
 }
+
+// ── Order ────────────────────────────────────────────────────────────────
+
+const META: i32 = 0x1000_0000;
+const SHIFT: i32 = 0x0200_0000;
+const CTRL: i32 = 0x0400_0000;
+const ALT: i32 = 0x0800_0000;
+const KEYPAD: i32 = 0x2000_0000;
+const MODS: i32 = META | SHIFT | CTRL | ALT | KEYPAD;
+
+/// A Qt key combination (one int: modifiers | key) as QKeySequence's
+/// portable text, for the keys this cares about; "" for the rest.
+pub fn key_text(k: i32) -> String {
+    let base = k & !MODS;
+    let key = match base {
+        0x30..=0x39 | 0x41..=0x5a => char::from_u32(base as u32).map(String::from),
+        0x2d => Some("-".into()),
+        0x3d => Some("=".into()),
+        0x0100_0030..=0x0100_0052 => Some(format!("F{}", base - 0x0100_0030 + 1)),
+        _ => None,
+    };
+    let Some(key) = key else {
+        return String::new();
+    };
+    let mut parts: Vec<String> = [(META, "Meta"), (CTRL, "Ctrl"), (ALT, "Alt"), (SHIFT, "Shift")]
+        .iter()
+        .filter(|(m, _)| k & m != 0)
+        .map(|(_, n)| n.to_string())
+        .collect();
+    parts.push(key);
+    parts.join("+")
+}
+
+/// The digit of a key combination (Meta+1 → 1), if its key is one.
+fn digit(k: i32) -> Option<u32> {
+    let base = k & !MODS;
+    (0x30..=0x39).contains(&base).then(|| (base - 0x30) as u32)
+}
+
+/// Sort rank of a digit: 1…9 first, then 0 (as on the keyboard).
+fn rank(d: u32) -> u32 {
+    if d == 0 { 10 } else { d }
+}
+
+/// The Activities in Loft's order: those whose "Switch to activity" shortcut
+/// is on a digit by that digit (1…9, then 0; Meta+… preferred when an action
+/// has several keys), then the rest in kactivitymanagerd's order. `keys`:
+/// activity id → its shortcut's key combinations (Qt ints).
+pub fn order(listed: Vec<(String, String, String)>, keys: &HashMap<String, Vec<i32>>) -> Vec<Activity> {
+    let mut out: Vec<(u32, usize, Activity)> = listed
+        .into_iter()
+        .enumerate()
+        .map(|(i, (id, name, icon))| {
+            let ks = keys.get(&id).cloned().unwrap_or_default();
+            // A digit key, Meta ones first; else the first key there is.
+            let best = ks
+                .iter()
+                .copied()
+                .filter(|k| digit(*k).is_some())
+                .min_by_key(|k| (k & META == 0, rank(digit(*k).unwrap_or(0))))
+                .or_else(|| ks.first().copied());
+            let position = best.and_then(digit);
+            let key = best.map(key_text).unwrap_or_default();
+            let sort = position.map(rank).unwrap_or(u32::MAX);
+            (sort, i, Activity { id, name, icon, key, position })
+        })
+        .collect();
+    out.sort_by_key(|(sort, i, _)| (*sort, *i));
+    // Two Activities can't both be ⌘N: the later one keeps its key but loses
+    // the position (KDE would only fire one of them anyway).
+    let mut seen = Vec::new();
+    for (_, _, a) in out.iter_mut() {
+        if let Some(p) = a.position {
+            if seen.contains(&p) {
+                a.position = None;
+            } else {
+                seen.push(p);
+            }
+        }
+    }
+    out.into_iter().map(|(_, _, a)| a).collect()
+}
+
+/// Every Qt key int in a D-Bus value: `ai` (one int per combination) or
+/// `a(ai)` / `a(aiaiaiai)` (a key sequence per entry: its first key).
+fn key_ints(v: &zbus::zvariant::Value<'_>) -> Vec<i32> {
+    use zbus::zvariant::Value as V;
+    fn first(v: &V<'_>) -> Option<i32> {
+        match v {
+            V::I32(k) => Some(*k).filter(|k| *k != 0),
+            V::U32(k) => Some(*k as i32).filter(|k| *k != 0),
+            V::Array(a) => a.iter().find_map(first),
+            V::Structure(s) => s.fields().iter().find_map(first),
+            V::Value(b) => first(b),
+            _ => None,
+        }
+    }
+    match v {
+        V::Array(a) => a.iter().filter_map(first).collect(),
+        V::Value(b) => key_ints(b),
+        other => first(other).into_iter().collect(),
+    }
+}
+
+/// activity id → the keys of its "Switch to activity" shortcut, from
+/// kglobalaccel (empty when it or the component isn't there).
+pub async fn switch_keys(conn: &Connection) -> HashMap<String, Vec<i32>> {
+    let mut out = HashMap::new();
+    let Ok(path) = ObjectPath::try_from(KGA_COMPONENT) else { return out };
+    let Ok(p) = Proxy::new(conn, KGA, path, "org.kde.kglobalaccel.Component").await else {
+        return out;
+    };
+    // (action, actionFriendly, component, componentFriendly, context,
+    // contextFriendly, keys, defaultKeys) per action.
+    let Ok(msg) = p.call_method("allShortcutInfos", &()).await else { return out };
+    let body = msg.body();
+    let Ok(args) = body.deserialize::<zbus::zvariant::Structure<'_>>() else {
+        return out;
+    };
+    let Some(zbus::zvariant::Value::Array(rows)) = args.fields().first() else { return out };
+    for r in rows.iter() {
+        let zbus::zvariant::Value::Structure(r) = r else { continue };
+        let f = r.fields();
+        let Some(zbus::zvariant::Value::Str(action)) = f.first() else { continue };
+        let Some(id) = action.as_str().strip_prefix(SWITCH_PREFIX) else { continue };
+        if let Some(keys) = f.get(6) {
+            out.insert(id.to_string(), key_ints(keys));
+        }
+    }
+    out
+}
+
+// ── kactivitymanagerd ────────────────────────────────────────────────────
+
+pub async fn proxy(conn: &Connection) -> Result<Proxy<'static>> {
+    Ok(Proxy::new(conn, SERVICE, PATH, IFACE).await?)
+}
+
+/// (id, name, icon) in kactivitymanagerd's order, and the current one.
+pub async fn list(p: &Proxy<'_>) -> Result<(Vec<(String, String, String)>, String)> {
+    let ids: Vec<String> = p
+        .call("ListActivities", &())
+        .await
+        .context("kactivitymanagerd (org.kde.ActivityManager) isn't answering")?;
+    let mut out = Vec::new();
+    for id in ids {
+        let name: String = p.call("ActivityName", &(id.as_str(),)).await.unwrap_or_default();
+        let icon: String = p.call("ActivityIcon", &(id.as_str(),)).await.unwrap_or_default();
+        out.push((id, name, icon));
+    }
+    let current: String = p.call("CurrentActivity", &()).await.unwrap_or_default();
+    Ok((out, current))
+}
+
+/// The shell's `{"Activities": …}` line.
+pub async fn report(conn: &Connection) -> Value {
+    let got = async {
+        let p = proxy(conn).await?;
+        list(&p).await
+    }
+    .await;
+    match got {
+        Ok((listed, current)) => {
+            let keys = switch_keys(conn).await;
+            json!({ "Activities": { "activities": order(listed, &keys), "current": current, "error": null } })
+        }
+        Err(e) => json!({ "Activities": { "activities": [], "current": "", "error": format!("{e:#}") } }),
+    }
+}
+
+/// Send the report again whenever kactivitymanagerd or kglobalaccel change
+/// something (debounced: switching sends a few signals at once), and when
+/// kactivitymanagerd (re)starts.
+pub async fn watch(conn: Connection, emit: fn(&Value)) {
+    let rules = [
+        MatchRule::builder().msg_type(zbus::message::Type::Signal).interface(IFACE).map(|b| b.build()),
+        MatchRule::builder()
+            .msg_type(zbus::message::Type::Signal)
+            .interface("org.kde.KGlobalAccel")
+            .and_then(|b| b.member("yourShortcutsChanged"))
+            .map(|b| b.build()),
+        MatchRule::builder()
+            .msg_type(zbus::message::Type::Signal)
+            .interface("org.freedesktop.DBus")
+            .and_then(|b| b.member("NameOwnerChanged"))
+            .and_then(|b| b.add_arg(SERVICE))
+            .map(|b| b.build()),
+    ];
+    let mut streams = Vec::new();
+    for r in rules.into_iter().flatten() {
+        match MessageStream::for_match_rule(r, &conn, Some(64)).await {
+            Ok(s) => streams.push(s),
+            Err(e) => eprintln!("loft-kwin: can't watch activities: {e}"),
+        }
+    }
+    if streams.is_empty() {
+        return;
+    }
+    // The first report, without being asked.
+    emit(&report(&conn).await);
+    let mut all = futures_util::stream::select_all(streams);
+    while all.next().await.is_some() {
+        // Let the burst finish, then report once.
+        let _ = tokio::time::timeout(Duration::from_millis(150), async {
+            while all.next().await.is_some() {}
+        })
+        .await;
+        emit(&report(&conn).await);
+    }
+}
+
+// ── The old map, for `prune` ─────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Adopted {
@@ -77,197 +289,27 @@ pub struct Map {
     pub spaces: BTreeMap<String, Entry>,
 }
 
-/// One change to kactivitymanagerd (or to the map).
+/// What `prune` does to an Activity recorded in the old map.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
-    /// Create an Activity for the space.
-    Add {
-        space: String,
-        name: String,
-        icon: String,
-    },
-    /// The first Space takes over the current Activity.
-    Adopt {
-        space: String,
-        activity: String,
-        prev: Adopted,
-        name: String,
-        icon: String,
-    },
-    Rename {
-        activity: String,
-        name: String,
-    },
-    SetIcon {
-        activity: String,
-        icon: String,
-    },
-    /// Loft created it and its Space is gone.
-    Remove {
-        space: String,
-        activity: String,
-    },
-    /// An adopted Activity whose Space is gone: old name and icon back.
-    Restore {
-        space: String,
-        activity: String,
-        prev: Adopted,
-    },
-    /// The user removed the Activity in Plasma: forget it (an Add follows).
-    Forget {
-        space: String,
-    },
+    /// Loft created it: remove it.
+    Remove { space: String, activity: String },
+    /// A Space adopted the user's Activity: its old name and icon back.
+    Restore { space: String, activity: String, prev: Adopted },
 }
 
-/// Plasma's icon for a Space: the document's `icon` when it is already an
-/// icon name, else one per built-in / template, else Plasma's activities icon.
-/// (Loft's icons are Nerd Font glyphs, which Plasma can't show.)
-pub fn kde_icon(s: &SpaceInfo) -> String {
-    let i = s.icon.trim();
-    if !i.is_empty()
-        && i.chars()
-            .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
-    {
-        return i.to_string();
-    }
-    let by = |k: &str| match k {
-        "main" => Some("user-desktop"),
-        "music" => Some("audio-x-generic"),
-        "video" => Some("video-x-generic"),
-        "comms" => Some("internet-mail"),
-        "gaming" => Some("applications-games"),
-        "task" => Some("view-task"),
-        "project" => Some("folder-development"),
-        _ => None,
-    };
-    by(&s.id)
-        .or_else(|| s.template.as_deref().and_then(by))
-        .unwrap_or("activities")
-        .to_string()
-}
-
-fn display_name(s: &SpaceInfo) -> String {
-    if s.name.trim().is_empty() {
-        s.id.clone()
-    } else {
-        s.name.clone()
-    }
-}
-
-/// What makes kactivitymanagerd match `spaces` (in order). `fresh`: no map
-/// was ever written, so the first Space may adopt `current`.
-pub fn plan(
-    map: &Map,
-    spaces: &[SpaceInfo],
-    activities: &[Activity],
-    current: &str,
-    fresh: bool,
-) -> Vec<Op> {
-    let mut ops = Vec::new();
-    let exists = |id: &str| activities.iter().find(|a| a.id == id);
-    let wanted: Vec<&str> = spaces.iter().map(|s| s.id.as_str()).collect();
-
-    // Spaces that are gone first, so a removed Activity can't be the one
-    // switched to afterwards.
-    for (space, e) in &map.spaces {
-        if wanted.contains(&space.as_str()) {
-            continue;
-        }
-        match (&e.adopted, exists(&e.activity)) {
-            (_, None) => ops.push(Op::Forget {
-                space: space.clone(),
-            }),
-            (Some(prev), Some(_)) => ops.push(Op::Restore {
-                space: space.clone(),
-                activity: e.activity.clone(),
-                prev: prev.clone(),
-            }),
-            (None, Some(_)) => ops.push(Op::Remove {
-                space: space.clone(),
-                activity: e.activity.clone(),
-            }),
-        }
-    }
-
-    // Activities the map already gives a Space (a stale map could name one twice).
-    let mut taken: Vec<&str> = map
-        .spaces
-        .iter()
-        .filter(|(s, _)| wanted.contains(&s.as_str()))
-        .map(|(_, e)| e.activity.as_str())
-        .collect();
-    for (i, s) in spaces.iter().enumerate() {
-        let name = display_name(s);
-        let icon = kde_icon(s);
-        match map.spaces.get(&s.id).map(|e| (e, exists(&e.activity))) {
-            Some((e, Some(a))) => {
-                if a.name != name {
-                    ops.push(Op::Rename {
-                        activity: e.activity.clone(),
-                        name: name.clone(),
-                    });
-                }
-                if a.icon != icon {
-                    ops.push(Op::SetIcon {
-                        activity: e.activity.clone(),
-                        icon,
-                    });
-                }
-            }
-            other => {
-                if other.is_some() {
-                    ops.push(Op::Forget {
-                        space: s.id.clone(),
-                    });
-                }
-                let adoptable = fresh && i == 0 && !current.is_empty() && !taken.contains(&current);
-                match exists(current).filter(|_| adoptable) {
-                    Some(a) => {
-                        taken.push(current);
-                        ops.push(Op::Adopt {
-                            space: s.id.clone(),
-                            activity: a.id.clone(),
-                            prev: Adopted {
-                                name: a.name.clone(),
-                                icon: a.icon.clone(),
-                            },
-                            name,
-                            icon,
-                        });
-                    }
-                    None => ops.push(Op::Add {
-                        space: s.id.clone(),
-                        name,
-                        icon,
-                    }),
-                }
-            }
-        }
-    }
-    ops
-}
-
-/// What `prune` does with the map: every Activity Loft created goes, adopted
-/// ones get their name and icon back. Activities already gone are skipped.
-pub fn prune_plan(map: &Map, activities: &[Activity]) -> Vec<Op> {
+/// `prune`'s plan: only Activities in the map that still exist; every other
+/// Activity is the user's and isn't touched.
+pub fn prune_plan(map: &Map, existing: &[String]) -> Vec<Op> {
     map.spaces
         .iter()
-        .filter(|(_, e)| activities.iter().any(|a| a.id == e.activity))
+        .filter(|(_, e)| existing.contains(&e.activity))
         .map(|(space, e)| match &e.adopted {
-            Some(prev) => Op::Restore {
-                space: space.clone(),
-                activity: e.activity.clone(),
-                prev: prev.clone(),
-            },
-            None => Op::Remove {
-                space: space.clone(),
-                activity: e.activity.clone(),
-            },
+            Some(prev) => Op::Restore { space: space.clone(), activity: e.activity.clone(), prev: prev.clone() },
+            None => Op::Remove { space: space.clone(), activity: e.activity.clone() },
         })
         .collect()
 }
-
-// ── State ────────────────────────────────────────────────────────────────
 
 /// Loft's state dir: $LOFT_STATE_DIR, else $XDG_STATE_HOME/loft, else
 /// ~/.local/state/loft (as the shell and the CLI).
@@ -278,9 +320,7 @@ pub fn state_dir() -> PathBuf {
     let base = std::env::var_os("XDG_STATE_HOME")
         .filter(|d| !d.is_empty())
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/state")
-        });
+        .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/state"));
     base.join("loft")
 }
 
@@ -288,13 +328,13 @@ pub fn map_path(state: &Path) -> PathBuf {
     state.join(MAP_FILE)
 }
 
-/// The map, and whether one existed.
+/// The old map, and whether one exists.
 pub fn load(path: &Path) -> (Map, bool) {
     match std::fs::read_to_string(path) {
         Ok(text) => match serde_json::from_str(&text) {
             Ok(m) => (m, true),
             Err(e) => {
-                eprintln!("loft-kwin: {}: {e}; starting a new map", path.display());
+                eprintln!("loft-kwin: {}: {e}; ignoring it", path.display());
                 (Map::default(), true)
             }
         },
@@ -312,103 +352,18 @@ pub fn save(path: &Path, map: &Map) -> Result<()> {
     Ok(())
 }
 
-// ── kactivitymanagerd ────────────────────────────────────────────────────
-
-pub async fn proxy(conn: &Connection) -> Result<Proxy<'static>> {
-    Ok(Proxy::new(conn, SERVICE, PATH, IFACE).await?)
-}
-
-pub async fn list(p: &Proxy<'_>) -> Result<(Vec<Activity>, String)> {
-    let ids: Vec<String> = p
-        .call("ListActivities", &())
-        .await
-        .context("kactivitymanagerd (org.kde.ActivityManager) isn't answering")?;
-    let mut out = Vec::new();
-    for id in ids {
-        let name: String = p
-            .call("ActivityName", &(id.as_str(),))
-            .await
-            .unwrap_or_default();
-        let icon: String = p
-            .call("ActivityIcon", &(id.as_str(),))
-            .await
-            .unwrap_or_default();
-        out.push(Activity { id, name, icon });
-    }
-    let current: String = p.call("CurrentActivity", &()).await.unwrap_or_default();
-    Ok((out, current))
-}
-
-/// Apply `ops`, updating `map`. Errors are collected, not fatal: one bad
-/// Activity shouldn't stop the rest.
-pub async fn apply(p: &Proxy<'_>, map: &mut Map, ops: &[Op]) -> Vec<String> {
+async fn apply(p: &Proxy<'_>, map: &mut Map, ops: &[Op]) -> Vec<String> {
     let mut errors = Vec::new();
     for op in ops {
         let r: Result<()> = async {
             match op {
-                Op::Add { space, name, icon } => {
-                    let id: String = p.call("AddActivity", &(name.as_str(),)).await?;
-                    anyhow::ensure!(!id.is_empty(), "AddActivity refused {name:?}");
-                    let () = p
-                        .call("SetActivityIcon", &(id.as_str(), icon.as_str()))
-                        .await?;
-                    map.spaces.insert(
-                        space.clone(),
-                        Entry {
-                            activity: id,
-                            adopted: None,
-                        },
-                    );
-                }
-                Op::Adopt {
-                    space,
-                    activity,
-                    prev,
-                    name,
-                    icon,
-                } => {
-                    let () = p
-                        .call("SetActivityName", &(activity.as_str(), name.as_str()))
-                        .await?;
-                    let () = p
-                        .call("SetActivityIcon", &(activity.as_str(), icon.as_str()))
-                        .await?;
-                    map.spaces.insert(
-                        space.clone(),
-                        Entry {
-                            activity: activity.clone(),
-                            adopted: Some(prev.clone()),
-                        },
-                    );
-                }
-                Op::Rename { activity, name } => {
-                    let () = p
-                        .call("SetActivityName", &(activity.as_str(), name.as_str()))
-                        .await?;
-                }
-                Op::SetIcon { activity, icon } => {
-                    let () = p
-                        .call("SetActivityIcon", &(activity.as_str(), icon.as_str()))
-                        .await?;
-                }
                 Op::Remove { space, activity } => {
                     let () = p.call("RemoveActivity", &(activity.as_str(),)).await?;
                     map.spaces.remove(space);
                 }
-                Op::Restore {
-                    space,
-                    activity,
-                    prev,
-                } => {
-                    let () = p
-                        .call("SetActivityName", &(activity.as_str(), prev.name.as_str()))
-                        .await?;
-                    let () = p
-                        .call("SetActivityIcon", &(activity.as_str(), prev.icon.as_str()))
-                        .await?;
-                    map.spaces.remove(space);
-                }
-                Op::Forget { space } => {
+                Op::Restore { space, activity, prev } => {
+                    let () = p.call("SetActivityName", &(activity.as_str(), prev.name.as_str())).await?;
+                    let () = p.call("SetActivityIcon", &(activity.as_str(), prev.icon.as_str())).await?;
                     map.spaces.remove(space);
                 }
             }
@@ -422,85 +377,36 @@ pub async fn apply(p: &Proxy<'_>, map: &mut Map, ops: &[Op]) -> Vec<String> {
     errors
 }
 
-/// The shell's `{"Spaces": …}` line: space id → activity id, plus what
-/// kactivitymanagerd has now.
-pub fn report(map: &Map, activities: &[Activity], current: &str, errors: &[String]) -> Value {
-    let m: BTreeMap<&str, &str> = map
-        .spaces
-        .iter()
-        .map(|(s, e)| (s.as_str(), e.activity.as_str()))
-        .collect();
-    json!({ "Spaces": { "map": m, "activities": activities, "current": current, "errors": errors } })
-}
-
-/// Make the Activities match `spaces`; returns the report line.
-pub async fn sync(conn: &Connection, state: &Path, spaces: &[SpaceInfo]) -> Result<Value> {
-    let p = proxy(conn).await?;
-    let path = map_path(state);
-    let (mut map, existed) = load(&path);
-    let (activities, current) = list(&p).await?;
-    let ops = plan(&map, spaces, &activities, &current, !existed);
-    let errors = apply(&p, &mut map, &ops).await;
-    // Written even when nothing changed: an existing (empty) map means "no
-    // more adopting" from now on.
-    if !ops.is_empty() || !existed {
-        save(&path, &map)?;
-    }
-    let (activities, current) = list(&p).await?;
-    Ok(report(&map, &activities, &current, &errors))
-}
-
-/// Is Loft's shell running in this session (its loft-kwin owns the bridge)?
-async fn shell_running(conn: &Connection) -> bool {
-    let Ok(dbus) = zbus::fdo::DBusProxy::new(conn).await else {
-        return false;
-    };
-    let Ok(name) = zbus::names::BusName::try_from(crate::BUS_NAME) else {
-        return false;
-    };
-    dbus.name_has_owner(name).await.unwrap_or(false)
-}
-
-/// `loft-kwin spaces prune [--dry-run] [--force]` / `list`.
+/// `loft-kwin spaces list` / `prune [--dry-run]`.
 pub async fn cli(args: &[String]) -> Result<()> {
     let sub = args.first().map(String::as_str).unwrap_or("list");
     let dry = args.iter().any(|a| a == "--dry-run" || a == "-n");
-    let force = args.iter().any(|a| a == "--force" || a == "-f");
     let conn = Connection::session().await?;
-    let p = proxy(&conn).await?;
     let path = map_path(&state_dir());
     let (mut map, existed) = load(&path);
-    let (activities, current) = list(&p).await?;
     match sub {
         "list" => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&report(&map, &activities, &current, &[]))?
-            );
+            let mut r = report(&conn).await;
+            if existed {
+                r["Activities"]["legacyMap"] = serde_json::to_value(&map)?;
+            }
+            println!("{}", serde_json::to_string_pretty(&r)?);
         }
         "prune" => {
-            // Loft's shell with Spaces on would make them again at once.
-            if !dry && !force && shell_running(&conn).await {
-                anyhow::bail!(
-                    "Loft's shell is running here and would recreate its Spaces' activities; \
-                     switch to Plasma's shell first (loft-plasma use plasma), or pass --force"
-                );
+            if !existed {
+                println!("no activities of Loft's (no {})", path.display());
+                return Ok(());
             }
-            let ops = prune_plan(&map, &activities);
+            let p = proxy(&conn).await?;
+            let (listed, _) = list(&p).await?;
+            let existing: Vec<String> = listed.into_iter().map(|(id, _, _)| id).collect();
+            let ops = prune_plan(&map, &existing);
             for op in &ops {
                 let line = match op {
-                    Op::Remove { space, activity } => format!("remove {activity} (space {space})"),
-                    Op::Restore {
-                        space,
-                        activity,
-                        prev,
-                    } => {
-                        format!(
-                            "restore {activity} as {:?} (adopted by space {space})",
-                            prev.name
-                        )
+                    Op::Remove { space, activity } => format!("remove {activity} (made for space {space})"),
+                    Op::Restore { space, activity, prev } => {
+                        format!("restore {activity} as {:?} (adopted by space {space})", prev.name)
                     }
-                    _ => continue,
                 };
                 println!("{}{line}", if dry { "would " } else { "" });
             }
@@ -511,246 +417,127 @@ pub async fn cli(args: &[String]) -> Result<()> {
             for e in &errors {
                 eprintln!("loft-kwin: {e}");
             }
-            if errors.is_empty() {
-                if existed {
-                    std::fs::remove_file(&path)
-                        .with_context(|| format!("removing {}", path.display()))?;
-                }
-            } else {
+            if !errors.is_empty() {
                 // Keep what couldn't be undone for the next try.
                 save(&path, &map)?;
-                anyhow::bail!(
-                    "{} activit{} left as they were",
-                    errors.len(),
-                    if errors.len() == 1 { "y" } else { "ies" }
-                );
+                anyhow::bail!("{} activit{} left as they were", errors.len(), if errors.len() == 1 { "y" } else { "ies" });
             }
+            std::fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
             if ops.is_empty() {
                 println!("no activities of Loft's");
             }
         }
-        other => anyhow::bail!(
-            "loft-kwin spaces: unknown command {other:?} (list | prune [--dry-run] [--force])"
-        ),
+        other => anyhow::bail!("loft-kwin spaces: unknown command {other:?} (list | prune [--dry-run])"),
     }
     Ok(())
+}
+
+/// For tests: an owned D-Bus value of Qt keys.
+#[cfg(test)]
+fn ov<T: Into<zbus::zvariant::Value<'static>>>(v: T) -> zbus::zvariant::OwnedValue {
+    zbus::zvariant::OwnedValue::try_from(v.into()).unwrap()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn sp(id: &str, name: &str) -> SpaceInfo {
-        SpaceInfo {
-            id: id.into(),
-            name: name.into(),
-            icon: "󰕰".into(),
-            template: None,
-        }
+    fn acts(names: &[&str]) -> Vec<(String, String, String)> {
+        names.iter().map(|n| (n.to_lowercase(), n.to_string(), "activities".to_string())).collect()
     }
-    fn act(id: &str, name: &str, icon: &str) -> Activity {
-        Activity {
-            id: id.into(),
-            name: name.into(),
-            icon: icon.into(),
-        }
+    fn keys(pairs: &[(&str, i32)]) -> HashMap<String, Vec<i32>> {
+        pairs.iter().map(|(id, k)| (id.to_string(), vec![*k])).collect()
     }
-    fn entry(a: &str) -> Entry {
-        Entry {
-            activity: a.into(),
-            adopted: None,
-        }
+    const M: i32 = META;
+
+    #[test]
+    fn ordered_by_their_switch_keys_then_kdes_order() {
+        // The user's setup: Meta+1…6 and Meta+0, listed by KDE in another order.
+        let listed = acts(&["Gaming", "Default", "Ignition", "Coding", "System-Configuration", "Music", "Editing", "Spare"]);
+        let k = keys(&[
+            ("default", M | 0x31),
+            ("music", M | 0x32),
+            ("coding", M | 0x33),
+            ("gaming", M | 0x34),
+            ("editing", M | 0x35),
+            ("ignition", M | 0x36),
+            ("system-configuration", M | 0x30),
+        ]);
+        let got = order(listed, &k);
+        let names: Vec<&str> = got.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["Default", "Music", "Coding", "Gaming", "Editing", "Ignition", "System-Configuration", "Spare"]);
+        assert_eq!(got[0].key, "Meta+1");
+        assert_eq!(got[0].position, Some(1));
+        assert_eq!(got[6].key, "Meta+0");
+        assert_eq!(got[6].position, Some(0));
+        assert_eq!(got[7].key, "");
+        assert_eq!(got[7].position, None);
     }
 
     #[test]
-    fn first_sync_adopts_the_current_activity_for_the_first_space() {
-        let acts = [act("def", "Default", "")];
-        let ops = plan(
-            &Map::default(),
-            &[sp("main", "Main"), sp("music", "Music")],
-            &acts,
-            "def",
-            true,
-        );
-        assert_eq!(
-            ops,
-            vec![
-                Op::Adopt {
-                    space: "main".into(),
-                    activity: "def".into(),
-                    prev: Adopted {
-                        name: "Default".into(),
-                        icon: "".into()
-                    },
-                    name: "Main".into(),
-                    icon: "user-desktop".into(),
-                },
-                Op::Add {
-                    space: "music".into(),
-                    name: "Music".into(),
-                    icon: "audio-x-generic".into()
-                },
-            ]
-        );
+    fn without_shortcuts_kdes_order_stays() {
+        let got = order(acts(&["B", "A", "C"]), &HashMap::new());
+        let names: Vec<&str> = got.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["B", "A", "C"]);
     }
 
     #[test]
-    fn later_syncs_never_adopt() {
-        let acts = [act("def", "Default", "")];
-        let ops = plan(&Map::default(), &[sp("main", "Main")], &acts, "def", false);
-        assert_eq!(
-            ops,
-            vec![Op::Add {
-                space: "main".into(),
-                name: "Main".into(),
-                icon: "user-desktop".into()
-            }]
-        );
+    fn a_non_digit_key_is_shown_but_doesnt_order() {
+        let got = order(acts(&["A", "B"]), &keys(&[("a", M | CTRL | 0x41), ("b", M | 0x32)]));
+        assert_eq!(got[0].name, "B");
+        assert_eq!(got[1].key, "Meta+Ctrl+A");
+        assert_eq!(got[1].position, None);
     }
 
     #[test]
-    fn names_and_icons_follow_the_spaces() {
-        let mut map = Map::default();
-        map.spaces.insert("main".into(), entry("a1"));
-        let acts = [act("a1", "Old", "user-desktop")];
-        let mut s = sp("main", "Desk");
-        s.icon = "computer".into();
-        let ops = plan(&map, &[s], &acts, "a1", false);
-        assert_eq!(
-            ops,
-            vec![
-                Op::Rename {
-                    activity: "a1".into(),
-                    name: "Desk".into()
-                },
-                Op::SetIcon {
-                    activity: "a1".into(),
-                    icon: "computer".into()
-                },
-            ]
-        );
-        // Already matching: nothing to do.
-        let acts = [act("a1", "Main", "user-desktop")];
-        assert!(plan(&map, &[sp("main", "Main")], &acts, "a1", false).is_empty());
+    fn a_digit_used_twice_keeps_one_position() {
+        let got = order(acts(&["A", "B"]), &keys(&[("a", M | 0x31), ("b", M | 0x31)]));
+        assert_eq!(got[0].position, Some(1));
+        assert_eq!(got[1].position, None);
+        assert_eq!(got[1].key, "Meta+1");
     }
 
     #[test]
-    fn deleted_spaces_lose_their_activity_and_adopted_ones_are_restored() {
+    fn key_texts() {
+        assert_eq!(key_text(M | 0x31), "Meta+1");
+        assert_eq!(key_text(M | SHIFT | 0x5a), "Meta+Shift+Z");
+        assert_eq!(key_text(CTRL | (0x0100_0030 + 4)), "Ctrl+F5");
+        assert_eq!(key_text(M | 0x0100_0012), "");
+    }
+
+    #[test]
+    fn keys_from_either_dbus_shape() {
+        // ai: one int per key combination.
+        let v = ov(vec![M | 0x31, 0]);
+        assert_eq!(key_ints(&v), vec![M | 0x31]);
+        // a(ai): a key sequence per entry.
+        let s = zbus::zvariant::StructureBuilder::new().add_field(vec![M | 0x32, 0, 0, 0]).build().unwrap();
+        let v = ov(zbus::zvariant::Value::from(vec![zbus::zvariant::Value::from(s)]));
+        assert_eq!(key_ints(&v), vec![M | 0x32]);
+    }
+
+    #[test]
+    fn prune_touches_only_what_loft_made() {
         let mut map = Map::default();
         map.spaces.insert(
             "main".into(),
-            Entry {
-                activity: "def".into(),
-                adopted: Some(Adopted {
-                    name: "Default".into(),
-                    icon: "x".into(),
-                }),
-            },
+            Entry { activity: "def".into(), adopted: Some(Adopted { name: "Default".into(), icon: "".into() }) },
         );
-        map.spaces.insert("music".into(), entry("a2"));
-        map.spaces.insert("gone".into(), entry("a3"));
-        let acts = [
-            act("def", "Main", "user-desktop"),
-            act("a2", "Music", "audio-x-generic"),
-        ];
-        let ops = plan(&map, &[], &acts, "def", false);
+        map.spaces.insert("music".into(), Entry { activity: "a2".into(), adopted: None });
+        map.spaces.insert("gone".into(), Entry { activity: "a3".into(), adopted: None });
+        let existing = ["def".to_string(), "a2".into(), "mine".into()];
         assert_eq!(
-            ops,
-            vec![
-                Op::Forget {
-                    space: "gone".into()
-                },
-                Op::Restore {
-                    space: "main".into(),
-                    activity: "def".into(),
-                    prev: Adopted {
-                        name: "Default".into(),
-                        icon: "x".into()
-                    }
-                },
-                Op::Remove {
-                    space: "music".into(),
-                    activity: "a2".into()
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn an_activity_removed_in_plasma_is_recreated() {
-        let mut map = Map::default();
-        map.spaces.insert("music".into(), entry("a2"));
-        let ops = plan(
-            &map,
-            &[sp("music", "Music")],
-            &[act("def", "Default", "")],
-            "def",
-            false,
-        );
-        assert_eq!(
-            ops,
-            vec![
-                Op::Forget {
-                    space: "music".into()
-                },
-                Op::Add {
-                    space: "music".into(),
-                    name: "Music".into(),
-                    icon: "audio-x-generic".into()
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn prune_removes_created_and_restores_adopted() {
-        let mut map = Map::default();
-        map.spaces.insert(
-            "main".into(),
-            Entry {
-                activity: "def".into(),
-                adopted: Some(Adopted {
-                    name: "Default".into(),
-                    icon: "".into(),
-                }),
-            },
-        );
-        map.spaces.insert("music".into(), entry("a2"));
-        map.spaces.insert("gone".into(), entry("a3"));
-        let acts = [
-            act("def", "Main", ""),
-            act("a2", "Music", ""),
-            act("other", "Mine", ""),
-        ];
-        assert_eq!(
-            prune_plan(&map, &acts),
+            prune_plan(&map, &existing),
             vec![
                 Op::Restore {
                     space: "main".into(),
                     activity: "def".into(),
-                    prev: Adopted {
-                        name: "Default".into(),
-                        icon: "".into()
-                    }
+                    prev: Adopted { name: "Default".into(), icon: "".into() }
                 },
-                Op::Remove {
-                    space: "music".into(),
-                    activity: "a2".into()
-                },
+                Op::Remove { space: "music".into(), activity: "a2".into() },
             ]
         );
-    }
-
-    #[test]
-    fn plasma_icons_for_glyphs() {
-        assert_eq!(kde_icon(&sp("gaming", "")), "applications-games");
-        let mut s = sp("loft", "Loft");
-        s.template = Some("project".into());
-        assert_eq!(kde_icon(&s), "folder-development");
-        assert_eq!(kde_icon(&sp("misc", "")), "activities");
-        s.icon = "folder-music".into();
-        assert_eq!(kde_icon(&s), "folder-music");
-        assert_eq!(display_name(&sp("x", " ")), "x");
+        assert!(prune_plan(&Map::default(), &existing).is_empty());
     }
 
     #[test]
@@ -760,7 +547,7 @@ mod tests {
         let (m, existed) = load(&path);
         assert!(!existed && m.spaces.is_empty());
         let mut map = Map::default();
-        map.spaces.insert("main".into(), entry("a1"));
+        map.spaces.insert("main".into(), Entry { activity: "a1".into(), adopted: None });
         save(&path, &map).unwrap();
         let (back, existed) = load(&path);
         assert!(existed);

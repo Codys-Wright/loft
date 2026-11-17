@@ -29,12 +29,13 @@ Singleton {
     property var keyboardLayouts: ({ names: [], current_idx: 0 })
     property var activities: []
     property string currentActivity: ""
-    // Spaces as Activities (docs/KWIN.md §4.2): space id → activity id, from
-    // loft-kwin's last `syncSpaces` (its map in <state>/kwin-activities.json),
-    // and kactivitymanagerd's activities [{ id, name, icon }].
-    property var spaceActivities: ({})
-    property var activityInfo: []
-    property bool spacesSynced: false
+    // Spaces are the user's KDE Activities (docs/KWIN.md §4.2), read-only:
+    // kactivitymanagerd's [{ id, name, icon, key, position }] in the order of
+    // their "Switch to activity" keys (Meta+1…9, 0), else KDE's own order;
+    // loft-kwin sends it again on every change.
+    property var activityList: []
+    property bool activitiesLoaded: false
+    property string activitiesError: ""
     // [{ name, geometry, identity ("Make Model Serial", niri's), model }]
     property var displays: []
 
@@ -61,7 +62,11 @@ Singleton {
             // windows too: WindowChrome leaves out its traffic lights.
             serverDecorations: true,
             // Spaces are KDE Activities, one per Space (Spaces.qml).
-            spaces: true
+            spaces: true,
+            // Loft's shortcuts report press, repeat and release
+            // (shortcutKey; docs/KWIN.md §4.13): the quit guard and the
+            // Radial Menu's hold.
+            shortcutKeys: true
         })
 
     signal outputsChanged
@@ -72,6 +77,16 @@ Singleton {
     signal windowActionsMenuRequested(int id, string output, real x, real y)
     // A window screenshot of ours finished (screenshotWindow), path written.
     signal screenshotTaken(string path)
+    // One of Loft's global shortcuts (kglobalaccel `loft-<id>`) was pressed,
+    // repeated (held) or released: id without `loft-` and a `-N` twin suffix
+    // ("quit", "radial-hold"), state "pressed" | "repeated" | "released".
+    signal shortcutKey(string id, string state)
+    // id → Date.now() of its last press, and whether it is still held.
+    property var shortcutPressedAt: ({})
+    property var shortcutDown: ({})
+    // openSpace's report: { space, activity, apps: [{ app, display, window,
+    // spawn }], notes }.
+    signal spaceOpened(var report)
     property string outputKey: ""
     property string layoutKey: ""
 
@@ -146,12 +161,16 @@ Singleton {
                 layoutKey = layout;
                 displayLayoutChanged();
             }
-        } else if (msg.Spaces) {
-            spaceActivities = msg.Spaces.map ?? {};
-            activityInfo = msg.Spaces.activities ?? [];
-            spacesSynced = true;
-            for (const e of msg.Spaces.errors ?? [])
-                console.warn(`KWin: activities: ${e}`);
+        } else if (msg.Activities) {
+            activityList = msg.Activities.activities ?? [];
+            activitiesError = msg.Activities.error ?? "";
+            if (activitiesError)
+                console.warn(`KWin: activities: ${activitiesError}`);
+            if (msg.Activities.current)
+                currentActivity = msg.Activities.current;
+            activitiesLoaded = true;
+        } else if (msg.SpaceOpened) {
+            spaceOpened(msg.SpaceOpened);
         } else if (msg.WindowActionsMenuRequested) {
             const e = msg.WindowActionsMenuRequested;
             const w = windows.find(x => x.kwin_uuid === e.window);
@@ -159,6 +178,14 @@ Singleton {
                 windowActionsMenuRequested(w.id, e.output ?? "", e.x, e.y);
         } else if (msg.KeyboardLayouts) {
             keyboardLayouts = msg.KeyboardLayouts;
+        } else if (msg.Shortcut) {
+            const id = String(msg.Shortcut.name ?? "").replace(/^loft-/, "").replace(/-\d+$/, "");
+            const st = msg.Shortcut.state;
+            if (st === "pressed")
+                shortcutPressedAt[id] = Date.now();
+            if (st === "pressed" || st === "released")
+                shortcutDown[id] = st === "pressed";
+            shortcutKey(id, st);
         } else if (msg.Error) {
             console.warn(`KWin: ${msg.Error}`);
         }
@@ -303,10 +330,16 @@ Singleton {
         send({ cmd: "setActivity", activity: activity });
     }
 
-    // Make kactivitymanagerd's activities match the spaces
-    // ([{ id, name, icon, template }]); answered with a Spaces line.
-    function syncSpaces(spaces) {
-        send({ cmd: "syncSpaces", spaces: spaces });
+    // Ask for the Activities again (answered with an Activities line).
+    function refreshActivities() {
+        send({ cmd: "activities" });
+    }
+
+    // A space's apps (`loft-niri space specs`) into its Activity: loft-kwin
+    // finds the open ones, moves them to their displays, starts the rest
+    // (crates/loft-kwin/src/spinup.rs). focus: switch to the Activity first.
+    function openSpace(space, activity, apps, notes, focus) {
+        send({ cmd: "openSpace", space: space, activity: activity, apps: apps, notes: notes ?? [], focus: focus === true });
     }
 
     // Put a window on these activities ([] = all); follow: switch there too.

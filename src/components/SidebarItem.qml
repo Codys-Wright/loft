@@ -15,11 +15,15 @@ Rectangle {
     property bool current: false
     // The window's active state (WindowChrome.active).
     property bool windowActive: true
+    // A switched-off entry: still listed, greyed.
+    property bool dimmed: false
+    // A second, smaller line (search results: where a setting lives).
+    property string detail
 
     signal clicked
 
     Layout.fillWidth: true
-    implicitHeight: 32
+    implicitHeight: detail !== "" ? 40 : 32
     radius: Theme.controlRadius
     color: current ? (windowActive ? Theme.accent : Theme.withAlpha(Theme.text, 0.14)) : mouse.containsMouse ? Theme.withAlpha(Theme.text, 0.07) : "transparent"
 
@@ -39,16 +43,31 @@ Rectangle {
             icon: item.icon
             badge: item.badge
             size: 22
+            opacity: item.dimmed && !item.current ? 0.45 : 1
         }
 
-        Text {
+        ColumnLayout {
             Layout.fillWidth: true
-            text: item.label
-            elide: Text.ElideRight
-            color: item.current && item.windowActive ? Theme.readableOn(Theme.accent, "#ffffff") : Theme.text
-            font.family: Theme.fontUi
-            font.pixelSize: 13
-            font.weight: item.current ? Font.Medium : Font.Normal
+            spacing: 0
+
+            Text {
+                Layout.fillWidth: true
+                text: item.label
+                elide: Text.ElideRight
+                color: item.current && item.windowActive ? Theme.readableOn(Theme.accent, "#ffffff") : item.dimmed ? Theme.subtext : Theme.text
+                font.family: Theme.fontUi
+                font.pixelSize: 13
+                font.weight: item.current ? Font.Medium : Font.Normal
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: item.detail !== ""
+                text: item.detail
+                elide: Text.ElideRight
+                color: item.current && item.windowActive ? Theme.withAlpha(Theme.readableOn(Theme.accent, "#ffffff"), 0.8) : Theme.subtext
+                font.family: Theme.fontUi
+                font.pixelSize: 11
+            }
         }
     }
 

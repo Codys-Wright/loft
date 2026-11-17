@@ -223,6 +223,11 @@
           touch $out
         '';
 
+        settings-nav = check "settings-nav" [ pkgs.nodejs-slim ] ''
+          node ${../tests/settingsnav.test.js} ${../src/settings/settingsnav.js} ${../src/settings/SettingsApp.qml} ${../src} ${../launcher}
+          touch $out
+        '';
+
         workspace-wallpapers = check "workspace-wallpapers" [ pkgs.nodejs-slim ] ''
           node ${../tests/wswallpapers.test.js} ${../src/services/wswallpapers.js}
           touch $out

@@ -10,6 +10,8 @@ digit or symbol is its symbol without Shift.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import shlex
 import tempfile
@@ -91,6 +93,26 @@ class FromShellBinds(unittest.TestCase):
         self.assertIn("invokeShortcut 'Window Close'", q.command[2])
         self.assertEqual(self.by_id["quit-2"].keys, "Alt+F4")
 
+    def test_held_keys_keep_niris_repeat_and_cooldown(self):
+        # KWin repeats a held shortcut and runs the callback each time.
+        radial = self.by_id["radial-hold"]
+        self.assertFalse(radial.repeat)
+        self.assertEqual(self.by_id["quit"].cooldown_ms, 100)
+        self.assertTrue(self.by_id["controlcenter-toggle"].repeat)
+        self.assertEqual(self.by_id["controlcenter-toggle"].cooldown_ms, 0)
+        js = kwinkeys.render_js(self.actions)
+        self.assertIn('"Meta+Ctrl+Space", function () { if (loftOnce("radial-hold")) { loftRun("radial-hold"); } });', js)
+        self.assertIn('"Meta+Q", function () { if (loftCooldown("quit", 100)) { loftRun("quit"); } });', js)
+        self.assertIn('"Meta+A", function () { loftRun("controlcenter-toggle"); });', js)
+
+    def test_override_props_carry_repeat(self):
+        ov = {"binds": {"Mod+Ctrl+R": {"action": "spawn", "args": ["x"], "props": {"repeat": False}},
+                        "Mod+Ctrl+C": {"action": "spawn", "args": ["y"], "props": {"cooldown-ms": 300}}}}
+        actions, _ = kwinkeys.build(shell_binds(), ov)
+        by_keys = {a.keys: a for a in actions}
+        self.assertFalse(by_keys["Meta+Ctrl+R"].repeat)
+        self.assertEqual(by_keys["Meta+Ctrl+C"].cooldown_ms, 300)
+
     def test_niri_actions_become_kwin_calls(self):
         self.assertEqual(self.by_id["toggle-overview"].kind, "kwin")
         self.assertIn('loftKwin("Overview")', self.by_id["toggle-overview"].js)
@@ -103,22 +125,69 @@ class FromShellBinds(unittest.TestCase):
             self.assertRegex(a.id, r"^[a-z0-9-]+$")  # a systemd instance name, a file name
 
     def test_space_binds(self):
-        """Spaces under KWin: ⌘1…9 focus, ⌘⇧1…9 move the focused window, through
-        the shell's IPC (no spaces.kdl). ⌘⇧3/4/5 stay Capture (Super = Mod here)."""
-        go = self.by_id["spaces-focus-3"]
-        self.assertEqual(go.keys, "Meta+3")
-        self.assertEqual(go.text, "Loft: Go to Space 3")
-        self.assertEqual(go.command[-3:], ["spaces", "focus", "3"])
-        self.assertEqual(go.command[:9], ["timeout", "-k", "1", "5", "/qs", "ipc", "--path", "/src", "call"])
+        """Spaces under KWin are KDE's Activities: ⌘1…9 stay KDE's "Switch to
+        activity" keys (Loft binds none), ⌘⇧1…9, 0 move the focused window
+        through the shell's IPC. ⌘⇧3/4/5 stay Capture (Super = Mod here)."""
+        self.assertFalse(any(a.id.startswith("spaces-focus-") for a in self.actions))
+        self.assertFalse(any(a.keys in {f"Meta+{n}" for n in range(10)} for a in self.actions))
         mv = self.by_id["spaces-movewindow-1"]
         self.assertEqual(mv.keys, "Meta+!")
         self.assertEqual(mv.command[-3:], ["spaces", "moveWindow", "1"])
+        self.assertEqual(mv.command[:9], ["timeout", "-k", "1", "5", "/qs", "ipc", "--path", "/src", "call"])
+        self.assertEqual(self.by_id["spaces-movewindow-0"].keys, "Meta+)")
         self.assertNotIn("spaces-movewindow-5", self.by_id)
         self.assertEqual(self.by_id["capture-toggle"].keys, "Meta+%")
         self.assertTrue(any(s.startswith("Mod+Shift+5:") for s in self.skipped))
-        # The user's changes still win: a disabled ⌘2 is gone.
-        actions, _ = kwinkeys.build(shell_binds(), {"binds": {"Mod+2": {"disabled": True}}})
-        self.assertNotIn("spaces-focus-2", {a.id for a in actions})
+        # The user's changes still win: a disabled ⌘⇧2 is gone.
+        actions, _ = kwinkeys.build(shell_binds(), {"binds": {"Mod+Shift+2": {"disabled": True}}})
+        self.assertNotIn("spaces-movewindow-2", {a.id for a in actions})
+
+    def test_ctrl_arrows_are_kdes_desktops(self):
+        """⌃←/→ (Meta+Ctrl+←/→ through the keyboard layer) are KWin's own
+        Switch One Desktop to the Left/Right here: Loft doesn't bind them."""
+        self.assertNotIn("Meta+Ctrl+Left", {a.keys for a in self.actions})
+        self.assertNotIn("Meta+Ctrl+Right", {a.keys for a in self.actions})
+        self.assertFalse(any((a.command or [])[-2:] in (["spaces", "prev"], ["spaces", "next"]) for a in self.actions))
+        # ⌃↑ (Mission Control) is still Loft's.
+        self.assertIn("Meta+Ctrl+Up", {a.keys for a in self.actions})
+
+    def test_window_focus_and_move_like_niri(self):
+        """Caps (Meta here) + H/J/K/L and arrows focus, + Shift + H/J/K/L move,
+        as niri/base.kdl binds them; each a KWin workspace slot."""
+        by_keys = {a.keys: a for a in self.actions}
+        want = {
+            "Meta+H": "slotSwitchWindowLeft", "Meta+L": "slotSwitchWindowRight",
+            "Meta+J": "slotSwitchWindowDown", "Meta+K": "slotSwitchWindowUp",
+            "Meta+Left": "slotSwitchWindowLeft", "Meta+Right": "slotSwitchWindowRight",
+            "Meta+Down": "slotSwitchWindowDown", "Meta+Up": "slotSwitchWindowUp",
+            "Meta+Shift+H": "slotWindowQuickTileLeft", "Meta+Shift+L": "slotWindowQuickTileRight",
+            "Meta+Shift+J": "slotWindowQuickTileBottom", "Meta+Shift+K": "slotWindowQuickTileTop",
+        }
+        for keys, slot in want.items():
+            self.assertEqual(by_keys[keys].kind, "kwin", keys)
+            self.assertEqual(by_keys[keys].js, f"workspace.{slot}();", keys)
+        self.assertEqual(by_keys["Meta+H"].text, "Loft: Focus Window Left")
+        # niri's own arrows-with-Shift aren't bound: KDE keeps Meta+Shift+←/→ (window to screen).
+        self.assertNotIn("Meta+Shift+Left", by_keys)
+        # A disabled Mod+L (Settings → Keyboard Shortcuts) leaves Meta+L to KDE.
+        actions, _ = kwinkeys.build(shell_binds(), {"binds": {"Mod+L": {"disabled": True}}})
+        self.assertNotIn("Meta+L", {a.keys for a in actions})
+
+    def test_window_binds_are_base_kdls(self):
+        """WINDOW_BINDS is niri/base.kdl's focus / move binds, one for one."""
+        base = kwinkeys.parse_binds((REPO / "niri" / "base.kdl").read_text())
+        # (Mod+Shift+1…5, move to workspace N, are Spaces: ⌘⇧N, space_binds.)
+        niri = {(b.combo, b.action) for b in base
+                if b.action.startswith(("focus-column", "focus-window", "move-column", "move-window")) and "to-workspace" != b.action[-12:]}
+        self.assertEqual(niri, set(kwinkeys.WINDOW_BINDS))
+        self.assertTrue(all(a in kwinkeys.WINDOW_ACTIONS for _, a in kwinkeys.WINDOW_BINDS))
+
+    def test_hide_moves_off_meta_h(self):
+        """⌘H / ⌘M (niri's Super+H / Super+M) would be Meta+H / Meta+M here,
+        and Meta+H is focus left: they take their parity.json `kdeKeys`."""
+        self.assertEqual(self.by_id["appmenu-hide"].keys, "Meta+Ctrl+Alt+H")
+        self.assertEqual(self.by_id["appmenu-minimize"].keys, "Meta+Ctrl+Alt+M")
+        self.assertEqual(self.by_id["appmenu-hide"].command[-2:], ["appmenu", "hide"])
 
     def test_twin_without_title_is_named(self):
         """XF86LaunchA has hotkey-overlay-title=null: it takes Mod+Shift+A's."""
@@ -152,7 +221,8 @@ class Overrides(unittest.TestCase):
                 "Mod+Ctrl+X": {"action": "spawn", "args": ["kitty"], "title": "Kitty"},
                 "Mod+Ctrl+Y": {"action": "spawn", "args": ["foot"], "off": True},
                 "shift+mod+m": {"disabled": True},
-                "Mod+O": {"action": "focus-column-left"},
+                "Mod+O": {"action": "center-column"},
+                "Mod+Ctrl+H": {"action": "focus-column-left"},
             }
         }
         actions, skipped = kwinkeys.build(shell_binds(), ov)
@@ -163,7 +233,9 @@ class Overrides(unittest.TestCase):
         self.assertEqual(by_keys["Meta+Ctrl+X"].text, "Loft: Kitty")
         self.assertNotIn("Meta+Ctrl+Y", by_keys)
         self.assertNotIn("Meta+Shift+M", by_keys)  # mute mics: disabled (any modifier order)
-        self.assertTrue(any("focus-column-left" in s for s in skipped))
+        self.assertTrue(any("center-column" in s for s in skipped))
+        # A niri window action KWin has works from a custom shortcut too.
+        self.assertIn("slotSwitchWindowLeft", by_keys["Meta+Ctrl+H"].js)
 
 
 class FakeBus:
@@ -201,6 +273,7 @@ class FakeBus:
 
 
 META_TAB, ALT_TAB, META_I, ALT_F4, META_A = 0x11000001, 0x8000001, 0x10000049, 0x9000033, 0x10000041
+META_1 = 0x10000031
 
 
 class ClaimRelease(unittest.TestCase):
@@ -253,6 +326,102 @@ class ClaimRelease(unittest.TestCase):
         kwinkeys.claim(self.bus, {"loft-controlcenter-toggle"}, self.record)
         self.assertFalse(self.record.exists())
 
+    def test_never_takes_kdes_activity_keys(self):
+        """Even if Loft binds a key "Switch to activity" has, KDE keeps it."""
+        self.bus.add("ActivityManager", "switch-to-activity-abc", [[META_1]], friendly='Switch to activity "Default"')
+        self.bus.add("kwin", "loft-custom", [[META_1]])
+        kwinkeys.claim(self.bus, self.names | {"loft-custom"}, self.record)
+        self.assertEqual(self.bus.seqs[("ActivityManager", "switch-to-activity-abc")], [[META_1]])
+        rec = json.loads(self.record.read_text())
+        self.assertFalse(any(t["id"][0] == "ActivityManager" for t in rec))
+
+    def test_activity_keys_taken_before_are_given_back(self):
+        """The user's record from an older Loft lists six ActivityManager
+        entries: the next claim gives them back and doesn't take them again;
+        the other entries stay recorded."""
+        acts = [(f"switch-to-activity-{n}", 0x10000030 + n) for n in range(1, 7)]
+        for action, _ in acts:
+            self.bus.add("ActivityManager", action, [])  # taken: no key now
+        old = [{"id": ["ActivityManager", a, "Activity Manager", f"Switch to activity {a}"], "keys": [[k]]} for a, k in acts]
+        old.append({"id": ["kwin", "Walk Through Windows", "KWin", "Walk Through Windows"], "keys": [[ALT_TAB], [META_TAB]]})
+        self.record.parent.mkdir(parents=True)
+        self.record.write_text(json.dumps(old))
+        self.bus.seqs[("kwin", "Walk Through Windows")] = [[ALT_TAB]]
+        kwinkeys.claim(self.bus, self.names, self.record)
+        for action, k in acts:
+            self.assertEqual(self.bus.seqs[("ActivityManager", action)], [[k]])
+        rec = json.loads(self.record.read_text())
+        self.assertNotIn("ActivityManager", [t["id"][0] for t in rec])
+        self.assertEqual([t for t in rec if t["id"][1] == "Walk Through Windows"][0]["keys"], [[ALT_TAB], [META_TAB]])
+        # And a second claim (Loft restarted) leaves them alone.
+        kwinkeys.claim(self.bus, self.names, self.record)
+        self.assertEqual(self.bus.seqs[("ActivityManager", "switch-to-activity-1")], [[0x10000031]])
+
+    def test_move_to_space_yields_to_a_kde_key(self):
+        """⌘⇧N (move to Space N) gives its key up when KDE binds it to
+        something else, instead of taking it."""
+        meta_excl = 0x10000021  # Meta+!
+        self.bus.add("kwin", "Window to Desktop 1", [[meta_excl]])
+        self.bus.add("kwin", "loft-spaces-movewindow-1", [[meta_excl]])
+        self.bus.add("kwin", "loft-spaces-movewindow-2", [[0x10000040]])  # Meta+@: free
+        names = self.names | {"loft-spaces-movewindow-1", "loft-spaces-movewindow-2"}
+        with contextlib.redirect_stdout(io.StringIO()):
+            kwinkeys.claim(self.bus, names, self.record)
+        self.assertEqual(self.bus.seqs[("kwin", "Window to Desktop 1")], [[meta_excl]])
+        self.assertEqual(self.bus.seqs[("kwin", "loft-spaces-movewindow-1")], [])
+        self.assertEqual(self.bus.seqs[("kwin", "loft-spaces-movewindow-2")], [[0x10000040]])
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+ALT_F3, META_F3 = 0x8000032, 0x10000032
+
+
+class WindowMenu(unittest.TestCase):
+    """KWin's Window Operations Menu (Alt+F3) opens Loft's window menu."""
+
+    def setUp(self):
+        self.bus = FakeBus()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.record = Path(self.tmp.name) / "taken.json"
+        self.names = {"loft-window-menu"}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_rendered_with_fallback(self):
+        actions, _ = kwinkeys.build(shell_binds())
+        wm = next(a for a in actions if a.id == "window-menu")
+        self.assertEqual((wm.keys, wm.kind), ("Alt+F3", "kwin"))
+        js = kwinkeys.render_js(actions)
+        self.assertIn('registerShortcut("loft-window-menu", "Loft: Window Menu", "Alt+F3", function () { loftWindowMenu(); });', js)
+        self.assertIn('JSON.stringify({ cmd: "windowMenu" })', js)
+        self.assertIn("workspace.slotWindowOperations();", js)
+
+    def test_a_user_bind_on_alt_f3_wins(self):
+        ov = {"binds": {"Alt+F3": {"action": "spawn", "args": ["foot"]}}}
+        actions, _ = kwinkeys.build(shell_binds(), ov)
+        self.assertFalse(any(a.id == "window-menu" for a in actions))
+
+    def test_claim_takes_alt_f3_and_release_gives_it_back(self):
+        self.bus.add("kwin", "Window Operations Menu", [[ALT_F3]])
+        self.bus.add("kwin", "loft-window-menu", [[ALT_F3]])
+        kwinkeys.claim(self.bus, self.names, self.record)
+        self.assertEqual(self.bus.seqs[("kwin", "Window Operations Menu")], [])
+        kwinkeys.release(self.bus, self.record)
+        self.assertEqual(self.bus.seqs[("kwin", "Window Operations Menu")], [[ALT_F3]])
+
+    def test_follows_a_moved_window_operations_key(self):
+        self.bus.add("kwin", "Window Operations Menu", [[META_F3]])
+        self.bus.add("kwin", "loft-window-menu", [[ALT_F3]])
+        kwinkeys.claim(self.bus, self.names, self.record)
+        self.assertEqual(self.bus.seqs[("kwin", "loft-window-menu")], [[META_F3]])
+        self.assertEqual(self.bus.seqs[("kwin", "Window Operations Menu")], [])
+        # A second claim (restart without release) still knows the original key.
+        self.bus.seqs[("kwin", "loft-window-menu")] = [[ALT_F3]]  # re-registered from the script
+        kwinkeys.claim(self.bus, self.names, self.record)
+        self.assertEqual(self.bus.seqs[("kwin", "loft-window-menu")], [[META_F3]])
+        kwinkeys.release(self.bus, self.record)
+        self.assertEqual(self.bus.seqs[("kwin", "Window Operations Menu")], [[META_F3]])

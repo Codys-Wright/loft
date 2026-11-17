@@ -1,7 +1,8 @@
 """Qt / KDE apps in the Loft look (programs.loft.qt; render unit `qt`).
 
 What the `qt` hook does after `loft theme apply`, and `loft qt sync` on
-demand. Nothing is global, and nothing happens unless home-manager wrote
+demand. Nothing here is global (global mode, programs.loft.qt.global, is
+qtglobal.py), and nothing happens unless home-manager wrote
 ~/.config/loft/qt.json (programs.loft.qt.enable):
 
   {"apps": ["dolphin"], "iconTheme": "MacTahoe-blue", "dolphinDefaults": true}
@@ -172,19 +173,25 @@ def _global_kvantum_theme() -> str | None:
     return None
 
 
+def link_theme(state_dir: Path) -> list[str | None]:
+    """Step 1: the Kvantum theme and color scheme `Loft`, linked to <state>/current."""
+    cur = Path(state_dir) / "current"
+    cfg, data = config_home(), data_home()
+    return [
+        _link(cfg / "Kvantum" / THEME / f"{THEME}.kvconfig", cur / "kvantum.kvconfig"),
+        _link(cfg / "Kvantum" / THEME / f"{THEME}.svg", cur / "kvantum.svg"),
+        _link(data / "color-schemes" / f"{THEME}.colors", cur / "kde.colors"),
+    ]
+
+
 def sync(state_dir: Path, doc: dict | None = None) -> list[str]:
     """Steps 1-3 of the module docstring. Returns what it did (for `loft qt sync`)."""
     doc = settings() if doc is None else doc
     if doc is None:
         return []
     apps = [a for a in doc.get("apps") or ["dolphin"] if isinstance(a, str) and a]
-    cur = Path(state_dir) / "current"
-    cfg, data = config_home(), data_home()
-    notes: list[str | None] = [
-        _link(cfg / "Kvantum" / THEME / f"{THEME}.kvconfig", cur / "kvantum.kvconfig"),
-        _link(cfg / "Kvantum" / THEME / f"{THEME}.svg", cur / "kvantum.svg"),
-        _link(data / "color-schemes" / f"{THEME}.colors", cur / "kde.colors"),
-    ]
+    cfg = config_home()
+    notes: list[str | None] = link_theme(state_dir)
 
     chooser = cfg / "Kvantum" / "kvantum.kvconfig"
     entries = [("Applications", THEME, ", ".join(apps))]

@@ -10,10 +10,12 @@
 //! - `runtime`: `<state>/spaces/runtime.json` (claims, opened, per-space memory)
 //! - `launch`: the live side of spin-up (`/proc`, `systemd-run`, waiting)
 //! - `edit`: writing space documents (create, patch, delete, reorder, capture)
+//! - `kwin`: what KWin sessions ask of the above, with KWin's outputs and windows
 
 pub mod apps;
 pub mod edit;
 pub mod expr;
+pub mod kwin;
 pub mod launch;
 pub mod live;
 pub mod model;

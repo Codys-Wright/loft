@@ -124,6 +124,7 @@ workspace.desktops.forEach(watchDesktop);
 
 workspace.windowAdded.connect(w => {
     watchWindow(w);
+    placeExpected(w);
     push();
 });
 workspace.windowRemoved.connect(w => {
@@ -136,6 +137,41 @@ for (const s of ["currentDesktopChanged", "screensChanged", "currentActivityChan
         workspace[s].connect(push);
     } catch (e) {}
 }
+// A window held in an interactive move comes along to the Activity switched
+// to (any way: KDE's shortcuts, Loft's Spaces), like macOS's Spaces. KWin
+// carries it across virtual desktops itself, but not Activities: the move
+// goes on with the window hidden on its old Activity and the drop leaves it
+// there (measured, KWin 6.8.2; "FIXME" in Workspace::
+// updateWindowVisibilityOnDesktopChange). Windows on every Activity ([]) are
+// already there. docs/KWIN.md §4.16.
+const carried = {};
+
+function carryMovingWindow() {
+    const now = workspace.currentActivity;
+    if (!now)
+        return;
+    for (const w of workspace.windowList()) {
+        if (!w.move || w.activities.length === 0 || w.activities.indexOf(now) >= 0)
+            continue;
+        w.activities = [now];
+        // The switch focused the new Activity's last window (or none), and
+        // focusing during the move doesn't stick: the window in hand gets
+        // the focus back when it's dropped, as on macOS.
+        const id = "" + w.internalId;
+        if (carried[id])
+            continue;
+        carried[id] = true;
+        const dropped = () => {
+            w.interactiveMoveResizeFinished.disconnect(dropped);
+            delete carried[id];
+            workspace.activeWindow = w;
+        };
+        w.interactiveMoveResizeFinished.connect(dropped);
+    }
+}
+try {
+    workspace.currentActivityChanged.connect(carryMovingWindow);
+} catch (e) {}
 // Settings → Displays re-reads KScreen when a screen moves, resizes or
 // rescales (KWin.qml displayLayoutChanged).
 function watchScreen(s) {
@@ -166,6 +202,77 @@ overviewTimer.timeout.connect(() => {
     }
 });
 overviewTimer.start();
+
+// ── A Space's apps, as they appear (docs/KWIN.md §4.15) ─────────────────
+// loft-kwin's openSpace started them and sent one `expectWindow` each: the
+// first new window of that pid (else matching the app id / title) goes to
+// the Space's Activity and its role's display, then is maximized or made
+// fullscreen if the app asks. A rule lapses after `ttl` ms.
+let expected = [];
+
+function compile(src, flags) {
+    if (!src)
+        return null;
+    try {
+        return new RegExp(src, flags || "");
+    } catch (e) {
+        print("loft-bridge: bad pattern " + src + ": " + e);
+        return null;
+    }
+}
+
+function expectMatches(r, w) {
+    if (r.pid && w.pid === r.pid)
+        return true;
+    const id = w.desktopFileName || w.resourceClass || "";
+    if (!r.appId && !r.title)
+        return false;
+    return (!r.appId || r.appId.test(id)) && (!r.title || r.title.test(w.caption || ""));
+}
+
+function placeExpected(w) {
+    if (!tracked(w) || expected.length === 0)
+        return;
+    const now = Date.now();
+    expected = expected.filter(r => r.until > now);
+    // A pid match first, so two apps with the same id take their own windows.
+    let i = expected.findIndex(r => r.pid && w.pid === r.pid);
+    if (i < 0)
+        i = expected.findIndex(r => expectMatches(r, w));
+    if (i < 0)
+        return;
+    const r = expected.splice(i, 1)[0];
+    if (r.activity && workspace.activities.indexOf(r.activity) >= 0)
+        w.activities = [r.activity];
+    const s = r.output ? screenByName(r.output) : null;
+    if (s && w.output !== s)
+        workspace.sendClientToScreen(w, s);
+    if (r.open === "maximized")
+        w.setMaximize(true, true);
+    else if (r.open === "fullscreen")
+        w.fullScreen = true;
+    if (debug)
+        print("loft-bridge: " + r.app + " → " + (r.output || "?") + " on " + r.activity);
+}
+
+function expectWindow(c) {
+    expected.push({
+        app: c.app || "",
+        pid: c.pid || 0,
+        appId: compile(c.appId, c.appIdFlags),
+        title: compile(c.title, ""),
+        activity: c.activity || "",
+        output: c.output || "",
+        open: c.open || "",
+        until: Date.now() + (c.ttl || 20000)
+    });
+    // Its window may be there already (an app quicker than the command).
+    const w = workspace.windowList().find(x => tracked(x) && c.pid && x.pid === c.pid);
+    if (w) {
+        placeExpected(w);
+        push();
+    }
+}
 
 // ── Actions ──────────────────────────────────────────────────────────────
 function windowById(uuid) {
@@ -343,8 +450,19 @@ function apply(c) {
             }
         }
         return;
+    case "expectWindow":
+        expectWindow(c);
+        return;
     case "titleBar":
         titleBar(c);
+        return;
+    case "windowMenu":
+        // KWin's Window Operations Menu key (Alt+F3, loft-keys.js): Loft's
+        // window menu for the active window, under its green bead.
+        if (w)
+            menuEvent(w, beadAnchor(w), "tileMenu");
+        else
+            workspace.slotWindowOperations();
         return;
     case "refresh":
         push();
@@ -385,10 +503,22 @@ function titleBar(c) {
         w.fullScreen = !w.fullScreen;
         return;
     }
+    menuEvent(w, { x: c.x, y: c.y }, c.action);
+}
+
+// Under the green bead of Loft's decoration (kdecoration/tahoe.h: 14 px
+// beads 23 px apart, the first 13 px in, centred in a 40 px bar), where a
+// held green opens the menu; a window without a title bar: near its corner.
+function beadAnchor(w) {
+    return w.noBorder ? { x: 16, y: 16 } : { x: 13 + 2 * 23, y: 27 };
+}
+
+// Ask the shell for Loft's window menu at a frame-local point.
+function menuEvent(w, at, kind) {
     // The menu's anchor, output-local like niri's WindowActionsMenuRequested.
     const f = w.frameGeometry;
-    const gx = f.x + c.x;
-    const gy = f.y + c.y;
+    const gx = f.x + at.x;
+    const gy = f.y + at.y;
     const s = workspace.screenAt({ x: gx, y: gy }) || w.output;
     const g = s ? s.geometry : { x: 0, y: 0 };
     callDBus(SVC, PATH, IFACE, "Event", JSON.stringify({
@@ -397,7 +527,7 @@ function titleBar(c) {
             output: s ? s.name : "",
             x: gx - g.x,
             y: gy - g.y,
-            kind: c.action
+            kind: kind
         }
     }));
 }

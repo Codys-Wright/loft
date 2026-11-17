@@ -72,7 +72,7 @@ Item {
                 visible: !Agenda.enabled || root.rows.length === 0
                 Layout.fillWidth: true
                 Layout.topMargin: 4
-                text: Agenda.enabled ? "No events today or tomorrow." : "Add a calendar in Settings → Dynamic Island: khal, Evolution or an ICS link."
+                text: Agenda.enabled ? "No events today or tomorrow." : "Add a calendar in Settings → Desktop & Dock → Dynamic Island: khal, Evolution or an ICS link."
                 wrapMode: Text.Wrap
                 color: Theme.islandSubtext
                 font.family: Theme.fontUi

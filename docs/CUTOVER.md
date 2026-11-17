@@ -131,7 +131,7 @@ column-width actions and Logout. In Loft those are:
 - Column widths: niri's own binds in the fleet's `binds.kdl` (`Mod+R` presets, `Mod+F`
   maximize, `Mod+C` center). "Fill available" (`expand-column-to-available-width`) has no
   bind. If it's missed, give it one when removing the menu.
-- Discoverability: Settings → Keyboard Shortcuts lists every effective bind, and niri's
+- Discoverability: Settings → Keyboard & Mouse → Keyboard Shortcuts lists every effective bind, and niri's
   hotkey overlay (`Mod+Shift+/`) shows Loft's binds with titles.
 
 Loft doesn't bind `Mod+D`, so removing the menu frees the key.

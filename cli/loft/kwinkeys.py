@@ -19,10 +19,22 @@ keeps nothing of Loft's.
   loft keys kwin claim --names DIR/names     take Loft's keys off other shortcuts
   loft keys kwin release                     give them back
 
+KWin repeats a held global shortcut (after the keyboard's repeat delay, at
+its repeat rate) and runs the callback each time, where niri runs a bind
+once with `repeat=false` and at most once per `cooldown-ms`. The script
+keeps both: a `repeat=false` bind skips triggers that follow the last one
+within REPEAT_GAP_MS (a repeat), a cooldown bind skips those within its
+cooldown. The shell gets the press and release itself from loft-kwin
+(docs/KWIN.md §4.13) for the keys that need them (⌘Q held, the Radial Menu).
+
 Mod and Super are both Meta here: the KWin session has no ISO_Level3_Shift
 window-manager key (niri/base.kdl `mod-key`). The keyboard layer makes the
 WM key (Caps Lock / Esc / Right Ctrl held) send Meta in Plasma instead
 (keys.py, LOFT_WM_KEY=meta), so the same physical keys reach these shortcuts.
+niri's window binds from base.kdl (Mod+H/J/K/L and arrows focus, Mod+Shift+H/J/K/L
+move) are added as KWin workspace calls (WINDOW_BINDS). KWin can't tell Left or Right
+Super from that Meta, so binds that niri keeps apart by Super vs. Mod take their
+parity.json `kdeKeys` here: ⌘H / ⌘M hide on Meta+Ctrl+Alt+H / M, not Meta+H.
 """
 
 from __future__ import annotations
@@ -38,6 +50,16 @@ UNIT_PREFIX = "loft-plasma-key@"
 # KWin's own action names (kglobalaccel component "kwin").
 KWIN_CLOSE = "Window Close"
 KWIN_OVERVIEW = "Overview"
+# A trigger this soon after the previous one is a key repeat (KWin's default
+# rate is 25/s, 40 ms apart). The first repeat comes after the repeat delay
+# (600 ms by default) and isn't caught; the shell drops it (Compositor.
+# shortcutRecent).
+REPEAT_GAP_MS = 250
+# KWin's window-operations menu (Alt+F3): Loft's window menu takes its keys
+# (WINDOW_MENU below, docs/KWIN.md §4.4 "Alt+F3").
+KWIN_WINDOW_OPS = "Window Operations Menu"
+WINDOW_MENU_ID = "window-menu"
+WINDOW_MENU_KEYS = "Alt+F3"
 
 # niri modifier → Qt. Qt's portable text orders them Meta, Ctrl, Alt, Shift.
 QT_MODS = {
@@ -126,6 +148,11 @@ class Bind:
     args: list = field(default_factory=list)
     title: str | None = None
     origin: str = "shell-binds"
+    # niri's `repeat=false` and `cooldown-ms=N`.
+    repeat: bool = True
+    cooldown_ms: int = 0
+    # The KWin key when it isn't qt_keys(combo) (parity.json `kdeKeys`).
+    keys: str | None = None
 
 
 @dataclass
@@ -138,6 +165,8 @@ class Action:
     command: list[str] | None = None
     js: str | None = None
     combo: str = ""
+    repeat: bool = True
+    cooldown_ms: int = 0
 
 
 # ── KDL (the subset shell-binds uses: one bind per line) ────────────────
@@ -203,19 +232,25 @@ def parse_binds(text: str) -> list[Bind]:
         if not m:
             raise KwinKeysError(f"line {n}: not a one-line bind: {raw.strip()!r}")
         title = None
+        repeat, cooldown = True, 0
         for kind, tok in _tokens(m.group("props")):
             if kind == "word" and "=" in tok:
                 k, v = tok.split("=", 1)
                 if k == "hotkey-overlay-title":
                     v = _value(v)
                     title = v if isinstance(v, str) else None
+                elif k == "repeat":
+                    repeat = _value(v) is not False
+                elif k == "cooldown-ms":
+                    v = _value(v)
+                    cooldown = v if isinstance(v, int) and v > 0 else 0
         body = [t for t in _tokens(m.group("body"))]
         words = [(k, t) for k, t in body if k != "semi"]
         if not words:
             raise KwinKeysError(f"line {n}: empty action")
         action = words[0][1]
         args = [_value(t) for k, t in words[1:] if not (k == "word" and "=" in t)]
-        binds.append(Bind(combo=m.group("combo"), action=action, args=args, title=title))
+        binds.append(Bind(combo=m.group("combo"), action=action, args=args, title=title, repeat=repeat, cooldown_ms=cooldown))
     return binds
 
 
@@ -251,9 +286,13 @@ def apply_overrides(binds: list[Bind], overrides: dict) -> list[Bind]:
         args = args if isinstance(args, list) else []
         title = r.get("title")
         title = title if isinstance(title, str) else None
+        props = r.get("props") if isinstance(r.get("props"), dict) else {}
+        cooldown = props.get("cooldown-ms")
         if k not in out:
             order.append(k)
-        out[k] = Bind(combo=combo, action=r["action"], args=list(args), title=title, origin="overrides")
+        out[k] = Bind(combo=combo, action=r["action"], args=list(args), title=title, origin="overrides",
+                      repeat=props.get("repeat") is not False,
+                      cooldown_ms=cooldown if isinstance(cooldown, int) and cooldown > 0 else 0)
     return [out[k] for k in order if k in out]
 
 
@@ -328,6 +367,8 @@ def _kwin_js(action: str) -> str | None:
         return "var w = workspace.activeWindow; if (w) w.fullScreen = !w.fullScreen;"
     if action == "close-window":
         return "var w = workspace.activeWindow; if (w) w.closeWindow();"
+    if action in WINDOW_ACTIONS:
+        return f"workspace.{WINDOW_ACTIONS[action][0]}();"
     return None
 
 
@@ -344,7 +385,7 @@ def translate(binds: list[Bind]) -> tuple[list[Action], list[str]]:
         if b.title:
             titles.setdefault(json.dumps([b.action, b.args]), b.title)
     for b in binds:
-        keys = qt_keys(b.combo)
+        keys = b.keys or qt_keys(b.combo)
         if keys is None:
             skipped.append(f"{b.combo}: no Qt key name")
             continue
@@ -369,8 +410,11 @@ def translate(binds: list[Bind]) -> tuple[list[Action], list[str]]:
             aid, n = f"{base}-{n}", n + 1
         ids.add(aid)
         seen_keys[keys] = b.combo
-        title = b.title or titles.get(json.dumps([b.action, b.args])) or aid
-        actions.append(Action(id=aid, keys=keys, text=f"Loft: {title}", kind=kind, command=command, js=js, combo=b.combo))
+        title = b.title or titles.get(json.dumps([b.action, b.args])) or (WINDOW_ACTIONS.get(b.action) or (None, None))[1] or aid
+        actions.append(
+            Action(id=aid, keys=keys, text=f"Loft: {title}", kind=kind, command=command, js=js, combo=b.combo,
+                   repeat=b.repeat, cooldown_ms=b.cooldown_ms)
+        )
     return actions, skipped
 
 
@@ -399,9 +443,40 @@ def render_js(actions: list[Action]) -> str:
         '    callDBus("org.kde.kglobalaccel", "/component/kwin",',
         '        "org.kde.kglobalaccel.Component", "invokeShortcut", name);',
         "}",
+        "// KWin runs a callback again on every key repeat. niri's repeat=false:",
+        f"// a trigger within {REPEAT_GAP_MS} ms of the last one is a repeat. cooldown-ms: at",
+        "// most one run per cooldown.",
+        "var loftLast = {};",
+        "function loftOnce(id) {",
+        "    var now = Date.now(), last = loftLast[id] || 0;",
+        "    loftLast[id] = now;",
+        f"    return now - last >= {REPEAT_GAP_MS};",
+        "}",
+        "function loftCooldown(id, ms) {",
+        "    var now = Date.now();",
+        "    if (now - (loftLast[id] || 0) < ms) return false;",
+        "    loftLast[id] = now;",
+        "    return true;",
+        "}",
+        "// Loft's window menu for the active window (loft-kwin's bridge script",
+        "// opens it under the green bead); KWin's own when loft-kwin isn't there.",
+        "function loftWindowMenu() {",
+        '    callDBus("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",',
+        '        "NameHasOwner", "dev.loft.KWinBridge", function (has) {',
+        "            if (has)",
+        '                callDBus("dev.loft.KWinBridge", "/Bridge", "dev.loft.KWinBridge", "Command",',
+        '                    JSON.stringify({ cmd: "windowMenu" }));',
+        "            else",
+        "                workspace.slotWindowOperations();",
+        "        });",
+        "}",
     ]
     for a in actions:
         body = f"loftRun({_js_str(a.id)});" if a.kind == "exec" else a.js
+        if not a.repeat:
+            body = f"if (loftOnce({_js_str(a.id)})) {{ {body} }}"
+        elif a.cooldown_ms:
+            body = f"if (loftCooldown({_js_str(a.id)}, {a.cooldown_ms})) {{ {body} }}"
         lines.append(
             f"registerShortcut({_js_str(name_of(a))}, {_js_str(a.text)}, {_js_str(a.keys)}, function () {{ {body} }});"
         )
@@ -437,33 +512,120 @@ def write(out: Path, actions: list[Action]) -> None:
     )
 
 
+# Spaces under KWin are the user's KDE Activities (docs/KWIN.md §4.2), and
+# KDE's own keys for them stay KDE's: Meta+1…9/0 are kactivitymanagerd's
+# "Switch to activity" shortcuts, Meta+Ctrl+←/→ (what ⌃←/→ sends through the
+# keyboard layer) KWin's "Switch One Desktop to the Left/Right" — the virtual
+# desktops inside the Activity, as ⌃←/→ steps Spaces on macOS. So Loft binds
+# neither here, and never takes a key from these components.
+KDE_OWNED_IPC = (["spaces", "prev"], ["spaces", "next"])
+PROTECTED_COMPONENTS = {"ActivityManager"}
+# Loft actions that give their key up when another action has it, instead of
+# taking it: ⌘⇧N (move to Space N) is only Loft's where KDE binds nothing.
+YIELD_PREFIXES = ("loft-spaces-movewindow-",)
+
+
 def space_binds(binds: list[Bind]) -> list[Bind]:
     """Spaces under KWin (docs/KWIN.md §4.2): niri gets Mod+1…9 / Mod+Shift+1…9
-    from loft-niri's spaces.kdl, which KWin never sees. Here they go to the
-    shell (`spaces focus N`, `spaces moveWindow N`), with the IPC command of
-    shell-binds' own `spaces` binds (Mod+Ctrl+Left/Right). The shell steps the
-    workspaces instead while Spaces is off, so nothing is lost then."""
+    from loft-niri's spaces.kdl, which KWin never sees. Here Mod+1…9 (switch)
+    stay KDE's own "Switch to activity" shortcuts; only Mod+Shift+1…9, 0 go to
+    the shell (`spaces moveWindow N`: the Space whose KDE key is Meta+N), with
+    the IPC command of shell-binds' own `spaces` binds. Each yields to a KDE
+    action that has the same key (`claim`)."""
     proto = next((b for b in binds if b.action == "spawn" and (_ipc_args(b.args) or [""])[0] == "spaces"), None)
     if proto is None:
         return []
     ipc = _ipc_args(proto.args) or []
     prefix = proto.args[: len(proto.args) - len(ipc)]
-    out = []
-    for n in range(1, 10):
-        out.append(Bind(combo=f"Mod+{n}", action="spawn", args=[*prefix, "spaces", "focus", str(n)],
-                        title=f"Go to Space {n}", origin="spaces"))
-        out.append(Bind(combo=f"Mod+Shift+{n}", action="spawn", args=[*prefix, "spaces", "moveWindow", str(n)],
-                        title=f"Move Window to Space {n}", origin="spaces"))
-    return out
+    return [
+        Bind(combo=f"Mod+Shift+{n}", action="spawn", args=[*prefix, "spaces", "moveWindow", str(n)],
+             title=f"Move Window to Space {n}", origin="spaces")
+        for n in [*range(1, 10), 0]
+    ]
+
+
+def kde_owned(b: Bind) -> bool:
+    """A shell bind that KDE does itself under KWin (⌃←/→: desktops)."""
+    ipc = _ipc_args(b.args) if b.action == "spawn" else None
+    return bool(ipc) and any(ipc[: len(k)] == list(k) for k in KDE_OWNED_IPC)
+
+
+def window_menu_action(taken: set[str]) -> Action | None:
+    """Loft's window menu on KWin's Window Operations Menu key (Alt+F3; `claim`
+    moves it to whatever key that action has). None when a bind of the user's
+    already uses Alt+F3."""
+    if WINDOW_MENU_KEYS in taken:
+        return None
+    return Action(id=WINDOW_MENU_ID, keys=WINDOW_MENU_KEYS, text="Loft: Window Menu", kind="kwin",
+                  js="loftWindowMenu();", combo="Alt+F3")
+
+
+# niri's window binds (niri/base.kdl: Mod+H/J/K/L and Mod+arrows focus,
+# Mod+Shift+H/J/K/L move), so the WM key (Caps held → Meta) does the same
+# under KWin. KWin has no columns: focus is its "Switch to Window to the
+# Left/Below/Above/Right" (directional, across outputs; nothing past the last
+# window, where niri's J/K go on to the next workspace), and move is its quick
+# tile to that half (a second press at an output's edge moves the window to
+# the next output, as KWin's quick tile does; niri's move-column stops at the
+# edge, its J/K go on to the next workspace). Workspace scripting slots
+# (KWin 6.8's WorkspaceWrapper). tests/test_kwinkeys.py checks this list
+# against base.kdl.
+WINDOW_ACTIONS = {
+    "focus-column-left": ("slotSwitchWindowLeft", "Focus Window Left"),
+    "focus-column-right": ("slotSwitchWindowRight", "Focus Window Right"),
+    "focus-window-or-workspace-down": ("slotSwitchWindowDown", "Focus Window Below"),
+    "focus-window-or-workspace-up": ("slotSwitchWindowUp", "Focus Window Above"),
+    "move-column-left": ("slotWindowQuickTileLeft", "Move Window Left (Tile Left)"),
+    "move-column-right": ("slotWindowQuickTileRight", "Move Window Right (Tile Right)"),
+    "move-window-down-or-to-workspace-down": ("slotWindowQuickTileBottom", "Move Window Down (Tile Bottom)"),
+    "move-window-up-or-to-workspace-up": ("slotWindowQuickTileTop", "Move Window Up (Tile Top)"),
+}
+WINDOW_BINDS = [
+    ("Mod+H", "focus-column-left"),
+    ("Mod+L", "focus-column-right"),
+    ("Mod+J", "focus-window-or-workspace-down"),
+    ("Mod+K", "focus-window-or-workspace-up"),
+    ("Mod+Left", "focus-column-left"),
+    ("Mod+Right", "focus-column-right"),
+    ("Mod+Down", "focus-window-or-workspace-down"),
+    ("Mod+Up", "focus-window-or-workspace-up"),
+    ("Mod+Shift+H", "move-column-left"),
+    ("Mod+Shift+L", "move-column-right"),
+    ("Mod+Shift+J", "move-window-down-or-to-workspace-down"),
+    ("Mod+Shift+K", "move-window-up-or-to-workspace-up"),
+]
+
+
+def window_binds() -> list[Bind]:
+    return [Bind(combo=c, action=a, origin="base") for c, a in WINDOW_BINDS]
+
+
+def plasma_keys() -> dict[str, str]:
+    """{normalized niri combo: KWin key} for binds that take another key under
+    Plasma (parity.json `kdeKeys`): ⌘H / ⌘M hide, which niri binds as Super+H /
+    Super+M — under KWin that is Meta+H, the WM key's focus left, so the
+    keyboard layer sends them as Meta+Ctrl+Alt+H / M instead."""
+    from . import parity
+
+    return {_norm(c): k for c, k in parity.kde_keys(parity.load()).items()}
 
 
 def build(binds_text: str, overrides: dict | None = None) -> tuple[list[Action], list[str]]:
     binds = parse_binds(binds_text)
+    kde = [f"{b.combo}: KDE's own here (desktops inside the Activity)" for b in binds if kde_owned(b)]
+    binds = [b for b in binds if not kde_owned(b)]
+    moved = plasma_keys()
+    for b in binds:
+        b.keys = moved.get(_norm(b.combo))
     # After shell-binds, before the user's changes: a moved or disabled key wins.
-    binds = binds + space_binds(binds)
+    binds = binds + space_binds(binds) + window_binds()
     if overrides:
         binds = apply_overrides(binds, overrides)
-    return translate(binds)
+    actions, skipped = translate(binds)
+    wm = window_menu_action({a.keys for a in actions})
+    if wm is not None and wm.id not in {a.id for a in actions}:
+        actions.append(wm)
+    return actions, kde + skipped
 
 
 # ── Keys other actions hold (record + revert) ───────────────────────────
@@ -532,39 +694,104 @@ def _read_record(path: Path) -> list[dict]:
     return [r for r in data if isinstance(r, dict) and isinstance(r.get("id"), list)] if isinstance(data, list) else []
 
 
+def give_back_protected(bus, record: Path) -> list[dict]:
+    """Older Loft builds took KDE's activity keys (ActivityManager's "Switch to
+    activity …") for their own Spaces: give those back and drop them from the
+    record, so the next release can't take them away again either."""
+    taken = _read_record(record)
+    back = [t for t in taken if t["id"][0] in PROTECTED_COMPONENTS]
+    if not back:
+        return []
+    for t in back:
+        try:
+            bus.set_foreign(t["id"], [list(k) for k in t.get("keys", [])])
+        except Exception as e:  # keep going: the others must get theirs
+            print(f"loft keys kwin: couldn't give {t['id'][:2]} its keys back: {e}")
+    rest = [t for t in taken if t["id"][0] not in PROTECTED_COMPONENTS]
+    if rest:
+        record.write_text(json.dumps(rest, indent=2) + "\n")
+    elif record.exists():
+        record.unlink()
+    return back
+
+
+def _is_default_context(r) -> bool:
+    return r[4] in ("", "default")
+
+
 def claim(bus, names: set[str], record: Path) -> list[dict]:
     """Take Loft's keys (those of the `kwin` actions in `names`) off every
     other action that has one; append what was taken to `record` (an action
-    already in it keeps its first, original keys). Returns the new entries."""
+    already in it keeps its first, original keys). Returns the new entries.
+
+    Never from PROTECTED_COMPONENTS (KDE's Activities): a key one of those
+    has stays theirs (and KDE's action wins it). A Loft action in
+    YIELD_PREFIXES whose key another action has gives its key up instead."""
+    give_back_protected(bus, record)
     infos = {path: bus.infos(path) for path in bus.components()}
-    ours: set[int] = set()
-    for rows in infos.values():
-        for r in rows:
-            if r[2] == "kwin" and r[0] in names:
-                ours.update(int(k) for k in r[6] if int(k))
     taken = _read_record(record)
+    _adopt_window_ops_keys(bus, infos, names, taken)
+    rows = [r for rs in infos.values() for r in rs]
+    is_ours = lambda r: r[2] == "kwin" and r[0] in names  # noqa: E731
+    held: set[int] = {int(k) for r in rows if not is_ours(r) and _is_default_context(r) for k in r[6] if int(k)}
+    kde: set[int] = {int(k) for r in rows if r[2] in PROTECTED_COMPONENTS for k in r[6] if int(k)}
+    ours: set[int] = set()
+    for r in rows:
+        if not is_ours(r):
+            continue
+        keys = {int(k) for k in r[6] if int(k)}
+        if r[0].startswith(YIELD_PREFIXES) and keys & held:
+            bus.set_foreign([r[2], r[0], r[3], r[1]], [])
+            print(f"left {r[1]} without a key: another shortcut has it")
+            continue
+        ours.update(keys - kde)
     known = {tuple(t["id"][:2]) for t in taken}
     new: list[dict] = []
-    for rows in infos.values():
-        for r in rows:
-            action, friendly, comp, comp_friendly, context = r[0], r[1], r[2], r[3], r[4]
-            if (comp == "kwin" and action in names) or not ours.intersection(int(k) for k in r[6]):
-                continue
-            if context not in ("", "default"):
-                continue
-            aid = [comp, action, comp_friendly, friendly]
-            keys = bus.keys(aid)
-            keep = [k for k in keys if not (len(k) == 1 and k[0] in ours)]
-            entry = {"id": aid, "keys": keys}
-            if tuple(aid[:2]) not in known:
-                taken.append(entry)
-                known.add(tuple(aid[:2]))
-            new.append(entry)
-            bus.set_foreign(aid, keep)
+    for r in rows:
+        action, friendly, comp, comp_friendly = r[0], r[1], r[2], r[3]
+        if is_ours(r) or comp in PROTECTED_COMPONENTS or not ours.intersection(int(k) for k in r[6]):
+            continue
+        if not _is_default_context(r):
+            continue
+        aid = [comp, action, comp_friendly, friendly]
+        keys = bus.keys(aid)
+        keep = [k for k in keys if not (len(k) == 1 and k[0] in ours)]
+        entry = {"id": aid, "keys": keys}
+        if tuple(aid[:2]) not in known:
+            taken.append(entry)
+            known.add(tuple(aid[:2]))
+        new.append(entry)
+        bus.set_foreign(aid, keep)
     if new:
         record.parent.mkdir(parents=True, exist_ok=True)
         record.write_text(json.dumps(taken, indent=2) + "\n")
     return new
+
+
+def _adopt_window_ops_keys(bus, infos: dict, names: set[str], taken: list[dict]) -> None:
+    """Loft's Window Menu gets the keys KWin's Window Operations Menu has (the
+    user may have moved it off Alt+F3), or had before an earlier claim took
+    them (the record). `infos` is updated so claim takes those keys next."""
+    ours_name = f"loft-{WINDOW_MENU_ID}"
+    if ours_name not in names:
+        return
+    mine = ops = None
+    for rows in infos.values():
+        for r in rows:
+            if r[2] == "kwin" and r[0] == ours_name:
+                mine = r
+            elif r[2] == "kwin" and r[0] == KWIN_WINDOW_OPS:
+                ops = r
+    if mine is None or ops is None:
+        return
+    rec = next((t for t in taken if t["id"][:2] == ["kwin", KWIN_WINDOW_OPS]), None)
+    want = [list(k) for k in rec["keys"]] if rec else bus.keys([ops[2], ops[0], ops[3], ops[1]])
+    if not want:
+        return  # the user cleared it: keep Alt+F3
+    if sorted(want) == sorted([int(k)] for k in mine[6] if int(k)):
+        return
+    bus.set_foreign([mine[2], mine[0], mine[3], mine[1]], want)
+    mine[6] = [k[0] for k in want]
 
 
 def release(bus, record: Path) -> list[dict]:

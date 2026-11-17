@@ -441,7 +441,7 @@ with Emacs text navigation in every macOS text field (A, E, K, N, P).
 
   | macOS | Loft | niri bind |
   |---|---|---|
-  | ⌃← / ⌃→ (move a space) | previous / next **Loft space** (`spaces prev/next`; a space spans every display like a macOS Space). With Settings → Features → Spaces off, niri's workspace up / down instead (niri's workspaces are vertical, so ← = up) | Mod+Ctrl+Left / Right |
+  | ⌃← / ⌃→ (move a space) | previous / next **Loft space** (`spaces prev/next`; a space spans every display like a macOS Space). With Settings → General → Features → Spaces off, niri's workspace up / down instead (niri's workspaces are vertical, so ← = up) | Mod+Ctrl+Left / Right |
   | ⌃↑ Mission Control | niri overview | Mod+Ctrl+Up |
   | ⌃↓ App Exposé | Loft's switcher on the focused app's windows (`switcher windows`: one entry per window, stays open; ←→ / hover, Return / click, Esc; ⌃↓ again closes). niri's own per-app switcher (⌘`) can't be opened from IPC and closes on the modifier release | Mod+Ctrl+Down |
 
@@ -627,7 +627,7 @@ works on a machine whose build contains none of them. *(Met.)*
 > importers bring all of a theme's wallpapers (cozytile: orphaned
 > `Wallpaper/` images go to the closest palette; qylock: every background,
 > a frame per video) and its SDDM design as a lock. Shell: `Vibes` service;
-> Settings → Wallpaper / Lock Screen pages and the wallpaper carousel show
+> Settings → Appearance → Wallpaper / Lock Screen pages and the wallpaper carousel show
 > "From <theme>" then "Matching vibes"; choices, rotation and per-workspace
 > wallpapers are per theme (`overrides/shell.json` `perTheme`); "Preview
 > lock" locks with the chosen design. See THEME-FORMAT.md, "Vibes".

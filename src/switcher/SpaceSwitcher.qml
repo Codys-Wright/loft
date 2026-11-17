@@ -90,7 +90,10 @@ PanelWindow {
     }
 
     // "music · music/right" — the workspaces a space switches, main first.
+    // KWin: a KDE Activity, on every display (with Loft settings or not).
     function summary(s) {
+        if (Spaces.byActivity)
+            return s.linked ? `KDE Activity · Loft settings: ${s.id}` : "KDE Activity";
         const d = s.displays ?? {};
         const roles = Object.keys(d).filter(r => d[r] !== "keep" && r !== "*");
         roles.sort((a, b) => (a === "main" ? -1 : b === "main" ? 1 : a.localeCompare(b)));
@@ -331,7 +334,7 @@ PanelWindow {
                 id: footer
                 Layout.fillWidth: true
                 Layout.leftMargin: 6
-                text: "↵ switch   ↑↓ choose   ⌃⌘← → previous / next space"
+                text: Spaces.byActivity ? "↵ switch   ↑↓ choose   ⌃← → desktops inside it" : "↵ switch   ↑↓ choose   ⌃⌘← → previous / next space"
                 color: Theme.subtext
                 font.family: Theme.fontUi
                 font.pixelSize: 11

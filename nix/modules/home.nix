@@ -71,7 +71,7 @@
       # niri-loft's place-within-workspace rule is in loft/niri.kdl: the shell
       # may bind wallpapers to workspaces (WorkspaceWallpapers.qml).
       ++ lib.optional workspaceLayers "LOFT_NIRI_WORKSPACE_LAYERS=1"
-      # Feature defaults (Features.qml); Settings → Features still wins.
+      # Feature defaults (Features.qml); Settings → General → Features still wins.
       ++ lib.optional (
         featureDefaults != [ ]
       ) "LOFT_FEATURE_DEFAULTS=${lib.concatStringsSep "," featureDefaults}"
@@ -382,7 +382,7 @@
       tileModifierOn = cfg.plasma.kwinPackage != null && cfg.plasma.tileModifier != null;
 
       # Loft's shortcuts in a Plasma session (cli/loft/kwinkeys.py, docs/KWIN.md
-      # §5): the shell binds (+ Settings → Keyboard Shortcuts) as a KWin script
+      # §5): the shell binds (+ Settings → Keyboard & Mouse → Keyboard Shortcuts) as a KWin script
       # of kglobalaccel shortcuts, loaded while loft-plasma-shell runs.
       # kglobalaccel lets two actions share a key (and then the other one
       # wins), so Loft also takes its keys off the shortcuts that have them
@@ -396,6 +396,14 @@
         PATH=${lib.makeBinPath [ pkgs.systemd ]}:$PATH \
           ${lib.getExe sp.loft} keys kwin release --record ${lib.escapeShellArg kwinShortcutsTaken}
       '';
+      # Global Qt style (programs.loft.qt.global, cli/loft/qtglobal.py):
+      # `start` applies it when the switch is on, `stop` puts the recorded
+      # kdeglobals / Kvantum keys back. busctl sends KConfig's notifications.
+      qtGlobal = verb: "${pkgs.writeShellScript "loft-qt-global" ''
+        PATH=$PATH:${lib.makeBinPath [ pkgs.systemd ]}
+        ${lib.concatMapStrings (e: "export ${lib.escapeShellArg e}\n") env}
+        exec ${lib.getExe sp.loft} qt global "$1"
+      ''} ${verb}";
       plasmaShortcuts = pkgs.writeShellScript "loft-plasma-shortcuts" ''
         set -u
         dir="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}/loft/plasma-keys"
@@ -433,7 +441,10 @@
             case "$id" in
               "" | -*) echo "loft-plasma-shortcuts: KWin didn't load $dir/$script.js" >&2; exit 1 ;;
             esac
-            ${qdbus} org.kde.KWin "/Scripting/Script$id" org.kde.kwin.Script.run >/dev/null || exit 1
+            # Scripting.start runs every loaded script that isn't running yet
+            # (not Script$id.run: KWin reuses ids, so that path can name
+            # another script, e.g. loft-kwin's bridge).
+            ${qdbus} org.kde.KWin /Scripting org.kde.kwin.Scripting.start >/dev/null || exit 1
             ${lib.getExe sp.loft} keys kwin claim --names "$dir/names" --record ${lib.escapeShellArg kwinShortcutsTaken}
             ;;
           unload)
@@ -666,7 +677,7 @@
             half needs the system too — BlueZ with `Experimental = true` and the
             Hands-Free class unit (tether-btclass@hciN) — see
             docs/research/phone-integration.md and Settings → Phone. Turn the
-            feature on in Settings → Features → iPhone once the phone is paired
+            feature on in Settings → General → Features → iPhone once the phone is paired
           '';
           package = lib.mkOption {
             type = lib.types.package;
@@ -704,6 +715,20 @@
             type = lib.types.listOf lib.types.str;
             default = [ "dolphin" ];
             description = "KDE apps (binary names; their rc file is ~/.config/<name>rc) that get the Loft Kvantum theme and color scheme.";
+          };
+          global = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = ''
+              Theme every Qt / KDE app while Loft is the shell, not only
+              `apps`: kdeglobals `[KDE] widgetStyle=kvantum` (`kvantum-dark`
+              for a dark theme), `[General] ColorScheme=Loft` with the scheme's
+              colour groups, and Kvantum's global `theme=Loft`. The previous
+              values are recorded and put back when the shell stops (Plasma or
+              niri), so plain Plasma keeps its look (docs/KWIN.md §4.14). The
+              default for Settings → Appearance → "Theme all Qt apps", which
+              wins once used (`loft qt global on|off`).
+            '';
           };
           dolphinDefaults = lib.mkOption {
             type = lib.types.bool;
@@ -768,9 +793,9 @@
             "-island"
           ];
           description = ''
-            Defaults for the shell's optional modules (Settings → Features,
+            Defaults for the shell's optional modules (Settings → General → Features,
             ids in src/services/Features.qml): an id turns it on, `-id` off.
-            A choice made in Settings → Features still wins.
+            A choice made in Settings → General → Features still wins.
           '';
         };
 
@@ -809,7 +834,7 @@
             description = ''
               Space documents seeded into the library (`<library>/Spaces`)
               when they aren't there yet, never overwritten: edits made in
-              Settings → Spaces stay. `"kind": "space"` documents go to
+              Settings → Spaces & Windows → Spaces stay. `"kind": "space"` documents go to
               `<name>.json`, `"space-instance"` ones to `instances/`,
               `"space-template"` ones to `templates/`. As soon as the library
               has any space of its own, those replace the built-in set, so
@@ -984,7 +1009,7 @@
         # first sync so the app is themed before the next `loft theme apply`.
         xdg.configFile."loft/qt.json" = lib.mkIf cfg.qt.enable {
           text = builtins.toJSON {
-            inherit (cfg.qt) apps dolphinDefaults;
+            inherit (cfg.qt) apps dolphinDefaults global;
             iconTheme = cfg.iconTheme;
           };
         };
@@ -1067,6 +1092,10 @@
                 ${lib.concatMapStrings (e: "export ${e}\n") env}
                 ${lib.getExe sp.loft} theme apply ${lib.escapeShellArg cfg.theme} || true
               ''}";
+              # Global Qt style under niri too (docs/KWIN.md §4.14): KDE apps
+              # read kdeglobals at start; put back when the shell stops.
+              Service.ExecStartPost = lib.optional cfg.qt.enable "-${qtGlobal "start"}";
+              Service.ExecStopPost = [ "-${qtGlobal "stop"}" ];
             };
 
         # programs.loft.keyboard: the seed, and xremap on Loft's config. The
@@ -1182,6 +1211,8 @@
               "-${lib.getExe sp.loft-kwin-decoration} apply"
               "-${plasmaShortcuts} load"
             ]
+            # Global Qt style (docs/KWIN.md §4.14): applies only when on.
+            ++ lib.optional cfg.qt.enable "-${qtGlobal "start"}"
             # Option-drag tiles (docs/KWIN.md §4.6).
             ++ lib.optional tileModifierOn "-${lib.getExe sp.loft-kwin-tile-modifier} apply ${cfg.plasma.tileModifier}";
             # revert always: a no-op without a record, and it cleans up after
@@ -1190,6 +1221,8 @@
               "-${lib.getExe sp.loft-kwin-decoration} revert"
               "-${plasmaShortcuts} unload"
               "-${lib.getExe sp.loft-kwin-tile-modifier} revert"
+              # A no-op without a record (programs.loft.qt off too).
+              "-${qtGlobal "stop"}"
             ];
             Unit.ConditionPathExists = "!%t/loft-live/active";
             # Three crashes in a minute: Plasma's shell takes over, so a
@@ -1254,6 +1287,8 @@
             # Keys Loft took for its shortcuts and never gave back (the session
             # ended without stopping Loft's shell): back to their owners.
             ExecStartPre=-${releaseKwinShortcuts}
+            # The same for the global Qt style's kdeglobals / Kvantum keys.
+            ExecStartPre=-${qtGlobal "stop"}
           '';
         };
         # KWin's drop-in. ExecStopPost, as with niri: KWin can end without a
@@ -1269,6 +1304,18 @@
             [Service]
             ExecStartPre=-${lib.getExe loftPlasma} lock-env
             EnvironmentFile=-%t/loft/plasma-lock.env
+          ''
+          # Global Qt style (docs/KWIN.md §4.14): KWin reads its widget style
+          # once, at start, so a Loft login applies it before KWin starts (the
+          # shell's own start would come too late for KWin's menus). Plain
+          # "Plasma" logins put back what a session that ended without a stop
+          # job left.
+          + lib.optionalString cfg.qt.enable ''
+            ExecStartPre=-${pkgs.writeShellScript "loft-qt-global-kwin" ''
+              if ${lib.getExe loftPlasma} check loft; then exec ${qtGlobal "start"}; else exec ${qtGlobal "stop"}; fi
+            ''}
+          ''
+          + ''
             ExecStopPost=-${pkgs.systemd}/bin/systemctl --user --no-block stop ${plasmaUnits}
           ''
           # programs.loft.plasma.kwinPackage: that KWin, with the stock unit's
@@ -1281,7 +1328,7 @@
         };
 
         # programs.loft.spaces.documents → the library, once (never
-        # overwritten: Settings → Spaces edits them there).
+        # overwritten: Settings → Spaces & Windows → Spaces edits them there).
         home.activation.loftSpaces = lib.mkIf (cfg.spaces.documents != { } && spacesDir != null) (
           lib.hm.dag.entryAfter [ "writeBoundary" ] (
             lib.concatStrings (

@@ -51,7 +51,7 @@ Item {
         width: parent.width - 60
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.Wrap
-        text: !Settings.island.ai ? "AI usage is off (Settings → Dynamic Island)." : AiUsage.data === null ? "Reading Claude Code and Codex usage…" : "No Claude Code or Codex activity this week."
+        text: !Settings.island.ai ? "AI usage is off (Settings → Desktop & Dock → Dynamic Island)." : AiUsage.data === null ? "Reading Claude Code and Codex usage…" : "No Claude Code or Codex activity this week."
         color: Theme.islandSubtext
         font.family: Theme.fontUi
         font.pixelSize: 12

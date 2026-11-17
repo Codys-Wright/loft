@@ -46,7 +46,10 @@ Singleton {
             configReload: true,
             serverDecorations: false,
             // Spaces: named workspaces per output, activated by loft-niri.
-            spaces: true
+            spaces: true,
+            // No press/release of binds (shortcutKey): niri repeats a held
+            // bind, and the quit guard counts the repeats.
+            shortcutKeys: false
         })
 
     // A screenshot was taken (niri's screenshot UI or actions); path may be "".
