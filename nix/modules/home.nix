@@ -554,8 +554,10 @@
           example = lib.literalExpression "inputs.loft.packages.\${system}.loft-kwin-patched";
           description = ''
             A KWin to run in Plasma sessions instead of the system's, e.g.
-            Loft's `loft-kwin-patched` (KWin with a kwinrc key for the
-            tile-while-dragging modifier, see `plasma.tileModifier`). Loft's
+            Loft's `loft-kwin-patched` (KWin with kwinrc keys for the
+            tile-while-dragging modifier, see `plasma.tileModifier`, and for
+            sending the window menus apps with their own title bars ask for
+            to Loft, set while Loft's shell runs). Loft's
             drop-in for plasma-kwin_wayland.service starts its
             kwin_wayland_wrapper; plain "Plasma" logins run it too (it behaves
             like stock KWin until the key is set). With Loft's NixOS option
@@ -1257,13 +1259,16 @@
             # Global Qt style (docs/KWIN.md §4.14): applies only when on.
             ++ lib.optional cfg.qt.enable "-${qtGlobal "start"}"
             # Option-drag tiles (docs/KWIN.md §4.6).
-            ++ lib.optional tileModifierOn "-${lib.getExe sp.loft-kwin-tile-modifier} apply ${cfg.plasma.tileModifier}";
+            ++ lib.optional tileModifierOn "-${lib.getExe sp.loft-kwin-tile-modifier} apply ${cfg.plasma.tileModifier}"
+            # Apps' own window menus (GTK, Chromium) are Loft's (docs/KWIN.md §4.4).
+            ++ lib.optional (cfg.plasma.kwinPackage != null) "-${lib.getExe sp.loft-kwin-window-menu} apply";
             # revert always: a no-op without a record, and it cleans up after
             # the option is turned off.
             Service.ExecStopPost = [
               "-${lib.getExe sp.loft-kwin-decoration} revert"
               "-${plasmaShortcuts} unload"
               "-${lib.getExe sp.loft-kwin-tile-modifier} revert"
+              "-${lib.getExe sp.loft-kwin-window-menu} revert"
               # A no-op without a record (programs.loft.qt off too).
               "-${qtGlobal "stop"}"
             ];

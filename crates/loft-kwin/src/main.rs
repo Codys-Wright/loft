@@ -34,6 +34,8 @@
 //!   names from the same report as `{"Activities"}`); `loft-kwin expect
 //!   JSON` (`loft open`) and `openSpace` place the windows of a started
 //!   process tree, through one expectation (placement::Expect).
+//! - Serves `org.kde.KWin.ClientWindowMenu` on `/WindowMenu` for Loft's patched
+//!   KWin: window menus apps with their own title bars ask for (docs/KWIN.md §4.4).
 
 mod activities;
 mod displays;
@@ -186,6 +188,36 @@ impl Bridge {
             _ => eprintln!("loft-kwin: bad event from the script {json:?}"),
         }
     }
+}
+
+/// A window menu an app with its own title bar asked for (GTK / libadwaita
+/// header bars, Chromium's, X11's `_GTK_SHOW_WINDOW_MENU`), from Loft's
+/// patched KWin (nix/kwin/client-window-menu-service.patch, kwinrc
+/// `[Windows] ClientWindowMenuService=dev.loft.KWinBridge`; docs/KWIN.md §4.4).
+struct ClientWindowMenu {
+    queue: Arc<Queue>,
+}
+
+#[interface(name = "org.kde.KWin.ClientWindowMenu")]
+impl ClientWindowMenu {
+    /// `window`: KWin's internal id; `x`, `y`: the global point the app asked
+    /// for. True = Loft's menu opens there; false = KWin shows its own.
+    async fn show(&self, window: String, x: f64, y: f64) -> bool {
+        match client_menu_command(&window, x, y) {
+            Some(cmd) => {
+                self.queue.push(cmd);
+                true
+            }
+            None => false,
+        }
+    }
+}
+
+/// A client's window-menu request → the script's `clientMenu` command.
+fn client_menu_command(window: &str, x: f64, y: f64) -> Option<Value> {
+    let id = window.trim();
+    let uuid = id.len() == 38 && id.starts_with('{') && id.ends_with('}');
+    (uuid && x.is_finite() && y.is_finite()).then(|| json!({"cmd": "clientMenu", "window": id, "x": x, "y": y}))
 }
 
 /// A command line: a JSON object with a string `cmd`.
@@ -709,6 +741,7 @@ async fn main() -> Result<()> {
             "/Bridge",
             Bridge { snapshots: snapshots_tx, commands: commands_tx, state: state.clone(), queue: queue.clone() },
         )?
+        .serve_at("/WindowMenu", ClientWindowMenu { queue: queue.clone() })?
         .build()
         .await
     {
@@ -818,6 +851,18 @@ mod tests {
         assert!(title_bar_command(r#"{"action":"close","x":0,"y":0,"width":1,"height":1}"#).is_none());
         assert!(title_bar_command(r#"{"action":"menu","x":0,"y":0}"#).is_none());
         assert!(title_bar_command("not json").is_none());
+    }
+
+    #[test]
+    fn client_menu_requests() {
+        let id = "{0b5c6a2e-8d6f-4c1e-9a3b-2f1d7e4c5a60}";
+        assert_eq!(
+            client_menu_command(id, 412.5, 88.0).unwrap(),
+            json!({"cmd": "clientMenu", "window": id, "x": 412.5, "y": 88.0})
+        );
+        assert!(client_menu_command("", 1.0, 1.0).is_none());
+        assert!(client_menu_command("not-a-uuid", 1.0, 1.0).is_none());
+        assert!(client_menu_command(id, f64::NAN, 1.0).is_none());
     }
 
     #[test]

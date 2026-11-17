@@ -27,7 +27,10 @@
 #                          Loft runs in Plasma, reverts after
 #   loft-kwin-patched      KWin + nix/kwin/tile-while-moving-modifier.patch (kwinrc
 #                          [Windows] TileWhileMovingModifier: Option-drag tiles)
+#                          + nix/kwin/client-window-menu-service.patch ([Windows]
+#                          ClientWindowMenuService: apps' own window menus → Loft)
 #   loft-kwin-tile-modifier  sets that key while Loft runs in Plasma, reverts after
+#   loft-kwin-window-menu  the same for ClientWindowMenuService
 #
 # Both sessions include <state>/overrides/spaces.kdl once, after the theme
 # (`loft-niri space render`: the spaces' workspaces, rules and binds).
@@ -832,9 +835,17 @@
         # Only KWin rebuilds: nothing in Plasma depends on this package, the
         # session runs it through programs.loft.plasma.kwinPackage
         # (docs/KWIN.md §4.6).
+        # + nix/kwin/client-window-menu-service.patch: kwinrc [Windows]
+        # ClientWindowMenuService; when set, a window menu that an app with
+        # its own title bar asks for (GTK / libadwaita, Chromium, X11's
+        # _GTK_SHOW_WINDOW_MENU) goes to that D-Bus service (Loft's
+        # dev.loft.KWinBridge), falling back to KWin's menu (docs/KWIN.md §4.4).
         loft-kwin-patched = pkgs.kdePackages.kwin.overrideAttrs (old: {
           pname = "loft-kwin-patched";
-          patches = (old.patches or [ ]) ++ [ ./kwin/tile-while-moving-modifier.patch ];
+          patches = (old.patches or [ ]) ++ [
+            ./kwin/tile-while-moving-modifier.patch
+            ./kwin/client-window-menu-service.patch
+          ];
         });
 
         # Sets [Windows] TileWhileMovingModifier while Loft runs (Option-drag
@@ -849,6 +860,20 @@
             pkgs.kdePackages.kconfig
           ];
           text = builtins.readFile ./kwin-tile-modifier.sh;
+        };
+
+        # Points [Windows] ClientWindowMenuService at Loft's bridge while Loft
+        # runs, so apps' own window menus are Loft's, and restores the previous
+        # value after (nix/kwin-window-menu.sh; docs/KWIN.md §4.4).
+        loft-kwin-window-menu = pkgs.writeShellApplication {
+          name = "loft-kwin-window-menu";
+          runtimeInputs = [
+            pkgs.coreutils
+            pkgs.dbus
+            pkgs.gnused
+            pkgs.kdePackages.kconfig
+          ];
+          text = builtins.readFile ./kwin-window-menu.sh;
         };
 
         # Selects Loft's decoration and macOS's button order in kwinrc while Loft
