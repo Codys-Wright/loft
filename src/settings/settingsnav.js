@@ -25,7 +25,7 @@ var pages = {
     // ── Desktop ─────────────────────────────────────────────────────────
     appearance: { label: "Appearance", icon: "󰏘", badge: "graphite", children: ["wallpaper", "lockscreen"], keywords: ["theme", "dark", "light", "glass", "transparency", "blur", "colors", "spotify"] },
     wallpaper: { label: "Wallpaper", icon: "󰸉", badge: "cyan", parent: "appearance", summary: "Collection, per display and workspace, video", keywords: ["background", "video wallpaper", "rotate"] },
-    lockscreen: { label: "Lock Screen", icon: "󰌾", badge: "indigo", parent: "appearance", summary: "The lock screen's design", keywords: ["lock", "lock screen settings"] },
+    lockscreen: { label: "Lock Screen", icon: "󰌾", badge: "indigo", parent: "appearance", summary: "The lock screen's design, and when idle locks, turns displays off and sleeps", keywords: ["lock", "lock screen settings", "idle", "screen off", "displays off", "sleep", "suspend", "timeout", "grace"] },
     menubar: { label: "Menu Bar", icon: "󰍜", badge: "graphite", keywords: ["bar", "status bar", "top bar", "controls", "control center", "global menu", "system menu", "app menu"] },
     desktop: { label: "Desktop & Dock", icon: "󱂬", badge: "blue", children: ["dock", "island", "desktopmenu", "quickpanel"], keywords: ["desktop", "taskbar"] },
     dock: { label: "Dock", icon: "󱂬", badge: "blue", parent: "desktop", feature: "dock", summary: "Apps, size, magnification, folders", keywords: ["taskbar", "magnification", "autohide"] },

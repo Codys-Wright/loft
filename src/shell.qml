@@ -28,8 +28,8 @@ import qs.phone
 // Optional modules are gated by the feature registry (services/Features.qml).
 ShellRoot {
     // Background services are lazy singletons; touch them so they run from
-    // startup (screen time, Bluetooth banners).
-    readonly property var services: [AppUsage, DeviceEvents, Shortcuts, Spaces, Hud, Phone, Perf]
+    // startup (screen time, Bluetooth banners, KDE idle settings and keep-awake).
+    readonly property var services: [AppUsage, DeviceEvents, Shortcuts, Spaces, Hud, Phone, Perf, Idle, KeepAwake]
     Variants {
         model: Quickshell.screens
         Wallpaper {}

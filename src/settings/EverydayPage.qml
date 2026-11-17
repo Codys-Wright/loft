@@ -30,7 +30,7 @@ ColumnLayout {
             title: "Keep Awake"
         }
         Note {
-            text: (KeepAwake.inhibitError ? `systemd-logind refused the inhibitor (${KeepAwake.inhibitError}); idle is still inhibited through Wayland. ` : "") + `Now: ${KeepAwake.status}. While awake the screen doesn't blank or lock on idle (an idle inhibitor, which niri passes to swayidle and friends) and, with the option below, the system doesn't suspend (a systemd-logind inhibitor).`
+            text: KeepAwake.kde ? (KWin.keepAwake.error ? `${KWin.keepAwake.error}. ` : "") + `Now: ${KeepAwake.status}. While awake, PowerDevil neither dims nor turns the displays off, Plasma's locker doesn't lock on idle and the system doesn't sleep on idle (a PowerDevil inhibition, listed in Plasma's battery applet as Loft's). Closing the lid does what PowerDevil's lid setting says.` : (KeepAwake.inhibitError ? `systemd-logind refused the inhibitor (${KeepAwake.inhibitError}); idle is still inhibited through Wayland. ` : "") + `Now: ${KeepAwake.status}. While awake the screen doesn't blank or lock on idle (an idle inhibitor, which niri passes to swayidle and friends) and, with the option below, the system doesn't suspend (a systemd-logind inhibitor).`
         }
 
         SettingsRow {
@@ -43,6 +43,8 @@ ColumnLayout {
             }
         }
         SettingsRow {
+            // Under KWin, PowerDevil's inhibition always holds off idle sleep.
+            visible: !KeepAwake.kde
             label: "Also block suspend"
             hint: "systemd-inhibit --what=idle:sleep while awake"
             SettingsSwitch {
@@ -51,7 +53,7 @@ ColumnLayout {
             }
         }
         SettingsRow {
-            visible: KeepAwake.hasBattery
+            visible: KeepAwake.hasBattery && !KeepAwake.kde
             label: "Stay awake with the lid closed"
             hint: "While awake, closing the lid doesn't suspend (logind handle-lid-switch inhibitor)"
             SettingsSwitch {

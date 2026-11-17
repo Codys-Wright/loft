@@ -404,6 +404,14 @@
         ${lib.concatMapStrings (e: "export ${lib.escapeShellArg e}\n") env}
         exec ${lib.getExe sp.loft} qt global "$1"
       ''} ${verb}";
+      # Loft's idle settings in KDE's kscreenlockerrc / powerdevilrc
+      # (cli/loft/kdeidle.py, docs/KWIN.md §4.20): the shell applies them
+      # under KWin; `revert` gives KDE's own values back.
+      kdeIdle = verb: "${pkgs.writeShellScript "loft-idle" ''
+        PATH=$PATH:${lib.makeBinPath [ pkgs.systemd ]}
+        ${lib.concatMapStrings (e: "export ${lib.escapeShellArg e}\n") env}
+        exec ${lib.getExe sp.loft} idle "$1"
+      ''} ${verb}";
       plasmaShortcuts = pkgs.writeShellScript "loft-plasma-shortcuts" ''
         set -u
         dir="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}/loft/plasma-keys"
@@ -640,12 +648,22 @@
           lockAfter = lib.mkOption {
             type = lib.types.nullOr lib.types.ints.positive;
             default = 300;
-            description = "Lock the session after this many idle seconds (null: never). Always locks before sleep.";
+            description = ''
+              Lock the session after this many idle seconds (null: never).
+              Always locks before sleep. Under niri, swayidle's timeout; in a
+              Plasma (Loft) session, the default for Settings → Lock Screen →
+              When Idle, written into kscreenlockerrc while Loft runs.
+            '';
           };
           screenOffAfter = lib.mkOption {
             type = lib.types.nullOr lib.types.ints.positive;
             default = 600;
-            description = "Turn the monitors off after this many idle seconds (null: never).";
+            description = ''
+              Turn the monitors off after this many idle seconds (null:
+              never). Under niri, swayidle's timeout; in a Plasma (Loft)
+              session, the default for Settings → Lock Screen → When Idle,
+              written into powerdevilrc while Loft runs.
+            '';
           };
         };
 
@@ -1188,7 +1206,16 @@
           ExecStopPost=-${pkgs.systemd}/bin/systemctl --user --no-block stop ${lib.concatStringsSep " " loftSessionUnits}
         '';
 
+        # programs.loft.idle for a Plasma (Loft) session: the shell writes it
+        # (or Settings → Lock Screen → When Idle, which wins) into KDE's
+        # kscreenlockerrc / powerdevilrc (docs/KWIN.md §4.20). null = never.
+        xdg.configFile."loft/idle.json".text = builtins.toJSON {
+          inherit (cfg.idle) lockAfter screenOffAfter;
+        };
+
         # Idle: lock through the shell (its WlSessionLock) and blank the screens.
+        # Only under niri (systemdTarget): a Plasma session has no niri.service,
+        # and its idle is PowerDevil's and kscreenlocker's.
         services.swayidle = {
           enable = true;
           # Its lock and blanking go through Loft and niri.
@@ -1295,6 +1322,8 @@
               "-${lib.getExe sp.loft-kwin-window-menu} revert"
               # A no-op without a record (programs.loft.qt off too).
               "-${qtGlobal "stop"}"
+              # KDE's own idle settings back (docs/KWIN.md §4.20).
+              "-${kdeIdle "revert"}"
             ];
             Unit.ConditionPathExists = "!%t/loft-live/active";
             # Three crashes in a minute: Plasma's shell takes over, so a
@@ -1359,8 +1388,10 @@
             # Keys Loft took for its shortcuts and never gave back (the session
             # ended without stopping Loft's shell): back to their owners.
             ExecStartPre=-${releaseKwinShortcuts}
-            # The same for the global Qt style's kdeglobals / Kvantum keys.
+            # The same for the global Qt style's kdeglobals / Kvantum keys,
+            # and for Loft's idle settings in kscreenlockerrc / powerdevilrc.
             ExecStartPre=-${qtGlobal "stop"}
+            ExecStartPre=-${kdeIdle "revert"}
           '';
         };
         # KWin's drop-in. ExecStopPost, as with niri: KWin can end without a
