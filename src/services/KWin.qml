@@ -61,7 +61,11 @@ Singleton {
             // windows too: WindowChrome leaves out its traffic lights.
             serverDecorations: true,
             // Spaces are KDE Activities, one per Space (Spaces.qml).
-            spaces: true
+            spaces: true,
+            // Loft's shortcuts report press, repeat and release
+            // (shortcutKey; docs/KWIN.md §4.12): the quit guard and the
+            // Radial Menu's hold.
+            shortcutKeys: true
         })
 
     signal outputsChanged
@@ -72,6 +76,13 @@ Singleton {
     signal windowActionsMenuRequested(int id, string output, real x, real y)
     // A window screenshot of ours finished (screenshotWindow), path written.
     signal screenshotTaken(string path)
+    // One of Loft's global shortcuts (kglobalaccel `loft-<id>`) was pressed,
+    // repeated (held) or released: id without `loft-` and a `-N` twin suffix
+    // ("quit", "radial-hold"), state "pressed" | "repeated" | "released".
+    signal shortcutKey(string id, string state)
+    // id → Date.now() of its last press, and whether it is still held.
+    property var shortcutPressedAt: ({})
+    property var shortcutDown: ({})
     property string outputKey: ""
     property string layoutKey: ""
 
@@ -159,6 +170,14 @@ Singleton {
                 windowActionsMenuRequested(w.id, e.output ?? "", e.x, e.y);
         } else if (msg.KeyboardLayouts) {
             keyboardLayouts = msg.KeyboardLayouts;
+        } else if (msg.Shortcut) {
+            const id = String(msg.Shortcut.name ?? "").replace(/^loft-/, "").replace(/-\d+$/, "");
+            const st = msg.Shortcut.state;
+            if (st === "pressed")
+                shortcutPressedAt[id] = Date.now();
+            if (st === "pressed" || st === "released")
+                shortcutDown[id] = st === "pressed";
+            shortcutKey(id, st);
         } else if (msg.Error) {
             console.warn(`KWin: ${msg.Error}`);
         }

@@ -23,6 +23,15 @@ import qs.services
 //
 // Apps without protection keep the old behavior (close the focused window),
 // once per burst, so a held key no longer closes window after window.
+//
+// Under KWin (Compositor.capabilities.shortcutKeys, docs/KWIN.md §4.12) the
+// key also comes as press / repeat / release (Compositor.shortcutKey →
+// shortcut()): KWin repeats a held shortcut too, so the repeats drive the
+// hold as above, but the release cancels at once, and between the press and
+// the first repeat (the keyboard's repeat delay, however long) the key is
+// known to be down, so no firstGapMs. The bind's own command still arrives,
+// later, and is dropped (Everyday.qml). With key repeat off in KDE there
+// are no repeats: then holding down for holdMs quits.
 Singleton {
     id: root
 
@@ -38,6 +47,8 @@ Singleton {
     property real lastAt: 0
     property bool repeating: false
     property bool holding: false
+    // KWin: the key is down (pressed, not yet released).
+    property bool down: false
     property real progress: 0
     // "hold" | "quitting" | "cancelled" | "" — what the pill says.
     property string phase: ""
@@ -60,8 +71,24 @@ Singleton {
 
     property real lastPlainAt: 0
 
-    // The bind fired (press or repeat).
-    function key() {
+    // KWin: the shortcut was "pressed", "repeated" or "released".
+    function shortcut(state) {
+        if (state === "released") {
+            down = false;
+            if (holding && progress < 1)
+                cancel();
+            return;
+        }
+        if (state === "pressed") {
+            down = true;
+            key(false);
+        } else if (holding) {
+            key(true); // repeats only keep a hold going; never a second close
+        }
+    }
+
+    // The bind fired (press or repeat; repeat = known to be one).
+    function key(repeat) {
         const now = Date.now();
         const w = Compositor.focusedWindow;
         if (!w)
@@ -75,7 +102,7 @@ Singleton {
             return;
         }
         if (holding && window && window.id === w.id) {
-            if (now - startedAt > 120)
+            if (repeat || now - startedAt > 120)
                 repeating = true;
             lastAt = now;
             return;
@@ -115,12 +142,15 @@ Singleton {
         onTriggered: {
             const now = Date.now();
             const quiet = now - root.lastAt;
-            if (quiet > (root.repeating ? root.repeatGapMs : root.firstGapMs)) {
+            // KWin: held and waiting for the first repeat (the release
+            // would have cancelled).
+            const waiting = root.down && !root.repeating;
+            if (!waiting && quiet > (root.repeating ? root.repeatGapMs : root.firstGapMs)) {
                 root.cancel();
                 return;
             }
             root.progress = Math.min(1, (now - root.startedAt) / root.holdMs);
-            if (root.progress >= 1 && root.repeating)
+            if (root.progress >= 1 && (root.repeating || root.down))
                 root.finish();
         }
     }

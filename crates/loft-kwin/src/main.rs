@@ -24,9 +24,12 @@
 //! - Spaces as Activities (src/activities.rs): stdin `syncSpaces` makes
 //!   kactivitymanagerd match the shell's Space list and answers
 //!   `{"Spaces": {"map": {space: activity}, …}}`; `loft-kwin spaces list|prune`.
+//! - stdout `{"Shortcut": {"name": "loft-…", "state": "pressed"|"repeated"|
+//!   "released"}}`: Loft's global shortcuts held and let go (src/keys.rs).
 
 mod activities;
 mod displays;
+mod keys;
 mod record;
 mod shot;
 mod state;
@@ -435,6 +438,7 @@ async fn main() -> Result<()> {
     effects_off(&conn).await;
 
     tokio::spawn(watch_layouts(conn.clone()));
+    tokio::spawn(keys::watch(conn.clone(), emit));
 
     let mut model = state::Model::new();
     // Display identities spell the vendor out like niri (LOFT_PNP_IDS: set

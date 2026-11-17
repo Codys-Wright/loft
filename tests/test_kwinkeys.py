@@ -91,6 +91,26 @@ class FromShellBinds(unittest.TestCase):
         self.assertIn("invokeShortcut 'Window Close'", q.command[2])
         self.assertEqual(self.by_id["quit-2"].keys, "Alt+F4")
 
+    def test_held_keys_keep_niris_repeat_and_cooldown(self):
+        # KWin repeats a held shortcut and runs the callback each time.
+        radial = self.by_id["radial-hold"]
+        self.assertFalse(radial.repeat)
+        self.assertEqual(self.by_id["quit"].cooldown_ms, 100)
+        self.assertTrue(self.by_id["controlcenter-toggle"].repeat)
+        self.assertEqual(self.by_id["controlcenter-toggle"].cooldown_ms, 0)
+        js = kwinkeys.render_js(self.actions)
+        self.assertIn('"Meta+Ctrl+Space", function () { if (loftOnce("radial-hold")) { loftRun("radial-hold"); } });', js)
+        self.assertIn('"Meta+Q", function () { if (loftCooldown("quit", 100)) { loftRun("quit"); } });', js)
+        self.assertIn('"Meta+A", function () { loftRun("controlcenter-toggle"); });', js)
+
+    def test_override_props_carry_repeat(self):
+        ov = {"binds": {"Mod+Ctrl+R": {"action": "spawn", "args": ["x"], "props": {"repeat": False}},
+                        "Mod+Ctrl+C": {"action": "spawn", "args": ["y"], "props": {"cooldown-ms": 300}}}}
+        actions, _ = kwinkeys.build(shell_binds(), ov)
+        by_keys = {a.keys: a for a in actions}
+        self.assertFalse(by_keys["Meta+Ctrl+R"].repeat)
+        self.assertEqual(by_keys["Meta+Ctrl+C"].cooldown_ms, 300)
+
     def test_niri_actions_become_kwin_calls(self):
         self.assertEqual(self.by_id["toggle-overview"].kind, "kwin")
         self.assertIn('loftKwin("Overview")', self.by_id["toggle-overview"].js)

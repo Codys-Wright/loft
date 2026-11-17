@@ -23,6 +23,12 @@ import qs.services
 // The window is RadialMenuWindow.qml (drawing: RadialWheel.qml), the editor
 // Settings → Radial Menu.
 // IPC: radial hold | toggle | open | close | release | settings
+//
+// Under KWin (Compositor.capabilities.shortcutKeys, docs/KWIN.md §4.12) the
+// key comes from KWin as press / release: the press opens the wheel, the
+// release (of ⌃, ⌘ or Space, whichever goes first) picks. KWin repeats a
+// held shortcut, so the bind's own `radial hold` arrives again and again
+// while the key is down; those are dropped instead of toggling the wheel.
 Singleton {
     id: root
 
@@ -319,11 +325,30 @@ Singleton {
         }
     }
 
+    Connections {
+        target: Compositor
+        enabled: Compositor.capabilities.shortcutKeys === true
+        function onShortcutKey(id, state) {
+            if (id !== "radial-hold")
+                return;
+            if (state === "pressed") {
+                if (!root.open && Shortcuts.skip("Radial Menu"))
+                    return;
+                root.hold();
+            } else if (state === "released") {
+                root.release();
+            }
+        }
+    }
+
     IpcHandler {
         target: "radial"
 
         // Bound to ⌃⌘Space: opens at the pointer; releasing the modifier picks.
         function hold(): void {
+            // KWin reported this keypress itself (onShortcutKey above).
+            if (Compositor.shortcutRecent("radial-hold", 1500))
+                return;
             if (!root.open && Shortcuts.skip("Radial Menu"))
                 return;
             root.hold();

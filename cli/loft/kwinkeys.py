@@ -19,6 +19,14 @@ keeps nothing of Loft's.
   loft keys kwin claim --names DIR/names     take Loft's keys off other shortcuts
   loft keys kwin release                     give them back
 
+KWin repeats a held global shortcut (after the keyboard's repeat delay, at
+its repeat rate) and runs the callback each time, where niri runs a bind
+once with `repeat=false` and at most once per `cooldown-ms`. The script
+keeps both: a `repeat=false` bind skips triggers that follow the last one
+within REPEAT_GAP_MS (a repeat), a cooldown bind skips those within its
+cooldown. The shell gets the press and release itself from loft-kwin
+(docs/KWIN.md §4.12) for the keys that need them (⌘Q held, the Radial Menu).
+
 Mod and Super are both Meta here: the KWin session has no ISO_Level3_Shift
 window-manager key (niri/base.kdl `mod-key`). The keyboard layer makes the
 WM key (Caps Lock / Esc / Right Ctrl held) send Meta in Plasma instead
@@ -38,6 +46,11 @@ UNIT_PREFIX = "loft-plasma-key@"
 # KWin's own action names (kglobalaccel component "kwin").
 KWIN_CLOSE = "Window Close"
 KWIN_OVERVIEW = "Overview"
+# A trigger this soon after the previous one is a key repeat (KWin's default
+# rate is 25/s, 40 ms apart). The first repeat comes after the repeat delay
+# (600 ms by default) and isn't caught; the shell drops it (Compositor.
+# shortcutRecent).
+REPEAT_GAP_MS = 250
 
 # niri modifier → Qt. Qt's portable text orders them Meta, Ctrl, Alt, Shift.
 QT_MODS = {
@@ -126,6 +139,9 @@ class Bind:
     args: list = field(default_factory=list)
     title: str | None = None
     origin: str = "shell-binds"
+    # niri's `repeat=false` and `cooldown-ms=N`.
+    repeat: bool = True
+    cooldown_ms: int = 0
 
 
 @dataclass
@@ -138,6 +154,8 @@ class Action:
     command: list[str] | None = None
     js: str | None = None
     combo: str = ""
+    repeat: bool = True
+    cooldown_ms: int = 0
 
 
 # ── KDL (the subset shell-binds uses: one bind per line) ────────────────
@@ -203,19 +221,25 @@ def parse_binds(text: str) -> list[Bind]:
         if not m:
             raise KwinKeysError(f"line {n}: not a one-line bind: {raw.strip()!r}")
         title = None
+        repeat, cooldown = True, 0
         for kind, tok in _tokens(m.group("props")):
             if kind == "word" and "=" in tok:
                 k, v = tok.split("=", 1)
                 if k == "hotkey-overlay-title":
                     v = _value(v)
                     title = v if isinstance(v, str) else None
+                elif k == "repeat":
+                    repeat = _value(v) is not False
+                elif k == "cooldown-ms":
+                    v = _value(v)
+                    cooldown = v if isinstance(v, int) and v > 0 else 0
         body = [t for t in _tokens(m.group("body"))]
         words = [(k, t) for k, t in body if k != "semi"]
         if not words:
             raise KwinKeysError(f"line {n}: empty action")
         action = words[0][1]
         args = [_value(t) for k, t in words[1:] if not (k == "word" and "=" in t)]
-        binds.append(Bind(combo=m.group("combo"), action=action, args=args, title=title))
+        binds.append(Bind(combo=m.group("combo"), action=action, args=args, title=title, repeat=repeat, cooldown_ms=cooldown))
     return binds
 
 
@@ -251,9 +275,13 @@ def apply_overrides(binds: list[Bind], overrides: dict) -> list[Bind]:
         args = args if isinstance(args, list) else []
         title = r.get("title")
         title = title if isinstance(title, str) else None
+        props = r.get("props") if isinstance(r.get("props"), dict) else {}
+        cooldown = props.get("cooldown-ms")
         if k not in out:
             order.append(k)
-        out[k] = Bind(combo=combo, action=r["action"], args=list(args), title=title, origin="overrides")
+        out[k] = Bind(combo=combo, action=r["action"], args=list(args), title=title, origin="overrides",
+                      repeat=props.get("repeat") is not False,
+                      cooldown_ms=cooldown if isinstance(cooldown, int) and cooldown > 0 else 0)
     return [out[k] for k in order if k in out]
 
 
@@ -370,7 +398,10 @@ def translate(binds: list[Bind]) -> tuple[list[Action], list[str]]:
         ids.add(aid)
         seen_keys[keys] = b.combo
         title = b.title or titles.get(json.dumps([b.action, b.args])) or aid
-        actions.append(Action(id=aid, keys=keys, text=f"Loft: {title}", kind=kind, command=command, js=js, combo=b.combo))
+        actions.append(
+            Action(id=aid, keys=keys, text=f"Loft: {title}", kind=kind, command=command, js=js, combo=b.combo,
+                   repeat=b.repeat, cooldown_ms=b.cooldown_ms)
+        )
     return actions, skipped
 
 
@@ -399,9 +430,28 @@ def render_js(actions: list[Action]) -> str:
         '    callDBus("org.kde.kglobalaccel", "/component/kwin",',
         '        "org.kde.kglobalaccel.Component", "invokeShortcut", name);',
         "}",
+        "// KWin runs a callback again on every key repeat. niri's repeat=false:",
+        f"// a trigger within {REPEAT_GAP_MS} ms of the last one is a repeat. cooldown-ms: at",
+        "// most one run per cooldown.",
+        "var loftLast = {};",
+        "function loftOnce(id) {",
+        "    var now = Date.now(), last = loftLast[id] || 0;",
+        "    loftLast[id] = now;",
+        f"    return now - last >= {REPEAT_GAP_MS};",
+        "}",
+        "function loftCooldown(id, ms) {",
+        "    var now = Date.now();",
+        "    if (now - (loftLast[id] || 0) < ms) return false;",
+        "    loftLast[id] = now;",
+        "    return true;",
+        "}",
     ]
     for a in actions:
         body = f"loftRun({_js_str(a.id)});" if a.kind == "exec" else a.js
+        if not a.repeat:
+            body = f"if (loftOnce({_js_str(a.id)})) {{ {body} }}"
+        elif a.cooldown_ms:
+            body = f"if (loftCooldown({_js_str(a.id)}, {a.cooldown_ms})) {{ {body} }}"
         lines.append(
             f"registerShortcut({_js_str(name_of(a))}, {_js_str(a.text)}, {_js_str(a.keys)}, function () {{ {body} }});"
         )

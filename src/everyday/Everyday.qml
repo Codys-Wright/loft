@@ -67,6 +67,20 @@ Scope {
         blockLoading: false
     }
 
+    // ⌘Q under KWin: press, repeats and release from KWin itself
+    // (docs/KWIN.md §4.12), so a tap cancels as soon as the key is let go.
+    Connections {
+        target: Compositor
+        enabled: Compositor.capabilities.shortcutKeys === true
+        function onShortcutKey(id, state) {
+            if (id !== "quit")
+                return;
+            if (state === "pressed" && Shortcuts.skip("⌘Q"))
+                return;
+            QuitGuard.shortcut(state);
+        }
+    }
+
     // ── IPC ──────────────────────────────────────────────────────────────
     // The ⌘Q bind (niri/shell-binds.kdl.in). Always answers, so the bind's
     // `|| niri msg action close-window` fallback only runs without a shell.
@@ -76,10 +90,14 @@ Scope {
         target: "quit"
 
         function key(): void {
+            // KWin reported this keypress itself (press/release,
+            // onShortcutKey below): this is its slower twin.
+            if (Compositor.shortcutRecent("quit", 1500))
+                return;
             // An app left alone (Settings → Keyboard Shortcuts): ⌘Q does
             // nothing rather than closing the game / VM / remote desktop.
             if (!Shortcuts.skip("⌘Q"))
-                QuitGuard.key();
+                QuitGuard.key(false);
         }
         // The bind's form: `sent` = when the key was pressed (epoch ms). The
         // bind gives up after 0.6 s and closes the window itself, so a press
