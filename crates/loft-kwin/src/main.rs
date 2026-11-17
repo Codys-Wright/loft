@@ -24,10 +24,13 @@
 //! - Spaces as Activities (src/activities.rs): stdin `syncSpaces` makes
 //!   kactivitymanagerd match the shell's Space list and answers
 //!   `{"Spaces": {"map": {space: activity}, …}}`; `loft-kwin spaces list|prune`.
+//! - stdout `{"Shortcut": {"name": "loft-…", "state": "pressed"|"repeated"|
+//!   "released"}}`: Loft's global shortcuts held and let go (src/keys.rs).
 
 mod activities;
 mod displays;
 mod input;
+mod keys;
 mod record;
 mod shot;
 mod state;
@@ -443,6 +446,7 @@ async fn main() -> Result<()> {
     effects_off(&conn).await;
 
     tokio::spawn(watch_layouts(conn.clone()));
+    tokio::spawn(keys::watch(conn.clone(), emit));
     // GStreamer's first run after an update scans every plugin (~10 s), and
     // auto's encoder probe takes a moment: do both now, so the first
     // recording starts at once (record.rs).

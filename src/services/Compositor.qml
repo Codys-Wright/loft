@@ -97,6 +97,21 @@ Singleton {
     signal windowActionsMenuRequested(int id, string output, real x, real y)
     // The set of outputs changed (hotplug, enable/disable).
     signal outputsChanged()
+    // capabilities.shortcutKeys (KWin): one of Loft's shortcuts was pressed,
+    // repeated (held) or released. id is the bind's action id ("quit",
+    // "radial-hold"; cli/loft/kwinkeys.py), state "pressed" | "repeated" |
+    // "released". The shortcut's own command still runs too (later: through
+    // systemd and `quickshell ipc`); shortcutRecent() tells them apart.
+    signal shortcutKey(string id, string state)
+
+    // The compositor reported a press of shortcut `id` in the last `ms`, or
+    // it is still held: a command that arrives now from that shortcut is the
+    // same keypress, already handled through shortcutKey.
+    function shortcutRecent(id, ms) {
+        if (backend !== "kwin")
+            return false;
+        return KWin.shortcutDown[id] === true || Date.now() - (KWin.shortcutPressedAt[id] ?? 0) < ms;
+    }
 
     Connections {
         target: Niri
@@ -129,6 +144,9 @@ Singleton {
         }
         function onWindowActionsMenuRequested(id, output, x, y) {
             root.windowActionsMenuRequested(id, output, x, y);
+        }
+        function onShortcutKey(id, state) {
+            root.shortcutKey(id, state);
         }
     }
 

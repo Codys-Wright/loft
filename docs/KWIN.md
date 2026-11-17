@@ -601,10 +601,10 @@ bar (Meta+Shift+5), the Island (Meta+I, after claim), the switcher, Spaces,
 emoji; unload leaves kglobalshortcutsrc as before. xremap-kde's KWin script
 loads and reports `org.kde.dolphin` for a Dolphin window. **Not run:** the
 systemd template itself (no user systemd on the private bus), xremap-kde against
-input devices (it would grab the real keyboard), the quit guard's hold, the
-Radial Menu's hold (KWin shortcuts have no repeat/release semantics like niri's
-`repeat=false`), and conflicts with plasmashell's own shortcuts (Meta+Q
-activities etc.: same mechanism, not present in the scratch session).
+input devices (it would grab the real keyboard), and conflicts with plasmashell's own shortcuts (Meta+Q
+activities etc.: same mechanism, not present in the scratch session). The quit guard's
+hold and the Radial Menu's hold: §4.13 (KWin does repeat held shortcuts; the
+press and release come from kglobalaccel's signals through loft-kwin).
 
 ### 4.6 Option-drag tiles, like macOS
 
@@ -1005,6 +1005,83 @@ arguments) only. Needs a check on real hardware.
 The arrangement drag also got `preventStealing`: the settings page's Flickable used to
 take the drag over (the page scrolled and the tile stayed half-moved), on niri too.
 
+### 4.13 Held shortcuts: press, repeat and release
+
+Two Loft shortcuts are about holding a key: **⌘Q** (the quit guard, hold ~1 s to quit a
+protected app, `src/everyday/QuitGuard.qml`) and **⌃⌘Space** (the Radial Menu: press opens
+the wheel, release picks, `src/palette/Radial.qml`). On niri the first counts niri's bind
+repeats and the second is `repeat=false` plus the wheel's own key-release handling.
+
+**What KWin delivers** (KWin 6.8.2, kglobalaccel 6.x, measured in a nested session with
+real key presses held for set times; `dbus-monitor` on the session bus, and a stand-in for
+systemd's `StartUnit` logging every unit the KWin script starts):
+
+| | ⌘Q (`loft-quit`, Meta+Q) | ⌃⌘Space (`loft-radial-hold`) |
+|---|---|---|
+| press | `globalShortcutPressed` at once, and the script's callback | same |
+| held | after the repeat delay (600 ms), `globalShortcutRepeated` every 40 ms (25/s), **and the callback again each time** | same |
+| release | `globalShortcutReleased` when the first key of the chord goes up (Q, or Meta) | same: Space, ⌃ or ⌘, whichever first |
+
+So kglobalaccel does repeat, unlike what §4.5 assumed, but a KWin script can't tell a
+repeat from a press (its callback is the QAction's `triggered`) and never sees the release.
+Before this change a 2.5 s ⌘Q hold started 48 `loft-plasma-key@quit` units (it did quit, the
+repeats feeding the guard), and a 2 s ⌃⌘Space hold sent 38 `radial hold` calls, each one
+toggling the wheel: it never stayed open. The signals on `/component/kwin`
+(`org.kde.kglobalaccel.Component`) carry the action name and do say which is which.
+
+**The mechanism** (one, for any Loft shortcut):
+
+1. `loft-kwin` subscribes to `globalShortcutPressed` / `Repeated` / `Released` on
+   kglobalaccel's `kwin` component (`crates/loft-kwin/src/keys.rs`) and prints
+   `{"Shortcut": {"name": "loft-quit", "state": "pressed"|"repeated"|"released"}}` for every
+   `loft-*` action. `KWin.qml` turns that into `Compositor.shortcutKey(id, state)` (id =
+   the action id without `loft-` and a `-N` twin suffix: `quit` for Meta+Q and Alt+F4,
+   `radial-hold`) and keeps when each id was last pressed and whether it is down.
+   `capabilities.shortcutKeys` is true on KWin, false on niri.
+2. The KWin script keeps niri's bind properties (`cli/loft/kwinkeys.py`): a `repeat=false`
+   bind drops triggers within 250 ms of the previous one (a repeat; the first repeat, one
+   repeat delay after the press, still gets through), a `cooldown-ms` bind runs at most once
+   per cooldown. Moved/custom binds keep their `props`. A held ⌘Q now starts ~6 units a
+   second instead of 25, a held ⌃⌘Space 2 in all.
+3. The shortcut's own command still runs (it is the fallback when the shell is gone: the
+   quit bind then closes the window through KWin), arriving 50+ ms later through systemd and
+   `quickshell ipc`. `Compositor.shortcutRecent(id, 1500)` (pressed in the last 1.5 s, or
+   still down) tells the shell it is the same keypress, and `quit key`/`keyAt` and
+   `radial hold` drop it.
+4. **Quit guard**: `QuitGuard.shortcut(state)`. pressed = the bind's press (protected app:
+   the pill; other apps: close the window once); repeated = keeps a hold going, never a
+   second close; released before the hold completes = cancel at once (instead of after
+   0.8 s without repeats). Between the press and the first repeat the key is known to be
+   down, so a long repeat delay doesn't cancel the hold. It quits once the hold has lasted
+   `holdMs` with repeats arriving, or with the key down and no repeats (key repeat off in
+   KDE).
+5. **Radial Menu**: pressed → `Radial.hold()` (opens, or closes an open wheel); released →
+   `Radial.release()` (picks the slice under the pointer; a tap or a submenu leaves it open
+   to click). The wheel's own modifier-release handling stays; whichever comes second finds
+   the wheel closed or sticky and does nothing. Unlike niri, letting go of Space first picks
+   too.
+
+**Verified** in a nested KWin 6.8.2 (`loft-dev --compositor kwin`, Loft's shortcuts
+rendered and loaded as `loft-plasma-shortcuts load` does, a stand-in for systemd's
+`StartUnit` on the private bus running the real action scripts, quit protection on for
+every app, `loft-input` holding keys for set times):
+
+- tap ⌘Q (120 ms) on KWrite: the pill, `cancelled` within ~125 ms of the release, KWrite
+  stays; the duplicate `quit keyAt` was dropped.
+- hold 700 ms (past the repeat delay, short of 1 s): cancelled on release, KWrite stays.
+- hold 1.5 s: `quitting`, KWrite quits.
+- with the stand-in told **not** to run the commands (only KWin's signals through
+  loft-kwin): tap → pill, cancelled; 1.5 s hold → KWrite quits.
+- hold ⌃⌘Space, move onto the top slice, release: the wheel shows Terminal selected while
+  held, the release runs it (a terminal opens). Tap (100 ms): the wheel stays open; Esc
+  closes it.
+
+**Not run / open**: real keyboards through xremap-kde (it would grab the real devices; xremap
+sends ⌘Q as Meta+Q or Alt+F4 presses, both `loft-quit*`, so the same signals apply);
+plasmashell's shortcuts. Seen once in the nested session: the wheel opened at the screen's
+top-left corner, or on the pointer's previous position, instead of under the pointer
+(`RadialMenuWindow` takes `mouseX/mouseY` on the pointer's enter; likely the
+virtual-pointer races of §6); placement isn't part of this change.
 ### 4.12 Settings → Keyboard & Mouse through kxkbrc and KWin's InputDevice
 
 **Done.** Under niri the page writes `input.keyboard` / `input.mouse` / `input.touchpad`
