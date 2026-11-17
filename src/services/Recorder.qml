@@ -8,7 +8,7 @@ import Quickshell.Io
 // ~/Videos/Recordings (the Capture module re-points `dir`). Shown as a live
 // activity in the island. niri: wf-recorder (wlr-screencopy). KWin, which
 // has no wlr-screencopy: `loft-kwin record` (KWin's zkde_screencast →
-// PipeWire → GStreamer, the same H.264 MP4; docs/KWIN.md §4.8).
+// PipeWire → GStreamer, the same H.264 MP4; docs/KWIN.md §4.10).
 //
 // Audio: none | system (the default sink's monitor) | mic (the default
 // source) | both — system goes into the video by wf-recorder, the mic is

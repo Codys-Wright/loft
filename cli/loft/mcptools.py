@@ -4,7 +4,7 @@
   maximize, column width, workspaces, overview, spawn — `niri msg` against
   $NIRI_SOCKET.
 - KWin (a Plasma session, no $NIRI_SOCKET): the same tools through the shell's
-  loft-kwin daemon (`loft-kwin state` / `loft-kwin send`, docs/KWIN.md §4.8);
+  loft-kwin daemon (`loft-kwin state` / `loft-kwin send`, docs/KWIN.md §4.9);
   the niri-only ones (tiling, columns) answer with an error that says so.
 - screenshots: an output (grim -o) or a window (grim -g for a visible
   floating window, else niri's own render), PNG, downscaled to `max_width`;

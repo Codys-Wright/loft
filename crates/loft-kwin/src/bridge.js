@@ -10,7 +10,7 @@
 //     a while), applies them, and polls again.
 //   - overview: KWin has no signal for an effect starting, so a timer asks
 //     `workspace.isEffectActive` (in-process, cheap) and pushes on a change.
-// docs/KWIN.md §3, §4.8.
+// docs/KWIN.md §3, §4.9.
 
 const SVC = "dev.loft.KWinBridge";
 const PATH = "/Bridge";

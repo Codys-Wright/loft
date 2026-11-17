@@ -1,5 +1,5 @@
 //! `loft-kwin record …`: screen recording under KWin (no wlr-screencopy, so
-//! wf-recorder can't capture). docs/KWIN.md §4.8.
+//! wf-recorder can't capture). docs/KWIN.md §4.10.
 //!
 //! KWin's `zkde_screencast_unstable_v1` Wayland protocol turns an output, a
 //! window or a region of the desktop into a PipeWire video node; we ask for

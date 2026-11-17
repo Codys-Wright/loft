@@ -23,7 +23,7 @@ Singleton {
     readonly property var focusedWindow: windows.find(w => w.is_focused) ?? null
     readonly property var focusedWorkspace: workspaces.find(w => w.is_focused) ?? null
     // KWin's Overview / Grid View / Present Windows effect is running
-    // (loft-bridge asks KWin, docs/KWIN.md §4.8): wallpapers and the bar
+    // (loft-bridge asks KWin, docs/KWIN.md §4.9): wallpapers and the bar
     // react as they do to niri's overview.
     property bool overviewOpen: false
     property var keyboardLayouts: ({ names: [], current_idx: 0 })

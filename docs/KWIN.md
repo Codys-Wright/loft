@@ -95,7 +95,7 @@ under niri (`spaces`: Spaces work; under KWin they are Activities, §4.2). Nothi
 | Capture: `capture/Capture`, `island/Island` | `screenshotWindow`, `screenshotTaken`, `shutter` | screen/area capture goes through grim today, which needs screencopy (KWin has none): switch to `org.kde.KWin.ScreenShot2` (§4) |
 | Wallpapers: `WorkspaceWallpapers`, `VideoWallpapers`, `Vibes` | active workspace per output, overview | per-workspace wallpaper **surfaces** off (they need niri-loft's patch). The "one wallpaper per screen, swapped on switch" fallback works |
 | Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **KDE Activities** (decided, §4.2). Off until that lands |
-| Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | **done** (§4.8): `Displays.outputs` / `setOutputs` → `KScreen.qml` → `loft-kwin displays` (kscreen-doctor) |
+| Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | **done** (§4.11): `Displays.outputs` / `setOutputs` → `KScreen.qml` → `loft-kwin displays` (kscreen-doctor) |
 | Spaces: `services/Spaces`, settings pages | named niri workspaces per output, activated together by loft-niri | **KDE Activities**, one per Space (done, §4.2) |
 | Displays: `Displays` (`niri msg -j outputs`), `NiriSettings`, settings pages | output identities, config writes through loft-niri | KWin-native: `kscreen-doctor -j` / KScreen D-Bus |
 | Title-bar events (`windowMinimizeRequested`, `windowActionsMenuRequested`) | niri-loft's traffic lights | not needed: KWin decorations minimize and open the window menu themselves |
@@ -188,8 +188,8 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | keybinds (loft-niri → niri KDL binds) | kglobalaccel, **done** (§4.5): `loft-keys.js`, a KWin script of `registerShortcut`s generated from shell-binds + Settings → Keyboard Shortcuts, loaded while Loft's shell runs (§5) |
 | window rules (loft-niri window_rules.rs) | applied by loft-bridge.js at `windowAdded` while Loft runs, not written to `kwinrulesrc` (§5) |
 | outputs / Displays page | `kscreen-doctor` (or KScreen D-Bus). Identities from its JSON |
-| overview (`toggle-overview`) | KWin's Overview effect; its state reaches the shell as `overviewOpen` (§4.8) |
-| outputs / Displays page | **done** (§4.8): `kscreen-doctor -j` + `-o`, applied with `kscreen-doctor output.…`; identities from the bridge's screens |
+| overview (`toggle-overview`) | KWin's Overview effect; its state reaches the shell as `overviewOpen` (§4.9) |
+| outputs / Displays page | **done** (§4.11): `kscreen-doctor -j` + `-o`, applied with `kscreen-doctor output.…`; identities from the bridge's screens |
 | overview (`toggle-overview`) | KWin's Overview effect |
 | lock screen (`WlSessionLock`) | Plasma's locker with **Loft's lock design** (§4.3) |
 | Spaces (named niri workspaces per output) | **KDE Activities** (§4.2) |
@@ -680,9 +680,8 @@ needed (checked on THEBATTLESHIP and in a nested session).
 Under the KWin backend, Capture.qml's screen shots and the frozen frames for area
 selection run `KWin.screenshotArgv()` instead of grim, and `Compositor.screenshotWindow`
 (`capabilities.windowScreenshot`) runs `shot window`, copies the PNG and emits
-`screenshotTaken`, like niri. `--max PX` downscales so the longer side is at most PX. Not
-done: **recording** (wf-recorder needs wlr-screencopy; KWin records through the
-ScreenCast portal or `zkde_screencast`). Window thumbnails are §4.8.
+`screenshotTaken`, like niri. `--max PX` downscales so the longer side is at most PX.
+Window thumbnails are §4.8, recording §4.10.
 
 ### 4.8 Window thumbnails through ScreenShot2
 
@@ -720,7 +719,7 @@ loft-kwin thumbs DIR MAX_PX UUID…   # one connection, a PNG per window: DIR/<u
   full-size `shot window` of it takes 18–24 ms. Well inside the switcher's 120 ms show
   delay.
 
-### 4.8 Window commands, `loft mcp` and the overview under KWin
+### 4.9 Window commands, `loft mcp` and the overview under KWin
 
 **Done.** Spotlight's window commands, `loft mcp`'s window tools and `Compositor.overviewOpen`
 work under KWin, through one route: the shell's `loft-kwin` daemon.
@@ -787,10 +786,8 @@ input woke them.
 
 Found while testing, not fixed here: `Displays.fullscreenOn` skips floating windows, and
 under KWin every window floats, so FullscreenChrome never sees a fullscreen window there.
-`screenshotTaken`, like niri. Recording is §4.8. Not done: window thumbnails (step 11,
-the same `shot window`).
 
-### 4.8 Screen recording through zkde_screencast
+### 4.10 Screen recording through zkde_screencast
 
 **Done.** wf-recorder needs wlr-screencopy, which KWin doesn't have. `loft-kwin record`
 (crates/loft-kwin/src/record.rs) asks KWin for a screencast and records it:
@@ -862,7 +859,7 @@ showed the counter advancing and the block moving.
 Not done: hardware encoding (VA-API: `vah264enc` from gst-plugins-bad), and recording
 with KWin's cursor as metadata instead of embedded.
 
-### 4.8 Settings → Displays through KScreen
+### 4.11 Settings → Displays through KScreen
 
 **Done.** Under niri the Displays page reads `loft-niri outputs` and writes Loft's
 overrides through `loft-niri apply`. Under KWin it goes to KScreen instead, and Loft
@@ -1038,7 +1035,7 @@ What it took:
 - Plasma-session services that `startplasma-wayland` normally starts and this doesn't:
   ksmserver, powerdevil, the polkit agent, xdg-desktop-portal-kde (D-Bus activated anyway).
   Add them when a test needs them.
-- **A private PipeWire.** KWin's screencasts (`loft-kwin record`, §4.8) need PipeWire.
+- **A private PipeWire.** KWin's screencasts (`loft-kwin record`, §4.10) need PipeWire.
   `kwin-run.sh` starts `pipewire`, `wireplumber` and `pipewire-pulse` in the session's runtime
   dir before KWin, with no devices (WirePlumber's ALSA, bluez, V4L2 and libcamera monitors off,
   no logind or device reservation) and two virtual nodes: a null sink (`loft-dev-sink`, the
@@ -1064,15 +1061,10 @@ What it took:
 7. ✅ Decoration plugin (§4.4): `dev.loft.decoration`, `loft-kwin-decoration apply|revert`.
 8. ✅ Lock screen shell package (§4.3).
 9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). ✅ Spotlight's window
-   commands, `loft mcp` and the overview state (§4.8). Display settings, recording.
-9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). ✅ Recording through
-   zkde_screencast (§4.8). Display settings.
-9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). ✅ Display settings (§4.8). Recording.
-10. Spaces on Activities (§4.2).
-11. ✅ Window thumbnails through ScreenShot2 (§4.8).
-9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). Display settings, recording.
+   commands, `loft mcp` and the overview state (§4.9). ✅ Recording through
+   zkde_screencast (§4.10). ✅ Display settings (§4.11).
 10. ✅ Spaces on Activities (§4.2).
-11. Window thumbnails through ScreenShot2.
+11. ✅ Window thumbnails through ScreenShot2 (§4.8).
 
 ## 8. Notes for the fleet flake (~/.flake, out of scope here)
 

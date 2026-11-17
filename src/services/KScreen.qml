@@ -4,7 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Outputs under KWin, for Settings → Displays (docs/KWIN.md §4.8), through
+// Outputs under KWin, for Settings → Displays (docs/KWIN.md §4.11), through
 // `loft-kwin displays` (crates/loft-kwin/src/displays.rs): KScreen's outputs
 // in loft-niri's `outputs` shape, and changes applied with kscreen-doctor.
 // KScreen applies and persists them itself; nothing is recorded by Loft.

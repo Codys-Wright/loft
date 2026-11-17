@@ -1,4 +1,4 @@
-//! `loft-kwin displays`: Settings → Displays under KWin (docs/KWIN.md §4.8).
+//! `loft-kwin displays`: Settings → Displays under KWin (docs/KWIN.md §4.11).
 //!
 //! Reads KScreen's view of the outputs (`kscreen-doctor -j` for modes and
 //! geometry, `kscreen-doctor -o` for what the JSON leaves out: enabled, VRR,
