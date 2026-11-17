@@ -27,6 +27,7 @@
 
 mod activities;
 mod displays;
+mod input;
 mod record;
 mod shot;
 mod state;
@@ -386,6 +387,9 @@ async fn main() -> Result<()> {
     if args.first().is_some_and(|a| a == "displays") {
         return displays::run(&args[1..]);
     }
+    if args.first().is_some_and(|a| a == "input") {
+        return input::cli(&args[1..]).await;
+    }
     if args.first().is_some_and(|a| a == "spaces") {
         return activities::cli(&args[1..]).await;
     }
@@ -401,6 +405,7 @@ async fn main() -> Result<()> {
              loft-kwin thumbs DIR MAX_PX UUID…               window stills for the dock and switcher\n\
              loft-kwin record screen|area|window …           a screen recording (zkde_screencast)\n\
              loft-kwin displays [set JSON]                   outputs through KScreen\n\
+             loft-kwin input [set JSON]                      keyboard layouts (kxkbrc), mouse and trackpad (KWin's InputDevice)\n\
              loft-kwin spaces list                           Spaces ↔ Activities map\n\
              loft-kwin spaces prune [--dry-run] [--force]    remove the Activities Loft made"
         );
@@ -435,6 +440,13 @@ async fn main() -> Result<()> {
     effects_off(&conn).await;
 
     tokio::spawn(watch_layouts(conn.clone()));
+    // GStreamer's first run after an update scans every plugin (~10 s), and
+    // auto's encoder probe takes a moment: do both now, so the first
+    // recording starts at once (record.rs).
+    tokio::spawn(async {
+        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+        record::warm_up().await;
+    });
 
     let mut model = state::Model::new();
     // Display identities spell the vendor out like niri (LOFT_PNP_IDS: set
