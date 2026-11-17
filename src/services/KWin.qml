@@ -29,6 +29,8 @@ Singleton {
     property var keyboardLayouts: ({ names: [], current_idx: 0 })
     property var activities: []
     property string currentActivity: ""
+    // Activity id → name (kactivitymanagerd, through loft-kwin's state).
+    property var activityNames: ({})
     // Spaces as Activities (docs/KWIN.md §4.2): space id → activity id, from
     // loft-kwin's last `syncSpaces` (its map in <state>/kwin-activities.json),
     // and kactivitymanagerd's activities [{ id, name, icon }].
@@ -132,6 +134,8 @@ Singleton {
             workspaceMap = ws;
             windowMap = wins;
             activities = s.activities ?? [];
+            if (JSON.stringify(s.activity_names ?? {}) !== JSON.stringify(activityNames))
+                activityNames = s.activity_names ?? {};
             displays = s.outputs ?? [];
             currentActivity = s.current_activity ?? "";
             overviewOpen = s.overview_open === true;

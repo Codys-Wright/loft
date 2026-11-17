@@ -147,16 +147,61 @@ app id **exactly** (`^dev\.cody\.myapp$`).
 | `square-corners` | true | `geometry-corner-radius 0` |
 | `block-out-from` | `screencast` · `screen-capture` | same |
 
-Booleans also accept on/off/yes/no. Keep video, games and color-critical apps
-opaque: `loft windows opaque add APP-ID`.
+| `open-on-desktop` | KWin: desktop number (1 = first) or name · niri: a name = `open-on-workspace` | — |
+| `open-on-activity` | a KDE Activity **by name** (case, spaces, `-` ignored) · KWin only | — |
+| `open-size` | `1200x800` or `60%x80%` (of the display) | `default-column-width` + `default-window-height` |
+| `open-position` | `center` · `left` / `right` (that half) · `X,Y` · KWin only | — |
+| `keep-above` | true/false · KWin only | — |
+| `follow` | true: switch to it when it opens · false: land there, you stay | `open-focused` |
+| `match-app-id` | regex replacing the exact key match (the key is then just the rule's name) | `match app-id=…` |
+| `match-title` / `exclude-title` / `exclude-app-id` | regexes | `match title=…` / `exclude …` |
+
+`open-on-output` also takes a **display role** (`main`, `left`, `right`, `left-2`,
+`portrait`, `display-2` …), resolved on the live layout, so the rule follows the
+display when connectors change. Booleans also accept on/off/yes/no. Keep video,
+games and color-critical apps opaque: `loft windows opaque add APP-ID`.
+
+**Under KDE (Loft's shell in Plasma)** the same records are applied by Loft's KWin
+script as windows open (and when an app sets its title late), never written to
+`kwinrulesrc`; they stop when Loft's shell stops (docs/KWIN.md §4.13). "Wherever I
+am, it lands there":
+
+```sh
+loft windows rule org.kde.kwrite open-on-activity=Coding open-on-desktop=2 open-on-output=right open-fullscreen=true follow=false
+loft windows rule agents match-app-id='^com\.mitchellh\.ghostty$' match-title='^claude' open-on-activity=Coding open-size=1200x800
+```
+
+**Declarative / every machine:** `programs.loft.windowRules."org.kde.kwrite" = {
+open-on-activity = "Coding"; open-on-desktop = 2; open-on-output = "right";
+open-fullscreen = true; };` (→ `~/.config/loft/window-rules.json`, merged under
+the runtime rules, field by field).
+
+### 3b. One launch, not every window of an app — `loft open`
+
+Agent terminals and dev sessions share an app id (every one is a ghostty / kitty /
+konsole), so a rule can't tell them apart. Start them with `loft open`: the windows
+of **that process tree** go where you say, the rest of the app's windows open as usual.
+
+```sh
+loft open --activity Coding --desktop 2 --monitor right --size 1200x800 -- konsole
+loft open --activity Coding --monitor main --fullscreen --follow -- ghostty -e claude
+```
+
+KWin: every new window of the process (and its children) for `--ttl` seconds (30),
+`--count N` to stop earlier; `--app-id REGEX` (default: ends in the command's name)
+catches an app that hands its window to an instance already running. niri: the
+first `--count` window(s), via niri IPC; `--desktop` = workspace index or name on
+that display; Activity, position and keep-above don't exist there. It fails with
+the reason (and starts nothing) when Loft's shell isn't running or the Activity /
+desktop / display doesn't exist. MCP: the `open` tool.
 
 ### 4. When to write niri KDL instead
 
-`loft windows rule` covers one exact app id and the fields above. Write a
-`window-rule` in the user's niri config when you need:
+`loft windows rule` covers an app id (or a `match-app-id` / `match-title` regex)
+and the fields above. Write a `window-rule` in the user's niri config (niri only;
+KWin never reads it) when you need:
 
-- a **regex or title** match (all dialogs of an app, one window by title,
-  `is-floating`, …),
+- other matchers (`is-floating`, `at-startup`, several `match` lines, …),
 - niri properties the CLI lacks (`open-focused`, `min-width`/`max-width`,
   `default-window-height`, `default-floating-position`, `variable-refresh-rate`,
   `clip-to-geometry`, …),
@@ -249,8 +294,9 @@ exports the user's session environment (`systemctl --user show-environment`:
 | `set_column_width` (`proportion` 0.1–1) | focuses the window, then sets its column |
 | `focus_workspace` · `focus_output` · `toggle_overview` (`state` toggle/open/close) | |
 | `launch` (`command` argv) · `spotlight_open` | `niri msg action spawn --` in the session |
+| `open` (`command`, `activity`, `desktop`, `monitor`, `placement` fullscreen/maximized, `size`, `position`, `keep_above`, `follow`, `app_id`, `count`, `ttl`, `cwd`) | `loft open` (§3b): start it and place that process tree's windows |
 | `screenshot_output` (`output`?, `max_width`) · `screenshot_window` (`id`, `max_width`) | PNG image content (default ≤ 1920 px wide) + JSON with the logical region; a tiled or hidden window is rendered by niri (window-local image; clipboard text is put back) |
-| `loft_windows_list` · `loft_windows_rule` (`app_id`, `fields`) | `loft windows …` (fields as in the table above; `null` drops one) |
+| `loft_windows_list` · `loft_windows_rule` (`app_id`, `fields`) | `loft windows …` (fields as in the table above, KWin's too; `null` drops one) |
 | `loft_theme_list` · `loft_theme_apply` (`name`, `mode`?) | `loft theme …` |
 | `loft_appearance_get` · `loft_appearance_set` (transparency, blur, terminals, gtk) | `loft appearance …` |
 | `loft_niri_show` · `loft_niri_keys` · `loft_niri_set` (`key`, `value`) | `loft niri …` (set renders + reloads) |

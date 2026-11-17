@@ -774,6 +774,44 @@
           '';
         };
 
+        windowRules = lib.mkOption {
+          type = lib.types.attrsOf (lib.types.attrsOf (lib.types.oneOf [
+            lib.types.bool
+            lib.types.int
+            lib.types.float
+            lib.types.str
+          ]));
+          default = { };
+          example = lib.literalExpression ''
+            {
+              # app id → where its windows open, on niri and under KDE.
+              "org.kde.kwrite" = {
+                open-on-activity = "Coding";   # a KDE Activity, by name (KWin)
+                open-on-desktop = 2;           # KWin: desktop number or name; niri: a name = workspace
+                open-on-output = "right";      # a display role (main, left, right, …) or a connector
+                open-fullscreen = true;
+                follow = false;                # stay where you are
+              };
+              # a name + match-app-id: a regex, with match-title.
+              agents-coding = {
+                match-app-id = "^com\.mitchellh\.ghostty$";
+                match-title = "^claude";
+                open-on-activity = "Coding";
+                open-size = "1200x800";
+              };
+            }
+          '';
+          description = ''
+            Per-app window rules shipped with the config, the same records as
+            Settings → Window Rules and `loft windows rule` (fields:
+            crates/loft-niri/src/window_rules.rs, docs/KWIN.md §4.13). Written
+            to ~/.config/loft/window-rules.json; loft-niri renders them for
+            niri under the runtime rules, and under KDE loft-kwin applies
+            them as windows open (reloaded when the file changes). A field set
+            in Settings / the CLI wins over the same field here.
+          '';
+        };
+
         workspaceIcons = lib.mkOption {
           type = lib.types.attrsOf lib.types.str;
           default = { };
@@ -979,6 +1017,11 @@
         };
         xdg.configFile."loft/gtk-base-light.css" = lib.mkIf (cfg.gtk && cfg.gtkBase.light != null) {
           text = ''@import url("file://${cfg.gtkBase.light}");'';
+        };
+        # programs.loft.windowRules: the seed loft-niri merges under the
+        # runtime window rules (and loft-kwin applies under KDE).
+        xdg.configFile."loft/window-rules.json" = lib.mkIf (cfg.windowRules != { }) {
+          text = builtins.toJSON cfg.windowRules;
         };
         # Qt / KDE apps (programs.loft.qt): what the `qt` hook reads, and a
         # first sync so the app is themed before the next `loft theme apply`.

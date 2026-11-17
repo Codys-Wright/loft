@@ -69,6 +69,8 @@ Singleton {
     // KDE Activities (KWin only; empty under niri).
     readonly property var activities: backend === "kwin" ? KWin.activities : []
     readonly property string currentActivity: backend === "kwin" ? KWin.currentActivity : ""
+    // Activity id → name (KWin only).
+    readonly property var activityNames: backend === "kwin" ? KWin.activityNames : ({})
     // Spaces as Activities (KWin, docs/KWIN.md §4.2): space id → activity id
     // once loft-kwin synced them (spacesSynced), else {}.
     readonly property var spaceActivities: backend === "kwin" ? KWin.spaceActivities : ({})

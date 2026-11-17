@@ -500,6 +500,8 @@ ColumnLayout {
                     }
 
                     SettingsRow {
+                        // KWin: every window floats.
+                        visible: !WindowRules.kwin
                         label: "Open floating"
                         SettingsSwitch {
                             checked: appRow.rec["open-floating"] === true
@@ -521,6 +523,7 @@ ColumnLayout {
                         }
                     }
                     SettingsRow {
+                        visible: !WindowRules.kwin
                         label: "Column width"
                         hint: "When it opens tiled"
                         SettingsSelect {
@@ -529,6 +532,104 @@ ColumnLayout {
                             onActivated: v => WindowRules.setField(appRow.app, "default-column-width", v === 0 ? null : v)
                         }
                     }
+                    // ── Where it opens (docs/KWIN.md §4.13) ──────────────
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        text: "Opens On"
+                        color: Theme.subtext
+                        font.family: Theme.fontUi
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                    }
+                    SettingsRow {
+                        visible: WindowRules.kwin
+                        label: "Activity"
+                        hint: "One of your KDE Activities, wherever you are when it opens"
+                        SettingsSelect {
+                            options: WindowRules.activityOptions()
+                            current: appRow.rec["open-on-activity"] ?? ""
+                            onActivated: v => WindowRules.setField(appRow.app, "open-on-activity", v === "" ? null : v)
+                        }
+                    }
+                    SettingsRow {
+                        label: WindowRules.kwin ? "Desktop" : "Workspace"
+                        SettingsSelect {
+                            options: WindowRules.desktopOptions()
+                            current: appRow.rec["open-on-desktop"] ?? ""
+                            onActivated: v => WindowRules.setField(appRow.app, "open-on-desktop", v === "" ? null : v)
+                        }
+                    }
+                    SettingsRow {
+                        label: "Display"
+                        hint: "A role (Main, Right …) follows the layout when displays change"
+                        SettingsSelect {
+                            options: WindowRules.monitorOptions(appRow.rec["open-on-output"] ?? "")
+                            current: appRow.rec["open-on-output"] ?? ""
+                            onActivated: v => WindowRules.setField(appRow.app, "open-on-output", v === "" ? null : v)
+                        }
+                    }
+                    SettingsRow {
+                        label: "Size"
+                        hint: "Pixels (1200x800) or a share of the display (60%x80%)"
+                        SettingsTextField {
+                            implicitWidth: 140
+                            text: appRow.rec["open-size"] ?? ""
+                            placeholder: "Default"
+                            onCommitted: t => WindowRules.setField(appRow.app, "open-size", t.trim() === "" ? null : t.trim())
+                        }
+                    }
+                    SettingsRow {
+                        visible: WindowRules.kwin
+                        label: "Position"
+                        SettingsSelect {
+                            options: [{ value: "", label: "Default" }, { value: "center", label: "Centered" }, { value: "left", label: "Left half" }, { value: "right", label: "Right half" }]
+                            current: typeof appRow.rec["open-position"] === "string" && ["center", "left", "right"].includes(appRow.rec["open-position"]) ? appRow.rec["open-position"] : ""
+                            onActivated: v => WindowRules.setField(appRow.app, "open-position", v === "" ? null : v)
+                        }
+                    }
+                    SettingsRow {
+                        visible: WindowRules.kwin
+                        label: "Keep above others"
+                        SettingsSwitch {
+                            checked: appRow.rec["keep-above"] === true
+                            onToggled: on => WindowRules.setField(appRow.app, "keep-above", on ? true : null)
+                        }
+                    }
+                    SettingsRow {
+                        label: "Switch to it when it opens"
+                        hint: "Off: it lands there and you stay where you are"
+                        SettingsSwitch {
+                            checked: appRow.rec["follow"] === true
+                            onToggled: on => WindowRules.setField(appRow.app, "follow", on ? true : null)
+                        }
+                    }
+                    SettingsRow {
+                        label: "Only titles matching"
+                        hint: "A regex; empty: every window of the app"
+                        SettingsTextField {
+                            implicitWidth: 180
+                            text: appRow.rec["match-title"] ?? ""
+                            placeholder: "Any title"
+                            onCommitted: t => WindowRules.setField(appRow.app, "match-title", t === "" ? null : t)
+                        }
+                    }
+                    SettingsRow {
+                        label: "Except titles matching"
+                        SettingsTextField {
+                            implicitWidth: 180
+                            text: appRow.rec["exclude-title"] ?? ""
+                            placeholder: "None"
+                            onCommitted: t => WindowRules.setField(appRow.app, "exclude-title", t === "" ? null : t)
+                        }
+                    }
+                    SettingsRow {
+                        visible: (appRow.rec["match-app-id"] ?? "") !== "" || WindowRules.fromNix(appRow.app)
+                        label: WindowRules.fromNix(appRow.app) ? "From Nix" : "Matches app ids"
+                        hint: [(appRow.rec["match-app-id"] ?? "") !== "" ? `app id ${appRow.rec["match-app-id"]}` : "", WindowRules.fromNix(appRow.app) ? "programs.loft.windowRules; your changes here win per field" : ""].filter(x => x !== "").join("  ·  ")
+                    }
+                    WindowRulesError {}
+
                     SettingsRow {
                         label: "Square corners"
                         SettingsSwitch {
@@ -625,6 +726,17 @@ ColumnLayout {
             model: page.otherRules
             delegate: ConfigRule {}
         }
+    }
+
+    // A refused change (a bad size or regex), under the app's fields.
+    component WindowRulesError: Text {
+        Layout.fillWidth: true
+        visible: WindowRules.error !== ""
+        text: WindowRules.error
+        color: Theme.urgent
+        font.family: Theme.fontUi
+        font.pixelSize: 11
+        wrapMode: Text.Wrap
     }
 
     // One window-rule from the config (read-only).

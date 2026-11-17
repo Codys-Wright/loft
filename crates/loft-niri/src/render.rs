@@ -202,17 +202,19 @@ pub fn regex_literal(s: &str) -> String {
 
 /// The whole fragment, without the window-glass rules (see `render_with`).
 pub fn render(ov: &Overrides, base: Option<&ConfigTree>, live: Option<&Outputs>) -> String {
-    render_with(ov, base, live, None)
+    render_with(ov, base, live, None, None)
 }
 
 /// The whole fragment. `glass`: the theme's window translucency; with it,
 /// the global window-glass rules and the built-in opaque list are written
-/// (crate::window_rules), without it only the per-app rules.
+/// (crate::window_rules), without it only the per-app rules. `main`: the
+/// main display from Settings → Displays (display roles in window rules).
 pub fn render_with(
     ov: &Overrides,
     base: Option<&ConfigTree>,
     live: Option<&Outputs>,
     glass: Option<&GlassTheme>,
+    main: Option<&str>,
 ) -> String {
     let mut nodes = Vec::new();
     if let Some(outs) = ov.outputs() {
@@ -224,7 +226,8 @@ pub fn render_with(
             nodes.push(render_output(id, rec, b));
         }
     }
-    nodes.extend(crate::window_rules::render(ov, base, glass));
+    let roles = crate::window_rules::niri_roles(live, main);
+    nodes.extend(crate::window_rules::render(ov, base, glass, &roles));
     nodes.extend(render_settings(ov, base));
     nodes.extend(crate::shortcuts::render(ov));
     let mut out = String::from(HEADER);
@@ -297,9 +300,11 @@ pub enum RenderResult {
 /// Render, validate, atomically swap in, and ask niri to reload.
 pub fn render_to_disk(paths: &Paths, opts: &RenderOpts) -> Result<RenderResult> {
     let ov = Overrides::load(&paths.json)?;
+    let ov = crate::window_rules::with_seed(&ov, &crate::window_rules::load_seed(&crate::window_rules::seed_path()));
     let base = base_tree(opts.entry, paths);
     let glass = GlassTheme::load(&paths.state);
-    let text = render_with(&ov, base.as_ref(), opts.live, Some(&glass));
+    let main = crate::spaces::live::main_from_settings(&paths.state);
+    let text = render_with(&ov, base.as_ref(), opts.live, Some(&glass), main.as_deref());
     if std::fs::read_to_string(&paths.kdl).ok().as_deref() == Some(text.as_str()) {
         return Ok(RenderResult::Unchanged);
     }
@@ -517,7 +522,11 @@ output "Samsung Electric Company Odyssey G95NC H1AK500000" {{
             "layout": { "gaps": 10, "default-column-width": 0.5, "preset-column-widths": [0.5, 1], "struts": { "top": 4 },
                         "center-focused-column": "always" },
             "animations": { "slowdown": 1.5, "off": true },
-            "outputs": { "Samsung Electric Company Odyssey G95NC H1AK500000": { "mode": "5120x1440@239.761", "scale": 1, "transform": "flipped-90", "position": { "x": 0, "y": 0 }, "vrr": "on-demand" } }
+            "outputs": { "Samsung Electric Company Odyssey G95NC H1AK500000": { "mode": "5120x1440@239.761", "scale": 1, "transform": "flipped-90", "position": { "x": 0, "y": 0 }, "vrr": "on-demand" } },
+            // Where-it-opens fields (docs/KWIN.md §4.13): their niri side.
+            "window-rules": { "agents": { "match-app-id": "^kitty$", "match-title": "^claude", "exclude-title": "x",
+                                          "open-on-desktop": "code", "open-on-output": "DP-1", "follow": false,
+                                          "open-size": "1200x50%", "open-on-activity": "Coding", "keep-above": true } }
         }));
         let cand = d.join("cand.kdl");
         std::fs::write(&cand, render(&o, None, None)).unwrap();

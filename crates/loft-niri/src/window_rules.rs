@@ -34,6 +34,27 @@
 //! rules: niri applies later rules over earlier ones, and the overrides come
 //! last, so without that a config's `opacity 0.8` would silently lose.
 //!
+//! **Where a window opens** (docs/KWIN.md §4.13). A record's key is the app
+//! id it matches exactly, unless `match-app-id` (a regex) replaces that; then
+//! the key is just the rule's name (`agents-coding`). `match-title` adds a
+//! title regex, `exclude-app-id` / `exclude-title` leave windows out. Then:
+//!
+//! | field | niri | KWin (loft-bridge.js) |
+//! |---|---|---|
+//! | `open-on-output` | connector / identity, or a display role (`main`, `right`, …) resolved on the live outputs | same, resolved on KWin's outputs |
+//! | `open-on-workspace` | named workspace | the virtual desktop of that name (when no `open-on-desktop`) |
+//! | `open-on-desktop` | a name becomes `open-on-workspace` (when that is unset); a number is ignored | virtual desktop: number (1 = first) or name |
+//! | `open-on-activity` | ignored | the user's KDE Activity, by name (case and `-`/`_`/space ignored) |
+//! | `open-fullscreen` / `open-maximized` | same | same |
+//! | `open-size` | `WxH` / `W%xH%`: `default-column-width` (unless that is set) + `default-window-height` | the frame's size |
+//! | `open-position` | ignored | `center`, `left` / `right` (that half of the work area), `X,Y` (in the output) |
+//! | `keep-above` | ignored | keep above |
+//! | `follow` | `open-focused` | true: switch to its Activity / desktop and focus it; false: you stay where you are |
+//!
+//! **Nix seed.** `programs.loft.windowRules` writes the same records to
+//! `$XDG_CONFIG_HOME/loft/window-rules.json` ([`seed_path`]); per field the
+//! runtime record (Settings, `loft windows rule`) wins over it.
+//!
 //! niri has no fullscreen matcher (26.04: `is-focused`, `is-active`,
 //! `is-floating`, … but no `is-fullscreen`), so a translucent app stays
 //! translucent when fullscreened. Video players and games are on the opaque
@@ -71,7 +92,20 @@ pub const RULE_FIELDS: &[&str] = &[
     "default-column-width",
     "square-corners",
     "block-out-from",
+    "match-app-id",
+    "match-title",
+    "exclude-app-id",
+    "exclude-title",
+    "open-on-activity",
+    "open-on-desktop",
+    "open-size",
+    "open-position",
+    "keep-above",
+    "follow",
 ];
+
+/// Fields only KWin acts on (niri ignores them; `open-on-desktop` partly).
+pub const KWIN_FIELDS: &[&str] = &["open-on-activity", "open-on-desktop", "open-position", "keep-above"];
 
 /// One built-in "keep opaque" entry: apps where see-through windows hurt
 /// (video, games, color-critical and pro-audio/video work).
@@ -317,8 +351,230 @@ fn rules(ov: &Overrides) -> BTreeMap<&String, &Map<String, Value>> {
         .unwrap_or_default()
 }
 
-fn app_match(app: &str) -> Node {
-    Node::new("match").prop("app-id", Val::Str(format!("^{}$", regex_literal(app))))
+fn str_field<'a>(rec: &'a Map<String, Value>, k: &str) -> Option<&'a str> {
+    rec.get(k).and_then(Value::as_str).filter(|s| !s.is_empty())
+}
+
+/// The app-id regex a record matches: `match-app-id`, else its key exactly.
+pub fn app_id_regex(app: &str, rec: &Map<String, Value>) -> String {
+    str_field(rec, "match-app-id").map_or_else(|| format!("^{}$", regex_literal(app)), str::to_string)
+}
+
+/// A record's `match` node (app id, and title when given).
+fn rule_match(app: &str, rec: &Map<String, Value>) -> Node {
+    let mut m = Node::new("match").prop("app-id", Val::Str(app_id_regex(app, rec)));
+    if let Some(t) = str_field(rec, "match-title") {
+        m = m.prop("title", Val::Str(t.to_string()));
+    }
+    m
+}
+
+/// A record's `exclude` nodes (each leaves out what it matches).
+fn rule_excludes(rec: &Map<String, Value>) -> Vec<Node> {
+    let mut v = Vec::new();
+    if let Some(a) = str_field(rec, "exclude-app-id") {
+        v.push(Node::new("exclude").prop("app-id", Val::Str(a.to_string())));
+    }
+    if let Some(t) = str_field(rec, "exclude-title") {
+        v.push(Node::new("exclude").prop("title", Val::Str(t.to_string())));
+    }
+    v
+}
+
+/// One side of `open-size`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Dim {
+    Px(u32),
+    /// Share of the output's work area, 0–1.
+    Share(f64),
+}
+
+impl Dim {
+    fn parse(s: &str) -> Option<Dim> {
+        let s = s.trim();
+        if let Some(p) = s.strip_suffix('%') {
+            let f: f64 = p.trim().parse().ok()?;
+            return (f > 0.0 && f <= 100.0).then_some(Dim::Share(f / 100.0));
+        }
+        let n: u32 = s.parse().ok()?;
+        (n > 0 && n <= 32768).then_some(Dim::Px(n))
+    }
+
+    fn json(self) -> Value {
+        match self {
+            Dim::Px(n) => json!({ "px": n }),
+            Dim::Share(f) => json!({ "share": f }),
+        }
+    }
+
+    /// niri's `{ fixed N }` / `{ proportion F }`.
+    fn node(self, name: &str) -> Node {
+        match self {
+            Dim::Px(n) => Node::new(name).child(Node::new("fixed").arg(Val::Int(i64::from(n)))),
+            Dim::Share(f) => Node::new(name).child(Node::new("proportion").arg(Val::Float(f))),
+        }
+    }
+}
+
+/// `open-size`: `1200x800`, `60%x80%`, `50%x900`.
+pub fn parse_size(s: &str) -> Option<(Dim, Dim)> {
+    let (w, h) = s.split_once(['x', 'X', '×'])?;
+    Some((Dim::parse(w)?, Dim::parse(h)?))
+}
+
+/// `open-position`: `center`, `left`, `right` (that half), or `X,Y`.
+pub fn parse_position(s: &str) -> Option<Value> {
+    match s.trim() {
+        p @ ("center" | "left" | "right") => Some(json!(p)),
+        p => {
+            let (x, y) = p.split_once(',')?;
+            let x: i32 = x.trim().parse().ok()?;
+            let y: i32 = y.trim().parse().ok()?;
+            Some(json!([x, y]))
+        }
+    }
+}
+
+/// connector → its display roles (crate::spaces::roles), for `open-on-output`.
+pub type RoleMap = BTreeMap<String, Vec<String>>;
+
+/// `open-on-output`: a connector / identity as is; a role → the connector
+/// that has it (None: no display has that role now).
+pub fn resolve_output(target: &str, roles: &RoleMap) -> Option<String> {
+    let t = target.trim();
+    if roles.contains_key(t) {
+        return Some(t.to_string());
+    }
+    if crate::spaces::roles::is_known_role(t) {
+        // `*`: any, so no constraint worth writing.
+        if t == "*" {
+            return None;
+        }
+        return roles.iter().find(|(_, rs)| rs.iter().any(|r| r == t)).map(|(c, _)| c.clone());
+    }
+    Some(t.to_string())
+}
+
+/// Where the Nix seed (`programs.loft.windowRules`) is: $LOFT_WINDOW_RULES,
+/// else $XDG_CONFIG_HOME/loft/window-rules.json, else ~/.config/loft/….
+pub fn seed_path() -> std::path::PathBuf {
+    if let Some(p) = std::env::var_os("LOFT_WINDOW_RULES").filter(|p| !p.is_empty()) {
+        return p.into();
+    }
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|d| !d.is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config"));
+    base.join("loft").join("window-rules.json")
+}
+
+/// The seed's records (`{name: {field: value}}`); none when it's missing.
+/// A bad file is reported on stderr and ignored.
+pub fn load_seed(path: &Path) -> Map<String, Value> {
+    let Ok(text) = std::fs::read_to_string(path) else { return Map::new() };
+    match serde_json::from_str::<Value>(&text) {
+        Ok(Value::Object(m)) => {
+            // `{"window-rules": {...}}` too.
+            match m.get(RULES) {
+                Some(Value::Object(r)) => r.clone(),
+                _ => m,
+            }
+        }
+        Ok(_) | Err(_) => {
+            eprintln!("loft-niri: {}: expected {{\"app\": {{field: value}}}}; ignored", path.display());
+            Map::new()
+        }
+    }
+}
+
+/// The overrides with the seed's records under them: per field, the
+/// runtime record wins. Bad seed fields are dropped (with a note).
+pub fn with_seed(ov: &Overrides, seed: &Map<String, Value>) -> Overrides {
+    if seed.is_empty() {
+        return ov.clone();
+    }
+    let mut out = ov.clone();
+    let mut merged: Map<String, Value> = Map::new();
+    for (app, rec) in seed {
+        let Some(rec) = rec.as_object() else { continue };
+        let mut clean = Map::new();
+        for (k, v) in rec {
+            match validate_field(app, k, v) {
+                Ok(()) => drop(clean.insert(k.clone(), v.clone())),
+                Err(e) => eprintln!("loft-niri: window-rules seed: {e}"),
+            }
+        }
+        merged.insert(app.clone(), Value::Object(clean));
+    }
+    if let Some(runtime) = ov.0.get(RULES).and_then(Value::as_object) {
+        for (app, rec) in runtime {
+            let Some(rec) = rec.as_object() else { continue };
+            let entry = merged.entry(app.clone()).or_insert_with(|| Value::Object(Map::new()));
+            let e = entry.as_object_mut().unwrap();
+            for (k, v) in rec {
+                e.insert(k.clone(), v.clone());
+            }
+        }
+    }
+    out.0.insert(RULES.into(), Value::Object(merged));
+    out
+}
+
+/// The roles of niri's live outputs (`main` from Settings → Displays).
+pub fn niri_roles(live: Option<&crate::outputs::Outputs>, main: Option<&str>) -> RoleMap {
+    live.map(|o| {
+        let ds = crate::spaces::roles::displays_from_niri(o);
+        crate::spaces::roles::roles(&ds, main)
+    })
+    .unwrap_or_default()
+}
+
+/// The records as loft-bridge.js applies them under KWin (docs/KWIN.md
+/// §4.13): only records that place windows, with JS-ready regexes and the
+/// output resolved on `roles` (`output_role` keeps what was asked).
+pub fn kwin_rules(ov: &Overrides, roles: &RoleMap) -> Value {
+    let mut out = Vec::new();
+    for (app, rec) in rules(ov) {
+        let b = |k: &str| rec.get(k).and_then(Value::as_bool);
+        let open = if b("open-fullscreen") == Some(true) {
+            "fullscreen"
+        } else if b("open-maximized") == Some(true) {
+            "maximized"
+        } else {
+            ""
+        };
+        let desktop = rec
+            .get("open-on-desktop")
+            .filter(|v| v.is_u64() || v.as_str().is_some_and(|s| !s.is_empty()))
+            .cloned()
+            .or_else(|| str_field(rec, "open-on-workspace").map(|s| json!(s)));
+        let role = str_field(rec, "open-on-output");
+        let size = str_field(rec, "open-size").and_then(parse_size);
+        let position = str_field(rec, "open-position").and_then(parse_position);
+        let activity = str_field(rec, "open-on-activity");
+        let keep_above = b("keep-above");
+        let places = !open.is_empty() || desktop.is_some() || role.is_some() || size.is_some() || position.is_some() || activity.is_some() || keep_above.is_some();
+        if !places {
+            continue;
+        }
+        out.push(json!({
+            "name": app,
+            "appId": app_id_regex(app, rec),
+            "title": str_field(rec, "match-title"),
+            "excludeAppId": str_field(rec, "exclude-app-id"),
+            "excludeTitle": str_field(rec, "exclude-title"),
+            "activityName": activity,
+            "desktop": desktop,
+            "output": role.and_then(|r| resolve_output(r, roles)),
+            "outputRole": role,
+            "open": open,
+            "size": size.map(|(w, h)| json!({ "w": w.json(), "h": h.json() })),
+            "position": position,
+            "keepAbove": keep_above,
+            "follow": b("follow").unwrap_or(false),
+        }));
+    }
+    Value::Array(out)
 }
 
 /// niri draws the focus ring / border as a solid rectangle behind a window
@@ -374,7 +630,8 @@ fn config_opacity_matches(base: Option<&ConfigTree>) -> Vec<Node> {
 /// The global rules + the built-in opaque list + the per-app rules.
 /// `theme`: None leaves the global look and the built-in list out (only the
 /// per-app rules), for callers that don't manage window glass.
-pub fn render(ov: &Overrides, base: Option<&ConfigTree>, theme: Option<&GlassTheme>) -> Vec<Node> {
+/// `roles`: the live outputs' display roles, for `open-on-output` roles.
+pub fn render(ov: &Overrides, base: Option<&ConfigTree>, theme: Option<&GlassTheme>, roles: &RoleMap) -> Vec<Node> {
     let managed = theme.is_some();
     let g = effective(ov, theme.unwrap_or(&GlassTheme::default()));
     let mut nodes = Vec::new();
@@ -417,14 +674,17 @@ pub fn render(ov: &Overrides, base: Option<&ConfigTree>, theme: Option<&GlassThe
         }
     }
     for (app, rec) in rules(ov) {
-        nodes.extend(render_app(app, rec, &g));
+        nodes.extend(render_app(app, rec, &g, roles));
     }
     nodes
 }
 
 /// One app's rules (none when its record is empty).
-pub fn render_app(app: &str, rec: &Map<String, Value>, g: &GlassTheme) -> Vec<Node> {
-    let mut n = Node::new("window-rule").child(app_match(app));
+pub fn render_app(app: &str, rec: &Map<String, Value>, g: &GlassTheme, roles: &RoleMap) -> Vec<Node> {
+    let excludes = rule_excludes(rec);
+    let mut n = Node::new("window-rule").child(rule_match(app, rec));
+    n.children.extend(excludes.iter().cloned());
+    let head = n.children.len();
     let mut unfocused = None;
     let blur = rec.get("blur").and_then(Value::as_bool);
     match rec.get("glass").and_then(Value::as_str) {
@@ -461,25 +721,34 @@ pub fn render_app(app: &str, rec: &Map<String, Value>, g: &GlassTheme) -> Vec<No
             }
         }
     }
-    for key in ["open-on-workspace", "open-on-output"] {
-        if let Some(v) = rec
-            .get(key)
-            .and_then(Value::as_str)
-            .filter(|s| !s.is_empty())
-        {
-            n = n.child(Node::new(key).arg(Val::Str(v.to_string())));
-        }
+    // A desktop name stands for a named workspace on niri; a number has no
+    // niri meaning (workspace indexes shift), so it's KWin's only.
+    let workspace = str_field(rec, "open-on-workspace").or_else(|| str_field(rec, "open-on-desktop"));
+    if let Some(v) = workspace {
+        n = n.child(Node::new("open-on-workspace").arg(Val::Str(v.to_string())));
+    }
+    if let Some(v) = str_field(rec, "open-on-output").and_then(|o| resolve_output(o, roles)) {
+        n = n.child(Node::new("open-on-output").arg(Val::Str(v)));
     }
     for key in ["open-floating", "open-maximized", "open-fullscreen"] {
         if let Some(b) = rec.get(key).and_then(Value::as_bool) {
             n = n.child(Node::new(key).arg(Val::Bool(b)));
         }
     }
+    if let Some(b) = rec.get("follow").and_then(Value::as_bool) {
+        n = n.child(Node::new("open-focused").arg(Val::Bool(b)));
+    }
+    let size = str_field(rec, "open-size").and_then(parse_size);
     if let Some(p) = rec.get("default-column-width").and_then(Value::as_f64) {
         n = n.child(
             Node::new("default-column-width")
                 .child(Node::new("proportion").arg(Val::Float(p.clamp(0.05, 1.0)))),
         );
+    } else if let Some((w, _)) = size {
+        n = n.child(w.node("default-column-width"));
+    }
+    if let Some((_, h)) = size {
+        n = n.child(h.node("default-window-height"));
     }
     if rec.get("square-corners").and_then(Value::as_bool) == Some(true) {
         n = n.child(Node::new("geometry-corner-radius").arg(Val::Int(0)));
@@ -492,22 +761,31 @@ pub fn render_app(app: &str, rec: &Map<String, Value>, g: &GlassTheme) -> Vec<No
         n = n.child(Node::new("block-out-from").arg(Val::Str(b.to_string())));
     }
     let mut out = Vec::new();
-    if n.children.len() > 1 {
+    if n.children.len() > head {
         out.push(n);
     }
     if let Some(u) = unfocused {
-        out.push(
-            Node::new("window-rule")
-                .child(app_match(app).prop("is-focused", Val::Bool(false)))
-                .child(Node::new("opacity").arg(Val::Float(u))),
-        );
+        let mut r = Node::new("window-rule").child(rule_match(app, rec).prop("is-focused", Val::Bool(false)));
+        r.children.extend(excludes);
+        out.push(r.child(Node::new("opacity").arg(Val::Float(u))));
     }
     out
 }
 
 fn validate_field(app: &str, k: &str, v: &Value) -> Result<()> {
     let ok = match k {
-        "open-on-workspace" | "open-on-output" => v.is_string(),
+        "open-on-workspace" | "open-on-output" | "open-on-activity" => v.is_string(),
+        "match-app-id" | "match-title" | "exclude-app-id" | "exclude-title" => {
+            let Some(r) = v.as_str() else { bail!("window_rules.{app}.{k}: expected a regex string") };
+            if let Err(e) = regex::Regex::new(r) {
+                bail!("window_rules.{app}.{k}: bad regex `{r}`: {e}");
+            }
+            true
+        }
+        "open-on-desktop" => v.as_u64().is_some_and(|n| n >= 1) || v.as_str().is_some_and(|s| !s.trim().is_empty()),
+        "open-size" => v.as_str().is_some_and(|s| parse_size(s).is_some()),
+        "open-position" => v.as_str().is_some_and(|s| parse_position(s).is_some()),
+        "keep-above" | "follow" => v.is_boolean(),
         "glass" => matches!(v.as_str(), Some("opaque" | "custom" | "native")),
         "opacity" | "opacity-unfocused" => v.as_f64().is_some_and(|f| (0.0..=1.0).contains(&f)),
         "default-column-width" => v.as_f64().is_some_and(|f| f > 0.0 && f <= 1.0),
@@ -773,7 +1051,7 @@ mod tests {
                 "mpv": { "blur": true }
             }
         }));
-        let out = write_doc(&render(&o, None, Some(&GlassTheme::default())));
+        let out = write_doc(&render(&o, None, Some(&GlassTheme::default()), &RoleMap::new()));
         assert!(out.starts_with("window-rule {\n    exclude app-id=\"^org\\\\.quickshell$\"\n    opacity 0.85\n    draw-border-with-background false\n    background-effect {\n        blur true\n    }\n}\n"), "{out}");
         assert!(
             out.contains("window-rule {\n    match is-focused=false\n    exclude app-id=\"^org\\\\.quickshell$\"\n    opacity 0.8\n}\n"),
@@ -811,7 +1089,7 @@ mod tests {
             "window-glass": { "enabled": false },
             "window-rules": { "foot": { "glass": "custom", "opacity": 0.9, "opacity-unfocused": 0.85 } }
         }));
-        let out = write_doc(&render(&o, None, Some(&GlassTheme::default())));
+        let out = write_doc(&render(&o, None, Some(&GlassTheme::default()), &RoleMap::new()));
         assert_eq!(
             out,
             "window-rule {\n    match app-id=\"^foot$\"\n    opacity 0.9\n    draw-border-with-background false\n    background-effect {\n        blur true\n    }\n}\n\nwindow-rule {\n    match app-id=\"^foot$\" is-focused=false\n    opacity 0.85\n}\n"
@@ -820,7 +1098,7 @@ mod tests {
             enabled: false,
             ..GlassTheme::default()
         };
-        assert!(render(&Overrides::default(), None, Some(&themed_off)).is_empty());
+        assert!(render(&Overrides::default(), None, Some(&themed_off), &RoleMap::new()).is_empty());
     }
 
     #[test]
@@ -836,6 +1114,7 @@ mod tests {
             &Overrides::default(),
             Some(&tree),
             Some(&GlassTheme::default()),
+            &RoleMap::new(),
         ));
         assert!(
             out.starts_with(
@@ -948,5 +1227,94 @@ mod tests {
             GlassTheme::from_theme_json(&json!({})),
             GlassTheme::default()
         );
+    }
+
+    fn two_displays() -> RoleMap {
+        let ds = vec![
+            crate::spaces::roles::Display { name: "WL-0".into(), identity: String::new(), x: 0, y: 0, width: 1920, height: 1080 },
+            crate::spaces::roles::Display { name: "WL-1".into(), identity: String::new(), x: 1920, y: 0, width: 1920, height: 1080 },
+        ];
+        crate::spaces::roles::roles(&ds, Some("WL-0"))
+    }
+
+    #[test]
+    fn placement_fields_on_niri() {
+        let o = ov(json!({ "window-rules": {
+            "agents": { "match-app-id": "^com\\.mitchellh\\.ghostty$", "match-title": "^claude",
+                        "exclude-title": "scratch", "open-on-output": "right", "open-on-desktop": "code",
+                        "open-on-activity": "Coding", "open-size": "60%x900", "follow": false,
+                        "keep-above": true, "open-position": "center" },
+            "org.kde.kwrite": { "open-on-desktop": 2, "open-on-output": "left-3", "open-fullscreen": true }
+        }}));
+        let out = write_doc(&render(&o, None, None, &two_displays()));
+        assert!(out.contains("window-rule {\n    match app-id=\"^com\\\\.mitchellh\\\\.ghostty$\" title=\"^claude\"\n    exclude title=\"scratch\"\n    open-on-workspace \"code\"\n    open-on-output \"WL-1\"\n    open-focused false\n    default-column-width {\n        proportion 0.6\n    }\n    default-window-height {\n        fixed 900\n    }\n}\n"), "{out}");
+        // A numbered desktop and a role no display has: only what niri can do.
+        assert!(out.contains("window-rule {\n    match app-id=\"^org\\\\.kde\\\\.kwrite$\"\n    open-fullscreen true\n}\n"), "{out}");
+        assert!(!out.contains("Coding") && !out.contains("keep"), "{out}");
+    }
+
+    #[test]
+    fn kwin_export() {
+        let o = ov(json!({ "window-rules": {
+            "org.kde.kwrite": { "open-on-activity": "Coding", "open-on-desktop": 2, "open-on-output": "right",
+                                "open-fullscreen": true, "glass": "opaque" },
+            "konsole": { "open-size": "1200x800", "open-position": "10,20", "open-on-workspace": "Work" },
+            "org.gnome.Nautilus": { "glass": "opaque" }
+        }}));
+        let r = kwin_rules(&o, &two_displays());
+        let r = r.as_array().unwrap();
+        assert_eq!(r.len(), 2, "{r:?}");
+        let k = r.iter().find(|x| x["name"] == "org.kde.kwrite").unwrap();
+        assert_eq!(k["appId"], "^org\\.kde\\.kwrite$");
+        assert_eq!(k["activityName"], "Coding");
+        assert_eq!(k["desktop"], 2);
+        assert_eq!(k["output"], "WL-1");
+        assert_eq!(k["outputRole"], "right");
+        assert_eq!(k["open"], "fullscreen");
+        assert_eq!(k["follow"], false);
+        let c = r.iter().find(|x| x["name"] == "konsole").unwrap();
+        assert_eq!(c["size"], json!({ "w": { "px": 1200 }, "h": { "px": 800 } }));
+        assert_eq!(c["position"], json!([10, 20]));
+        assert_eq!(c["desktop"], "Work");
+        assert_eq!(c["output"], Value::Null);
+    }
+
+    #[test]
+    fn seed_under_runtime() {
+        let seed = json!({
+            "org.kde.kwrite": { "open-on-activity": "Coding", "open-fullscreen": true },
+            "bad": { "open-size": "huge", "follow": true }
+        });
+        let o = ov(json!({ "window-rules": { "org.kde.kwrite": { "open-fullscreen": false, "blur": true } } }));
+        let m = with_seed(&o, seed.as_object().unwrap());
+        assert_eq!(
+            m.0[RULES],
+            json!({ "org.kde.kwrite": { "open-on-activity": "Coding", "open-fullscreen": false, "blur": true },
+                    "bad": { "follow": true } })
+        );
+        assert_eq!(with_seed(&o, &Map::new()), o);
+    }
+
+    #[test]
+    fn new_fields_are_checked() {
+        let mut o = Overrides::default();
+        for bad in [
+            json!({ "a": { "open-size": "12x" } }),
+            json!({ "a": { "open-size": "0x10" } }),
+            json!({ "a": { "open-size": "120%x10" } }),
+            json!({ "a": { "open-position": "middle" } }),
+            json!({ "a": { "open-on-desktop": 0 } }),
+            json!({ "a": { "match-title": "(" } }),
+            json!({ "a": { "follow": "yes" } }),
+        ] {
+            assert!(apply_rules(&mut o, bad.as_object().unwrap()).is_err(), "{bad}");
+        }
+        let good = json!({ "a": { "open-size": "50%x100%", "open-position": "right", "open-on-desktop": "Two",
+                                  "match-title": "^x$", "keep-above": true } });
+        apply_rules(&mut o, good.as_object().unwrap()).unwrap();
+        assert_eq!(parse_size("1200×800"), Some((Dim::Px(1200), Dim::Px(800))));
+        assert_eq!(resolve_output("DP-4", &two_displays()).as_deref(), Some("DP-4"));
+        assert_eq!(resolve_output("main", &two_displays()).as_deref(), Some("WL-0"));
+        assert_eq!(resolve_output("*", &two_displays()), None);
     }
 }
