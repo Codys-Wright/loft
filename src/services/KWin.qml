@@ -36,7 +36,8 @@ Singleton {
             floating: false,
             minimize: true,
             overview: true,
-            windowScreenshot: false,
+            // loft-kwin shot (KWin's ScreenShot2).
+            windowScreenshot: true,
             workspaceNames: true,
             perOutputWorkspaces: false,
             titleBarEvents: false,
@@ -47,7 +48,19 @@ Singleton {
         })
 
     signal outputsChanged
+    // A window screenshot of ours finished (screenshotWindow), path written.
+    signal screenshotTaken(string path)
     property string outputKey: ""
+
+    // loft-kwin: the daemon below, and `loft-kwin shot …` for screenshots.
+    readonly property string bin: Quickshell.env("LOFT_KWIN_BIN") || "loft-kwin"
+
+    // argv for a screenshot of one output by name ("" = every output), at
+    // its native resolution, into `path` (PNG). Capture.qml's grim, here.
+    function screenshotArgv(output, path, showPointer) {
+        const a = output ? [bin, "shot", "screen", output, path] : [bin, "shot", "workspace", path];
+        return showPointer ? a.concat(["--pointer"]) : a;
+    }
 
     function workspacesOn(output) {
         return workspaces.filter(w => w.output === output);
@@ -235,8 +248,15 @@ Singleton {
         send({ cmd: "toggleOverview" });
     }
 
+    // Like niri's screenshot-window: writes `path`, copies it, then
+    // screenshotTaken(path).
     function screenshotWindow(id, path, showPointer) {
-        console.warn("KWin: window screenshots aren't supported yet");
+        const w = windowMap[id];
+        if (!w?.kwin_uuid || shot.running)
+            return;
+        shot.path = path;
+        shot.command = ["sh", "-c", '"$@" && wl-copy --type image/png < "$5"', "sh", bin, "shot", "window", w.kwin_uuid, path].concat(showPointer ? ["--pointer"] : []);
+        shot.running = true;
     }
 
     function setActivity(activity) {
@@ -269,7 +289,7 @@ Singleton {
 
     Process {
         id: proc
-        command: [Quickshell.env("LOFT_KWIN_BIN") || "loft-kwin"]
+        command: [root.bin]
         stdinEnabled: true
         stdout: SplitParser {
             onRead: line => root.handle(line)
@@ -284,6 +304,18 @@ Singleton {
             // Crashed, or KWin wasn't ready yet: come back.
             if (root.wanted)
                 restart.start();
+        }
+    }
+
+    Process {
+        id: shot
+        property string path: ""
+        stderr: SplitParser {
+            onRead: line => console.warn(`loft-kwin shot: ${line}`)
+        }
+        onExited: code => {
+            if (code === 0)
+                root.screenshotTaken(shot.path);
         }
     }
 

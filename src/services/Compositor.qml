@@ -117,6 +117,9 @@ Singleton {
         function onOutputsChanged() {
             root.outputsChanged();
         }
+        function onScreenshotTaken(path) {
+            root.screenshotTaken(path);
+        }
     }
 
     // ── Actions: any compositor ───────────────────────────────────────────
