@@ -43,6 +43,8 @@ Singleton {
             // Window stills for the dock preview and the switcher, through
             // the same ScreenShot2 (KWinThumbs, docs/KWIN.md §4.8).
             windowThumbnails: true,
+            // loft-kwin record window (KWin's zkde_screencast stream_window).
+            windowRecording: true,
             workspaceNames: true,
             perOutputWorkspaces: false,
             titleBarEvents: false,

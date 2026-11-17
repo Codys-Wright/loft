@@ -681,6 +681,80 @@ input woke them.
 
 Found while testing, not fixed here: `Displays.fullscreenOn` skips floating windows, and
 under KWin every window floats, so FullscreenChrome never sees a fullscreen window there.
+`screenshotTaken`, like niri. Recording is §4.8. Not done: window thumbnails (step 11,
+the same `shot window`).
+
+### 4.8 Screen recording through zkde_screencast
+
+**Done.** wf-recorder needs wlr-screencopy, which KWin doesn't have. `loft-kwin record`
+(crates/loft-kwin/src/record.rs) asks KWin for a screencast and records it:
+
+```sh
+loft-kwin record screen WL-0 out.mp4                       # one output, native resolution
+loft-kwin record area X Y W H out.mp4 [--scale S]          # global logical rect, S px per logical px
+loft-kwin record window '{uuid}' out.mp4                   # one window (its kwin_uuid), title bar included
+#   [--no-pointer] [--audio @DEFAULT_MONITOR@|default|SOURCE] [--fps 30]
+# SIGINT/SIGTERM: finish the file and exit 0. SIGTSTP / SIGCONT: pause / resume.
+```
+
+How: loft-kwin binds KWin's `zkde_screencast_unstable_v1` (the protocol KWin's own
+portal and Spectacle use; bindings from the `wayland-protocols-plasma` crate) and calls
+`stream_output`, `stream_region` (v3) or `stream_window` with the pointer embedded. KWin
+answers `created(node)` with a PipeWire node, and loft-kwin runs
+
+```
+gst-launch-1.0 -e pipewiresrc path=NODE keepalive-time=500 always-copy=true ! videorate ! 30 fps
+  ! videoconvert ! videoscale ! I420 (even width/height) ! x264enc veryfast, constant quality
+  ! h264parse ! mp4mux ! filesink        [+ pulsesrc ! avenc_aac ! mux.]
+```
+
+so the file is what wf-recorder makes under niri: H.264 (High, yuv420p) in MP4 with an
+optional AAC track, in the same `Recording_<date>.mp4` under `recordingDir`. The frame rate is
+constant (30), and `keepalive-time` repeats the last frame while KWin sends none (it only sends
+frames on damage). A region is cropped by KWin (`stream_region`), so area recordings need no crop
+in the encoder and can span outputs. An odd width or height loses one pixel (4:2:0).
+
+Why this route:
+
+| | dialog | extra daemon | area | window | verdict |
+|---|---|---|---|---|---|
+| `zkde_screencast` + gst-launch | none | none (gst-launch only while recording) | `stream_region`, by KWin | `stream_window` | **chosen** |
+| xdg-desktop-portal ScreenCast | always the first time; a restore token (`persist_mode` 2) can skip it later, but an invalid token (e.g. the output changed) brings the picker back | the portal (D-Bus activated) | crop in the encoder | via the picker | no: never reliably non-interactive |
+| `spectacle --record` | its own UI to pick the region and to stop | Spectacle | its own region picker | yes | no: its UI, its settings decide format and folder |
+
+KWin 6.8.2 let loft-kwin, an ordinary session client, bind `zkde_screencast` with no
+`X-KDE-Wayland-Interfaces` desktop entry (nested session), like ScreenShot2 (§4.7); its
+interface filter looks aimed at sandboxed clients (`wp_security_context_v1`). Should a later KWin restrict it again, loft-kwin needs a .desktop file whose `Exec`
+is its binary, with `X-KDE-Wayland-Interfaces=zkde_screencast_unstable_v1`.
+
+The Nix package wraps `loft-kwin` with exactly the GStreamer plugins this uses (`gstreamer`,
+`-base`, `-good`, `-ugly` for x264enc, `gst-libav` for avenc_aac, and PipeWire's
+pipewiresrc) on `GST_PLUGIN_SYSTEM_PATH_1_0`. PipeWire itself is the session's.
+
+The shell: `Recorder.start` runs `loft-kwin record …` instead of wf-recorder when
+`Compositor.backend` is `kwin` (Recorder.qml `kwinArgs`): the focused output, an area from
+the frozen-frame overlay (with the screen's `devicePixelRatio` as `--scale`), or a window.
+Audio modes map the same way (system → `--audio @DEFAULT_MONITOR@`, mic → `--audio
+default`, both → system in the file plus the separate mic track muxed afterwards, as under
+niri). Pause sends SIGTSTP, which loft-kwin passes on as SIGSTOP to gst-launch (wf-recorder
+takes SIGSTOP itself); the paused span stays in the file as a held frame. The island's live
+activity, the notification, the thumbnail and the recording editor are unchanged.
+`capabilities.windowRecording` (KWin only) adds **Record Focused Window** to the capture
+selector and IPC `capture recordWindow`; niri's recorder can't record one window, so niri
+doesn't show it.
+
+Tested in a nested session (`loft-dev --compositor kwin`, 1280×800, a foot window drawing a
+moving block and a frame counter): screen 5.000 s, 1280×800, 150 frames at 30 fps; area
+501×301 → 500×300; area at `--scale 2` → 600×400; window 1268×502 with its title bar,
+following the window's content; system audio (null sink monitor) and mic (a silent virtual
+source) as a stereo AAC track. Through the shell: `capture recordScreen`, pause, resume,
+`recorder stop` → the file in `~/Videos/Recordings`, the "Recording saved" notification and
+the thumbnail; `capture recordArea` + a drag on the overlay → `record area 200 150 501 301
+… --scale 1`; `capture recordWindow` → `record window {uuid}`. Frames extracted with ffmpeg
+showed the counter advancing and the block moving.
+
+Not done: hardware encoding (VA-API: `vah264enc` from gst-plugins-bad), and recording
+with KWin's cursor as metadata instead of embedded.
 
 ## 5. One Plasma session, two shells: switching and backing out
 
@@ -792,6 +866,12 @@ What it took:
 - Plasma-session services that `startplasma-wayland` normally starts and this doesn't:
   ksmserver, powerdevil, the polkit agent, xdg-desktop-portal-kde (D-Bus activated anyway).
   Add them when a test needs them.
+- **A private PipeWire.** KWin's screencasts (`loft-kwin record`, §4.8) need PipeWire.
+  `kwin-run.sh` starts `pipewire`, `wireplumber` and `pipewire-pulse` in the session's runtime
+  dir before KWin, with no devices (WirePlumber's ALSA, bluez, V4L2 and libcamera monitors off,
+  no logind or device reservation) and two virtual nodes: a null sink (`loft-dev-sink`, the
+  default; its monitor is "system audio") and a silent source (`loft-dev-mic`). The user's own
+  PipeWire is never involved. Log: `<session dir>/pipewire.log`.
 - Still open: whether KWin's privileged-interface checks (ScreenShot2,
   plasma_window_management) can be relaxed for a dev session, or whether loft-kwin needs an
   installed .desktop file with `X-KDE-Wayland-Interfaces` /
@@ -813,6 +893,8 @@ What it took:
 8. ✅ Lock screen shell package (§4.3).
 9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). ✅ Spotlight's window
    commands, `loft mcp` and the overview state (§4.8). Display settings, recording.
+9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). ✅ Recording through
+   zkde_screencast (§4.8). Display settings.
 10. Spaces on Activities (§4.2).
 11. ✅ Window thumbnails through ScreenShot2 (§4.8).
 

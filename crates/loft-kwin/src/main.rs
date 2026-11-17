@@ -18,7 +18,10 @@
 //!   gets), over its `State` method (`loft mcp` reads windows from it).
 //! - `loft-kwin thumbs DIR MAX UUID…`: small window stills for the dock
 //!   preview and the switcher (src/shot.rs, docs/KWIN.md §4.8).
+//! - `loft-kwin record …`: a screen recording through KWin's zkde_screencast
+//!   and PipeWire (src/record.rs).
 
+mod record;
 mod shot;
 mod state;
 
@@ -271,6 +274,9 @@ async fn main() -> Result<()> {
     }
     if args.first().is_some_and(|a| a == "thumbs") {
         return shot::thumbs(&shot::parse_thumbs(&args[1..])?).await;
+    }
+    if args.first().is_some_and(|a| a == "record") {
+        return record::run(&record::parse(&args[1..])?).await;
     }
     if args.first().is_some_and(|a| a == "--help" || a == "-h") {
         println!(
