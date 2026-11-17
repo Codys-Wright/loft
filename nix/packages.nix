@@ -675,9 +675,12 @@
             "loft-kwin"
           ];
           # Display identities spell the EDID vendor out like niri does.
+          # `loft-kwin displays` runs kscreen-doctor: the system's (it
+          # matches the running KWin) when on PATH, else this one.
           nativeBuildInputs = [ pkgs.makeWrapper ];
           postInstall = ''
-            wrapProgram $out/bin/loft-kwin --set-default LOFT_PNP_IDS ${pkgs.hwdata}/share/hwdata/pnp.ids
+            wrapProgram $out/bin/loft-kwin --set-default LOFT_PNP_IDS ${pkgs.hwdata}/share/hwdata/pnp.ids \
+              --suffix PATH : ${pkgs.kdePackages.libkscreen}/bin
           '';
           meta.mainProgram = "loft-kwin";
         };

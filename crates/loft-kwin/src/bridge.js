@@ -53,7 +53,8 @@ function snapshot() {
             geometry: rect(s.geometry),
             manufacturer: s.manufacturer || "",
             model: s.model || "",
-            serial: s.serialNumber || ""
+            serial: s.serialNumber || "",
+            scale: s.scale || 1
         })),
         active_screen: workspace.activeScreen ? workspace.activeScreen.name : "",
         active_window: tracked(active) ? "" + active.internalId : "",
@@ -111,6 +112,20 @@ for (const s of ["currentDesktopChanged", "screensChanged", "currentActivityChan
         workspace[s].connect(push);
     } catch (e) {}
 }
+// Settings → Displays re-reads KScreen when a screen moves, resizes or
+// rescales (KWin.qml displayLayoutChanged).
+function watchScreen(s) {
+    for (const sig of ["geometryChanged", "scaleChanged"]) {
+        try {
+            s[sig].connect(push);
+        } catch (e) {}
+    }
+}
+workspace.screens.forEach(watchScreen);
+try {
+    workspace.screensChanged.connect(() => workspace.screens.forEach(watchScreen));
+} catch (e) {}
+
 workspace.desktopsChanged.connect(() => {
     workspace.desktops.forEach(watchDesktop);
     push();

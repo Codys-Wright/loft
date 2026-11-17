@@ -32,9 +32,6 @@ Singleton {
     readonly property bool busy: runner.running || queue.length > 0
     property var queue: []
 
-    // Identify: every screen flashes its name (IdentifyOverlay).
-    property bool identifying: false
-
     readonly property bool hasOverrides: Object.values(keys).some(k => k.source === "override") || Object.keys(outputOverrides).length > 0
 
     function value(key) {
@@ -106,11 +103,6 @@ Singleton {
     // replaced_by, also_defined, record, loft }.
     readonly property var shortcuts: bindsData.shortcuts ?? []
 
-    function identify() {
-        identifying = true;
-        identifyTimer.restart();
-    }
-
     function next() {
         if (queue.length === 0)
             return;
@@ -119,12 +111,6 @@ Singleton {
         runner.job = job;
         runner.command = ["loft-niri", "--json", "apply", JSON.stringify(job.batch)];
         runner.running = true;
-    }
-
-    Timer {
-        id: identifyTimer
-        interval: 2500
-        onTriggered: root.identifying = false
     }
 
     Process {

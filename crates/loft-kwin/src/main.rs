@@ -11,7 +11,9 @@
 //!   (applied by the script) or `setDesktopName` / `switchLayout` /
 //!   `toggleOverview` (done here over KWin's D-Bus API). EOF ends the daemon.
 //! - `loft-kwin shot …`: a screenshot through KWin's ScreenShot2 (src/shot.rs).
+//! - `loft-kwin displays [set JSON]`: outputs through KScreen (src/displays.rs).
 
+mod displays;
 mod shot;
 mod state;
 
@@ -199,6 +201,9 @@ async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.first().is_some_and(|a| a == "shot") {
         return shot::run(&shot::parse(&args[1..])?).await;
+    }
+    if args.first().is_some_and(|a| a == "displays") {
+        return displays::run(&args[1..]);
     }
     if args.first().is_some_and(|a| a == "--help" || a == "-h") {
         println!(
