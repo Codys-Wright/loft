@@ -18,6 +18,12 @@ import Quickshell.Services.UPower
 // (`systemd-inhibit`, from the system's systemd like nmcli/busctl):
 // idle (+ sleep with blockSleep, + handle-lid-switch with lidClosed). The
 // inhibitor process dies with the shell, so nothing outlives it.
+//
+// Under KWin, idle is PowerDevil's and kscreenlocker's: loft-kwin holds a
+// PowerDevil inhibition (PolicyAgent.AddInhibition, ChangeScreenSettings:
+// no dimming, no displays off, no idle lock, and so no idle sleep either),
+// released when Keep Awake ends or loft-kwin exits (docs/KWIN.md §4.20). No
+// logind inhibitor there: PowerDevil does lid and sleep itself.
 Singleton {
     id: root
 
@@ -107,6 +113,13 @@ Singleton {
     }
     readonly property bool active: reason !== ""
 
+    // ── KDE: PowerDevil's inhibition, held by loft-kwin ─────────────────
+    readonly property bool kde: Compositor.backend === "kwin"
+    readonly property string kdeWhy: kde && active ? `Keep Awake (${reason})` : ""
+    onKdeWhyChanged: KWin.setKeepAwake(kdeWhy)
+    Component.onCompleted: if (kdeWhy !== "")
+        KWin.setKeepAwake(kdeWhy)
+
     // One line for the Control Center tile / menu.
     function format(ms) {
         const m = Math.ceil(ms / 60000);
@@ -170,8 +183,8 @@ Singleton {
     // Its last error ("Failed to inhibit: Access denied" outside an active
     // logind session / without polkit rights); the idle inhibitor still works.
     property string inhibitError: ""
-    readonly property string what: ["idle"].concat(cfg.blockSleep ? ["sleep"] : []).concat(cfg.lidClosed && hasBattery ? ["handle-lid-switch"] : []).join(":")
-    readonly property string inhibitKey: active ? what : ""
+    readonly property string what: kde ? "" : ["idle"].concat(cfg.blockSleep ? ["sleep"] : []).concat(cfg.lidClosed && hasBattery ? ["handle-lid-switch"] : []).join(":")
+    readonly property string inhibitKey: active && what !== "" ? what : ""
     onInhibitKeyChanged: {
         inhibitor.running = false;
         if (inhibitKey !== "")

@@ -193,7 +193,7 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | overview (`toggle-overview`) | KWin's Overview effect |
 | lock screen (`WlSessionLock`) | Plasma's locker with **Loft's lock design** (§4.3) |
 | Spaces (named niri workspaces per output) | **the user's KDE Activities**, read-only (§4.2) |
-| idle (swayidle on niri.service) | PowerDevil (Plasma's own idle and DPMS) |
+| idle (swayidle on niri.service) | **done** (§4.20): Plasma's kscreenlocker and PowerDevil do idle, with **Loft's settings** (Settings → Lock Screen → When Idle, else `programs.loft.idle`) written into `kscreenlockerrc` / `powerdevilrc` while Loft runs and KDE's own given back after; Keep Awake is a PowerDevil inhibition |
 | xremap per-app remaps (`xremap.niri`) | **done**: `loft-plasma-keys.service` runs `xremap.kde` (its KWin script reports the focused window's `resourceClass`, the Wayland app id) on the same config (§4.5) |
 | WM key (Caps / Esc / Right Ctrl held → Right Alt = niri Mod) | **done**: the hold is a private xremap virtual modifier (F24) that sends **Meta** + the next key, so KWin's and Loft's Meta shortcuts are reachable (§4.5, `LOFT_WM_KEY=meta`) |
 
@@ -1962,6 +1962,107 @@ KWrite. After: all in the Loft theme's colors and accent with dark-on-accent (to
 or white-on-accent (latte) text; KWrite's menu round, shadowed, blurred glass with
 separators.
 
+### 4.20 Idle and lock timings: Loft's settings in Plasma's locker and PowerDevil
+
+**Done.** Under niri, swayidle does Loft's idle (`programs.loft.idle`: lock after 300 s,
+displays off after 600 s, lock before sleep). Under KWin, idle is Plasma's:
+kscreenlocker (inside KWin) locks, PowerDevil dims, turns displays off and suspends.
+Loft doesn't replace them. While Loft is the shell, **Loft's settings are what they
+use**, and KDE's own values come back when Plasma runs without Loft.
+
+Before this, Loft had no idle settings in the shell at all, only the two Nix options.
+Loft has no screensaver of its own (nothing shows after N minutes under niri), so there
+is nothing to start on idle under KWin.
+
+**The settings** (`Settings.idle` in shell.json; Settings → Appearance → Lock Screen →
+**When Idle**, `src/services/Idle.qml`): `lockAfter`, `screenOffAfter`, `suspendAfter`
+(seconds, 0 = never), `lockGrace` (seconds), `lockOnResume`. -1 means "not set here".
+Layers, last wins: Loft's defaults (300 / 600 / never / 5 s / on), `programs.loft.idle`
+(the home-manager module writes `~/.config/loft/idle.json`, null = never), Settings. One
+set of values for every power state: Loft has no AC / battery split, so the same values
+go into all three PowerDevil profiles. Under niri the card says swayidle uses
+`programs.loft.idle` and offers only the lock and displays-off rows (the values are kept for
+Plasma sessions; swayidle doesn't read them yet).
+
+**What is written** (`loft idle apply`, `cli/loft/kdeidle.py`):
+
+| File | Keys | From |
+|---|---|---|
+| `kscreenlockerrc` | `[Daemon] Autolock` | `lockAfter > 0` |
+| | `[Daemon] Timeout` (minutes, a double: 30 s = `0.5`), `Lock=true` | `lockAfter`, when > 0 |
+| | `[Daemon] LockGrace` (seconds) | `lockGrace` |
+| | `[Daemon] LockOnResume` | `lockOnResume` |
+| `powerdevilrc`, for `AC`, `Battery`, `LowBattery` | `[<p>][Display] TurnOffDisplayWhenIdle`, `TurnOffDisplayIdleTimeoutSec` | `screenOffAfter` |
+| | `[<p>][SuspendAndShutdown] AutoSuspendAction` (1 = sleep, 0 = nothing), `AutoSuspendIdleTimeoutSec` | `suspendAfter` |
+
+The keys are PowerDevil 6's (`PowerDevilProfileSettings.kcfg`, checked against 6.7.5's
+source) and kscreenlocker's (`kscreenlockersettings.kcfg`). Dimming, the lid, the power
+button and the "when locked" display timeout stay KDE's: Loft has no setting for them.
+
+**Applying live.** After writing, `loft idle apply` calls
+`org.kde.screensaver.configure` on `org.freedesktop.ScreenSaver /ScreenSaver`
+(kscreenlocker re-reads its file and re-arms its idle timeout) and
+`org.kde.Solid.PowerManagement.refreshStatus` on `/org/kde/Solid/PowerManagement`
+(PowerDevil re-reads its config and reloads the current profile with `force`, what its
+KCM does). Both apply at once, no restart. The shell runs `apply` at start and
+400 ms after every change under KWin (Idle.qml passes Settings.idle as `--settings`, so
+it doesn't race the shell.json write), then `loft idle status --json` reads the files
+back for the card ("KDE now: lock 5 min, displays off 2 min, suspend never").
+
+**Record and revert**, the same as the global Qt style (§4.14): `<state>/kde-idle.prev`
+keeps, per key, the user's value (null = not in the file) and Loft's. A key changed by
+someone else since Loft wrote it (System Settings while Loft ran) is recorded afresh, so
+that value is what comes back. `loft idle revert` puts back each key that still holds
+Loft's value, deletes keys that weren't there, forgets the record and reloads both
+daemons. It runs from `loft-plasma-shell`'s `ExecStopPost` and plasmashell's
+`ExecStartPre` (a session that ended without a stop job). So plain Plasma gets the
+user's own lock and power settings, and System Settings shows them.
+
+**Keep Awake** (`KeepAwake.qml`, Settings → Everyday): under KWin, loft-kwin holds a
+PowerDevil inhibition (`org.kde.Solid.PowerManagement.PolicyAgent.AddInhibition(4,
+"Loft", "Keep Awake (<reason>)")`, `crates/loft-kwin/src/idle.rs`; stdin `{"cmd":
+"keepAwake", "why"}`, `"why": ""` releases it, answered with `{"KeepAwake": {held, why,
+cookie?, error?}}`). Policy 4 is ChangeScreenSettings, what a video player asks for:
+PowerDevil neither dims nor turns the displays off, and it implies InterruptSession, so
+no idle sleep either. kscreenlocker skips its idle lock while PowerDevil reports it
+(`HasInhibition(4)`, its `PowerManagementInhibition`). PowerDevil enforces an inhibition
+5 s after it's asked for (its own debounce), lists it in the battery applet as Loft's,
+and drops it when loft-kwin's bus name goes away, so a crash can't leave the machine
+awake. The shell sends it again when loft-kwin restarts, and loft-kwin adds it again when
+PowerDevil (re)starts (`NameOwnerChanged` of `org.kde.Solid.PowerManagement.PolicyAgent`).
+No `systemd-inhibit` under KWin: PowerDevil does sleep and the lid itself, so "Also block
+suspend" and "Stay awake with the lid closed" are hidden there (the lid does what
+PowerDevil's lid setting says). The bar's Wayland idle inhibitor stays; KWin honours it
+too.
+
+**swayidle under Plasma.** The module binds it to `niri.service` (`systemdTarget`), which
+a Plasma session doesn't start, so it never runs there.
+
+**Tested** in a nested KWin 6.8.2 with `loft-dev --compositor kwin --power` (§6: KWin's
+locker on, PowerDevil 6.8.2 and kscreenlocker 6.8.2 in the session, both on a stub system bus). Startup:
+the shell wrote the defaults into the scratch HOME's files. Then "user" values written
+with kwriteconfig6 (Timeout 15, LockGrace 30, AC displays off 1200 s, suspend after
+900 s) and Loft's changed to lock 30 s / displays off 60 s / suspend 1800 s / grace 0:
+both files matched within a second, and with no input the session locked 30 s later
+(`org.freedesktop.ScreenSaver.GetActive` → true) and DPMS went off (`kscreen-doctor
+--dpms show`). `loft idle revert` then left exactly the user's keys (Timeout 15,
+LockGrace 30, 1200, 1 / 900) and removed the ones only Loft had written. Live reload
+without a lock: displays off at 45 s, changed to Never: still on after 70 s idle; changed
+to 30 s: off 30–40 s later. Keep Awake (`qs ipc call keepawake on`): `ListInhibitions` →
+`Loft / Keep Awake (manual)` after the 5 s delay, `HasInhibition(4)` true, the displays
+stayed on for 60 s with a 30 s timeout and the idle lock (30 s) didn't fire; after
+`off`, the inhibition was gone, the displays went off 30 s later and the session locked
+about 35 s later. Ending loft-kwin (SIGTERM) dropped the inhibition at once, and the
+shell's restarted loft-kwin took it again. Settings: the When Idle card under KWin;
+picking "Turn displays off after → 2 min" with real clicks wrote `120` into all three
+profiles and the card read "displays off 2 min" back from KDE. The real
+`~/.config/kscreenlockerrc` and `powerdevilrc` weren't touched. **Not tested:** suspend
+itself (the stub bus has no logind: an idle suspend can't reach the machine, and wasn't
+tried); PowerDevil restarting under a held inhibition (restarting it outside the session
+script would put it on the real system bus); the units' `ExecStopPost` / `ExecStartPre`
+in a real Plasma login (run by hand in the nested session instead); battery profiles
+(no UPower on the stub bus: PowerDevil loads `AC`).
+
 ## 5. One Plasma session, two shells: switching and backing out
 
 Requirements: both shells work in the same Plasma session, never run at once, can be
@@ -2014,6 +2115,7 @@ when Loft stops:
 | the global Qt style (`programs.loft.qt.global`, §4.14): kdeglobals `[KDE] widgetStyle`, `[General] ColorScheme` / `ColorSchemeHash`, the `[Colors:*]` / `[ColorEffects:*]` / `[WM]` keys of Loft's scheme; Kvantum's `[General] theme` | `loft qt global start` (`ExecStartPost`, only when on) records the user's values in `<state>/qt-global.prev`; `loft qt global stop` (`ExecStopPost`, and plasmashell's `ExecStartPre`) puts back every key still Loft's and deletes the ones that weren't set, with KConfig's change notification so running apps follow |
 | Alt+F3 (KWin's Window Operations Menu, §4.4) | taken by Loft's `loft-window-menu` shortcut through the same claim / release as the others |
 | any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |
+| Loft's idle settings (§4.20): `kscreenlockerrc [Daemon]` Autolock / Timeout / Lock / LockGrace / LockOnResume, `powerdevilrc` displays-off and idle-suspend keys of the AC / Battery / LowBattery profiles | the shell's `loft idle apply` records the user's values in `<state>/kde-idle.prev`; `loft idle revert` (`ExecStopPost` of loft-plasma-shell, and plasmashell's `ExecStartPre`) puts back every key still Loft's, deletes the ones that weren't set, and reloads kscreenlocker and PowerDevil |
 | the lock screen | `PLASMA_DEFAULT_SHELL` only in KWin's environment, and only when the login is Loft's (`loft-plasma lock-env`, §4.3). Lock and unlock stay Plasma's either way |
 | KDE Activities | never written: Spaces are the user's Activities, read-only (§4.2). Activities an older Loft build created (`<state>/kwin-activities.json`) are kept (harmless); `loft spaces prune` removes those and renames an adopted one back |
 
@@ -2021,7 +2123,8 @@ Loft never writes `plasma-org.kde.plasma.desktop-appletsrc`, `plasmashellrc` or
 `kwinrulesrc`, so plasmashell comes back with your panels as you left them.
 
 **Also in the module:** `findNiriSocket` is already a no-op without niri. swayidle
-stays bound to `niri.service`, and Plasma uses PowerDevil. loft-appmenu already steps
+stays bound to `niri.service`, and Plasma uses PowerDevil and kscreenlocker with Loft's
+settings (§4.20). loft-appmenu already steps
 aside when Plasma's appmenu kded module owns `com.canonical.AppMenu.Registrar`.
 Whether menus then still reach Loft's bar needs checking.
 
@@ -2074,8 +2177,15 @@ What it took:
   `invokeShortcut` on the session's bus (`bind kwin/Overview`, verified).
 - `loft-live` runs inside such a session as a test of its Plasma path (TESTING.md).
 - Plasma-session services that `startplasma-wayland` normally starts and this doesn't:
-  ksmserver, powerdevil, the polkit agent, xdg-desktop-portal-kde (D-Bus activated anyway).
+  ksmserver, the polkit agent, xdg-desktop-portal-kde (D-Bus activated anyway).
   Add them when a test needs them.
+- **`--power`**: KWin runs its screen locker (no `--no-lockscreen`) and the session script
+  starts PowerDevil (`POWERDEVIL_NO_DDCUTIL=1`). Both talk to logind, UPower and KAuth
+  helpers on the system bus, so the whole session gets a **stub system bus** (a private
+  `dbus-daemon` at `<session dir>/run/system-bus` with nothing on it): an idle lock never
+  sets the real session's lock hint, an idle suspend can't reach logind, and no backlight
+  is written. PowerDevil's log is `<session dir>/powerdevil.log`. A lock can't be undone
+  without the user's password (the greeter uses real PAM): stop the session instead (§4.20).
 - **A private PipeWire.** KWin's screencasts (`loft-kwin record`, §4.10) need PipeWire.
   `kwin-run.sh` starts `pipewire`, `wireplumber` and `pipewire-pulse` in the session's runtime
   dir before KWin, with no devices (WirePlumber's ALSA, bluez, V4L2 and libcamera monitors off,

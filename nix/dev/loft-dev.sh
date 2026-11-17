@@ -88,6 +88,11 @@ loft-dev-kwin-NAME; `loft-dev --stop NAME` stops all of it.
   --kwin-scale S           kwin: the outputs' scale (e.g. 1.25, 1.5), for
                            fractional-scaling tests: the host output is
                            scaled, KWin follows it; --size stays device px
+  --power                  kwin: Plasma's idle in the session: KWin's own screen
+                           locker (kscreenlocker; normally off) and PowerDevil,
+                           on a private stub system bus (no logind, UPower or
+                           backlight helper: nothing reaches the real machine;
+                           no ddcutil). For Loft's idle settings (KWIN.md §4.20)
   --kwin-env NAME=VALUE    kwin: extra environment for the whole session
                            (repeatable), e.g. a build's plugins first:
                            QT_PLUGIN_PATH=$PWD/result/lib/qt-6/plugins:$QT_PLUGIN_PATH
@@ -122,6 +127,7 @@ output_count=1
 keep_home=0
 kwin_env=()
 kwin_scale=1
+power=0
 action=run
 stop_name=""
 orig_args=("$@")
@@ -146,6 +152,7 @@ while [ $# -gt 0 ]; do
     --output-count) [ $# -ge 2 ] || usage; output_count="$2"; shift 2 ;;
     --keep-home) keep_home=1; shift ;;
     --kwin-scale) [ $# -ge 2 ] || usage; kwin_scale="$2"; shift 2 ;;
+    --power) power=1; shift ;;
     --kwin-env)
       [ $# -ge 2 ] || usage
       [[ "$2" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || { echo "loft-dev: --kwin-env wants NAME=VALUE" >&2; exit 2; }
@@ -292,6 +299,13 @@ run_kwin() {
   for c in /run/current-system/sw/libexec/kactivitymanagerd /usr/libexec/kactivitymanagerd /usr/lib/kactivitymanagerd; do
     [ -x "$c" ] && { kamd="$c"; break; }
   done
+  local powerdevil=""
+  if [ "$power" = 1 ]; then
+    for c in /run/current-system/sw/libexec/org_kde_powerdevil /usr/libexec/org_kde_powerdevil /usr/lib/x86_64-linux-gnu/libexec/org_kde_powerdevil; do
+      [ -x "$c" ] && { powerdevil="$c"; break; }
+    done
+    [ -n "$powerdevil" ] || { echo "loft-dev: --power: org_kde_powerdevil not found" >&2; exit 1; }
+  fi
 
   root="$(realpath "${root:-$PWD}")"
   if [ ! -f "$root/src/shell.qml" ]; then
@@ -408,6 +422,8 @@ env | grep -E '^(DBUS_SESSION_BUS_ADDRESS|WAYLAND_DISPLAY|DISPLAY)=' > "$LOFT_DE
 mv "$LOFT_DEV_DIR/kde.env.tmp" "$LOFT_DEV_DIR/kde.env"
 [ -z "$LOFT_DEV_KAMD" ] || "$LOFT_DEV_KAMD" &
 kded6 &
+# --power: PowerDevil (its system bus is the stub; no ddcutil on real monitors).
+[ -z "$LOFT_DEV_POWERDEVIL" ] || POWERDEVIL_NO_DDCUTIL=1 "$LOFT_DEV_POWERDEVIL" > "$LOFT_DEV_DIR/powerdevil.log" 2>&1 &
 if [ "$LOFT_DEV_SHELL" = plasma ]; then
   plasmashell &
 else
@@ -452,7 +468,29 @@ if command -v pipewire > /dev/null && command -v wireplumber > /dev/null; then
   "${pw_env[@]}" wireplumber >> "$d/pipewire.log" 2>&1 &
   if command -v pipewire-pulse > /dev/null; then "${pw_env[@]}" pipewire-pulse >> "$d/pipewire.log" 2>&1 & fi
 fi
-exec env -u DBUS_SESSION_BUS_ADDRESS -u DISPLAY -u NIRI_SOCKET -u WAYLAND_SOCKET -u SWAYSOCK \
+# --power: KWin's screen locker and PowerDevil run, and both talk to
+# logind / UPower on the system bus. That bus is a stub here (nothing on it),
+# so a lock hint, an inhibitor or a suspend never reaches the real machine.
+lock_arg=(--no-lockscreen)
+sys_bus=()
+if [ "${LOFT_DEV_POWER:-0}" = 1 ]; then
+  lock_arg=()
+  cat > "$d/system-bus.conf" <<CONF
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>system</type>
+  <listen>unix:path=$d/run/system-bus</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default"><allow send_destination="*" eavesdrop="true"/><allow eavesdrop="true"/><allow own="*"/></policy>
+</busconfig>
+CONF
+  rm -f "$d/run/system-bus"
+  dbus-daemon --config-file="$d/system-bus.conf" --nofork --nopidfile > "$d/system-bus.log" 2>&1 &
+  for _ in $(seq 50); do [ -S "$d/run/system-bus" ] && break; sleep 0.1; done
+  [ -S "$d/run/system-bus" ] || { echo "loft-dev: the stub system bus did not start (see $d/system-bus.log)" >&2; exit 1; }
+  sys_bus=(DBUS_SYSTEM_BUS_ADDRESS="unix:path=$d/run/system-bus")
+fi
+exec env -u DBUS_SESSION_BUS_ADDRESS -u DISPLAY -u NIRI_SOCKET -u WAYLAND_SOCKET -u SWAYSOCK "${sys_bus[@]}" \
   HOME="$d/home" XDG_CONFIG_HOME="$d/home/.config" XDG_DATA_HOME="$d/home/.local/share" \
   XDG_CACHE_HOME="$d/home/.cache" XDG_STATE_HOME="$d/home/.local/state" \
   XDG_RUNTIME_DIR="$d/run" WAYLAND_DISPLAY="$d/run/wayland-loft" \
@@ -460,7 +498,7 @@ exec env -u DBUS_SESSION_BUS_ADDRESS -u DISPLAY -u NIRI_SOCKET -u WAYLAND_SOCKET
   KDE_FULL_SESSION=true KDE_SESSION_VERSION=6 QT_QPA_PLATFORM=wayland \
   CLIPHIST_DB_PATH="$d/cliphist.db" LOFT_SESSION="$LOFT_SESSION" \
   dbus-run-session -- env WAYLAND_DISPLAY="$d/host/wayland-1" "$LOFT_DEV_KWIN" --width "$LOFT_DEV_W" --height "$LOFT_DEV_H" \
-    --output-count "$LOFT_DEV_OUTPUT_COUNT" --socket wayland-loft --xwayland --no-lockscreen \
+    --output-count "$LOFT_DEV_OUTPUT_COUNT" --socket wayland-loft --xwayland "${lock_arg[@]}" \
     --exit-with-session "$d/kde-session.sh"
 EOF
   chmod +x "$dir/kwin-run.sh"
@@ -472,6 +510,7 @@ EOF
   # (The single quotes are systemd's command-line quoting.)
   [ -z "$fm" ] || fuse_post=(-p "ExecStopPost=-$(command -v bash) -c '$fm -uz $dir/run/doc; $fm -uz $dir/run/gvfs; true'")
   local mode="kwin-$kshell"
+  [ "$power" = 0 ] || mode="$mode-power"
   echo "loft-dev: session $session ($mode, ${size} x$output_count on $node), unit $unit, shell from $root/src"
   systemd-run --user --quiet --collect --unit="$unit" \
     --description="loft-dev KDE session $session ($kshell shell)" \
@@ -481,6 +520,7 @@ EOF
     --setenv=LOFT_DEV_DIR="$dir" --setenv=LOFT_DEV_ROOT="$root" --setenv=LOFT_DEV_SHELL="$kshell" \
     --setenv=LOFT_DEV_NODE="$node" --setenv=LOFT_DEV_SWAY=@SWAY@ --setenv=LOFT_DEV_KWIN="$kwin_bin" \
     --setenv=LOFT_DEV_KAMD="$kamd" --setenv=LOFT_DEV_W="$w" --setenv=LOFT_DEV_H="$h" \
+    --setenv=LOFT_DEV_POWER="$power" --setenv=LOFT_DEV_POWERDEVIL="$powerdevil" \
     --setenv=LOFT_DEV_OUTPUT_COUNT="$output_count" --setenv=LOFT_SESSION="$session" \
     --setenv=LOFT_DEV_HOST_RUNTIME="$rt" \
     --setenv=LOFT_THEME_PATH="${XDG_DATA_HOME:-$HOME/.local/share}/loft/themes:$root/themes" \

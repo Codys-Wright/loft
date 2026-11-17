@@ -39,12 +39,16 @@
 //!   names from the same report as `{"Activities"}`); `loft-kwin expect
 //!   JSON` (`loft open`) and `openSpace` place the windows of a started
 //!   process tree, through one expectation (placement::Expect).
+//! - Keep Awake (src/idle.rs, docs/KWIN.md §4.20): stdin `keepAwake` holds
+//!   a PowerDevil inhibition on this connection, answered with
+//!   `{"KeepAwake"}`; added again when PowerDevil restarts.
 //! - Serves `org.kde.KWin.ClientWindowMenu` on `/WindowMenu` for Loft's patched
 //!   KWin: window menus apps with their own title bars ask for (docs/KWIN.md §4.4).
 
 mod activities;
 mod displays;
 mod heal;
+mod idle;
 mod input;
 mod keys;
 mod placement;
@@ -433,6 +437,7 @@ struct Daemon {
     state: Arc<Mutex<String>>,
     places: Places,
     starting: HashMap<(String, String), Instant>,
+    keep_awake: idle::KeepAwake,
 }
 
 impl Daemon {
@@ -687,6 +692,19 @@ async fn handle(
             emit(&r);
             Ok(r)
         }
+        // Keep Awake: a PowerDevil inhibition (src/idle.rs).
+        "keepAwake" => {
+            let r = d.keep_awake.set(conn, cmd["why"].as_str().unwrap_or("")).await;
+            emit(&r);
+            Ok(r)
+        }
+        // PowerDevil came or went (idle::watch).
+        "keepAwakeRefresh" => {
+            if d.keep_awake.wanted() {
+                emit(&d.keep_awake.refresh(conn).await);
+            }
+            ok()
+        }
         // Spaces are the user's Activities: read them, never write them
         // (src/activities.rs). `syncSpaces` is what older shells sent; it
         // gets the same read-only answer.
@@ -814,7 +832,7 @@ async fn main() -> Result<()> {
             "/Bridge",
             Bridge {
                 snapshots: snapshots_tx,
-                commands: commands_tx,
+                commands: commands_tx.clone(),
                 state: state.clone(),
                 queue: queue.clone(),
                 live: live.clone(),
@@ -844,6 +862,10 @@ async fn main() -> Result<()> {
     let (reports_tx, mut reports) = mpsc::unbounded_channel::<Value>();
     tokio::spawn(activities::watch(conn.clone(), move |r: &Value| drop(reports_tx.send(r.clone()))));
     tokio::spawn(heal::watch(conn.clone(), live, stopping.clone()));
+    {
+        let tx = commands_tx.clone();
+        tokio::spawn(idle::watch(conn.clone(), move || drop(tx.send((json!({ "cmd": "keepAwakeRefresh" }), None)))));
+    }
     // GStreamer's first run after an update scans every plugin (~10 s), and
     // auto's encoder probe takes a moment: do both now, so the first
     // recording starts at once (record.rs).
@@ -862,7 +884,7 @@ async fn main() -> Result<()> {
     }
     let mut stdin = BufReader::new(tokio::io::stdin()).lines();
     let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-    let mut d = Daemon { state: state.clone(), places: Places::default(), starting: HashMap::new() };
+    let mut d = Daemon { state: state.clone(), places: Places::default(), starting: HashMap::new(), keep_awake: idle::KeepAwake::default() };
     // The rules' files are polled (a change reloads them).
     let mut tick = tokio::time::interval(Duration::from_secs(2));
 

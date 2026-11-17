@@ -108,6 +108,7 @@ and `open-on-output` by identity work). Frames are paced at 60 Hz, clients rende
 loft-dev --session k1 --compositor kwin "$PWD"                  # Loft's shell on KWin
 loft-dev --session k2 --compositor kwin --shell plasma          # stock plasmashell, to compare
 loft-dev --session k3 --compositor kwin --size 1280x800 --output-count 2
+loft-dev --session k5 --compositor kwin --power                 # + KWin's locker and PowerDevil (stub system bus)
 loft-dev --stop k1
 # another KWin, e.g. the patched one (docs/KWIN.md §4.6): a kwin_wayland or a package dir
 LOFT_DEV_KWIN=$(nix build .#loft-kwin-patched --print-out-paths) \
