@@ -4,9 +4,27 @@ import qs.services
 
 // Settings → Layout & Motion: gaps, column widths, struts, animations.
 // Theme-owned looks (focus ring, borders, shadows, radius) live in the theme.
+// All of it is niri's: under KWin (no columns, its own animations) the page
+// only says where Plasma keeps these (docs/KWIN.md §4).
 ColumnLayout {
     id: page
     spacing: 12
+    readonly property bool niri: Compositor.backend === "niri"
+
+    SettingsCard {
+        visible: !page.niri
+        PageHeader {
+            title: "Windows"
+        }
+        Text {
+            Layout.fillWidth: true
+            text: "Under KDE Plasma, KWin lays windows out: there are no columns, and gaps, edges and animations are KWin's (System Settings → Window Management, and → Workspace Behavior → Desktop Effects). These settings are niri's and apply in a niri session."
+            color: Theme.subtext
+            font.family: Theme.fontUi
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+        }
+    }
 
 
     function sizeLabel(s) {
@@ -35,6 +53,7 @@ ColumnLayout {
     }
 
     SettingsCard {
+        visible: page.niri
         PageHeader {
             title: "Windows"
             SettingsButton {
@@ -103,6 +122,7 @@ ColumnLayout {
     }
 
     SettingsCard {
+        visible: page.niri
         PageHeader {
             title: "Struts"
         }
@@ -135,6 +155,7 @@ ColumnLayout {
     }
 
     SettingsCard {
+        visible: page.niri
         PageHeader {
             title: "Motion"
             SettingsButton {
@@ -175,7 +196,7 @@ ColumnLayout {
 
     Text {
         Layout.fillWidth: true
-        visible: NiriSettings.error !== ""
+        visible: page.niri && NiriSettings.error !== ""
         text: NiriSettings.error
         color: Theme.urgent
         font.family: Theme.fontUi

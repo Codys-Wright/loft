@@ -109,7 +109,8 @@
         "wallpapers": { "type": ["object", "null"], "additionalProperties": { "type": "string" } },
         "startup": { "enum": ["first-activate", "login", "never"] },
         "cwd": { "description": "Where the space's apps are spawned (an app's own cwd wins). `~` is your home.", "type": "string" },
-        "activity": { "description": "KDE (KWin): the Activity this document's settings attach to, by its id or its name (any case). Under KWin the Spaces are the KDE Activities; without a document naming it an Activity is a plain Space. niri ignores it.", "type": "string" }
+        "activity": { "description": "KDE (KWin): the Activity this document's settings attach to, by its id or its name (any case). Under KWin the Spaces are the KDE Activities; without a document naming it an Activity is a plain Space. niri ignores it.", "type": "string" },
+        "niri": { "description": "false: Loft settings for a KDE Activity only (`activity`), not a niri Space: niri leaves it out of its Spaces (⌘N, the switcher, spaces.kdl). Unset: a niri Space, unless it has an `activity` and binds no workspace. Made false by Settings → Spaces under KWin (New settings, Save This Activity's Apps).", "type": "boolean" }
       }
     },
     "space": {

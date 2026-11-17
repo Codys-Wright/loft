@@ -200,7 +200,13 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 **Off under KWin** (hidden with `Compositor.capabilities`): scrolling-column ops
 (Maximize Column, column-width presets, consume/expel, center visible), niri's motion
 and shape settings (KWin has its own animations), the niri sections of Settings
-(keybinds-as-KDL, window-rule KDL preview), and workspace-layer wallpapers.
+(keybinds-as-KDL, window-rule KDL preview), and workspace-layer wallpapers. Columns are
+niri's by nature, so Settings hides their controls under KWin rather than showing dead
+ones: Spaces & Windows → **Layout & Motion** is greyed out on the overview ("KWin's own
+under Plasma: System Settings → Window Management") and, if reached anyway, shows only
+that note; Window Rules has no **Column width**; a Space's editor has no workspace names
+(a role is Keep / Apps), and its apps' column order and widths (kept in the document,
+used under niri) aren't offered.
 
 ### 4.1 Hide = minimize
 
@@ -280,7 +286,22 @@ and the first sync would have renamed the current Activity and added duplicates.
   per-workspace choice made under niri for the workspace it binds to that role. A plain
   Activity keeps the current wallpaper.
 - **Not under KWin:** New Space / templates in Settings (a new Space is a new Activity,
-  made in Plasma), reordering, renaming (Plasma's), archive.
+  made in Plasma), reordering, renaming (Plasma's), archive, workspace names and the
+  apps' column order / widths (niri's; the editor hides them).
+- **Documents made for an Activity stay out of niri.** One library serves both sessions.
+  A document whose settings exist only for a KDE Activity would otherwise be an extra
+  niri Space (a ⌘ number with nothing on it, or a captured Activity's apps showing up as
+  a Space). So a document is **no niri Space** when it says `"niri": false` (written by
+  **Add Loft Settings… → New settings** and **Save This Activity's Apps**), or when it has
+  an `activity` and binds no workspace (what older builds' New settings wrote). loft-niri
+  leaves those out of `Catalog::active()` (⌘N, the switcher, `next`/`prev`, spaces.kdl's
+  binds, `space startup`); `space list` still lists them (`"niri": false`, no position)
+  and finds them by id, so under KWin nothing changes. Under niri, Settings → Spaces lists
+  them in an **Only for KDE Activities** card with **Use as a Space Here** (`niri: true`,
+  plus `main` if it binds nothing), and a niri Space that is also linked (the **Use
+  “Music”** case: an existing niri Space linked by name) stays a Space, its card saying
+  "also KDE Activity “Music” under Plasma". Badge only, not hidden: linking an existing
+  Space mustn't take it away from niri.
 - **Older Loft builds' Activities.** Step 10 at first kept `<state>/kwin-activities.json`
   (`{"spaces": {"<id>": {"activity", "adopted"?: {name, icon}}}}`). Nothing writes it now.
   `loft spaces prune [--dry-run]` (= `loft-kwin spaces prune`) undoes **only what it
@@ -1386,8 +1407,12 @@ switch off: Kvantum's file byte for byte as before and kdeglobals as before exce
   Settings → Spaces & Windows → Spaces (switch + find + place + start), and `startup: login` Spaces once the
   Activities and the library are loaded (started in their Activity without switching:
   the script assigns the window's Activity, not the current one). Only Activities with
-  Loft settings (a linked document, §4.2) have apps; a plain Activity starts nothing. A shell restart forgets
-  what was opened; the next activation then finds the running apps and starts nothing.
+  Loft settings (a linked document, §4.2) have apps; a plain Activity starts nothing.
+  **What was opened survives a shell restart:** `<state>/kwin-spaces.json` (`{session,
+  opened, loginDone}`) is kept per login session (boot id + `XDG_SESSION_ID` +
+  `WAYLAND_DISPLAY`, as loft-niri's `runtime.json` keeps `opened` per niri session) and
+  read back at start, so a restarted shell doesn't start a Space's apps again (or the
+  `startup: login` ones); a new session starts empty.
   No systemd scopes (niri's spin-up uses them to tell an app's windows apart): matching
   is by pid at start, then by app id / title / cwd.
 - **Save This Activity's Apps** (New Space from Current Desktop under niri): `space
@@ -1399,7 +1424,27 @@ switch off: Kvantum's file byte for byte as before and kdeglobals as before exce
   nothing moves and the Activity isn't touched. An Activity that already has Loft settings
   is refused (edit or unlink those first). (Before the 2026-11-16 rework this made a new
   Activity and moved the windows into it.)
-- **IPC:** `spaces open <id|n>`, `spaces capture <name>` (besides Settings → Spaces & Windows → Spaces).
+- **Closing** (niri's `space close`): **Close Apps…** on a linked card, or `spaces close
+  <id|n>`. The shell asks `space specs` again and sends loft-kwin `{"cmd": "closeSpace",
+  "space", "activity", "apps", "dryRun"}`; loft-kwin closes the windows **of the Space's
+  Activity that Open would take for its apps** (`spinup::close_targets`: the same
+  matching, each window once, never one on every Activity or of another Activity, never
+  a window no app matches) and answers `{"SpaceClosed": {space, activity, dryRun,
+  windows: [{app, window, app_id, title}], notes}}`. niri closes the windows it claimed
+  or started in its scopes; KWin keeps no claims across a shell restart, so matching
+  stands in for them (a second KWrite you opened yourself in the Activity stays, the one
+  matched to the app goes). Settings first sends a dry run and asks: "Close 2 windows of
+  “Coding”: …? Apps with unsaved changes ask first." The close is KWin's normal close, so
+  an app with unsaved changes shows its own save dialog (Loft has no unsaved-state guard
+  of its own; the ⌘Q QuitGuard is a hold-to-quit, not that). The **Activity is never
+  removed**, and its other windows stay. Afterwards the Space counts as not opened, so its
+  next activation spins it up again (niri forgets `opened` the same way).
+- **Settings → Spaces cards** of linked Activities list which app goes where, one line
+  per role: `main  kwrite  WL-0 (left)`, from the same `space specs --displays` (refreshed
+  when the library or the displays change; `spaces list` carries them as `apps`), with
+  `specs`' notes (a skipped role) under them.
+- **IPC:** `spaces open <id|n>`, `spaces close <id|n>`, `spaces capture <name>` (besides
+  Settings → Spaces & Windows → Spaces).
 - **Tested** in a nested KWin 6.8.2 with two outputs (`--output-count 2`, WL-0 = main,
   WL-1 = right) and kactivitymanagerd, a scratch library with Main and Work (KWrite on
   `main`, Konsole on `right` without a `match`), checked with `loft-kwin state` and
@@ -1410,10 +1455,36 @@ switch off: Kvantum's file byte for byte as before and kdeglobals as before exce
   KWrite in Work's Activity while Main stayed current; with Dolphin on WL-0 and a
   maximized Kate on WL-1 in Main, `spaces capture Desk` wrote Desk (Dolphin on `main`,
   Kate on `right`, `open: maximized`), made its Activity, moved both windows into it and
-  switched there; closing Kate and Open Desk started Kate maximized on WL-1. Not run:
+  switched there; closing Kate and Open Desk started Kate maximized on WL-1.
+  **Close, role lines, restart, niri** (2026-11-17, nested KWin 6.8.2, two outputs,
+  kactivitymanagerd with Default, Music, Coding, Gaming, Editing, Ignition,
+  System-Configuration made in a scrambled order and keyed Meta+1…6/0 on the session's
+  kglobalaccel; scratch library: `coding` linked by name with KWrite on `main` and
+  Konsole on `right`, `music` a niri Space linked by name, `gaming` linked with no
+  displays, `main`): Settings → Spaces showed Coding's lines (`main kwrite WL-0 (left)`,
+  `right konsole WL-1 (right)`); `spaces focus coding` started both; with a second KWrite
+  and Dolphin added in Coding and a KWrite in Default, **Close Apps…** asked "Close 2
+  windows of “Coding”: Welcome — KWrite, cody : bash — Konsole?", and Close closed
+  Konsole while the matched KWrite (with unsaved text) showed its own save dialog; the
+  other KWrite, Dolphin, Default's window and the Activity stayed; `kwin-spaces.json`
+  dropped `coding`, and focusing Coding again started only Konsole. Then, with the shell
+  stopped and started again, a Konsole closed by hand stayed closed on the next
+  activation (`opened` read back). **Save This Activity's Apps** on Editing wrote
+  `activity` + `niri: false`. The same library in a niri session: `spaces list` and
+  spaces.kdl's binds had only Main and Music; Settings showed Coding, Gaming and Editing
+  under **Only for KDE Activities**, Music with "also KDE Activity “Music”"; **Use as a
+  Space Here** on Gaming wrote `niri: true` + `main` and it became a Space. Layout & Motion
+  showed only its KWin note under KWin and every control under niri. Not run:
   `startup: login` at a real login (its path, `openSpace` without focus, was), and real
   hardware with mixed sizes and a portrait display (roles come from the same code as
   `space list --displays`, unit-tested).
+- **Still open:** claims under KWin (Close takes what matching finds, not what Loft
+  started; a pid record would survive only as long as loft-kwin); `space close` for a
+  plain Activity (no apps of its own, so nothing; closing *all* its windows would be a
+  different feature); `space gather` (niri pulls a Space's windows back from other
+  workspaces; under KWin that would mean taking matching windows from other Activities,
+  which Open deliberately never does); an `archive` of a linked document; the Python `loft
+  space …` CLI (still loft-niri / `qs ipc` only).
 
 ### 4.16 Dragging a window into another Space
 

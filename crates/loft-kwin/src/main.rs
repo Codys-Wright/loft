@@ -26,7 +26,9 @@
 //!   icon, key, position}], "current"}}` in KDE's "Switch to activity" key
 //!   order, sent again on every change; `loft-kwin spaces list|prune`.
 //!   stdin `openSpace` starts a Space's missing apps in its Activity, on
-//!   their roles' displays (src/spinup.rs), answered with `{"SpaceOpened"}`.
+//!   their roles' displays (src/spinup.rs), answered with `{"SpaceOpened"}`;
+//!   `closeSpace` closes the windows of its Activity that are its apps
+//!   (`dryRun`: lists them), answered with `{"SpaceClosed"}`.
 //! - stdout `{"Shortcut": {"name": "loft-…", "state": "pressed"|"repeated"|
 //!   "released"}}`: Loft's global shortcuts held and let go (src/keys.rs).
 //! - Where windows open (src/placement.rs, docs/KWIN.md §4.17): Loft's
@@ -464,6 +466,52 @@ fn open_space(queue: &Queue, d: &mut Daemon, cmd: &Value) -> Value {
     json!({ "SpaceOpened": { "space": space, "activity": activity, "apps": rows, "notes": notes } })
 }
 
+/// `closeSpace` (src/spinup.rs `close_targets`): close the windows of the
+/// Space's Activity that are its apps (`dryRun`: only say which). KWin's
+/// close is a polite request: an app with unsaved changes asks first, as
+/// on ⌘W. The Activity itself stays. Answers `{"SpaceClosed": {space,
+/// activity, dryRun, windows: [{app, window, app_id, title}], notes}}`.
+fn close_space(queue: &Queue, d: &mut Daemon, cmd: &Value) -> Value {
+    let space = cmd["space"].as_str().unwrap_or("").to_string();
+    let activity = cmd["activity"].as_str().unwrap_or("").to_string();
+    let dry = cmd["dryRun"].as_bool() == Some(true);
+    let mut notes: Vec<String> = Vec::new();
+    let apps: Vec<spinup::AppReq> = match serde_json::from_value(cmd["apps"].clone()) {
+        Ok(a) => a,
+        Err(e) => {
+            return json!({ "SpaceClosed": { "space": space, "activity": activity, "dryRun": dry, "windows": [], "notes": [format!("bad apps: {e}")] } });
+        }
+    };
+    let matchers: Vec<Option<spinup::Matcher>> = apps
+        .iter()
+        .map(|a| match spinup::Matcher::new(a) {
+            Ok(m) => Some(m),
+            Err(e) => {
+                notes.push(format!("{}: {e}", a.app));
+                None
+            }
+        })
+        .collect();
+    let state = d.current();
+    let wins = spinup::windows_from_state(&state, Some(std::path::Path::new("/proc")));
+    let rows: Vec<Value> = spinup::close_targets(&apps, &matchers, &wins, &activity)
+        .into_iter()
+        .map(|(i, uuid)| {
+            let w = wins.iter().find(|w| w.uuid == uuid);
+            if !dry {
+                queue.push(json!({ "cmd": "closeWindow", "window": uuid }));
+            }
+            json!({ "app": apps[i].app, "window": uuid,
+                    "app_id": w.map(|w| w.app_id.clone()), "title": w.map(|w| w.title.clone()) })
+        })
+        .collect();
+    if !dry {
+        // Closed on purpose: the next Open starts them again at once.
+        d.starting.retain(|(s, _), _| *s != space);
+    }
+    json!({ "SpaceClosed": { "space": space, "activity": activity, "dryRun": dry, "windows": rows, "notes": notes } })
+}
+
 /// Rules and expected windows (src/placement.rs).
 #[derive(Default)]
 struct Places {
@@ -581,6 +629,11 @@ async fn handle(
         }
         "openSpace" => {
             let r = open_space(queue, d, &cmd);
+            emit(&r);
+            Ok(r)
+        }
+        "closeSpace" => {
+            let r = close_space(queue, d, &cmd);
             emit(&r);
             Ok(r)
         }

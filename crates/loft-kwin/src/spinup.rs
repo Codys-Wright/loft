@@ -201,6 +201,25 @@ pub fn plan(apps: &[AppReq], matchers: &[Option<Matcher>], wins: &[Win], activit
     steps
 }
 
+/// `closeSpace`: the windows of `activity` that are the Space's apps (what
+/// [`plan`] finds for them, each window once), as (app index, uuid). niri's
+/// `space close` closes the windows it claimed; KWin has no claims across a
+/// shell restart, so these are the windows Open would take for the apps:
+/// only in the Space's Activity, never one on every Activity, never a
+/// window no app of the Space matches.
+pub fn close_targets(apps: &[AppReq], matchers: &[Option<Matcher>], wins: &[Win], activity: &str) -> Vec<(usize, String)> {
+    if activity.is_empty() {
+        return Vec::new();
+    }
+    plan(apps, matchers, wins, activity, &BTreeSet::new())
+        .into_iter()
+        .filter_map(|s| match s {
+            Step::Found { app, uuid, .. } => Some((app, uuid)),
+            _ => None,
+        })
+        .collect()
+}
+
 /// The `expectWindow` for a started app: its process tree (main.rs's
 /// Places::expect, as `loft open`'s), `loose` so a window matching its
 /// app id / title counts too, one window.
@@ -315,6 +334,28 @@ mod tests {
                 Step::Starting { app: 2 },
             ]
         );
+    }
+
+    #[test]
+    fn close_takes_the_apps_windows_in_the_activity_only() {
+        let apps = vec![
+            app("kwrite", "WL-0", &["kwrite"], Some(r"^org\.kde\.kwrite$")),
+            app("konsole", "WL-1", &["konsole"], None),
+            app("notes", "WL-0", &[], Some("^notes$")),
+        ];
+        let wins = vec![
+            win("{a}", "org.kde.kwrite", "other", "WL-0"),
+            win("{b}", "org.kde.kwrite", "", "WL-0"),
+            win("{c}", "org.kde.konsole", "act", "WL-0"),
+            win("{d}", "org.kde.kwrite", "act", "WL-1"),
+            // A second KWrite here: no app of the Space claims it.
+            win("{e}", "org.kde.kwrite", "act", "WL-0"),
+            // Not one of the Space's apps.
+            win("{f}", "org.kde.dolphin", "act", "WL-0"),
+        ];
+        let t = close_targets(&apps, &matchers(&apps), &wins, "act");
+        assert_eq!(t, vec![(0, "{e}".to_string()), (1, "{c}".to_string())]);
+        assert!(close_targets(&apps, &matchers(&apps), &wins, "").is_empty());
     }
 
     #[test]
