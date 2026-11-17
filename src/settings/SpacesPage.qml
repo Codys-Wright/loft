@@ -17,10 +17,12 @@ import qs.services
 // before anything is written.
 //
 // KWin: the cards are the user's KDE Activities, in the order of their KDE
-// "Switch to activity" keys (no reordering here; names and icons are
-// KDE's). Each can have Loft settings: a library document linked to it
-// (Link… an existing one, or new ones), edited, unlinked or removed here.
-// Linking only writes the document; the Activity is never touched. A
+// "Switch to activity" keys. New Activity, the name (click to rename), the
+// icon, the arrows (which move the ⌘ keys) and Remove… change the Activity
+// in KDE itself (Spaces.editActivity → loft-kwin). Each can have Loft
+// settings: a library document linked to it (Link… an existing one, or new
+// ones), edited, unlinked or removed here. Linking only writes the
+// document; the Activity isn't touched. A
 // linked card lists which of its apps go to which display (`space specs`,
 // Spaces.appsBySpace). Close Apps… (both) closes the space's apps after
 // a confirmation (KWin: naming the windows it would close).
@@ -73,7 +75,7 @@ ColumnLayout {
     function openForm(kind) {
         form = form === kind ? "" : kind;
         formName = "";
-        formIcon = kind === "capture" ? "󰍹" : kind === "new" ? "󰕰" : (Spaces.templates.find(t => t.id === kind)?.icon ?? "");
+        formIcon = kind === "capture" ? "󰍹" : kind === "new" ? "󰕰" : kind === "activity" ? "activities" : (Spaces.templates.find(t => t.id === kind)?.icon ?? "");
         formParams = {};
         formError = "";
     }
@@ -90,7 +92,20 @@ ColumnLayout {
 
     function submit() {
         const name = formName.trim();
-        if (form === "new") {
+        if (form === "activity") {
+            if (name === "") {
+                formError = "Give the Activity a name";
+                return;
+            }
+            Spaces.editActivity({ op: "create", name: name, icon: formIcon }, r => {
+                if (r.ok) {
+                    form = "";
+                    formError = "";
+                } else {
+                    formError = r.error ?? "That didn't work";
+                }
+            });
+        } else if (form === "new") {
             if (name === "") {
                 formError = "Give the space a name";
                 return;
@@ -157,7 +172,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: Spaces.byActivity ? "Your spaces are your KDE Activities (System Settings → Activities): each switches every display at once. Their order and ⌘ numbers are KDE's “Switch to activity” shortcuts, ⌘⇧N moves the focused window to one, ⌃← → switch the virtual desktops inside it (⌃⇧← → take the window along), ⌃⌘S opens the switcher. Loft adds a dock, menu bar, Focus, wallpapers or apps to an Activity only when you give it Loft settings here." : "A space switches every display at once: its workspace on each display role, or keeps what a display shows. ⌘1…9 activate spaces in this order, ⌃⌘← → step through them, ⌃⌘S opens the switcher."
+            text: Spaces.byActivity ? "Your spaces are your KDE Activities: each switches every display at once. Make, rename, re-icon, reorder and remove them here; Plasma sees the same Activities. Their order is their ⌘ numbers (KDE's “Switch to activity” shortcuts), so moving one moves its key. ⌘⇧N moves the focused window to one, ⌃← → switch the virtual desktops inside it (⌃⇧← → take the window along), ⌃⌘S opens the switcher. Loft adds a dock, menu bar, Focus, wallpapers or apps to an Activity only when you give it Loft settings here." : "A space switches every display at once: its workspace on each display role, or keeps what a display shows. ⌘1…9 activate spaces in this order, ⌃⌘← → step through them, ⌃⌘S opens the switcher."
             color: Theme.subtext
             font.family: Theme.fontUi
             font.pixelSize: 12
@@ -168,7 +183,14 @@ ColumnLayout {
             Layout.fillWidth: true
             spacing: 8
             SettingsButton {
-                // KWin: new spaces are new KDE Activities, made in Plasma.
+                // KWin: a new space is a new KDE Activity.
+                visible: Spaces.byActivity
+                text: "New Activity"
+                icon: "󰐕"
+                primary: page.form === "activity"
+                onClicked: page.openForm("activity")
+            }
+            SettingsButton {
                 visible: !Spaces.byActivity
                 text: "New Space"
                 icon: "󰐕"
@@ -204,6 +226,16 @@ ColumnLayout {
 
             Text {
                 Layout.fillWidth: true
+                visible: page.form === "activity"
+                text: `A new KDE Activity, on the first free ⌘ number${Spaces.spaces.filter(s => s.position !== null && s.position !== undefined).length >= 10 ? " (all ten are taken: it gets none)" : ""}. It starts empty, with no Loft settings.`
+                color: Theme.subtext
+                font.family: Theme.fontUi
+                font.pixelSize: 11
+                wrapMode: Text.Wrap
+            }
+
+            Text {
+                Layout.fillWidth: true
                 visible: page.form === "capture"
                 text: Spaces.byActivity ? "The windows of the current Activity become its Loft settings' apps, on the display role each one is on (left to right). Nothing moves, and the Activity itself isn't changed. Open (or its first activation in a session) starts the ones that aren't running." : "Each display's current workspace becomes this space's workspace on that display, with its windows as the space's apps (in column order, with their widths). Displays showing nothing are kept. Activating the space gathers the windows; Open starts the ones that aren't running."
                 color: Theme.subtext
@@ -218,7 +250,7 @@ ColumnLayout {
                 SettingsTextField {
                     implicitWidth: 240
                     text: page.formName
-                    placeholder: page.form === "capture" ? (Spaces.byActivity ? "the Activity's name" : "e.g. Writing") : "e.g. Design"
+                    placeholder: page.form === "capture" ? (Spaces.byActivity ? "the Activity's name" : "e.g. Writing") : page.form === "activity" ? "e.g. Writing" : "e.g. Design"
                     onEdited: t => page.formName = t
                     onCommitted: t => page.formName = t
                 }
@@ -269,6 +301,13 @@ ColumnLayout {
                 }
                 SpaceIconPicker {
                     Layout.fillWidth: true
+                    visible: page.form !== "activity"
+                    current: page.formIcon
+                    onPicked: icon => page.formIcon = icon
+                }
+                ActivityIconPicker {
+                    Layout.fillWidth: true
+                    visible: page.form === "activity"
                     current: page.formIcon
                     onPicked: icon => page.formIcon = icon
                 }
@@ -292,7 +331,7 @@ ColumnLayout {
                 SettingsButton {
                     text: page.form === "capture" ? "Capture" : "Create"
                     primary: true
-                    enabled: !Spaces.writing
+                    enabled: !Spaces.writing && !Spaces.activityBusy
                     onClicked: page.submit()
                 }
             }
@@ -300,7 +339,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: `Spaces are JSON files in ${Spaces.libraryDir || "(no library: LOFT_LIBRARY is off)"}; the first change copies the built-in ones there.`
+            text: Spaces.byActivity ? `Loft settings are JSON files in ${Spaces.libraryDir || "(no library: LOFT_LIBRARY is off)"}; the Activities themselves are KDE's.` : `Spaces are JSON files in ${Spaces.libraryDir || "(no library: LOFT_LIBRARY is off)"}; the first change copies the built-in ones there.`
             color: Theme.subtext
             font.family: Theme.fontUi
             font.pixelSize: 11
@@ -308,7 +347,7 @@ ColumnLayout {
         }
 
         Repeater {
-            model: Spaces.problems.concat(Spaces.editError && page.form === "" ? [Spaces.editError] : []).concat(Spaces.lastError ? [Spaces.lastError] : [])
+            model: Spaces.problems.concat(Spaces.editError && page.form === "" ? [Spaces.editError] : []).concat(Spaces.lastError ? [Spaces.lastError] : []).concat(Spaces.byActivity && Spaces.activityError && page.form === "" ? [Spaces.activityError] : [])
             delegate: Text {
                 required property var modelData
                 Layout.fillWidth: true
@@ -355,6 +394,20 @@ ColumnLayout {
                 return Object.values(by).sort((a, b) => (a.role === "main" ? -1 : b.role === "main" ? 1 : a.role.localeCompare(b.role))).map(l => ({ role: l.role, display: l.display, apps: l.apps.join(", ") }));
             }
             readonly property var appNotes: Spaces.byActivity && modelData.linked ? (Spaces.appsBySpace[modelData.id]?.notes ?? []) : []
+            // KWin: "" | "rename" | "icon" | "remove" (asking first).
+            property string managing: ""
+            readonly property var ownWindows: Spaces.byActivity ? Spaces.ownWindows(modelData.activity) : []
+            readonly property var neighbour: {
+                const i = card.index;
+                return Spaces.spaces[i + 1] ?? Spaces.spaces[i - 1] ?? null;
+            }
+            readonly property var rulesNaming: Spaces.byActivity ? Object.entries(WindowRules.rules ?? {}).filter(([a, r]) => Spaces.sameName(r["open-on-activity"], card.modelData.name)).map(([a]) => a) : []
+            function rename(t) {
+                const name = t.trim();
+                card.managing = "";
+                if (name !== "" && name !== card.modelData.name)
+                    Spaces.editActivity({ op: "rename", activity: card.modelData.activity, name: name });
+            }
             // Close Apps…: "" | "asking" (KWin's dry run) | "confirm".
             property string closing: ""
             property var closeWindows: []
@@ -383,9 +436,8 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 12
 
-                // Move up / down in ⌘N order (KWin: KDE's order).
+                // Move up / down in ⌘N order (KWin: the Activities' keys move).
                 ColumnLayout {
-                    visible: !Spaces.byActivity
                     spacing: 0
                     Repeater {
                         model: [{ glyph: "󰅃", delta: -1 }, { glyph: "󰅀", delta: 1 }]
@@ -401,7 +453,7 @@ ColumnLayout {
                                 anchors.fill: parent
                                 anchors.margins: -3
                                 hoverEnabled: true
-                                enabled: arrowIcon.can && !Spaces.writing
+                                enabled: arrowIcon.can && !Spaces.writing && !Spaces.activityBusy
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: Spaces.move(card.modelData.id, arrowIcon.modelData.delta)
                             }
@@ -413,6 +465,13 @@ ColumnLayout {
                     icon: card.modelData.icon || "󰕰"
                     badge: Spaces.badgeFor(card.modelData)
                     size: 30
+                    // KWin: click for the Activity's KDE icon.
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: Spaces.byActivity
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: card.managing = card.managing === "icon" ? "" : "icon"
+                    }
                 }
 
                 ColumnLayout {
@@ -422,11 +481,31 @@ ColumnLayout {
                     RowLayout {
                         spacing: 8
                         Text {
+                            visible: card.managing !== "rename"
                             text: card.modelData.name
-                            color: Theme.text
+                            color: nameHover.containsMouse ? Theme.accent : Theme.text
                             font.family: Theme.fontUi
                             font.pixelSize: 14
                             font.weight: Font.DemiBold
+                            // KWin: click to rename the Activity.
+                            MouseArea {
+                                id: nameHover
+                                anchors.fill: parent
+                                enabled: Spaces.byActivity
+                                hoverEnabled: true
+                                cursorShape: Qt.IBeamCursor
+                                onClicked: card.managing = "rename"
+                            }
+                        }
+                        SettingsTextField {
+                            id: nameField
+                            visible: card.managing === "rename"
+                            implicitWidth: 200
+                            text: card.modelData.name
+                            onCommitted: t => card.rename(t)
+                            onVisibleChanged: if (visible)
+                                focusInput()
+                            Keys.onEscapePressed: card.managing = ""
                         }
                         Rectangle {
                             visible: card.isActive
@@ -448,7 +527,7 @@ ColumnLayout {
 
                     Text {
                         Layout.fillWidth: true
-                        text: Spaces.byActivity ? [card.modelData.key ? card.modelData.key.replace("Meta+", "⌘") : "no KDE shortcut", card.modelData.linked ? `Loft settings: ${card.modelData.id}` : "no Loft settings"].join("  ·  ") : [card.modelData.position ? `⌘${card.modelData.position}` : "", card.modelData.template ? `from ${card.modelData.template}` : "", card.modelData.id, card.modelData.doc?.activity ? `also KDE Activity “${card.modelData.doc.activity}” under Plasma` : ""].filter(s => s).join("  ·  ")
+                        text: Spaces.byActivity ? [card.modelData.key ? card.modelData.key.replace("Meta+", "⌘") : "no KDE shortcut", card.modelData.linked ? `Loft settings: ${card.modelData.id}` : "no Loft settings"].join("  ·  ") : [card.modelData.position ? `⌘${card.modelData.position}` : "", card.modelData.template ? `from ${card.modelData.template}` : "", card.modelData.id, card.modelData.doc?.activity ? (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(card.modelData.doc.activity) ? "also a KDE Activity under Plasma" : `also KDE Activity “${card.modelData.doc.activity}” under Plasma`) : ""].filter(s => s).join("  ·  ")
                         color: Theme.subtext
                         font.family: Theme.fontUi
                         font.pixelSize: 11
@@ -514,16 +593,78 @@ ColumnLayout {
                 color: Theme.glassBorder
             }
 
-            // KWin: the space is an Activity, on every display.
-            Text {
+            // KWin: the space is an Activity, on every display; rename,
+            // re-icon or remove it here.
+            RowLayout {
                 Layout.fillWidth: true
                 visible: Spaces.byActivity && !card.editing
-                readonly property int windows: Spaces.windowCount(card.modelData.id)
-                text: `KDE Activity · every display${card.isActive ? " · showing" : ""}${windows > 0 ? ` · ${windows} window${windows === 1 ? "" : "s"}` : ""}`
-                color: Theme.subtext
-                font.family: Theme.fontUi
-                font.pixelSize: 11
-                elide: Text.ElideRight
+                spacing: 8
+                Text {
+                    Layout.fillWidth: true
+                    readonly property int windows: Spaces.windowCount(card.modelData.id)
+                    text: `KDE Activity · every display${card.isActive ? " · showing" : ""}${windows > 0 ? ` · ${windows} window${windows === 1 ? "" : "s"}` : ""}`
+                    color: Theme.subtext
+                    font.family: Theme.fontUi
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                }
+                SettingsButton {
+                    text: "Rename"
+                    enabled: !Spaces.activityBusy
+                    onClicked: card.managing = card.managing === "rename" ? "" : "rename"
+                }
+                SettingsButton {
+                    text: "Icon"
+                    primary: card.managing === "icon"
+                    enabled: !Spaces.activityBusy
+                    onClicked: card.managing = card.managing === "icon" ? "" : "icon"
+                }
+                SettingsButton {
+                    text: "Remove…"
+                    enabled: !Spaces.activityBusy && Spaces.spaces.length > 1
+                    onClicked: card.managing = card.managing === "remove" ? "" : "remove"
+                }
+            }
+
+            // KWin: the Activity's KDE icon.
+            ActivityIconPicker {
+                Layout.fillWidth: true
+                visible: Spaces.byActivity && card.managing === "icon"
+                current: card.modelData.kdeIcon
+                onPicked: icon => {
+                    card.managing = "";
+                    Spaces.editActivity({ op: "icon", activity: card.modelData.activity, icon: icon });
+                }
+            }
+
+            // KWin: Remove…, after saying what happens.
+            RowLayout {
+                Layout.fillWidth: true
+                visible: Spaces.byActivity && card.managing === "remove"
+                spacing: 8
+                Text {
+                    Layout.fillWidth: true
+                    readonly property string to: card.neighbour ? `“${card.neighbour.name}”` : "another Activity"
+                    readonly property int n: card.ownWindows.length
+                    text: [`Remove the KDE Activity “${card.modelData.name}”?`, n > 0 ? `Its ${n} window${n === 1 ? "" : "s"} move${n === 1 ? "s" : ""} to ${to}${card.isActive ? ", and Loft switches there" : ""}.` : (card.isActive ? `Loft switches to ${to}.` : ""), card.modelData.linked ? `Its Loft settings (“${card.modelData.id}”) stay in your library; Add Loft Settings → Use gives them to another Activity.` : "", card.rulesNaming.length > 0 ? `Window rules opening on it (${card.rulesNaming.join(", ")}) wait for an Activity with that name.` : "", card.modelData.key ? `${card.modelData.key.replace("Meta+", "⌘")} becomes free for the next new Activity.` : "", "Plasma loses it too; this can't be undone."].filter(s => s).join(" ")
+                    color: Theme.warn
+                    font.family: Theme.fontUi
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+                SettingsButton {
+                    text: "Cancel"
+                    onClicked: card.managing = ""
+                }
+                SettingsButton {
+                    text: "Remove"
+                    primary: true
+                    enabled: !Spaces.activityBusy
+                    onClicked: {
+                        card.managing = "";
+                        Spaces.editActivity({ op: "remove", activity: card.modelData.activity });
+                    }
+                }
             }
 
             // Close Apps… confirmation.

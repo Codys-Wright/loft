@@ -23,10 +23,15 @@
 //! - `loft-kwin displays [set JSON]`: outputs through KScreen (src/displays.rs).
 //! - `loft-kwin motion [set JSON]`: animation speed and KWin's effects
 //!   (src/motion.rs).
-//! - Spaces are the user's KDE Activities (src/activities.rs), read-only:
+//! - Spaces are the user's KDE Activities (src/activities.rs):
 //!   stdin `activities` answers `{"Activities": {"activities": [{id, name,
 //!   icon, key, position}], "current"}}` in KDE's "Switch to activity" key
 //!   order, sent again on every change; `loft-kwin spaces list|prune`.
+//!   stdin `activity` (src/manage.rs) creates, renames, re-icons, reorders
+//!   (their keys) or removes one in KDE, answered with `{"ActivityEdit"}`;
+//!   `loft-kwin spaces new|rename|icon|move|order|remove` (D-Bus
+//!   `Activity`). A rename, from anywhere, relinks Loft's settings and window
+//!   rules that named the old name (`{"ActivityLinks"}`).
 //!   stdin `openSpace` starts a Space's missing apps in its Activity, on
 //!   their roles' displays (src/spinup.rs), answered with `{"SpaceOpened"}`;
 //!   `closeSpace` closes the windows of its Activity that are its apps
@@ -54,6 +59,7 @@ mod idle;
 mod input;
 mod keys;
 mod motion;
+mod manage;
 mod placement;
 mod record;
 mod shot;
@@ -179,6 +185,23 @@ impl Bridge {
         }
     }
 
+    /// Create, rename, re-icon, reorder or remove a KDE Activity
+    /// (src/manage.rs, `loft-kwin spaces new|rename|…`): the `{"op": …}`
+    /// edit; answers the `ActivityEdit` object (`ok`, `error`, `notes`).
+    async fn activity(&self, json: String) -> zbus::fdo::Result<String> {
+        let mut cmd: Value = serde_json::from_str(&json).map_err(|e| zbus::fdo::Error::InvalidArgs(format!("bad JSON: {e}")))?;
+        cmd["cmd"] = json!("activity");
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.commands
+            .send((cmd, Some(tx)))
+            .map_err(|_| zbus::fdo::Error::Failed("loft-kwin is shutting down".into()))?;
+        match rx.await {
+            Ok(Ok(v)) => Ok(v.to_string()),
+            Ok(Err(e)) => Err(zbus::fdo::Error::Failed(e)),
+            Err(_) => Err(zbus::fdo::Error::Failed("loft-kwin dropped the request".into())),
+        }
+    }
+
     /// The shell's current state (niri-shaped windows, workspaces, outputs,
     /// overview_open), as JSON; `loft-kwin state`.
     async fn state(&self) -> zbus::fdo::Result<String> {
@@ -254,6 +277,32 @@ fn parse_command(json: &str) -> Result<Value, String> {
         return Err(format!("not a command (no \"cmd\"): {json}"));
     }
     Ok(v)
+}
+
+/// `loft-kwin spaces new|rename|…`: through the running daemon (which moves a
+/// removed Activity's windows and relinks on a rename), else straight to KDE.
+async fn edit_cli(cmd: Value) -> Result<()> {
+    let conn = Connection::session().await.context("the session bus")?;
+    let dbus = zbus::fdo::DBusProxy::new(&conn).await?;
+    let running = match zbus::names::BusName::try_from(BUS_NAME) {
+        Ok(n) => dbus.name_has_owner(n).await.unwrap_or(false),
+        Err(_) => false,
+    };
+    let r: Value = if running {
+        let p = Proxy::new(&conn, BUS_NAME, "/Bridge", BUS_NAME).await?;
+        let s: String = p.call("Activity", &(cmd.to_string(),)).await.context("loft-kwin's Activity method")?;
+        serde_json::from_str(&s)?
+    } else {
+        manage::edit_line(&conn, &cmd, None).await["ActivityEdit"].clone()
+    };
+    for n in r["notes"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+        eprintln!("{n}");
+    }
+    if r["ok"] != true {
+        anyhow::bail!("{}", r["error"].as_str().unwrap_or("that didn't work"));
+    }
+    println!("{}", serde_json::to_string(&r)?);
+    Ok(())
 }
 
 /// Talk to the running daemon (`send` / `state`): its bus name, not KWin's.
@@ -708,14 +757,23 @@ async fn handle(
             }
             ok()
         }
-        // Spaces are the user's Activities: read them, never write them
-        // (src/activities.rs). `syncSpaces` is what older shells sent; it
-        // gets the same read-only answer.
+        // Spaces are the user's Activities (src/activities.rs). `syncSpaces`
+        // is what older shells sent; it gets the same answer.
         "activities" | "syncSpaces" => {
             let r = activities::report(conn).await;
             activities_changed(queue, d, &r).await;
             emit(&r);
             Ok(r)
+        }
+        // Create, rename, re-icon, reorder or remove one, in KDE
+        // (src/manage.rs). A removed Activity's own windows move to its
+        // neighbour through the script.
+        "activity" => {
+            let windows = manage::windows_of(&d.current());
+            let move_window = |w: &str, to: &str| queue.push(json!({ "cmd": "setWindowActivities", "window": w, "activities": [to] }));
+            let line = manage::edit_line(conn, &cmd, Some(manage::Ctx { windows, move_window: &move_window })).await;
+            emit(&line);
+            Ok(line["ActivityEdit"].clone())
         }
         _ => match direct(conn, &cmd).await {
             Ok(true) => ok(),
@@ -736,8 +794,18 @@ async fn handle(
     }
 }
 
-/// A new `{"Activities"}` report: rules naming an Activity follow a rename.
+/// A new `{"Activities"}` report: rules naming an Activity follow a rename,
+/// and so do Loft's settings and rules that named the old name (whoever
+/// renamed it: Loft, `loft-kwin spaces rename` or Plasma).
 async fn activities_changed(queue: &Queue, d: &mut Daemon, report: &Value) {
+    let before: Vec<(String, String)> = d.places.activities.iter().map(|a| (a.id.clone(), a.name.clone())).collect();
+    let now: Vec<(String, String)> = placement::activities_of(report).into_iter().map(|a| (a.id, a.name)).collect();
+    for (id, old, new) in manage::renames(&before, &now) {
+        tokio::spawn(async move {
+            let r = manage::fix_links(&id, &old, &new).await;
+            emit(&json!({ "ActivityLinks": r }));
+        });
+    }
     if d.places.set_activities(report) {
         let s = d.current();
         if !s.is_null() {
@@ -803,6 +871,9 @@ async fn main() -> Result<()> {
         return motion::cli(&args[1..]).await;
     }
     if args.first().is_some_and(|a| a == "spaces") {
+        if let Some(cmd) = manage::parse_cli(&args[1..]) {
+            return edit_cli(cmd.map_err(anyhow::Error::msg)?).await;
+        }
         return activities::cli(&args[1..]).await;
     }
     if args.first().is_some_and(|a| a == "--help" || a == "-h") {
