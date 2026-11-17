@@ -433,7 +433,10 @@
             case "$id" in
               "" | -*) echo "loft-plasma-shortcuts: KWin didn't load $dir/$script.js" >&2; exit 1 ;;
             esac
-            ${qdbus} org.kde.KWin "/Scripting/Script$id" org.kde.kwin.Script.run >/dev/null || exit 1
+            # Scripting.start runs every loaded script that isn't running yet
+            # (not Script$id.run: KWin reuses ids, so that path can name
+            # another script, e.g. loft-kwin's bridge).
+            ${qdbus} org.kde.KWin /Scripting org.kde.kwin.Scripting.start >/dev/null || exit 1
             ${lib.getExe sp.loft} keys kwin claim --names "$dir/names" --record ${lib.escapeShellArg kwinShortcutsTaken}
             ;;
           unload)

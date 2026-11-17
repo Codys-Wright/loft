@@ -286,9 +286,12 @@ async fn load_script(conn: &Connection) -> Result<()> {
     if id < 0 {
         anyhow::bail!("KWin refused the loft-bridge script ({id})");
     }
-    let path = format!("/Scripting/Script{id}");
-    let script = kwin_proxy(conn, &path, "org.kde.kwin.Script").await?;
-    let () = script.call("run", &()).await.context("starting the loft-bridge KWin script")?;
+    // Start it through Scripting.start (runs every loaded script that isn't
+    // running yet; running ones are left alone), not `run` on
+    // /Scripting/Script<id>: KWin reuses script ids, and with another
+    // script (loft-keys, xremap) loaded and unloaded around us that path
+    // could name the wrong script, leaving ours loaded but never started.
+    let () = scripting.call("start", &()).await.context("starting the loft-bridge KWin script")?;
     Ok(())
 }
 
