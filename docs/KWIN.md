@@ -1134,6 +1134,70 @@ plasmashell's shortcuts. Seen once in the nested session: the wheel opened at th
 top-left corner, or on the pointer's previous position, instead of under the pointer
 (`RadialMenuWindow` takes `mouseX/mouseY` on the pointer's enter; likely the
 virtual-pointer races of §6); placement isn't part of this change.
+### 4.14 Dragging a window into another Space
+
+On macOS you can hold a window by its title bar, switch Space (⌃← →, ⌃1…9) and the window
+comes along. Under KWin a Space is an Activity (§4.2), and KWin doesn't do this for
+Activities. **Done**, in the bridge script, with stock KWin.
+
+**What KWin does during an interactive move** (measured in a nested KWin 6.8.2 with a probe
+script logging `interactiveMoveResizeStarted/Finished`, `activitiesChanged` and
+`currentActivityChanged`):
+
+- **Global shortcuts still fire.** `GlobalShortcutFilter` is installed before
+  `MoveResizeFilter` (`InputRedirection::setupInputFilters`, `src/input.cpp`), so KDE's
+  "Switch to activity" keys (Meta+1/2/3 in the test) switch the Activity mid-drag. Keys
+  that are no shortcut go to the move filter and are swallowed (§4.6).
+- **Activities: the window stays behind.** On the switch the held window is hidden (it is
+  on the old Activity only), the move goes on (`move` stays true, its geometry keeps
+  following the pointer) and the release finishes it on the **old** Activity: the reported
+  bug. KWin knows: `// FIXME: Keep Move/Resize window across activities` in
+  `Workspace::updateWindowVisibilityOnDesktopChange` (`src/workspace.cpp`).
+- **Virtual desktops: KWin carries it.** The same function puts the move/resize window on
+  the new desktop when it's on that output (`setDesktops({newDesktop})`). Measured:
+  Ctrl+Meta+→ mid-drag, the window's desktop became "Two" and it was dropped there.
+- **xremap** works on evdev events before KWin and doesn't know about moves. Its per-app
+  match uses the active window, which during a drag is the dragged one, as before it, so a
+  key that switches Activities normally switches them mid-drag too. Loft's keymap leaves
+  ⌘1…9 alone; ⌘0 becomes Ctrl+0 (reset zoom) in every app, drag or not.
+
+**The fix** (`carryMovingWindow`, `crates/loft-kwin/src/bridge.js`): on
+`workspace.currentActivityChanged`, a window with `move` set (an interactive move, not a
+resize) that isn't on the new Activity gets `activities = [current]`. It reappears at once
+under the pointer, the move continues, and the drop leaves it there. Its desktop and
+position are untouched (KWin's own desktop carry still applies). A window on every
+Activity (`[]`) is left so. Setting `workspace.activeWindow` during the move doesn't stick
+(the window stayed unfocused), so the carried window is focused when it's dropped
+(`interactiveMoveResizeFinished`, once), as on macOS. Escape cancels the move as usual:
+the window goes back to where the drag started, on the new Activity.
+
+It reacts to the Activity changing, not to a key, so every way of switching works: KDE's
+shortcuts, Loft's Spaces (⌘1…9, ⌃⌘← →, `setActivity` through the bridge, also tested), a
+D-Bus `SetCurrentActivity`. No KWin patch, nothing for xremap, and nothing changes under
+niri. It needs only the new loft-kwin (it loads the script when the shell starts it), no
+re-login.
+
+Options looked at and not needed: catching Meta+digit inside the move in the script (it
+can't see keys) or in loft-kwin/xremap with a D-Bus `SetCurrentActivity` (the shortcut
+already gets through), or a KWin patch for the FIXME (the script does the same thing from
+outside; worth upstreaming as a patch to `updateWindowVisibilityOnDesktopChange` some day).
+
+**Not covered:** switching by dragging onto a screen edge or onto the bar's Space
+indicator. During a move KWin keeps the pointer (`MoveResizeFilter`), so the bar sees no
+hover or drop. KWin's own "Switch desktop on edge: only when moving windows" (System
+Settings → Screen Edges) does it for virtual desktops, and the window comes along; for
+Activities it would need the bridge to watch the cursor during a move. Not done.
+
+**Tested** in a nested KWin 6.8.2 (§6) with kactivitymanagerd, Activities Default / Coding /
+Music on Meta+1/2/3 (kglobalaccel `ActivityManager` component) and a second desktop,
+loft-input holding the left button on a title bar: Konsole held on Default + Meta+2 → on
+Coding, still moving, dropped there and focused (`loft-kwin state`: `kwin_activities`
+[Coding]); one drag through Meta+3 then Meta+1 ended on Default; KWrite, not dragged,
+stayed on Default throughout, and a plain Meta+1 moved nothing; a held window on desktop
+Two + Meta+2 kept desktop Two on Coding; `loft-kwin send setActivity` mid-drag carried it
+to Music; a window on every Activity stayed on every Activity; Escape after Meta+2 put
+the window back where the drag began, on Coding, focused. Stock KWin first, same steps:
+the window ended on the old Activity.
 ### 4.12 Settings → Keyboard & Mouse through kxkbrc and KWin's InputDevice
 
 **Done.** Under niri the page writes `input.keyboard` / `input.mouse` / `input.touchpad`

@@ -137,6 +137,41 @@ for (const s of ["currentDesktopChanged", "screensChanged", "currentActivityChan
         workspace[s].connect(push);
     } catch (e) {}
 }
+// A window held in an interactive move comes along to the Activity switched
+// to (any way: KDE's shortcuts, Loft's Spaces), like macOS's Spaces. KWin
+// carries it across virtual desktops itself, but not Activities: the move
+// goes on with the window hidden on its old Activity and the drop leaves it
+// there (measured, KWin 6.8.2; "FIXME" in Workspace::
+// updateWindowVisibilityOnDesktopChange). Windows on every Activity ([]) are
+// already there. docs/KWIN.md §4.14.
+const carried = {};
+
+function carryMovingWindow() {
+    const now = workspace.currentActivity;
+    if (!now)
+        return;
+    for (const w of workspace.windowList()) {
+        if (!w.move || w.activities.length === 0 || w.activities.indexOf(now) >= 0)
+            continue;
+        w.activities = [now];
+        // The switch focused the new Activity's last window (or none), and
+        // focusing during the move doesn't stick: the window in hand gets
+        // the focus back when it's dropped, as on macOS.
+        const id = "" + w.internalId;
+        if (carried[id])
+            continue;
+        carried[id] = true;
+        const dropped = () => {
+            w.interactiveMoveResizeFinished.disconnect(dropped);
+            delete carried[id];
+            workspace.activeWindow = w;
+        };
+        w.interactiveMoveResizeFinished.connect(dropped);
+    }
+}
+try {
+    workspace.currentActivityChanged.connect(carryMovingWindow);
+} catch (e) {}
 // Settings → Displays re-reads KScreen when a screen moves, resizes or
 // rescales (KWin.qml displayLayoutChanged).
 function watchScreen(s) {
