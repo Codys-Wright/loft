@@ -151,6 +151,44 @@ class FromShellBinds(unittest.TestCase):
         # ⌃↑ (Mission Control) is still Loft's.
         self.assertIn("Meta+Ctrl+Up", {a.keys for a in self.actions})
 
+    def test_window_focus_and_move_like_niri(self):
+        """Caps (Meta here) + H/J/K/L and arrows focus, + Shift + H/J/K/L move,
+        as niri/base.kdl binds them; each a KWin workspace slot."""
+        by_keys = {a.keys: a for a in self.actions}
+        want = {
+            "Meta+H": "slotSwitchWindowLeft", "Meta+L": "slotSwitchWindowRight",
+            "Meta+J": "slotSwitchWindowDown", "Meta+K": "slotSwitchWindowUp",
+            "Meta+Left": "slotSwitchWindowLeft", "Meta+Right": "slotSwitchWindowRight",
+            "Meta+Down": "slotSwitchWindowDown", "Meta+Up": "slotSwitchWindowUp",
+            "Meta+Shift+H": "slotWindowQuickTileLeft", "Meta+Shift+L": "slotWindowQuickTileRight",
+            "Meta+Shift+J": "slotWindowQuickTileBottom", "Meta+Shift+K": "slotWindowQuickTileTop",
+        }
+        for keys, slot in want.items():
+            self.assertEqual(by_keys[keys].kind, "kwin", keys)
+            self.assertEqual(by_keys[keys].js, f"workspace.{slot}();", keys)
+        self.assertEqual(by_keys["Meta+H"].text, "Loft: Focus Window Left")
+        # niri's own arrows-with-Shift aren't bound: KDE keeps Meta+Shift+←/→ (window to screen).
+        self.assertNotIn("Meta+Shift+Left", by_keys)
+        # A disabled Mod+L (Settings → Keyboard Shortcuts) leaves Meta+L to KDE.
+        actions, _ = kwinkeys.build(shell_binds(), {"binds": {"Mod+L": {"disabled": True}}})
+        self.assertNotIn("Meta+L", {a.keys for a in actions})
+
+    def test_window_binds_are_base_kdls(self):
+        """WINDOW_BINDS is niri/base.kdl's focus / move binds, one for one."""
+        base = kwinkeys.parse_binds((REPO / "niri" / "base.kdl").read_text())
+        # (Mod+Shift+1…5, move to workspace N, are Spaces: ⌘⇧N, space_binds.)
+        niri = {(b.combo, b.action) for b in base
+                if b.action.startswith(("focus-column", "focus-window", "move-column", "move-window")) and "to-workspace" != b.action[-12:]}
+        self.assertEqual(niri, set(kwinkeys.WINDOW_BINDS))
+        self.assertTrue(all(a in kwinkeys.WINDOW_ACTIONS for _, a in kwinkeys.WINDOW_BINDS))
+
+    def test_hide_moves_off_meta_h(self):
+        """⌘H / ⌘M (niri's Super+H / Super+M) would be Meta+H / Meta+M here,
+        and Meta+H is focus left: they take their parity.json `kdeKeys`."""
+        self.assertEqual(self.by_id["appmenu-hide"].keys, "Meta+Ctrl+Alt+H")
+        self.assertEqual(self.by_id["appmenu-minimize"].keys, "Meta+Ctrl+Alt+M")
+        self.assertEqual(self.by_id["appmenu-hide"].command[-2:], ["appmenu", "hide"])
+
     def test_twin_without_title_is_named(self):
         """XF86LaunchA has hotkey-overlay-title=null: it takes Mod+Shift+A's."""
         self.assertEqual(self.by_id["launchpad-toggle-2"].text, "Loft: Launchpad")
@@ -183,7 +221,8 @@ class Overrides(unittest.TestCase):
                 "Mod+Ctrl+X": {"action": "spawn", "args": ["kitty"], "title": "Kitty"},
                 "Mod+Ctrl+Y": {"action": "spawn", "args": ["foot"], "off": True},
                 "shift+mod+m": {"disabled": True},
-                "Mod+O": {"action": "focus-column-left"},
+                "Mod+O": {"action": "center-column"},
+                "Mod+Ctrl+H": {"action": "focus-column-left"},
             }
         }
         actions, skipped = kwinkeys.build(shell_binds(), ov)
@@ -194,7 +233,9 @@ class Overrides(unittest.TestCase):
         self.assertEqual(by_keys["Meta+Ctrl+X"].text, "Loft: Kitty")
         self.assertNotIn("Meta+Ctrl+Y", by_keys)
         self.assertNotIn("Meta+Shift+M", by_keys)  # mute mics: disabled (any modifier order)
-        self.assertTrue(any("focus-column-left" in s for s in skipped))
+        self.assertTrue(any("center-column" in s for s in skipped))
+        # A niri window action KWin has works from a custom shortcut too.
+        self.assertIn("slotSwitchWindowLeft", by_keys["Meta+Ctrl+H"].js)
 
 
 class FakeBus:

@@ -163,7 +163,8 @@ class Plasma(unittest.TestCase):
         group = keys.for_wm_key(parity.xremap_group(parity.load()), keys.WM_META)
         for b in parity.load()["binds"]:
             src, _ = parity.xremap_pair(b)
-            self.assertEqual(as_qt(group["remap"][src]), b["kde"] if parity.plasma_only(b) else kwinkeys.qt_keys(b["niri"]), b["id"])
+            want = b["kde"] if parity.plasma_only(b) else b.get("kdeKeys") or kwinkeys.qt_keys(b["niri"])
+            self.assertEqual(as_qt(group["remap"][src]), want, b["id"])
 
     def test_ctrl_shift_arrows_move_the_window_a_desktop_in_plasma_only(self):
         """⌃⇧←/→ → Meta+Ctrl+Shift+←/→ (KWin's Window One Desktop to the
@@ -184,6 +185,20 @@ class Plasma(unittest.TestCase):
         # ⌃←/→ reach KWin as Meta+Ctrl+←/→ (its Switch One Desktop), ⌥←/→ stay word jumps.
         self.assertEqual(as_qt(plasma["remap"]["Ctrl-Left"]), "Meta+Ctrl+Left")
         self.assertNotIn("Alt-Left", plasma["remap"])
+
+    def test_hide_is_not_the_wm_keys_meta_h(self):
+        """⌘H / ⌘M go out on Right Super under niri (Super+H / Super+M), but
+        under Plasma Right Super is Meta, and Meta+H is the WM key's focus
+        left: there they are Meta+Ctrl+Alt+H / M, on which kwinkeys binds them."""
+        raw = parity.xremap_group(parity.load())
+        self.assertEqual(raw["remap"]["Super_L-h"], "Super_R-h")
+        plasma = keys.for_wm_key(raw, keys.WM_META)
+        self.assertEqual(plasma["remap"]["Super_L-h"], "Ctrl-Alt-Super_L-h")
+        self.assertEqual(plasma["remap"]["Super_L-m"], "Ctrl-Alt-Super_L-m")
+        actions, _ = kwinkeys.build(parity.SHELL_BINDS.read_text().replace("@IPC@", '"qs" "ipc" "call"'))
+        by_keys = {a.keys: a for a in actions}
+        self.assertEqual(by_keys["Meta+Ctrl+Alt+H"].command[-2:], ["appmenu", "hide"])
+        self.assertIn("slotSwitchWindowLeft", by_keys["Meta+H"].js)
 
     def test_niri_is_unchanged(self):
         group = parity.xremap_group(parity.load())

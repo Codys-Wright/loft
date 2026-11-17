@@ -215,6 +215,21 @@ class WmKey(Scratch):
         for name in ("Cmd shortcuts (non-terminal)", "Symbols layer (Right Super held)", "Text navigation and editing"):
             self.assertEqual(next(e for e in cfg["keymap"] if e["name"] == name), next(e for e in plain["keymap"] if e["name"] == name))
 
+    def test_right_cmd_is_plain_super_and_locks(self):
+        """Right ⌘ is no macOS ⌘: no ⌘→Ctrl group maps it, and Right ⌘ L is
+        ⌃⌘Q (Loft's Lock Screen: niri's Super+Ctrl+Q, KWin's Meta+Ctrl+Q),
+        exactly, on both window-manager keys."""
+        for wm in (keys.WM_RALT, keys.WM_META):
+            cfg = self.render(wm)
+            entries = [e for e in cfg["keymap"] if any(k.startswith("Super_R-") for k in e["remap"])]
+            self.assertEqual([e["name"] for e in entries], ["Right ⌘ = the system's Super key (Right ⌘ L locks)"], wm)
+            self.assertEqual(entries[0]["remap"], {"Super_R-l": "Ctrl-Super_L-q"})
+            self.assertTrue(entries[0]["exact_match"])
+        # The symbols layer, when on, comes first and keeps Right ⌘ L as its symbol.
+        self.seed.write_text(json.dumps({"groups": {"symbols": True}}))
+        names = [e["name"] for e in self.render(keys.WM_META)["keymap"]]
+        self.assertLess(names.index("Symbols layer (Right Super held)"), names.index("Right ⌘ = the system's Super key (Right ⌘ L locks)"))
+
     def test_plasma_without_a_hold_adds_nothing(self):
         self.seed.write_text(json.dumps({"groups": {"dual-role": False}}))
         cfg = self.render(keys.WM_META)
