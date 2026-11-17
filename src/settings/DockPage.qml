@@ -113,7 +113,7 @@ ColumnLayout {
         SettingsRow {
             visible: Features.on("dockPreview")
             label: "Window thumbnails"
-            hint: WindowCapture.canWindows ? "Every window, live while the preview is open" : Previews.canCapture ? "Floating and fullscreen windows; tiled ones show their app icon" : Previews.support ? "Not available here (no GPU capture): cards show the app icon" : "Checking…"
+            hint: KWinThumbs.enabled ? "Every window, a still taken as the preview opens (minimized ones keep their last)" : WindowCapture.canWindows ? "Every window, live while the preview is open" : Previews.canCapture ? "Floating and fullscreen windows; tiled ones show their app icon" : Previews.support ? "Not available here (no GPU capture): cards show the app icon" : "Checking…"
             SettingsSwitch {
                 checked: Settings.dock.previewThumbnails
                 onToggled: on => Settings.dock.previewThumbnails = on

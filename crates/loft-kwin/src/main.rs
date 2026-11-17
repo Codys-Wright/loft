@@ -16,6 +16,8 @@
 //!   `window` the script acts on the active window (Spotlight's commands).
 //! - `loft-kwin state`: the daemon's last `State` (the same JSON the shell
 //!   gets), over its `State` method (`loft mcp` reads windows from it).
+//! - `loft-kwin thumbs DIR MAX UUID…`: small window stills for the dock
+//!   preview and the switcher (src/shot.rs, docs/KWIN.md §4.8).
 
 mod shot;
 mod state;
@@ -266,6 +268,9 @@ async fn main() -> Result<()> {
     }
     if args.first().is_some_and(|a| a == "send" || a == "state") {
         return client(&args).await;
+    }
+    if args.first().is_some_and(|a| a == "thumbs") {
+        return shot::thumbs(&shot::parse_thumbs(&args[1..])?).await;
     }
     if args.first().is_some_and(|a| a == "--help" || a == "-h") {
         println!(
