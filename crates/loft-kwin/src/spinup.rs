@@ -1,4 +1,4 @@
-//! Opening a Space's apps under KWin (docs/KWIN.md §4.12): the shell sends
+//! Opening a Space's apps under KWin (docs/KWIN.md §4.13): the shell sends
 //! `{"cmd": "openSpace", "space", "activity", "focus", "apps": [...]}` with
 //! the apps `loft-niri space specs --displays` resolved (each with the
 //! display its role is on). Here:

@@ -260,7 +260,7 @@ Singleton {
     }
 
     // KWin: start a space's missing apps in its Activity, on their roles'
-    // displays (`apps`: `loft-niri space specs`; docs/KWIN.md §4.12).
+    // displays (`apps`: `loft-niri space specs`; docs/KWIN.md §4.13).
     function openSpace(space, activity, apps, notes, focus) {
         if (backend === "kwin")
             KWin.openSpace(space, activity, apps, notes, focus);

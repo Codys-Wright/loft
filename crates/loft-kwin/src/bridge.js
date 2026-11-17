@@ -168,7 +168,7 @@ overviewTimer.timeout.connect(() => {
 });
 overviewTimer.start();
 
-// ── A Space's apps, as they appear (docs/KWIN.md §4.12) ─────────────────
+// ── A Space's apps, as they appear (docs/KWIN.md §4.13) ─────────────────
 // loft-kwin's openSpace started them and sent one `expectWindow` each: the
 // first new window of that pid (else matching the app id / title) goes to
 // the Space's Activity and its role's display, then is maximized or made

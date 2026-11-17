@@ -1,4 +1,4 @@
-//! Spaces under KWin (docs/KWIN.md §4.2, §4.12): the pure parts loft-niri
+//! Spaces under KWin (docs/KWIN.md §4.2, §4.13): the pure parts loft-niri
 //! still does there, with KWin's outputs and windows given as JSON instead
 //! of read from niri.
 //!

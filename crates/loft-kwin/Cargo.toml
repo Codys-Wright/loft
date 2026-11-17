@@ -22,3 +22,8 @@ tokio = { version = "1.53.3", features = ["rt", "macros", "io-std", "io-util", "
 zbus = { version = "5.19.0", default-features = false, features = ["tokio"] }
 wayland-client = "0.31"
 wayland-protocols-plasma = { version = "0.3", features = ["client"] }
+
+[dev-dependencies]
+# input.rs's D-Bus test talks to a fake InputDevice over a socket pair.
+tokio = { version = "1.53.3", features = ["net", "rt", "macros"] }
+zbus = { version = "5.19.0", default-features = false, features = ["tokio", "p2p"] }
