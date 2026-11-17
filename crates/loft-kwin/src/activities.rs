@@ -229,7 +229,7 @@ pub async fn report(conn: &Connection) -> Value {
 /// Send the report again whenever kactivitymanagerd or kglobalaccel change
 /// something (debounced: switching sends a few signals at once), and when
 /// kactivitymanagerd (re)starts.
-pub async fn watch(conn: Connection, emit: fn(&Value)) {
+pub async fn watch(conn: Connection, emit: impl Fn(&Value)) {
     let rules = [
         MatchRule::builder().msg_type(zbus::message::Type::Signal).interface(IFACE).map(|b| b.build()),
         MatchRule::builder()

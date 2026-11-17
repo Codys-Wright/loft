@@ -29,19 +29,25 @@
 //!   their roles' displays (src/spinup.rs), answered with `{"SpaceOpened"}`.
 //! - stdout `{"Shortcut": {"name": "loft-…", "state": "pressed"|"repeated"|
 //!   "released"}}`: Loft's global shortcuts held and let go (src/keys.rs).
+//! - Where windows open (src/placement.rs, docs/KWIN.md §4.17): Loft's
+//!   window rules go to the script (`setWindowRules`, with the Activities'
+//!   names from the same report as `{"Activities"}`); `loft-kwin expect
+//!   JSON` (`loft open`) and `openSpace` place the windows of a started
+//!   process tree, through one expectation (placement::Expect).
 
 mod activities;
 mod displays;
 mod input;
 mod keys;
+mod placement;
 mod record;
 mod shot;
 mod spinup;
 mod state;
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use futures_util::StreamExt;
@@ -91,10 +97,13 @@ impl Queue {
     }
 }
 
+/// A command from another process, and where its answer goes (`Expect`).
+type Incoming = (Value, Option<tokio::sync::oneshot::Sender<Result<Value, String>>>);
+
 struct Bridge {
     snapshots: mpsc::UnboundedSender<String>,
     /// Commands from other processes (`loft-kwin send`), handled like stdin's.
-    commands: mpsc::UnboundedSender<Value>,
+    commands: mpsc::UnboundedSender<Incoming>,
     /// The last state emitted, as JSON ("" until the first snapshot).
     state: Arc<Mutex<String>>,
     queue: Arc<Queue>,
@@ -117,8 +126,28 @@ impl Bridge {
     async fn command(&self, json: String) -> zbus::fdo::Result<()> {
         let cmd = parse_command(&json).map_err(zbus::fdo::Error::InvalidArgs)?;
         self.commands
-            .send(cmd)
+            .send((cmd, None))
             .map_err(|_| zbus::fdo::Error::Failed("loft-kwin is shutting down".into()))
+    }
+
+    /// Place the next windows of a started process (`loft open`):
+    /// `{"pid", "activityName"?, "desktop"?, "output"? (connector or role),
+    /// "open"?, "size"?, "position"?, "keepAbove"?, "follow"?, "appId"?,
+    /// "ttl"?, "count"?}`. Answers `{"id", "output", "pid"}`, or fails with
+    /// the reason (no such display, no pid).
+    async fn expect(&self, json: String) -> zbus::fdo::Result<String> {
+        let mut cmd: Value = serde_json::from_str(&json).map_err(|e| zbus::fdo::Error::InvalidArgs(format!("bad JSON: {e}")))?;
+        cmd["cmd"] = json!("expectWindow");
+        cmd["tree"] = json!(true);
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.commands
+            .send((cmd, Some(tx)))
+            .map_err(|_| zbus::fdo::Error::Failed("loft-kwin is shutting down".into()))?;
+        match rx.await {
+            Ok(Ok(v)) => Ok(v.to_string()),
+            Ok(Err(e)) => Err(zbus::fdo::Error::Failed(e)),
+            Err(_) => Err(zbus::fdo::Error::Failed("loft-kwin dropped the request".into())),
+        }
     }
 
     /// The shell's current state (niri-shaped windows, workspaces, outputs,
@@ -182,7 +211,18 @@ async fn client(args: &[String]) -> Result<()> {
             let s: String = p.call("State", &()).await.with_context(not_running)?;
             println!("{s}");
         }
-        _ => anyhow::bail!("usage: loft-kwin send JSON | loft-kwin state"),
+        [verb, json] if verb == "expect" => {
+            serde_json::from_str::<Value>(json).context("expect: bad JSON")?;
+            let r: zbus::Result<String> = p.call("Expect", &(json.as_str(),)).await;
+            match r {
+                Ok(s) => println!("{s}"),
+                Err(zbus::Error::MethodError(name, Some(msg), _)) if name.as_str() == "org.freedesktop.DBus.Error.Failed" => {
+                    anyhow::bail!("{msg}")
+                }
+                Err(e) => return Err(anyhow::Error::new(e).context(not_running())),
+            }
+        }
+        _ => anyhow::bail!("usage: loft-kwin send JSON | loft-kwin state | loft-kwin expect JSON"),
     }
     Ok(())
 }
@@ -323,13 +363,6 @@ async fn direct(conn: &Connection, cmd: &Value) -> Result<bool> {
             let () = p.call("invokeShortcut", &("Overview",)).await?;
             Ok(true)
         }
-        // Spaces are the user's Activities: read them, never write them
-        // (src/activities.rs). `syncSpaces` is what older shells sent; it
-        // gets the same read-only answer.
-        "activities" | "syncSpaces" => {
-            emit(&activities::report(conn).await);
-            Ok(true)
-        }
         "switchLayout" => {
             let p = keyboard(conn).await?;
             let index = cmd["index"].as_u64().unwrap_or(0) as u32;
@@ -340,16 +373,25 @@ async fn direct(conn: &Connection, cmd: &Value) -> Result<bool> {
     }
 }
 
-/// What `openSpace` keeps between calls: the last state, and the apps
-/// started recently whose window hasn't shown up ((space, app) → when).
-struct Spin {
+/// What the command loop keeps between commands: the last state (shared
+/// with the D-Bus interface), where windows open (rules, expectations),
+/// the Activities, and the apps `openSpace` started recently whose window
+/// hasn't shown up ((space, app) → when).
+struct Daemon {
     state: Arc<Mutex<String>>,
-    starting: Mutex<std::collections::HashMap<(String, String), std::time::Instant>>,
+    places: Places,
+    starting: HashMap<(String, String), Instant>,
 }
 
-/// `openSpace` (src/spinup.rs): find, place, start; queue the script's
-/// commands; report.
-fn open_space(queue: &Queue, spin: &Spin, cmd: &Value) -> Value {
+impl Daemon {
+    fn current(&self) -> Value {
+        serde_json::from_str(&self.state.lock().unwrap()).unwrap_or(Value::Null)
+    }
+}
+
+/// `openSpace` (src/spinup.rs): find, place, start; the started apps'
+/// windows are expected like `loft open`'s (Places::expect); report.
+fn open_space(queue: &Queue, d: &mut Daemon, cmd: &Value) -> Value {
     let space = cmd["space"].as_str().unwrap_or("").to_string();
     let activity = cmd["activity"].as_str().unwrap_or("").to_string();
     let mut notes: Vec<String> = cmd["notes"]
@@ -375,19 +417,18 @@ fn open_space(queue: &Queue, spin: &Spin, cmd: &Value) -> Value {
             }
         })
         .collect();
-    let state: Value = serde_json::from_str(&spin.state.lock().unwrap()).unwrap_or(Value::Null);
+    let state = d.current();
     let wins = spinup::windows_from_state(&state, Some(std::path::Path::new("/proc")));
-    let mut starting = spin.starting.lock().unwrap();
     let ttl = Duration::from_millis(spinup::EXPECT_MS);
-    starting.retain(|_, t| t.elapsed() < ttl);
+    d.starting.retain(|_, t| t.elapsed() < ttl);
     let recent: std::collections::BTreeSet<String> =
-        starting.keys().filter(|(s, _)| *s == space).map(|(_, a)| a.clone()).collect();
+        d.starting.keys().filter(|(s, _)| *s == space).map(|(_, a)| a.clone()).collect();
     let mut rows = Vec::new();
     for step in spinup::plan(&apps, &matchers, &wins, &activity, &recent) {
         use spinup::Step;
         let (i, window, spawn) = match step {
             Step::Found { app, uuid, move_to } => {
-                starting.remove(&(space.clone(), apps[app].app.clone()));
+                d.starting.remove(&(space.clone(), apps[app].app.clone()));
                 if let Some(output) = move_to {
                     queue.push(json!({ "cmd": "moveToOutput", "window": uuid, "output": output }));
                 }
@@ -403,9 +444,12 @@ fn open_space(queue: &Queue, spin: &Spin, cmd: &Value) -> Value {
                 match spinup::spawn(a) {
                     Ok(pid) => {
                         if let Some(m) = &matchers[app] {
-                            queue.push(spinup::expect_cmd(a, m, &activity, Some(pid)));
+                            let e = spinup::expect_cmd(a, m, &activity, Some(pid));
+                            if let Err(err) = d.places.expect(queue, &state, &e) {
+                                notes.push(format!("{}: {err}", a.app));
+                            }
                         }
-                        starting.insert((space.clone(), a.app.clone()), std::time::Instant::now());
+                        d.starting.insert((space.clone(), a.app.clone()), Instant::now());
                         (app, None, Some("started"))
                     }
                     Err(e) => {
@@ -420,16 +464,161 @@ fn open_space(queue: &Queue, spin: &Spin, cmd: &Value) -> Value {
     json!({ "SpaceOpened": { "space": space, "activity": activity, "apps": rows, "notes": notes } })
 }
 
-/// A command from stdin or `Command`: KWin's D-Bus API, else the script.
-async fn dispatch(conn: &Connection, queue: &Queue, spin: &Spin, cmd: Value) {
-    if cmd["cmd"] == "openSpace" {
-        emit(&open_space(queue, spin, &cmd));
-        return;
+/// Rules and expected windows (src/placement.rs).
+#[derive(Default)]
+struct Places {
+    /// placement::layout_key of the last state the rules were sent for.
+    layout: String,
+    /// The Activities as last reported (activities.rs: id, name, …).
+    activities: Vec<placement::ActivityName>,
+    roles: BTreeMap<String, Vec<String>>,
+    sources: Vec<std::path::PathBuf>,
+    mtimes: Vec<Option<SystemTime>>,
+    expects: Vec<placement::Expect>,
+    last_error: String,
+}
+
+impl Places {
+    /// Ask loft-niri for the rules and send them to the script.
+    async fn reload(&mut self, queue: &Queue, state: &Value) {
+        match placement::fetch_rules(&placement::displays_arg(state)).await {
+            Ok(v) => {
+                self.roles = serde_json::from_value(v["roles"].clone()).unwrap_or_default();
+                self.sources = v["sources"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|p| p.as_str().map(std::path::PathBuf::from))
+                    .collect();
+                self.mtimes = placement::mtimes(&self.sources);
+                self.last_error.clear();
+                let names = placement::names_by_id(&self.activities);
+                queue.push(json!({ "cmd": "setWindowRules", "rules": v["rules"], "activityNames": names }));
+            }
+            Err(e) => {
+                if e != self.last_error {
+                    eprintln!("loft-kwin: window rules: {e}");
+                    self.last_error = e;
+                }
+            }
+        }
     }
-    match direct(conn, &cmd).await {
-        Ok(true) => {}
-        Ok(false) => queue.push(cmd),
-        Err(e) => eprintln!("loft-kwin: {}: {e:#}", cmd["cmd"]),
+
+    /// An `{"Activities"}` report: true if the names changed (the rules
+    /// naming them go to the script again).
+    fn set_activities(&mut self, report: &Value) -> bool {
+        let list = placement::activities_of(report);
+        if report["Activities"]["error"].is_string() && list.is_empty() {
+            return false;
+        }
+        let changed = list != self.activities;
+        self.activities = list;
+        changed
+    }
+
+    /// New windows of the expected process trees → `placeWindow`.
+    fn expected(&mut self, queue: &Queue, state: &Value) {
+        if self.expects.is_empty() {
+            return;
+        }
+        let procs = placement::RealProcs("/proc".into());
+        let wins = placement::windows_of(state);
+        let now = Instant::now();
+        for e in &mut self.expects {
+            for w in &wins {
+                if !e.expired(now) && e.matches(w, now, &procs) {
+                    e.placed.insert(w.uuid.clone());
+                    queue.push(e.place_cmd(&w.uuid));
+                }
+            }
+        }
+        self.expects.retain(|e| !e.expired(now));
+    }
+
+    /// `expectWindow` with a process tree (`loft open`, `openSpace`).
+    fn expect(&mut self, queue: &Queue, state: &Value, cmd: &Value) -> Result<Value, String> {
+        let procs = placement::RealProcs("/proc".into());
+        let mut cmd = cmd.clone();
+        if cmd["id"].as_str().is_none_or(str::is_empty) {
+            cmd["id"] = json!(format!("open-{}-{}", cmd["pid"], now().as_millis() % 100_000));
+        }
+        let roles = placement::with_outputs(&self.roles, state);
+        let e = placement::Expect::new(&cmd, &placement::windows_of(state), &roles, &self.activities, &procs)?;
+        let answer = json!({ "id": e.id, "pid": e.root, "output": e.place.get("output"), "ttl_ms": e.ttl.as_millis() as u64 });
+        // `dryRun`: only check it (a display or Activity that isn't there)
+        // before starting anything.
+        if cmd["dryRun"] == true {
+            return Ok(answer);
+        }
+        queue.push(e.script_cmd());
+        self.expects.push(e);
+        // Windows already there (an app quicker than this).
+        self.expected(queue, state);
+        Ok(answer)
+    }
+}
+
+/// Stdin's and other processes' commands: the ones with state here, KWin's
+/// D-Bus API next, else the script. `reply` (`loft-kwin expect`) gets the
+/// answer; without one an error is logged.
+async fn handle(
+    conn: &Connection,
+    queue: &Queue,
+    d: &mut Daemon,
+    cmd: Value,
+    reply: Option<tokio::sync::oneshot::Sender<Result<Value, String>>>,
+) {
+    let ok = || Ok(json!({ "ok": true }));
+    let answer = match cmd["cmd"].as_str().unwrap_or("") {
+        "expectWindow" if cmd["tree"] == true => {
+            let s = d.current();
+            d.places.expect(queue, &s, &cmd)
+        }
+        "reloadWindowRules" => {
+            let s = d.current();
+            d.places.reload(queue, &s).await;
+            ok()
+        }
+        "openSpace" => {
+            let r = open_space(queue, d, &cmd);
+            emit(&r);
+            Ok(r)
+        }
+        // Spaces are the user's Activities: read them, never write them
+        // (src/activities.rs). `syncSpaces` is what older shells sent; it
+        // gets the same read-only answer.
+        "activities" | "syncSpaces" => {
+            let r = activities::report(conn).await;
+            activities_changed(queue, d, &r).await;
+            emit(&r);
+            Ok(r)
+        }
+        _ => match direct(conn, &cmd).await {
+            Ok(true) => ok(),
+            Ok(false) => {
+                queue.push(cmd);
+                ok()
+            }
+            Err(e) => Err(format!("{}: {e:#}", cmd["cmd"])),
+        },
+    };
+    match reply {
+        Some(tx) => drop(tx.send(answer)),
+        None => {
+            if let Err(e) = answer {
+                eprintln!("loft-kwin: {e}");
+            }
+        }
+    }
+}
+
+/// A new `{"Activities"}` report: rules naming an Activity follow a rename.
+async fn activities_changed(queue: &Queue, d: &mut Daemon, report: &Value) {
+    if d.places.set_activities(report) {
+        let s = d.current();
+        if !s.is_null() {
+            d.places.reload(queue, &s).await;
+        }
     }
 }
 
@@ -471,7 +660,7 @@ async fn main() -> Result<()> {
     if args.first().is_some_and(|a| a == "shot") {
         return shot::run(&shot::parse(&args[1..])?).await;
     }
-    if args.first().is_some_and(|a| a == "send" || a == "state") {
+    if args.first().is_some_and(|a| a == "send" || a == "state" || a == "expect") {
         return client(&args).await;
     }
     if args.first().is_some_and(|a| a == "thumbs") {
@@ -497,6 +686,7 @@ async fn main() -> Result<()> {
              ({{\"cmd\":\"focusWindow\",\"window\":\"{{uuid}}\"}}, …). docs/KWIN.md.\n\n\
              loft-kwin send JSON                             one command to the running daemon (no window: the active one)\n\
              loft-kwin state                                 the running daemon's state, as JSON\n\
+             loft-kwin expect JSON                           place the next windows of a started pid (loft open)\n\
              loft-kwin shot screen|window|area|workspace …   a screenshot (ScreenShot2)\n\
              loft-kwin thumbs DIR MAX_PX UUID…               window stills for the dock and switcher\n\
              loft-kwin record screen|area|window …           a screen recording (zkde_screencast)\n\
@@ -509,7 +699,7 @@ async fn main() -> Result<()> {
     }
 
     let (snapshots_tx, mut snapshots) = mpsc::unbounded_channel::<String>();
-    let (commands_tx, mut commands) = mpsc::unbounded_channel::<Value>();
+    let (commands_tx, mut commands) = mpsc::unbounded_channel::<Incoming>();
     let state = Arc::new(Mutex::new(String::new()));
     let queue = Arc::new(Queue::default());
 
@@ -537,7 +727,10 @@ async fn main() -> Result<()> {
 
     tokio::spawn(watch_layouts(conn.clone()));
     tokio::spawn(keys::watch(conn.clone(), emit));
-    tokio::spawn(activities::watch(conn.clone(), emit));
+    // The Activities reports come through the loop: it passes them on and
+    // keeps the names for the window rules.
+    let (reports_tx, mut reports) = mpsc::unbounded_channel::<Value>();
+    tokio::spawn(activities::watch(conn.clone(), move |r: &Value| drop(reports_tx.send(r.clone()))));
     // GStreamer's first run after an update scans every plugin (~10 s), and
     // auto's encoder probe takes a moment: do both now, so the first
     // recording starts at once (record.rs).
@@ -554,9 +747,11 @@ async fn main() -> Result<()> {
         Ok(text) => model.pnp = state::parse_pnp_ids(&text),
         Err(e) => eprintln!("loft-kwin: no PNP ids ({pnp_path}: {e}); display vendors stay as ids"),
     }
-    let spin = Spin { state: state.clone(), starting: Mutex::default() };
     let mut stdin = BufReader::new(tokio::io::stdin()).lines();
     let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    let mut d = Daemon { state: state.clone(), places: Places::default(), starting: HashMap::new() };
+    // The rules' files are polled (a change reloads them).
+    let mut tick = tokio::time::interval(Duration::from_secs(2));
 
     loop {
         tokio::select! {
@@ -566,9 +761,25 @@ async fn main() -> Result<()> {
                         let s = model.update(&snap, now());
                         *state.lock().unwrap() = s.to_string();
                         emit(&json!({ "State": s }));
+                        let key = placement::layout_key(&s);
+                        if key != d.places.layout {
+                            d.places.layout = key;
+                            d.places.reload(&queue, &s).await;
+                        }
+                        d.places.expected(&queue, &s);
                     }
                     Err(e) => eprintln!("loft-kwin: bad snapshot: {e}"),
                 }
+            }
+            _ = tick.tick() => {
+                if !d.places.sources.is_empty() && placement::mtimes(&d.places.sources) != d.places.mtimes {
+                    let s = d.current();
+                    d.places.reload(&queue, &s).await;
+                }
+            }
+            Some(r) = reports.recv() => {
+                activities_changed(&queue, &mut d, &r).await;
+                emit(&r);
             }
             line = stdin.next_line() => {
                 let Ok(Some(line)) = line else { break };
@@ -577,11 +788,11 @@ async fn main() -> Result<()> {
                     continue;
                 }
                 match serde_json::from_str::<Value>(line) {
-                    Ok(cmd) => dispatch(&conn, &queue, &spin, cmd).await,
+                    Ok(cmd) => handle(&conn, &queue, &mut d, cmd, None).await,
                     Err(e) => eprintln!("loft-kwin: bad command {line:?}: {e}"),
                 }
             }
-            Some(cmd) = commands.recv() => dispatch(&conn, &queue, &spin, cmd).await,
+            Some((cmd, reply)) = commands.recv() => handle(&conn, &queue, &mut d, cmd, reply).await,
             _ = term.recv() => break,
             _ = tokio::signal::ctrl_c() => break,
         }

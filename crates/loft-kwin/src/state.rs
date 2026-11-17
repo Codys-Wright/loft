@@ -246,6 +246,7 @@ impl Model {
                 "kwin_uuid": w.uuid,
                 "kwin_desktops": w.desktops,
                 "kwin_activities": w.activities,
+                "kwin_output": w.output,
             });
             if let Some(t) = self.focus_stamps.get(&w.uuid) {
                 record["focus_timestamp"] = json!({ "secs": t.as_secs(), "nanos": t.subsec_nanos() });

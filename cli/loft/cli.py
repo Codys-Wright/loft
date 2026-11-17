@@ -47,7 +47,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from . import capture, cleaner, dock, doctor, fans, greeter, hooks, importers, index, indexcmds, island, keys, library, mcp, media, ports, qtglobal, render, spaces, spotify, themecmds, transparency, updates, utilities, vibes, wallsets, wallvideo
+from . import capture, cleaner, dock, doctor, fans, greeter, hooks, importers, index, indexcmds, island, keys, library, mcp, media, openwin, ports, qtglobal, render, spaces, spotify, themecmds, transparency, updates, utilities, vibes, wallsets, wallvideo
 from .facets import FacetError
 from .pack import IGNORED, Pack, PackError, is_any_pack, is_pack, is_pack_v2, pack_id, validate_v2
 
@@ -1447,6 +1447,8 @@ def parser() -> argparse.ArgumentParser:
     spotify.add_parser(top, _fail)
     doctor.add_parser(top)
     mcp.add_parser(top)
+    # Start a program, its windows on an Activity / desktop / display.
+    openwin.add_parser(top)
     return p
 
 

@@ -556,6 +556,37 @@ def _spawn(cmd: list[str]) -> None:
     subprocess.Popen([exe, *cmd[1:]], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
+def open_placed(a: dict) -> dict:
+    """`loft open`: start a program, its windows to an Activity / desktop / display."""
+    from . import openwin
+
+    _need_session()
+    if any("\0" in c for c in a["command"]):
+        raise ToolError("command: NUL bytes are not allowed")
+    placement = a.get("placement") or ""
+    opts = {
+        "command": a["command"],
+        "activity": a.get("activity"),
+        "desktop": a.get("desktop"),
+        "monitor": a.get("monitor"),
+        "fullscreen": placement == "fullscreen",
+        "maximized": placement == "maximized",
+        "size": a.get("size"),
+        "position": a.get("position"),
+        "keep_above": bool(a.get("keep_above")),
+        "follow": bool(a.get("follow")),
+        "app_id": a.get("app_id"),
+        "count": a.get("count"),
+        "ttl": a.get("ttl") or 30,
+        "cwd": a.get("cwd"),
+    }
+    try:
+        r = openwin.open_window(opts)
+    except openwin.OpenError as e:
+        raise ToolError(str(e)) from None
+    return _ok(**r, summary=openwin.describe(r))
+
+
 def spotlight_open(a: dict) -> dict:
     if kwin():
         _spawn(["loft-launcher", "open"])
@@ -819,7 +850,10 @@ def loft_tools(loft: LoftCli) -> list[Tool]:
             "Show or edit Loft's per-app niri window rule for one exact app id (applies when windows open). "
             "fields: open-on-workspace (name), open-on-output, open-floating/open-maximized/open-fullscreen (bool), "
             "default-column-width (0-1), glass (opaque|custom|native), opacity, opacity-unfocused, blur (bool), "
-            "square-corners, block-out-from (screencast|screen-capture); null/\"\" drops a field. No fields = show.",
+            "square-corners, block-out-from (screencast|screen-capture); where it opens (also under KDE): "
+            "open-on-activity (KDE Activity name), open-on-desktop (number or name), open-on-output (also a role: main/left/right/…), "
+            "open-size (WxH or W%xH%), open-position (center|left|right|X,Y), keep-above, follow (bool), "
+            "match-title / exclude-title / match-app-id (regex); null/\"\" drops a field. No fields = show.",
             _obj(
                 {
                     "app_id": {"type": "string", "pattern": APP_ID},
@@ -1032,6 +1066,32 @@ def tools(dev: bool = False) -> list[Tool]:
         T("focus_output", "Move focus to a display.", _obj({"output": OUT}, ["output"]), focus_output),
         T("toggle_overview", "Open, close or toggle the overview (niri's: all workspaces zoomed out; KWin's Overview effect).", _obj({"state": {"enum": ["toggle", "open", "close"]}}), toggle_overview),
         T("launch", "Start a program in the desktop session: command as argv list, e.g. [\"foot\", \"-e\", \"htop\"].", _obj({"command": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "string", "minLength": 1, "maxLength": 4096}}}, ["command"]), launch),
+        T(
+            "open",
+            "Start a program and send its windows (the whole process tree's, for ttl seconds) to a KDE Activity (by name), "
+            "a desktop (number or name), a display (role: main/left/right/… or connector), full screen / maximized / a size; "
+            "the user stays where they are unless follow. For agent terminals and dev sessions whose app id is shared. "
+            "Under niri: desktop = workspace index or name on that display; activity, position, keep_above are ignored.",
+            _obj(
+                {
+                    "command": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "string", "minLength": 1, "maxLength": 4096}},
+                    "activity": {"type": "string", "minLength": 1, "maxLength": 128},
+                    "desktop": {"type": ["integer", "string"], "minimum": 1, "minLength": 1, "maxLength": 128},
+                    "monitor": {"type": "string", "pattern": OUTPUT},
+                    "placement": {"enum": ["fullscreen", "maximized", "normal"]},
+                    "size": {"type": "string", "pattern": r"^\d{1,5}%?[xX]\d{1,5}%?$"},
+                    "position": {"type": "string", "pattern": r"^(center|left|right|-?\d{1,5},-?\d{1,5})$"},
+                    "keep_above": {"type": "boolean"},
+                    "follow": {"type": "boolean"},
+                    "app_id": {"type": "string", "minLength": 1, "maxLength": 256},
+                    "count": {"type": "integer", "minimum": 0, "maximum": 32},
+                    "ttl": {"type": "number", "minimum": 1, "maximum": 300},
+                    "cwd": {"type": "string", "minLength": 1, "maxLength": 4096},
+                },
+                ["command"],
+            ),
+            open_placed,
+        ),
         T("spotlight_open", "Open Loft's Spotlight launcher on the focused display.", _obj({}), spotlight_open),
         T("screenshot_output", "Screenshot a display (default: the focused one) as a PNG, scaled to max_width.", _obj({"output": OUT, "max_width": MAXW}), screenshot_output, read_only=True),
         T("screenshot_window", "Screenshot one window as a PNG, scaled to max_width (tiled/off-screen windows are rendered by niri; KWin renders any window, title bar included).", _obj({"id": WID, "max_width": MAXW}, ["id"]), screenshot_window, read_only=True),

@@ -88,6 +88,20 @@ function push() {
 // move), each relative to the one before.
 const asked = {};
 
+// Where windows open (§4.17, below): the rules, Activity names, expected
+// windows; windows still "opening" (uuid → ms: a late title / app id still
+// counts), placed by an expectation (rules leave them alone), and the user's
+// recent focus here (newest last) with the windows whose activation gives
+// it back (`follow: false`).
+let rules = [];
+let activityNames = {};
+let expected = [];
+const fresh = {};
+const placed = {};
+const FRESH_MS = 8000;
+let recentHere = [];
+const stayFor = {};
+
 // ── Change tracking ──────────────────────────────────────────────────────
 // Geometry only when a move/resize ends (not every frame of a drag).
 const windowSignals = ["captionChanged", "desktopsChanged", "outputChanged", "minimizedChanged",
@@ -124,11 +138,17 @@ workspace.desktops.forEach(watchDesktop);
 
 workspace.windowAdded.connect(w => {
     watchWindow(w);
-    placeExpected(w);
+    opened(w);
     push();
 });
 workspace.windowRemoved.connect(w => {
-    delete asked["" + w.internalId];
+    const id = "" + w.internalId;
+    delete asked[id];
+    delete fresh[id];
+    delete placed[id];
+    delete stayFor[id];
+    delete pendingGeometry[id];
+    recentHere = recentHere.filter(x => x !== w);
     push();
 });
 workspace.windowActivated.connect(push);
@@ -203,12 +223,18 @@ overviewTimer.timeout.connect(() => {
 });
 overviewTimer.start();
 
-// ── A Space's apps, as they appear (docs/KWIN.md §4.15) ─────────────────
-// loft-kwin's openSpace started them and sent one `expectWindow` each: the
-// first new window of that pid (else matching the app id / title) goes to
-// the Space's Activity and its role's display, then is maximized or made
-// fullscreen if the app asks. A rule lapses after `ttl` ms.
-let expected = [];
+// ── Where windows open (docs/KWIN.md §4.15, §4.17) ───────────────────────
+// Two sources, one placement (place()):
+//   - window rules: Loft's per-app rules (loft-niri `window-rules`, the Nix
+//     seed), sent by loft-kwin as `setWindowRules` with display roles already
+//     resolved to connectors. Matched when a window opens, and again when its
+//     title or app id first changes (apps that set them late), once a window;
+//   - expected windows: `expectWindow` (a Space's apps, §4.15; `loft open`):
+//     the next window(s) of a pid (else matching an app id / title) for `ttl`
+//     ms. loft-kwin also sends `placeWindow` for windows of the process tree
+//     it finds later (children, a running instance taking over).
+// An Activity is the user's KDE Activity, by id or by name (case, spaces,
+// `-` and `_` ignored), resolved when the window opens.
 
 function compile(src, flags) {
     if (!src)
@@ -221,56 +247,349 @@ function compile(src, flags) {
     }
 }
 
+function appIdOf(w) {
+    return w.desktopFileName || w.resourceClass || "";
+}
+
+// Either of KWin's ids (desktop file, Wayland app id / WM_CLASS).
+function idMatches(re, w) {
+    return re.test(w.desktopFileName || "") || re.test(w.resourceClass || "");
+}
+
+function normName(s) {
+    return ("" + s).toLowerCase().replace(/[\s_\-]+/g, "");
+}
+
+function activityFor(p) {
+    if (p.activity && workspace.activities.indexOf(p.activity) >= 0)
+        return p.activity;
+    const name = p.activityName || p.activity;
+    if (!name)
+        return "";
+    const n = normName(name);
+    return workspace.activities.find(a => normName(activityNames[a] || "") === n) || "";
+}
+
+// A number (1 = the first desktop), a name, or a desktop id.
+function desktopFor(d) {
+    if (d === null || d === undefined || d === "")
+        return null;
+    const all = workspace.desktops;
+    if (typeof d === "number")
+        return all[d - 1] || null;
+    const n = normName(d);
+    const hit = all.find(x => x.id === d || normName(x.name) === n);
+    if (hit)
+        return hit;
+    return /^\d+$/.test(d) ? (all[parseInt(d, 10) - 1] || null) : null;
+}
+
+function dim(v, total) {
+    if (!v)
+        return null;
+    if (v.share !== undefined)
+        return total * v.share;
+    return v.px;
+}
+
+// Size and position in the output's work area (on the window's desktop).
+function placeGeometry(w, p, screen, desktop) {
+    const a = workspace.clientArea(KWin.MaximizeArea, screen, desktop || workspace.currentDesktop);
+    const f = w.frameGeometry;
+    let width = p.size ? (dim(p.size.w, a.width) || f.width) : f.width;
+    let height = p.size ? (dim(p.size.h, a.height) || f.height) : f.height;
+    width = Math.min(width, a.width);
+    height = Math.min(height, a.height);
+    let x, y;
+    const pos = p.position || "center";
+    if (pos === "left" || pos === "right") {
+        width = a.width / 2;
+        height = a.height;
+        x = pos === "left" ? a.x : a.x + a.width / 2;
+        y = a.y;
+    } else if (Array.isArray(pos)) {
+        x = a.x + pos[0];
+        y = a.y + pos[1];
+    } else {
+        x = a.x + (a.width - width) / 2;
+        y = a.y + (a.height - height) / 2;
+    }
+    const r = { x: x, y: y, width: width, height: height };
+    askGeometry(w, r);
+    // Opened onto another Activity or desktop: a hidden client doesn't take
+    // the resize (KWin moves it, the size stays its own), so ask again when
+    // it's first shown here (showPending).
+    if (!visibleHere(w))
+        pendingGeometry["" + w.internalId] = r;
+}
+
+function askGeometry(w, r) {
+    setGeometry(w, r.x, r.y, r.width, r.height);
+    // A window placed as it maps (windowAdded) answers its first configure
+    // with its own size, and KWin places it again: ask once more after it
+    // settled, while it isn't what was asked.
+    for (const ms of [200, 800]) {
+        const t = new QTimer();
+        t.interval = ms;
+        t.singleShot = true;
+        t.timeout.connect(() => {
+            const f = w.frameGeometry;
+            if (!w.deleted && f && (Math.abs(f.width - r.width) > 2 || Math.abs(f.height - r.height) > 2
+                || Math.abs(f.x - r.x) > 2 || Math.abs(f.y - r.y) > 2))
+                setGeometry(w, r.x, r.y, r.width, r.height);
+        });
+        t.start();
+    }
+}
+
+// uuid → the geometry a placement asked for while the window wasn't shown.
+const pendingGeometry = {};
+
+function showPending() {
+    for (const id in pendingGeometry) {
+        const w = windowById(id);
+        if (!w || w.deleted) {
+            delete pendingGeometry[id];
+            continue;
+        }
+        if (!visibleHere(w))
+            continue;
+        const r = pendingGeometry[id];
+        delete pendingGeometry[id];
+        askGeometry(w, r);
+    }
+}
+for (const s of ["currentActivityChanged", "currentDesktopChanged"]) {
+    try {
+        workspace[s].connect(showPending);
+    } catch (e) {}
+}
+
+// p: { activity (id) | activityName, desktop, output (connector), open
+// ("fullscreen" | "maximized"), size {w, h: {px} | {share}}, position,
+// keepAbove, follow }.
+function place(w, p, why) {
+    const act = activityFor(p);
+    if ((p.activity || p.activityName) && !act)
+        print("loft-bridge: " + why + ": no Activity " + (p.activityName || p.activity));
+    if (act)
+        w.activities = [act];
+    const d = desktopFor(p.desktop);
+    if (p.desktop !== undefined && p.desktop !== null && p.desktop !== "" && !d)
+        print("loft-bridge: " + why + ": no desktop " + p.desktop);
+    if (d)
+        w.desktops = [d];
+    const s = p.output ? screenByName(p.output) : null;
+    if (s && w.output !== s)
+        workspace.sendClientToScreen(w, s);
+    if (p.keepAbove === true || p.keepAbove === false)
+        w.keepAbove = p.keepAbove;
+    // (A rule may have placed it first, when an expectation came after the
+    // window: the expectation's `open` replaces the rule's.)
+    if (p.open === "fullscreen")
+        w.fullScreen = true;
+    else if (p.open === "maximized") {
+        if (w.fullScreen)
+            w.fullScreen = false;
+        w.setMaximize(true, true);
+    }
+    else if (p.size || p.position)
+        placeGeometry(w, p, s || w.output, d);
+    if (p.follow === true) {
+        if (act)
+            workspace.currentActivity = act;
+        if (d)
+            workspace.currentDesktop = d;
+        workspace.activeWindow = w;
+    } else if (!visibleHere(w)) {
+        // KWin activates a new window even off the current Activity /
+        // desktop: keep focus where the user is (and give it back if it
+        // already moved).
+        stayFor["" + w.internalId] = Date.now() + 2000;
+        if (workspace.activeWindow === w)
+            giveFocusBack(w);
+    }
+    if (debug)
+        print("loft-bridge: " + why + " → " + JSON.stringify({ activity: act, desktop: d ? d.name : "", output: s ? s.name : "", open: p.open || "" }));
+}
+
+function visibleHere(w) {
+    const acts = w.activities || [];
+    const desks = w.desktops || [];
+    return (acts.length === 0 || acts.indexOf(workspace.currentActivity) >= 0)
+        && (w.onAllDesktops || desks.length === 0 || desks.indexOf(workspace.currentDesktop) >= 0);
+}
+
+
+// KWin may activate a new window before windowAdded, while it still counts
+// as "here": skip `except` (the window being sent away).
+function giveFocusBack(except) {
+    for (let i = recentHere.length - 1; i >= 0; --i) {
+        const x = recentHere[i];
+        if (x !== except && !x.deleted && !x.minimized && visibleHere(x)) {
+            workspace.activeWindow = x;
+            return;
+        }
+    }
+    // None known (the script just started): the topmost window here.
+    const top = workspace.stackingOrder.filter(x => x !== except && tracked(x) && !x.minimized && visibleHere(x)).pop();
+    if (top)
+        workspace.activeWindow = top;
+}
+
+if (tracked(workspace.activeWindow))
+    recentHere = [workspace.activeWindow];
+
+workspace.windowActivated.connect(w => {
+    if (!w)
+        return;
+    const id = "" + w.internalId;
+    if (stayFor[id] && stayFor[id] > Date.now() && !visibleHere(w)) {
+        giveFocusBack(w);
+        return;
+    }
+    if (tracked(w) && visibleHere(w))
+        recentHere = recentHere.filter(x => x !== w).concat([w]).slice(-8);
+});
+
+// ── Rules ──
+function setWindowRules(c) {
+    rules = (c.rules || []).map(r => ({
+        name: r.name || "",
+        re: compile(r.appId, ""),
+        titleRe: compile(r.title, ""),
+        exAppRe: compile(r.excludeAppId, ""),
+        exTitleRe: compile(r.excludeTitle, ""),
+        place: r
+    })).filter(r => r.re);
+    if (c.activityNames)
+        activityNames = c.activityNames;
+}
+
+function ruleMatches(r, w) {
+    const title = w.caption || "";
+    return idMatches(r.re, w) && (!r.titleRe || r.titleRe.test(title))
+        && !(r.exAppRe && idMatches(r.exAppRe, w)) && !(r.exTitleRe && r.exTitleRe.test(title));
+}
+
+// Every matching rule, later ones winning per field (as niri's rules do).
+function applyRules(w) {
+    const id = "" + w.internalId;
+    if (!(id in fresh) || placed[id] || rules.length === 0)
+        return false;
+    const hits = rules.filter(r => ruleMatches(r, w));
+    if (hits.length === 0)
+        return false;
+    const p = {};
+    for (const r of hits)
+        for (const k in r.place)
+            if (r.place[k] !== null && r.place[k] !== undefined && r.place[k] !== "")
+                p[k] = r.place[k];
+    delete fresh[id];
+    place(w, p, "rule " + hits.map(r => r.name).join("+"));
+    return true;
+}
+
+// ── Expected windows (openSpace's and `loft open`'s) ──
 function expectMatches(r, w) {
-    if (r.pid && w.pid === r.pid)
+    if (r.pids.length > 0 && r.pids.indexOf(w.pid) >= 0)
         return true;
-    const id = w.desktopFileName || w.resourceClass || "";
     if (!r.appId && !r.title)
         return false;
-    return (!r.appId || r.appId.test(id)) && (!r.title || r.title.test(w.caption || ""));
+    return (!r.appId || idMatches(r.appId, w)) && (!r.title || r.title.test(w.caption || ""));
 }
 
 function placeExpected(w) {
     if (!tracked(w) || expected.length === 0)
-        return;
+        return false;
     const now = Date.now();
-    expected = expected.filter(r => r.until > now);
+    expected = expected.filter(r => r.until > now && r.left !== 0);
     // A pid match first, so two apps with the same id take their own windows.
-    let i = expected.findIndex(r => r.pid && w.pid === r.pid);
+    let i = expected.findIndex(r => r.pids.indexOf(w.pid) >= 0);
     if (i < 0)
         i = expected.findIndex(r => expectMatches(r, w));
     if (i < 0)
-        return;
-    const r = expected.splice(i, 1)[0];
-    if (r.activity && workspace.activities.indexOf(r.activity) >= 0)
-        w.activities = [r.activity];
-    const s = r.output ? screenByName(r.output) : null;
-    if (s && w.output !== s)
-        workspace.sendClientToScreen(w, s);
-    if (r.open === "maximized")
-        w.setMaximize(true, true);
-    else if (r.open === "fullscreen")
-        w.fullScreen = true;
-    if (debug)
-        print("loft-bridge: " + r.app + " → " + (r.output || "?") + " on " + r.activity);
+        return false;
+    const r = expected[i];
+    if (r.left > 0)
+        r.left -= 1;
+    if (r.left === 0)
+        expected.splice(i, 1);
+    placed["" + w.internalId] = true;
+    place(w, r.place, "expected " + (r.app || r.id || w.pid));
+    return true;
 }
 
+// c: { id?, app?, pid?, pids?, appId?, appIdFlags?, title?, activity? |
+// activityName?, desktop?, output?, open?, size?, position?, keepAbove?,
+// follow?, ttl? (ms, default 20000), count? (windows to place, default 1;
+// 0 = every one until ttl) }.
 function expectWindow(c) {
-    expected.push({
+    const pids = (c.pids || []).concat(c.pid ? [c.pid] : []);
+    const r = {
+        id: c.id || "",
         app: c.app || "",
-        pid: c.pid || 0,
+        pids: pids,
         appId: compile(c.appId, c.appIdFlags),
         title: compile(c.title, ""),
-        activity: c.activity || "",
-        output: c.output || "",
-        open: c.open || "",
+        place: {
+            activity: c.activity || "",
+            activityName: c.activityName || "",
+            desktop: c.desktop,
+            output: c.output || "",
+            open: c.open || "",
+            size: c.size || null,
+            position: c.position || null,
+            keepAbove: c.keepAbove,
+            follow: c.follow === true
+        },
+        left: c.count === undefined || c.count === null ? 1 : (c.count > 0 ? c.count : -1),
         until: Date.now() + (c.ttl || 20000)
-    });
+    };
+    expected.push(r);
     // Its window may be there already (an app quicker than the command).
-    const w = workspace.windowList().find(x => tracked(x) && c.pid && x.pid === c.pid);
-    if (w) {
-        placeExpected(w);
+    let any = false;
+    for (const x of workspace.windowList()) {
+        if (r.left === 0)
+            break;
+        if (tracked(x) && !placed["" + x.internalId] && pids.indexOf(x.pid) >= 0 && placeExpected(x))
+            any = true;
+    }
+    if (any)
         push();
+}
+
+// From loft-kwin: a window it matched to an expectation later (a child of
+// the started process, or the running instance that took over).
+function placeWindow(c) {
+    const w = windowById(c.window);
+    if (!w || placed[c.window])
+        return;
+    placed[c.window] = true;
+    delete fresh[c.window];
+    place(w, c, "expected " + (c.id || ""));
+}
+
+function opened(w) {
+    if (!tracked(w))
+        return;
+    const id = "" + w.internalId;
+    fresh[id] = Date.now() + FRESH_MS;
+    if (placeExpected(w))
+        return;
+    if (applyRules(w))
+        return;
+    // Some apps set their title (or app id) after mapping: match again on
+    // the first changes, for a few seconds.
+    const again = () => {
+        if (fresh[id] && fresh[id] > Date.now() && applyRules(w))
+            push();
+    };
+    for (const sig of ["captionChanged", "desktopFileNameChanged"]) {
+        try {
+            if (w[sig])
+                w[sig].connect(again);
+        } catch (e) {}
     }
 }
 
@@ -450,8 +769,15 @@ function apply(c) {
             }
         }
         return;
+    case "setWindowRules":
+        setWindowRules(c);
+        return;
     case "expectWindow":
         expectWindow(c);
+        return;
+    case "placeWindow":
+        placeWindow(c);
+        push();
         return;
     case "titleBar":
         titleBar(c);

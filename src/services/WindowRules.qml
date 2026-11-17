@@ -16,7 +16,12 @@ import qs.services
 //   rules     the user's per-app records: { glass: opaque|custom|native,
 //             opacity, opacity-unfocused, blur, open-floating, open-maximized,
 //             open-fullscreen, default-column-width, square-corners,
-//             block-out-from, open-on-workspace, open-on-output }
+//             block-out-from, open-on-workspace, open-on-output,
+//             where it opens: open-on-activity, open-on-desktop, open-size,
+//             open-position, keep-above, follow, match-title, exclude-title,
+//             match-app-id, exclude-app-id (docs/KWIN.md §4.17) }
+//   seed      the Nix seed's records (programs.loft.windowRules): { path, rules }
+//   roles     connector → display roles (main, right, …) of the live layout
 //   config    every window-rule in the niri config tree: { file, line,
 //             origin (loft|theme|config), matches, excludes, settings }
 //
@@ -41,6 +46,10 @@ Singleton {
     readonly property var rules: data.rules ?? {}
     readonly property var defaults: data.defaults ?? []
     readonly property var configRules: data.config ?? []
+    readonly property var seedRules: data.seed?.rules ?? {}
+    readonly property bool kwin: Compositor.backend === "kwin"
+    // connector → roles, most specific first (loft-niri windows kwin-rules).
+    property var roles: ({})
 
     // Settings → Window Rules opens on this app (the dock's "Window Rules…").
     property string focusApp: ""
@@ -48,6 +57,60 @@ Singleton {
     // ── Reading ──────────────────────────────────────────────────────────
     function refresh() {
         listProc.running = true;
+        rolesProc.command = ["loft-niri", "--json", "windows", "kwin-rules"].concat(kwin ? ["--displays", JSON.stringify(KWin.displays ?? [])] : []);
+        rolesProc.running = true;
+    }
+
+    // ── Where it opens: the pickers' choices ─────────────────────────────
+    function fromNix(appId) {
+        return seedRules[appId] !== undefined;
+    }
+
+    // The user's KDE Activities (by name: rules name them, ids differ per
+    // machine), in Loft's order (their "Switch to activity" keys).
+    function activityOptions() {
+        const names = Compositor.activityList.map(a => a.name).filter(n => n);
+        return [{ value: "", label: "Wherever it opens" }].concat(names.map(n => ({ value: n, label: n })));
+    }
+
+    // KWin: desktops by number (1 = first), with their names; niri: named workspaces.
+    function desktopOptions() {
+        const out = [{ value: "", label: "Wherever it opens" }];
+        const seen = new Set();
+        if (kwin) {
+            const ws = Compositor.workspaces.slice().sort((a, b) => a.idx - b.idx);
+            for (const w of ws) {
+                if (seen.has(w.kwin_desktop))
+                    continue;
+                seen.add(w.kwin_desktop);
+                out.push({ value: w.idx, label: w.name ? `${w.idx} · ${w.name}` : `Desktop ${w.idx}` });
+            }
+        } else {
+            for (const w of Compositor.workspaces)
+                if (w.name && !seen.has(w.name) && !w.name.startsWith("hidden-")) {
+                    seen.add(w.name);
+                    out.push({ value: w.name, label: w.name });
+                }
+        }
+        return out;
+    }
+
+    // Display roles of the live layout (a rule naming a role follows the
+    // display when connectors change), then the connectors themselves.
+    function monitorOptions(current) {
+        const out = [{ value: "", label: "Wherever it opens" }];
+        const label = r => r.replace(/^./, c => c.toUpperCase()).replace(/-(\d+)$/, " $1");
+        const entries = Object.entries(roles);
+        for (const [conn, rs] of entries) {
+            const r = rs[0];
+            if (r && r !== "*" && !/^display-|^(portrait|landscape|ultrawide)$/.test(r))
+                out.push({ value: r, label: `${label(r)} (${conn})` });
+        }
+        for (const [conn] of entries)
+            out.push({ value: conn, label: conn });
+        if (current && !out.some(o => o.value === current))
+            out.push({ value: current, label: `${current} (not connected)` });
+        return out;
     }
 
     // The niri app id behind a dock / launcher id: a window's, else the id.
@@ -159,6 +222,20 @@ Singleton {
             out.push("Hidden from capture");
         if (r["open-on-workspace"])
             out.push(`On “${r["open-on-workspace"]}”`);
+        if (r["open-on-activity"])
+            out.push(r["open-on-activity"]);
+        if (r["open-on-desktop"])
+            out.push(typeof r["open-on-desktop"] === "number" ? `Desktop ${r["open-on-desktop"]}` : `On “${r["open-on-desktop"]}”`);
+        if (r["open-on-output"])
+            out.push(`${r["open-on-output"]} display`);
+        if (r["open-size"])
+            out.push(r["open-size"]);
+        if (r["keep-above"])
+            out.push("Keep above");
+        if (r["follow"] === true)
+            out.push("Follows");
+        if (fromNix(appId))
+            out.push("Nix");
         return out;
     }
 
@@ -276,6 +353,19 @@ Singleton {
                 } catch (e) {
                     console.warn(`WindowRules: bad list: ${e}`);
                 }
+            }
+        }
+    }
+
+    Process {
+        id: rolesProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const r = JSON.parse(text);
+                    if (r.roles)
+                        root.roles = r.roles;
+                } catch (e) {}
             }
         }
     }

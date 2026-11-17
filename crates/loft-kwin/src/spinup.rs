@@ -11,8 +11,9 @@
 //! - **place**: a found window on another display moves to its role's
 //!   (`moveToOutput`), as niri's spin-up moves it to its workspace;
 //! - **start** what's missing (unless `launch` is off), in its own process
-//!   group, and tell the script to expect its window (`expectWindow`: by
-//!   pid, else app id, for 20 s): bridge.js puts it on the Activity and the
+//!   group, and expect its window (`expectWindow` with `tree` and `loose`,
+//!   placement.rs, as `loft open`'s: by pid or its process tree, else app
+//!   id / title, for 20 s): bridge.js puts it on the Activity and the
 //!   display, and maximizes / fullscreens it, as it appears;
 //! - an app started less than 20 s ago whose window hasn't shown up yet is
 //!   not started again (two Opens in a row);
@@ -200,11 +201,17 @@ pub fn plan(apps: &[AppReq], matchers: &[Option<Matcher>], wins: &[Win], activit
     steps
 }
 
-/// The script's `expectWindow` for a started app.
+/// The `expectWindow` for a started app: its process tree (main.rs's
+/// Places::expect, as `loft open`'s), `loose` so a window matching its
+/// app id / title counts too, one window.
 pub fn expect_cmd(a: &AppReq, m: &Matcher, activity: &str, pid: Option<u32>) -> Value {
     let (app_id, flags) = m.js_app_id().map_or((None, ""), |(p, f)| (Some(p), f));
     json!({
         "cmd": "expectWindow",
+        "tree": true,
+        "loose": true,
+        "count": 1,
+        "id": format!("space-{}", a.app),
         "app": a.app,
         "activity": activity,
         "output": a.display,
