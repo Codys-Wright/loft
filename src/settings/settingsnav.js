@@ -36,7 +36,7 @@ var pages = {
     displays: { label: "Displays", icon: "󰍹", badge: "teal", keywords: ["monitors", "resolution", "scale", "arrangement", "refresh rate"] },
     windows: { label: "Spaces & Windows", icon: "󰖲", badge: "indigo", children: ["spaces", "layout", "windowrules"], keywords: ["windows", "workspaces", "tiling"] },
     spaces: { label: "Spaces", icon: "󰕰", badge: "indigo", parent: "windows", feature: "spaces", summary: "Functional desktops across every display", keywords: ["workspaces", "desktops", "activities"] },
-    layout: { label: "Layout & Motion", icon: "󰕰", badge: "mint", parent: "windows", summary: "Gaps, column widths, animations", keywords: ["gaps", "animations", "window layout", "struts"] },
+    layout: { label: "Layout & Motion", icon: "󰕰", badge: "mint", parent: "windows", summary: "Gaps, column widths, animations", keywords: ["gaps", "animations", "window layout", "struts", "animation speed", "effects", "desktop effects", "wobbly windows", "magic lamp", "blur", "overview"] },
     windowrules: { label: "Window Rules", icon: "󰖲", badge: "teal", parent: "windows", summary: "Where and how each app's windows open", keywords: ["rules", "floating", "opacity", "glass windows"] },
 
     // ── Tools ───────────────────────────────────────────────────────────

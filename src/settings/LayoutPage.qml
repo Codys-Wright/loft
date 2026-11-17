@@ -4,28 +4,140 @@ import qs.services
 
 // Settings → Layout & Motion: gaps, column widths, struts, animations.
 // Theme-owned looks (focus ring, borders, shadows, radius) live in the theme.
-// All of it is niri's: under KWin (no columns, its own animations) the page
-// only says where Plasma keeps these (docs/KWIN.md §4).
+// Under niri all of it is niri's. Under KWin (no columns) the page is KWin's
+// motion instead: KDE's animation speed and KWin's effects, through
+// KdeMotion (docs/KWIN.md §4.20).
 ColumnLayout {
     id: page
     spacing: 12
     readonly property bool niri: Compositor.backend === "niri"
+    readonly property bool kde: Compositor.backend === "kwin"
+
+    // KDE's speed steps (slow → instant), as names.
+    readonly property var speedNames: ["Slowest", "Slow", "Relaxed", "Normal", "Quick", "Fast", "Instant"]
 
     SettingsCard {
-        visible: !page.niri
+        visible: page.kde
         PageHeader {
-            title: "Windows"
+            title: "Motion"
+        }
+
+        SettingsRow {
+            label: "Animation speed"
+            hint: "Every KWin animation, and KDE apps' own. Instant turns them off"
+            SettingsSlider {
+                from: 0
+                to: KdeMotion.steps.length - 1
+                step: 1
+                value: KdeMotion.stepIndex(KdeMotion.speed)
+                format: v => page.speedNames[Math.round(v)] ?? ""
+                onCommitted: v => {
+                    const f = KdeMotion.steps[Math.round(v)];
+                    if (f !== undefined && f !== KdeMotion.speed)
+                        KdeMotion.setSpeed(f);
+                }
+            }
+        }
+
+        Repeater {
+            model: KdeMotion.choicesIn("animations")
+            delegate: KdeChoiceRow {
+                enabled: KdeMotion.speed > 0
+            }
+        }
+    }
+
+    SettingsCard {
+        visible: page.kde && KdeMotion.togglesIn("effects").length > 0
+        PageHeader {
+            title: "Effects"
+        }
+        Repeater {
+            model: KdeMotion.togglesIn("effects")
+            delegate: KdeToggleRow {}
         }
         Text {
             Layout.fillWidth: true
-            text: "Under KDE Plasma, KWin lays windows out: there are no columns, and gaps, edges and animations are KWin's (System Settings → Window Management, and → Workspace Behavior → Desktop Effects). These settings are niri's and apply in a niri session."
+            text: "Popup fades are off while Loft runs: Loft animates its own menus, and KDE's setting comes back when Loft stops."
             color: Theme.subtext
             font.family: Theme.fontUi
-            font.pixelSize: 12
+            font.pixelSize: 11
             wrapMode: Text.Wrap
         }
     }
 
+    SettingsCard {
+        visible: page.kde && KdeMotion.togglesIn("windows").length > 0
+        PageHeader {
+            title: "Window overviews"
+        }
+        Repeater {
+            model: KdeMotion.togglesIn("windows")
+            delegate: KdeToggleRow {}
+        }
+    }
+
+    SettingsCard {
+        visible: page.kde && (KdeMotion.choicesIn("accessibility").length + KdeMotion.togglesIn("accessibility").length) > 0
+        PageHeader {
+            title: "Accessibility"
+        }
+        Repeater {
+            model: KdeMotion.choicesIn("accessibility")
+            delegate: KdeChoiceRow {}
+        }
+        Repeater {
+            model: KdeMotion.togglesIn("accessibility")
+            delegate: KdeToggleRow {}
+        }
+    }
+
+    Text {
+        Layout.fillWidth: true
+        visible: page.kde && KdeMotion.error !== ""
+        text: KdeMotion.error
+        color: Theme.urgent
+        font.family: Theme.fontUi
+        font.pixelSize: 11
+        wrapMode: Text.Wrap
+    }
+
+    // One of KWin's exclusive groups: a segmented choice with None, or a
+    // switch when the group has one effect (maximize, full screen).
+    // modelData: the group's id; its state comes from KdeMotion.
+    component KdeChoiceRow: SettingsRow {
+        id: choiceRow
+        required property string modelData
+        readonly property var c: KdeMotion.choice(modelData)
+        readonly property var opts: c?.options ?? []
+        label: c?.label ?? ""
+        hint: c?.hint ?? ""
+        // Off (Instant): the controls dim themselves.
+        SettingsSegmented {
+            visible: choiceRow.opts.length > 1
+            options: [{ value: "none", label: "None" }].concat(choiceRow.opts.map(o => ({ value: o.id, label: o.label })))
+            current: choiceRow.c?.current
+            onActivated: v => KdeMotion.choose(choiceRow.modelData, v)
+        }
+        SettingsSwitch {
+            visible: choiceRow.opts.length === 1
+            checked: (choiceRow.c?.current ?? "none") !== "none"
+            onToggled: on => KdeMotion.choose(choiceRow.modelData, on ? choiceRow.opts[0].id : "none")
+        }
+    }
+
+    // modelData: the effect's id.
+    component KdeToggleRow: SettingsRow {
+        id: toggleRow
+        required property string modelData
+        readonly property var t: KdeMotion.toggle(modelData)
+        label: t?.label ?? ""
+        hint: t?.hint ?? ""
+        SettingsSwitch {
+            checked: toggleRow.t?.on ?? false
+            onToggled: on => KdeMotion.setEffect(toggleRow.modelData, on)
+        }
+    }
 
     function sizeLabel(s) {
         if (typeof s === "number")
