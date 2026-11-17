@@ -1,0 +1,96 @@
+KWin scripting: never reuse script ids.
+
+Scripting::loadScript() / loadDeclarativeScript() gave a new script the id
+scripts.size(), so as soon as any script was removed, the next load got an id
+(and a /Scripting/Script<id> D-Bus path) that a live script still had. The new
+script's registerObject() then failed silently, and a client calling run/stop
+on "its" id reached the older script. Ids now come from a counter that only
+grows, stop() and unloadScript() take the script off the bus at once, and a
+stale id fails with "no such object" (docs/KWIN.md §4.18).
+
+diff --git a/src/scripting/scripting.cpp b/src/scripting/scripting.cpp
+--- a/src/scripting/scripting.cpp
++++ b/src/scripting/scripting.cpp
+@@ -109,7 +109,14 @@
+     }
+ 
+     new ScriptAdaptor(this);
+-    QDBusConnection::sessionBus().registerObject(QStringLiteral("/Scripting/Script") + QString::number(scriptId()), this, QDBusConnection::ExportAdaptors);
++    if (!QDBusConnection::sessionBus().registerObject(dbusObjectPath(), this, QDBusConnection::ExportAdaptors)) {
++        qCWarning(KWIN_SCRIPTING) << "Could not register" << dbusObjectPath() << "for script" << m_pluginName;
++    }
++}
++
++QString KWin::AbstractScript::dbusObjectPath() const
++{
++    return QStringLiteral("/Scripting/Script") + QString::number(m_scriptId);
+ }
+ 
+ KWin::AbstractScript::~AbstractScript()
+@@ -123,6 +130,9 @@
+ 
+ void KWin::AbstractScript::stop()
+ {
++    // Off the bus now, not when deleteLater() runs: from here on a call on
++    // this script's path fails (no such object) instead of reaching it.
++    QDBusConnection::sessionBus().unregisterObject(dbusObjectPath());
+     deleteLater();
+ }
+ 
+@@ -785,13 +795,22 @@
+     QMutexLocker locker(m_scriptsLock.get());
+     for (AbstractScript *script : std::as_const(scripts)) {
+         if (script->pluginName() == pluginName) {
+-            script->deleteLater();
++            script->stop();
+             return true;
+         }
+     }
+     return false;
+ }
+ 
++namespace
++{
++// Script ids are never reused for the life of the process: a client that
++// holds the id of a script that is gone (it stopped or unloaded it) must not
++// reach another script through /Scripting/Script<id>. scripts.size() was
++// reused as soon as any script was removed. Guarded by m_scriptsLock.
++int s_nextScriptId = 0;
++}
++
+ void KWin::Scripting::runScripts()
+ {
+     QMutexLocker locker(m_scriptsLock.get());
+@@ -812,7 +831,7 @@
+     if (isScriptLoaded(pluginName)) {
+         return -1;
+     }
+-    const int id = scripts.size();
++    const int id = s_nextScriptId++;
+     KWin::Script *script = new KWin::Script(id, filePath, pluginName, this);
+     connect(script, &QObject::destroyed, this, &Scripting::scriptDestroyed);
+     scripts.append(script);
+@@ -825,7 +844,7 @@
+     if (isScriptLoaded(pluginName)) {
+         return -1;
+     }
+-    const int id = scripts.size();
++    const int id = s_nextScriptId++;
+     KWin::DeclarativeScript *script = new KWin::DeclarativeScript(id, filePath, pluginName, this);
+     connect(script, &QObject::destroyed, this, &Scripting::scriptDestroyed);
+     scripts.append(script);
+diff --git a/src/scripting/scripting.h b/src/scripting/scripting.h
+--- a/src/scripting/scripting.h
++++ b/src/scripting/scripting.h
+@@ -65,6 +65,11 @@
+     }
+ 
+     KConfigGroup config() const;
++    /**
++     * /Scripting/Script<id>: the script's object on the session bus while it
++     * is loaded and not stopped.
++     */
++    QString dbusObjectPath() const;
+ 
+ public Q_SLOTS:
+     void stop();
