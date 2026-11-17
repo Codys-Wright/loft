@@ -5,7 +5,10 @@
 # Glass: windows are translucent (the `window` element). niri blurs behind
 # them by window rule (templates/render/niri.kdl); under KWin, Kvantum asks
 # for KWin's blur itself (`blurring`, KWindowEffects: a no-op on niri, which
-# has no org_kde_kwin_blur). Menus and tooltips are opaque, so no popup blur.
+# has no org_kde_kwin_blur). Menus are the shell's glass (look.menu), which
+# Kvantum asks KWin to blur too (`popup_blurring`); dense enough unblurred.
+# Their shadow (`menu_shadow_depth`) also makes the menu translucent, so its
+# corners are round. Tooltips stay opaque.
 
 [%General]
 author=Loft
@@ -24,9 +27,11 @@ translucent_windows=true
 reduce_window_opacity=0
 reduce_menu_opacity=0
 blurring=true
-popup_blurring=false
-shadowless_popup=true
-menu_shadow_depth=0
+popup_blurring=true
+shadowless_popup=false
+menu_shadow_depth=${menu_shadow_depth}
+menu_separator_height=${menu_separator_height}
+menu_blur_radius=${menu_blur_radius}
 tooltip_shadow_depth=0
 opaque=kaffeine,kmplayer,subtitlecomposer,kdenlive,vlc,smplayer,smplayer2,avidemux,kamoso,QtCreator,VirtualBox,VirtualBoxVM,dragon,digikam,lyx,haruna,mpv
 respect_DE=false
@@ -401,19 +406,20 @@ inherits=PanelButtonCommand
 frame=true
 frame.element=menuitem
 interior.element=menuitem
-frame.top=4
-frame.bottom=4
-frame.left=4
-frame.right=4
+frame.top=${menu_row_radius}
+frame.bottom=${menu_row_radius}
+frame.left=${menu_row_radius}
+frame.right=${menu_row_radius}
 indicator.element=arrow
 min_width=0
 min_height=0
 text.normal.color=${text}
-text.focus.color=${on_accent}
-text.press.color=${on_accent}
-text.toggle.color=${on_accent}
-text.margin.top=1
-text.margin.bottom=1
+text.focus.color=${menu_hover_fg}
+text.press.color=${menu_hover_fg}
+text.toggle.color=${menu_hover_fg}
+text.disabled.color=${menu_disabled}
+text.margin.top=0
+text.margin.bottom=0
 text.margin.left=6
 text.margin.right=6
 
@@ -445,10 +451,10 @@ inherits=ComboBox
 inherits=PanelButtonCommand
 frame.element=menu
 interior.element=menu
-frame.top=${srf}
-frame.bottom=${srf}
-frame.left=${srf}
-frame.right=${srf}
+frame.top=${menu_radius}
+frame.bottom=${menu_radius}
+frame.left=${menu_radius}
+frame.right=${menu_radius}
 text.normal.color=${text}
 
 [GroupBox]

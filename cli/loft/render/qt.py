@@ -14,7 +14,10 @@
 
   colors    palette, polarity
   material  glass tint / opacity / blur → the window (sidebar) glass
-  shape     control radius (buttons, pills), surface radius (menus)
+  shape     control radius (buttons, pills)
+
+Menus follow the shell's MenuPanel (look.menu, look.MENU): its glass
+(translucent; Kvantum asks KWin for blur), radius, accent pill, separators.
 
 Nothing here is global (global mode is qtglobal.py): the `qt` hook (hooks.py) links these files in as the
 Kvantum theme `Loft` and the color scheme `Loft`, assigns the Kvantum theme
@@ -48,8 +51,10 @@ def inputs(src: Source) -> dict:
             # managers read alike and follow the same slider (Dolphin reads
             # its Kvantum theme at start, like GTK apps their CSS).
             "alpha": look.gtk_glass_alpha(m, look.dark(colors), src.res.transparency),
+            # Menus: the shell's MenuPanel glass (look.menu).
+            **{k: g[k] for k in ("opacity", "border", "borderOpacity")},
         },
-        "radius": {"control": sh["radius"]["control"], "surface": sh["radius"]["surface"]},
+        "radius": {"control": sh["radius"]["control"]},
     }
 
 
@@ -99,7 +104,15 @@ def roles(i: dict) -> dict[str, str]:
         "groove": c.with_alpha(p["text"], 0.12),
         "disabled": c.mix(p["subtext"], p["bg"], 0.45),
         "dark": "true" if dark else "false",
+        # Menus: the shell's (look.menu): its glass, translucent, which
+        # Kvantum asks KWin to blur (popup_blurring); opaque enough without.
+        **{f"menu_{k}": v for k, v in _menu(i).items() if k != "alpha"},
     }
+
+
+def _menu(i: dict) -> dict:
+    g = i["glass"]
+    return look.menu(i["colors"], {"glass": {**g, "tint": g["tint"]}, "blur": {"enabled": g["blur"]}})
 
 
 def variables(i: dict) -> dict[str, str]:
@@ -108,7 +121,12 @@ def variables(i: dict) -> dict[str, str]:
     v.update({k: x for k, x in r.items()})
     v.update({f"kde_{k}": _kde(x) for k, x in r.items() if k != "dark"})
     v["ctl"] = str(_ctl(i))
-    v["srf"] = str(_srf(i))
+    v["menu_radius"] = str(look.MENU["radius"])
+    v["menu_row_radius"] = str(look.MENU["row_radius"])
+    v["menu_separator_height"] = str(look.MENU["separator_height"])
+    v["menu_shadow_depth"] = str(MENU_SHADOW)
+    # KWin's blur behind a menu, rounded like it (Kvantum's maximum is 10).
+    v["menu_blur_radius"] = str(min(10, look.MENU["radius"]))
     # Places rows inset from the sidebar's edges, as gtk.css's Nautilus rows.
     v["places_inset"] = "10"
     return v
@@ -119,9 +137,6 @@ def _ctl(i: dict) -> int:
     draws a rounded corner inside the frame), 4..8 px."""
     return int(max(4, min(8, round(float(i["radius"]["control"])))))
 
-
-def _srf(i: dict) -> int:
-    return int(max(6, min(12, round(float(i["radius"]["surface"]) * 0.65))))
 
 
 # ── the Kvantum SVG ─────────────────────────────────────────────────────────
@@ -218,6 +233,39 @@ class Svg:
         )
 
 
+# Kvantum's menu shadow (menu_shadow_depth): the frame it draws around a
+# menu, inside the popup's own surface.
+MENU_SHADOW = 8
+
+
+def _shadow(s: Svg, el: str, d: int, col: str, frame: int) -> None:
+    """Kvantum's shadow parts `el-{top,…,bottomright}`: d px deep, fading out
+    from `col` at the menu's edge. The `el-hint-*` parts tell Kvantum how much
+    of the margin (frame + d) is shadow (hint / part = d / (frame + d)), so
+    KWin's blur stops at the menu's edge instead of covering the shadow."""
+    hint = d * d / (frame + d)
+    for part, (w, h) in {"left": (hint, 10), "right": (hint, 10), "top": (10, hint), "bottom": (10, hint)}.items():
+        s.shape(f"{el}-hint-{part}", w, h, "")
+    hx, a = c.hex6(col), c.num(c.parse(col)[3])
+    # (part, w, h, gradient x1 y1 x2 y2 from the menu outward, or a radial centre)
+    lin = {"top": (10, d, "0", "1", "0", "0"), "bottom": (10, d, "0", "0", "0", "1"), "left": (d, 10, "1", "0", "0", "0"), "right": (d, 10, "0", "0", "1", "0")}
+    rad = {"topleft": ("1", "1"), "topright": ("0", "1"), "bottomleft": ("1", "0"), "bottomright": ("0", "0")}
+    defs = []
+    for part, (w, h, x1, y1, x2, y2) in lin.items():
+        defs.append(
+            f'<linearGradient id="{el}-g-{part}" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}">'
+            f'<stop offset="0" stop-color="{hx}" stop-opacity="{a}"/><stop offset="1" stop-color="{hx}" stop-opacity="0"/></linearGradient>'
+        )
+        s.shape(f"{el}-{part}", w, h, f'<rect x="0" y="0" width="{w}" height="{h}" fill="url(#{el}-g-{part})"/>')
+    for part, (cx, cy) in rad.items():
+        defs.append(
+            f'<radialGradient id="{el}-g-{part}" cx="{cx}" cy="{cy}" r="1" fx="{cx}" fy="{cy}">'
+            f'<stop offset="0" stop-color="{hx}" stop-opacity="{a}"/><stop offset="1" stop-color="{hx}" stop-opacity="0"/></radialGradient>'
+        )
+        s.shape(f"{el}-{part}", d, d, f'<rect x="0" y="0" width="{d}" height="{d}" fill="url(#{el}-g-{part})"/>')
+    s.parts.insert(0, "<defs>" + "".join(defs) + "</defs>")
+
+
 def _p(col: str) -> str:
     r, g, b, a = c.parse(col)
     return f'fill="{c.hex6(col)}"' + (f' fill-opacity="{c.num(a)}"' if a < 1 else "")
@@ -232,7 +280,7 @@ def _s(col: str, w: float) -> str:
 
 def svg(i: dict) -> str:
     r = roles(i)
-    f, fs = _ctl(i), _srf(i)
+    f = _ctl(i)
     s = Svg()
 
     # The window: glass (sidebar, toolbar, status bar show it; views are opaque).
@@ -265,11 +313,21 @@ def svg(i: dict) -> str:
     s.framed("itemview-toggled-inactive", f, r["selection_inactive"])
     s.framed("itemview-pressed-inactive", f, r["selection_inactive"])
 
-    # Menus and tooltips: opaque raised surfaces (niri doesn't blur popups).
-    s.framed("menu-normal", fs, r["raised"], r["hairline"])
-    s.framed("menuitem-focused", 4, r["accent"])
-    s.framed("menuitem-pressed", 4, r["accent"])
-    s.framed("menuitem-toggled", 4, r["accent"])
+    # Menus: the shell's MenuPanel (look.menu): its glass with the hairline,
+    # rounded like it, a soft shadow (which also makes Kvantum draw the menu
+    # translucent, so the corners are round), the accent pill per row and a
+    # 1 px separator line.
+    mr, rr = look.MENU["radius"], look.MENU["row_radius"]
+    s.framed("menu-normal", mr, r["menu_fill"], r["menu_border"])
+    s.framed("menuitem-focused", rr, r["menu_hover"])
+    s.framed("menuitem-pressed", rr, r["menu_hover"])
+    s.framed("menuitem-toggled", rr, r["menu_hover"])
+    # A separator row: Kvantum stretches `<MenuItem indicator>-separator` over
+    # the whole row (menu_separator_height), so the line sits in the middle.
+    sh = look.MENU["separator_height"]
+    s.shape("arrow-separator", 10, sh, f'<rect x="0" y="{(sh - 1) // 2}" width="10" height="1" {_p(r["menu_separator"])}/>')
+    _shadow(s, "menu-shadow", MENU_SHADOW, r["menu_shadow"], mr)
+    # Tooltips: an opaque raised surface.
     s.framed("menubaritem-focused", f, r["hover"])
     s.framed("menubaritem-pressed", f, r["press"])
     s.framed("menubaritem-toggled", f, r["press"])

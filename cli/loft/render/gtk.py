@@ -5,6 +5,9 @@
             through the Transparency dial, render/look.py), specular
   shape     the window radius
 
+Menus (GTK 3 menus, GTK 4 popover menus, and through them Chromium /
+Electron context menus) follow the shell's MenuPanel (look.menu).
+
 Hook: gsettings color-scheme and the polarity's GTK base stylesheet (the
 CSS itself applies to new windows).
 """
@@ -23,7 +26,10 @@ def inputs(src: Source) -> dict:
     return {
         "name": src.res.name,
         "colors": {k: src.facet("colors")[k] for k in ("polarity", "palette")},
-        "glass": {"blur": m["blur"]["enabled"], "tint": m["glass"]["tint"], "opacity": m["glass"]["opacity"], "specular": m["glass"]["specular"]},
+        "glass": {
+            "blur": m["blur"]["enabled"],
+            **{k: m["glass"][k] for k in ("tint", "opacity", "specular", "border", "borderOpacity")},
+        },
         # Only what the dial changes here (cache key): the sidebar alpha.
         "transparency": {k: v for k, v in src.res.transparency.items() if k in ("level", "gtk")},
         "windowRadius": src.facet("shape")["radius"]["window"],
@@ -65,7 +71,19 @@ def variables(i: dict) -> dict[str, str]:
             "gtk_raised": p["surface"] if dark else c.mix(p["bg"], "#ffffff", 0.6),
         }
     )
+    # Menus (context, menu bar, popover menus; Chromium reads them too): the
+    # shell's MenuPanel, look.menu. GTK CSS takes rgba(), not #rrggbbaa.
+    mn = look.menu(i["colors"], {"glass": g, "blur": {"enabled": blur}})
+    v.update({f"menu_{k}": (x if k == "alpha" else _css(x)) for k, x in mn.items()})
+    v.update({f"menu_{k}": str(x) for k, x in look.MENU.items()})
+    # GTK 3 menu items: the row height less their 3 px top and bottom padding.
+    v["menu_row_inner"] = str(look.MENU["row_height"] - 6)
     return v
+
+
+def _css(col: str) -> str:
+    a = c.parse(col)[3]
+    return c.rgba(col, round(a, 3)) if a < 1 else c.hex6(col)
 
 
 def render(i: dict, template_dir: Path) -> dict:

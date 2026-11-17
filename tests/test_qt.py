@@ -90,6 +90,49 @@ class Render(unittest.TestCase):
         for el in ("window-normal", "itemview-toggled", "itemview-toggled-inactive", "menu-normal", "checkbox-checked-normal", "arrow-down-normal"):
             self.assertIn(el, ids)
 
+    def test_menus_like_the_shell(self):
+        # Menus follow MenuPanel (look.MENU): round glass KWin blurs, a shadow
+        # Kvantum can subtract from the blur, separators, the accent pill.
+        root = ET.fromstring((GOLDEN / "kvantum.svg").read_text())
+        ids = {e.get("id") for e in root.iter() if e.get("id")}
+        for part in ("top", "bottom", "left", "right"):
+            self.assertIn(f"menu-shadow-{part}", ids)
+            self.assertIn(f"menu-shadow-hint-{part}", ids)
+        for part in ("topleft", "topright", "bottomleft", "bottomright"):
+            self.assertIn(f"menu-shadow-{part}", ids)
+        conf = (GOLDEN / "kvantum.kvconfig").read_text()
+        # Kvantum draws a separator with the MenuItem indicator element.
+        ind = re.search(r"^\[MenuItem\][^[]*?^indicator\.element=(\S+)", conf, re.M | re.S).group(1)
+        self.assertIn(f"{ind}-separator", ids)
+        for key in ("popup_blurring=true", "shadowless_popup=false", "menu_shadow_depth=8", "menu_blur_radius=10", "menu_separator_height=9"):
+            self.assertIn(key, conf)
+        self.assertRegex(conf, r"\[Menu\][^[]*frame\.top=12")
+        corner = root.find(".//*[@id='menu-normal-topleft']")
+        self.assertIn("A12,12", ET.tostring(corner, encoding="unicode"))
+
+    def test_menu_colors(self):
+        colors = {"polarity": "dark", "palette": {"bg": "#1a1b26", "surface": "#24283b", "overlay": "#414868", "text": "#c0caf5", "subtext": "#a9b1d6",
+                                                  "accent": "#7aa2f7", "accent2": "#bb9af7", "urgent": "#f7768e", "ok": "#9ece6a", "warn": "#e0af68"}}
+        m = look.menu(colors, {"glass": {"tint": "#1a1b26", "opacity": 0.45, "border": "#ffffff", "borderOpacity": 0.14}, "blur": {"enabled": True}})
+        self.assertEqual(m["alpha"], "0.855")  # Theme.fillFor(1.9)
+        self.assertEqual(m["hover"], "#7aa2f7")
+        self.assertEqual(m["hover_fg"], "#1a1b26")  # dark text on the light accent, as the shell
+        self.assertEqual(m["solid"][:7], m["solid"])  # opaque, for GTK / Chromium
+        # Without blur the fill never drops under the shell's unblurred floor.
+        m = look.menu(colors, {"glass": {"tint": "#1a1b26", "opacity": 0.1}, "blur": {"enabled": False}})
+        self.assertEqual(m["alpha"], "0.72")
+
+    def test_gtk_menu_nodes_chromium_reads(self):
+        # Chromium / Electron take their menu colors from these GTK nodes and
+        # sample the background without blending: they must be opaque colors.
+        css = (GOLDEN.parent / "tokyonight" / "gtk.css").read_text()
+        menus = css.split("/* ── Menus: the shell's own")[1]
+        for sel in ("menu,\n.menu,", "menu > menuitem:hover,", "menu > separator,", "menuitem accelerator {"):
+            block = menus[menus.index(sel):]
+            block = block[: block.index("}")]
+            for m in re.finditer(r"(?:background-)?color: ([^;]+);", block):
+                self.assertRegex(m.group(1), r"^#[0-9a-f]{6}$", sel)
+
     def test_glass_alpha(self):
         # gtk.css's sidebar rule (render/look.py), shared with Nautilus, and
         # the Transparency dial with it.
