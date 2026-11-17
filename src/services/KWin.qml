@@ -64,8 +64,7 @@ Singleton {
             // Spaces are KDE Activities, one per Space (Spaces.qml).
             spaces: true,
             // Loft's shortcuts report press, repeat and release
-            // (shortcutKey; docs/KWIN.md §4.13): the quit guard and the
-            // Radial Menu's hold.
+            // (shortcutKey; docs/KWIN.md §4.13): the quit guard's hold.
             shortcutKeys: true
         })
 
@@ -79,7 +78,7 @@ Singleton {
     signal screenshotTaken(string path)
     // One of Loft's global shortcuts (kglobalaccel `loft-<id>`) was pressed,
     // repeated (held) or released: id without `loft-` and a `-N` twin suffix
-    // ("quit", "radial-hold"), state "pressed" | "repeated" | "released".
+    // ("quit", "quit-2"), state "pressed" | "repeated" | "released".
     signal shortcutKey(string id, string state)
     // id → Date.now() of its last press, and whether it is still held.
     property var shortcutPressedAt: ({})

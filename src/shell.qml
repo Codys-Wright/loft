@@ -198,11 +198,6 @@ ShellRoot {
         QuickPanelWindow {}
     }
 
-    Variants {
-        model: Features.on("radialMenu") ? Quickshell.screens : []
-        RadialMenuWindow {}
-    }
-
     // Cleaning Mode, Keep Awake, Quit on close / protection, Arrange.
     Everyday {}
 }

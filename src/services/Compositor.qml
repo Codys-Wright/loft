@@ -100,7 +100,7 @@ Singleton {
     signal outputsChanged()
     // capabilities.shortcutKeys (KWin): one of Loft's shortcuts was pressed,
     // repeated (held) or released. id is the bind's action id ("quit",
-    // "radial-hold"; cli/loft/kwinkeys.py), state "pressed" | "repeated" |
+    // "quit-2"; cli/loft/kwinkeys.py), state "pressed" | "repeated" |
     // "released". The shortcut's own command still runs too (later: through
     // systemd and `quickshell ipc`); shortcutRecent() tells them apart.
     signal shortcutKey(string id, string state)

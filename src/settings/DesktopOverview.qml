@@ -14,8 +14,7 @@ ColumnLayout {
         { id: "dock", feature: "dock", label: "Dock" },
         { id: "island", feature: "island", label: "Dynamic Island" },
         { id: "desktopmenu", feature: "desktopMenu", label: "Desktop Menu" },
-        { id: "quickpanel", feature: "quickPanel", label: "Quick Panel" },
-        { id: "radialmenu", feature: "radialMenu", label: "Radial Menu" }
+        { id: "quickpanel", feature: "quickPanel", label: "Quick Panel" }
     ]
 
     function cap(s) {
@@ -48,9 +47,6 @@ ColumnLayout {
         }
         SettingsNavRow {
             page: "quickpanel"
-        }
-        SettingsNavRow {
-            page: "radialmenu"
         }
     }
 

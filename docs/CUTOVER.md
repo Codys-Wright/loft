@@ -126,8 +126,8 @@ column-width actions and Logout. In Loft those are:
 - Workspaces: `Mod+1…9`, the Spaces switcher (`Mod+Ctrl+S`), workspace icons in the bar,
   and `Mod+Ctrl+←/→`.
 - Apps, Logout and the rest: Spotlight (`Mod+Space`; system commands, every Settings
-  page and every Control Center module), the Quick Panel (`Mod+Ctrl+V`) and the Radial
-  Menu (`Mod+Ctrl+Space`) for favourite actions, and the System menu.
+  page and every Control Center module), the Quick Panel (`Mod+Ctrl+V`) for favourite
+  actions, and the System menu.
 - Column widths: niri's own binds in the fleet's `binds.kdl` (`Mod+R` presets, `Mod+F`
   maximize, `Mod+C` center). "Fill available" (`expand-column-to-available-width`) has no
   bind. If it's missed, give it one when removing the menu.

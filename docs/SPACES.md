@@ -462,7 +462,7 @@ space never changes the global theme selection: leaving it re-applies the global
 
 These are generated into `spaces.kdl` as `spawn "loft-niri" "space" "focus" "music"` and
 so on, by space **id** rather than position, so a stale `spaces.kdl` never switches to the
-wrong space. Mod+Ctrl+Space is already the Radial Menu (`niri/shell-binds.kdl.in`), so
+wrong space. Mod+Ctrl+Space was the Radial Menu then (since removed), so
 the space switcher overlay is **Mod+Ctrl+S** (Q-S4, implemented in P4). Plain Mod+PageUp / PageDown stop meaning "the next niri workspace on this output":
 with spaces they move between spaces too, so the displays never get out of step.
 
@@ -938,7 +938,7 @@ Also decided: the AOC monitor (`HDMI-A-2`) is matched by identity in the fleet's
 - **Q-S2**: `code` stays a utility workspace (editor rules keep working); projects are the
   programming spaces.
 - **Q-S3**: Main keeps the left display (chat stays visible).
-- **Q-S4**: the space switcher gets **Mod+Ctrl+S** (Mod+Ctrl+Space stays the Radial Menu);
+- **Q-S4**: the space switcher gets **Mod+Ctrl+S** (Mod+Ctrl+Space was the Radial Menu, since removed);
   next / previous space: **Mod+Ctrl+→ / ←**.
 - **Q-S5**: yes, the AOC is `keep` in the built-ins.
 

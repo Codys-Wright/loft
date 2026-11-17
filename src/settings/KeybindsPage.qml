@@ -771,7 +771,7 @@ ColumnLayout {
         Text {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
-            text: "⌘Q (close, or hold to quit), Paste as Plain Text, Snippets, the Quick Panel, the Radial Menu, Arrange, and custom shortcuts' window and text actions. Spotlight, screenshots, the Control Center, Settings and the lock screen keep working."
+            text: "⌘Q (close, or hold to quit), Paste as Plain Text, Snippets, the Quick Panel, Arrange, and custom shortcuts' window and text actions. Spotlight, screenshots, the Control Center, Settings and the lock screen keep working."
             color: Theme.subtext
             font.family: Theme.fontUi
             font.pixelSize: 11
