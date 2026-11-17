@@ -20,7 +20,14 @@ import qs.services
 // "Switch to activity" keys (no reordering here; names and icons are
 // KDE's). Each can have Loft settings: a library document linked to it
 // (Link… an existing one, or new ones), edited, unlinked or removed here.
-// Linking only writes the document; the Activity is never touched.
+// Linking only writes the document; the Activity is never touched. A
+// linked card lists which of its apps go to which display (`space specs`,
+// Spaces.appsBySpace). Close Apps… (both) closes the space's apps after
+// a confirmation (KWin: naming the windows it would close).
+//
+// niri: documents made only for a KDE Activity (`niri: false`) aren't
+// Spaces here; they're listed in their own card, and can be made niri
+// Spaces too. A niri Space linked to an Activity says so on its card.
 ColumnLayout {
     id: page
     spacing: 12
@@ -36,6 +43,11 @@ ColumnLayout {
 
     onVisibleChanged: if (visible)
         Spaces.reload()
+
+    // Display name of a role's display, for the KWin app lines.
+    function displayOf(name) {
+        return name ? where(name) : "no display (skipped)";
+    }
 
     // "MPG491CX OLED (center)" for an output connector.
     function where(output) {
@@ -328,6 +340,37 @@ ColumnLayout {
             required property int index
             readonly property bool isActive: modelData.id === Spaces.activeId
             readonly property bool editing: page.selected === modelData.id
+            // KWin: the apps of a linked Activity by role, from `space specs`:
+            // [{ role, display, apps: "KWrite, Konsole" }], main first.
+            readonly property var appLines: {
+                const r = Spaces.appsBySpace[modelData.id];
+                if (!Spaces.byActivity || !modelData.linked || !r)
+                    return [];
+                const by = {};
+                for (const a of r.apps ?? []) {
+                    const k = a.role || "main";
+                    by[k] = by[k] ?? { role: k, display: a.display ?? "", apps: [] };
+                    by[k].apps.push(a.app);
+                }
+                return Object.values(by).sort((a, b) => (a.role === "main" ? -1 : b.role === "main" ? 1 : a.role.localeCompare(b.role))).map(l => ({ role: l.role, display: l.display, apps: l.apps.join(", ") }));
+            }
+            readonly property var appNotes: Spaces.byActivity && modelData.linked ? (Spaces.appsBySpace[modelData.id]?.notes ?? []) : []
+            // Close Apps…: "" | "asking" (KWin's dry run) | "confirm".
+            property string closing: ""
+            property var closeWindows: []
+            Connections {
+                target: Spaces
+                function onCloseReport(r) {
+                    if (r.space !== card.modelData.id)
+                        return;
+                    if (r.dryRun && card.closing === "asking") {
+                        card.closeWindows = r.windows ?? [];
+                        card.closing = "confirm";
+                    } else if (!r.dryRun) {
+                        card.closing = "";
+                    }
+                }
+            }
             readonly property var roles: {
                 const d = modelData.displays ?? {};
                 const keys = Object.keys(d).filter(r => r !== "*");
@@ -405,7 +448,7 @@ ColumnLayout {
 
                     Text {
                         Layout.fillWidth: true
-                        text: Spaces.byActivity ? [card.modelData.key ? card.modelData.key.replace("Meta+", "⌘") : "no KDE shortcut", card.modelData.linked ? `Loft settings: ${card.modelData.id}` : "no Loft settings"].join("  ·  ") : [card.modelData.position ? `⌘${card.modelData.position}` : "", card.modelData.template ? `from ${card.modelData.template}` : "", card.modelData.id].filter(s => s).join("  ·  ")
+                        text: Spaces.byActivity ? [card.modelData.key ? card.modelData.key.replace("Meta+", "⌘") : "no KDE shortcut", card.modelData.linked ? `Loft settings: ${card.modelData.id}` : "no Loft settings"].join("  ·  ") : [card.modelData.position ? `⌘${card.modelData.position}` : "", card.modelData.template ? `from ${card.modelData.template}` : "", card.modelData.id, card.modelData.doc?.activity ? `also KDE Activity “${card.modelData.doc.activity}” under Plasma` : ""].filter(s => s).join("  ·  ")
                         color: Theme.subtext
                         font.family: Theme.fontUi
                         font.pixelSize: 11
@@ -441,6 +484,20 @@ ColumnLayout {
                 }
                 SettingsButton {
                     visible: Spaces.canOpen && (!Spaces.byActivity || card.modelData.linked)
+                    text: "Close Apps…"
+                    enabled: card.closing === ""
+                    onClicked: {
+                        if (Spaces.byActivity) {
+                            card.closing = "asking";
+                            Spaces.close(card.modelData.id, true);
+                        } else {
+                            card.closeWindows = [];
+                            card.closing = "confirm";
+                        }
+                    }
+                }
+                SettingsButton {
+                    visible: Spaces.canOpen && (!Spaces.byActivity || card.modelData.linked)
                     text: "Open"
                     onClicked: Spaces.open(card.modelData.id)
                 }
@@ -467,6 +524,84 @@ ColumnLayout {
                 font.family: Theme.fontUi
                 font.pixelSize: 11
                 elide: Text.ElideRight
+            }
+
+            // Close Apps… confirmation.
+            RowLayout {
+                Layout.fillWidth: true
+                visible: card.closing === "confirm"
+                spacing: 8
+                Text {
+                    Layout.fillWidth: true
+                    readonly property var names: [...new Set(card.closeWindows.map(w => w.title || w.app))]
+                    text: Spaces.byActivity ? (card.closeWindows.length === 0 ? `None of “${card.modelData.name}”'s apps has a window open in this Activity.` : `Close ${card.closeWindows.length} window${card.closeWindows.length === 1 ? "" : "s"} of “${card.modelData.name}”: ${names.join(", ")}? Apps with unsaved changes ask first. The KDE Activity and its other windows stay.`) : `Close the windows “${card.modelData.name}” opened or claimed? Apps with unsaved changes ask first; its other windows stay.`
+                    color: Theme.warn
+                    font.family: Theme.fontUi
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+                SettingsButton {
+                    text: "Cancel"
+                    onClicked: card.closing = ""
+                }
+                SettingsButton {
+                    visible: !Spaces.byActivity || card.closeWindows.length > 0
+                    text: "Close"
+                    primary: true
+                    onClicked: {
+                        Spaces.close(card.modelData.id, false);
+                        card.closing = "";
+                    }
+                }
+            }
+
+            // KWin, a linked Activity: one line per display role, role →
+            // its apps → the display it is on now.
+            Repeater {
+                model: card.editing ? [] : card.appLines
+                delegate: RowLayout {
+                    id: appLine
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Text {
+                        Layout.preferredWidth: 70
+                        text: appLine.modelData.role
+                        color: Theme.subtext
+                        font.family: Theme.fontUi
+                        font.pixelSize: 12
+                        font.weight: Font.Medium
+                    }
+                    Text {
+                        Layout.preferredWidth: 150
+                        text: appLine.modelData.apps
+                        color: Theme.text
+                        font.family: Theme.fontUi
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: page.displayOf(appLine.modelData.display)
+                        color: Theme.subtext
+                        font.family: Theme.fontUi
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+            Repeater {
+                model: card.editing ? [] : card.appNotes
+                delegate: Text {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    text: modelData
+                    color: Theme.subtext
+                    font.family: Theme.fontUi
+                    font.pixelSize: 11
+                    font.italic: true
+                    wrapMode: Text.Wrap
+                }
             }
 
             // One line per display role: role → workspace → where it is now.
@@ -518,6 +653,52 @@ ColumnLayout {
                 sourceComponent: SpaceEditor {
                     spaceId: card.modelData.id
                     onDeleted: page.selected = ""
+                }
+            }
+        }
+    }
+
+    // ── niri: settings made for KDE Activities ───────────────────────────
+    SettingsCard {
+        id: kdeCard
+        visible: Spaces.kdeOnly.length > 0
+        spacing: 6
+        PageHeader {
+            title: "Only for KDE Activities"
+        }
+        Text {
+            Layout.fillWidth: true
+            text: "Loft settings made for a KDE Activity in a Plasma session. They aren't Spaces here (no ⌘ number, not in the switcher); Plasma uses them for their Activity."
+            color: Theme.subtext
+            font.family: Theme.fontUi
+            font.pixelSize: 11
+            wrapMode: Text.Wrap
+        }
+        Repeater {
+            model: Spaces.kdeOnly
+            delegate: RowLayout {
+                id: kdeRow
+                required property var modelData
+                Layout.fillWidth: true
+                spacing: 10
+                IconBadge {
+                    icon: kdeRow.modelData.icon || "󰕰"
+                    badge: "gray"
+                    size: 22
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: `${kdeRow.modelData.name}  ·  ${kdeRow.modelData.doc?.activity ? `Activity “${kdeRow.modelData.doc.activity}”` : "no Activity"}  ·  ${kdeRow.modelData.id}`
+                    color: Theme.text
+                    font.family: Theme.fontUi
+                    font.pixelSize: 13
+                    elide: Text.ElideRight
+                }
+                // A niri Space too: on main, unless it binds displays already.
+                SettingsButton {
+                    text: "Use as a Space Here"
+                    enabled: !Spaces.writing
+                    onClicked: Spaces.patch(kdeRow.modelData.id, Object.keys(kdeRow.modelData.displays ?? {}).some(r => kdeRow.modelData.displays[r] !== "keep") ? { niri: true } : { niri: true, displays: { main: {} } })
                 }
             }
         }

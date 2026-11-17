@@ -31,8 +31,12 @@ ColumnLayout {
             available: !!Compositor.capabilities.spaces
             value: Spaces.enabled ? (Spaces.active?.name ?? "") : ""
         }
+        // niri's layout (gaps, columns, struts, motion); KWin lays out its
+        // own windows (System Settings → Window Management).
         SettingsNavRow {
             page: "layout"
+            available: overview.niri
+            summary: overview.niri ? (info?.summary ?? "") : "KWin's own under Plasma: System Settings → Window Management"
             value: overview.niri ? `Gaps ${NiriSettings.value("layout.gaps") ?? 16} px` : ""
         }
         SettingsNavRow {

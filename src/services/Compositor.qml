@@ -116,6 +116,8 @@ Singleton {
 
     // KWin: loft-kwin's report on openSpace ({ space, apps, notes }).
     signal spaceOpened(var report)
+    // KWin: loft-kwin's report on closeSpace ({ space, dryRun, windows, notes }).
+    signal spaceClosed(var report)
 
     Connections {
         target: Niri
@@ -155,6 +157,9 @@ Singleton {
 
         function onSpaceOpened(report) {
             root.spaceOpened(report);
+        }
+        function onSpaceClosed(report) {
+            root.spaceClosed(report);
         }
     }
 
@@ -284,6 +289,13 @@ Singleton {
     function openSpace(space, activity, apps, notes, focus) {
         if (backend === "kwin")
             KWin.openSpace(space, activity, apps, notes, focus);
+    }
+
+    // KWin: close the windows of a space's Activity that are its apps
+    // (dryRun: report them only; docs/KWIN.md §4.15).
+    function closeSpace(space, activity, apps, dryRun) {
+        if (backend === "kwin")
+            KWin.closeSpace(space, activity, apps, dryRun);
     }
 
     // KWin: move a window to these activities ([] = all); follow switches too.

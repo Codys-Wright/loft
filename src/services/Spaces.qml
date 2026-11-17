@@ -53,10 +53,19 @@ import Quickshell.Io
 // `loft-niri space specs` for its apps on KWin's displays and hands them to
 // loft-kwin (`openSpace`), which starts the missing ones in the Activity,
 // each on its role's display. "New Space from Current Desktop" saves the
-// current Activity's windows as a document linked to it.
+// current Activity's windows as a document linked to it. Close (Settings,
+// `spaces close`) closes the windows of the Activity that are its apps
+// (loft-kwin `closeSpace`, the same matching as Open); the Activity stays.
+// Which Spaces were opened is kept per login session in
+// <state>/kwin-spaces.json, so a restarted shell doesn't start them again.
+//
+// A library document made for an Activity (`"niri": false`, or an
+// `activity` link that binds no workspace) is no niri Space: loft-niri
+// leaves it out of `active()` and `spaces` leaves it out here under niri
+// (kdeOnly lists them for Settings).
 //
 // IPC: spaces focus <id|n> | next | prev | moveWindow <id|n> | list | active
-// | switcher | reload | open <id|n> | capture <name>.
+// | switcher | reload | open <id|n> | close <id|n> | capture <name>.
 Singleton {
     id: root
 
@@ -94,7 +103,10 @@ Singleton {
     // KWin the Activities (activitySpaces). `spaces` leaves out the archived.
     property var library: []
     readonly property var all: byActivity ? activitySpaces : library
-    readonly property var spaces: all.filter(s => !s.archived)
+    readonly property var spaces: all.filter(s => !s.archived && (byActivity || s.niri !== false))
+    // niri: library documents that are only Loft settings for a KDE
+    // Activity (`niri: false`): not Spaces here, listed in Settings.
+    readonly property var kdeOnly: byActivity ? [] : library.filter(s => !s.archived && s.niri === false)
     property var problems: []
     property bool libraryLoaded: false
     readonly property bool loaded: byActivity ? Compositor.activitiesLoaded : libraryLoaded
@@ -294,6 +306,9 @@ Singleton {
         function onActivityListChanged() {
             quiet.restart();
             root.loginSpin();
+            // Which linked Activities there are may have changed.
+            if (root.libraryLoaded)
+                root.preview();
         }
         function onActivitiesChanged() {
             if (root.byActivity)
@@ -430,14 +445,62 @@ Singleton {
     }
 
     // ── Spin-up under KWin (docs/KWIN.md §4.15) ─────────────────────────
-    // Spaces opened in this shell's life (a restart opens them again, which
-    // finds what's running instead of starting it twice).
+    // Spaces opened in this login session (kept in kwin-spaces.json below,
+    // so a shell restart doesn't spin them up again).
     function opened(id) {
         return persist.opened.split(",").includes(id);
     }
     function markOpened(id) {
-        if (!opened(id))
+        if (!opened(id)) {
             persist.opened = persist.opened ? `${persist.opened},${id}` : id;
+            saveOpened();
+        }
+    }
+    // Closed (`close`): its next activation starts its apps again.
+    function forgetOpened(id) {
+        if (!opened(id))
+            return;
+        persist.opened = persist.opened.split(",").filter(x => x !== id && x !== "").join(",");
+        saveOpened();
+    }
+
+    // <state>/kwin-spaces.json: { session, opened: [ids], loginDone } for
+    // this login session (boot id + XDG_SESSION_ID + WAYLAND_DISPLAY), as
+    // loft-niri's runtime.json keeps `opened` per niri session. A shell
+    // restart reads it back; a new session starts empty.
+    property string bootId: ""
+    readonly property string sessionKey: bootId === "" ? "" : `${bootId}:${Quickshell.env("XDG_SESSION_ID") || ""}:${Quickshell.env("WAYLAND_DISPLAY") || ""}`
+    readonly property bool sessionReady: !byActivity || (sessionKey !== "" && openedStore.ready)
+    FileView {
+        path: "/proc/sys/kernel/random/boot_id"
+        printErrors: false
+        onLoaded: root.bootId = text().trim() || "boot"
+        onLoadFailed: root.bootId = "boot"
+    }
+    JsonStore {
+        id: openedStore
+        path: root.byActivity ? `${root.stateDir}/kwin-spaces.json` : ""
+        fallback: ({})
+    }
+    onSessionReadyChanged: if (sessionReady && byActivity) {
+        const v = openedStore.value ?? {};
+        if (v.session === sessionKey) {
+            for (const id of v.opened ?? [])
+                if (id && !opened(id))
+                    persist.opened = persist.opened ? `${persist.opened},${id}` : id;
+            if (v.loginDone === true)
+                persist.loginDone = true;
+        }
+        loginSpin();
+    }
+    function saveOpened() {
+        if (!byActivity || !sessionReady)
+            return;
+        openedStore.save({
+            session: sessionKey,
+            opened: persist.opened.split(",").filter(x => x !== ""),
+            loginDone: persist.loginDone
+        });
     }
 
     property var spinQueue: []
@@ -453,9 +516,50 @@ Singleton {
             return;
         }
         markOpened(s.id);
-        spinQueue = spinQueue.concat([{ space: s.id, activity: a, focus: focus === true }]);
+        enqueueSpecs({ kind: "open", space: s.id, activity: a, focus: focus === true });
+    }
+    function enqueueSpecs(job) {
+        spinQueue = spinQueue.concat([job]);
         if (!specs.running)
             nextSpin();
+    }
+
+    // ── Closing a space ─────────────────────────────────────────────────
+    // niri: `loft-niri space close` (the windows it claimed or started; an
+    // instance's workspaces lose their names). KWin: the windows of the
+    // Activity that are the space's apps, through loft-kwin's closeSpace;
+    // apps with unsaved changes ask first (a normal close), and the
+    // Activity stays. dryRun (KWin): only report which, as `closing`
+    // (Settings' confirmation). Either way its next activation spins its
+    // apps up again.
+    signal closeReport(var report)
+    function close(key, dryRun) {
+        const s = find(key);
+        if (!s)
+            return;
+        if (!byActivity) {
+            if (dryRun !== true)
+                run(["close", s.id]);
+            return;
+        }
+        const a = activityOf[s.id];
+        if (!a || !s.linked) {
+            closeReport({ space: s.id, activity: a ?? "", dryRun: dryRun === true, windows: [], notes: s.linked ? [] : [`“${s.name}” has no Loft settings, so no apps of its own`] });
+            return;
+        }
+        enqueueSpecs({ kind: "close", space: s.id, activity: a, dryRun: dryRun === true });
+    }
+
+    // ── Which app goes to which display (Settings → Spaces, KWin) ───────
+    // space id → { apps: [{ app, role, display }], notes } from `space
+    // specs --displays`, for the linked Activities. preview() refreshes.
+    property var appsBySpace: ({})
+    function preview() {
+        if (!byActivity)
+            return;
+        for (const s of spaces)
+            if (s.linked)
+                enqueueSpecs({ kind: "preview", space: s.id, activity: s.activity });
     }
     function nextSpin() {
         if (spinQueue.length === 0)
@@ -484,6 +588,12 @@ Singleton {
             if (code !== 0 || !r) {
                 root.lastError = specsErr.text.trim().split("\n").pop() || `loft-niri space specs exited with ${code}`;
                 console.warn(`Spaces: ${root.lastError}`);
+            } else if (job.kind === "preview") {
+                const m = Object.assign({}, root.appsBySpace);
+                m[job.space] = { apps: r.apps ?? [], notes: r.notes ?? [] };
+                root.appsBySpace = m;
+            } else if (job.kind === "close") {
+                Compositor.closeSpace(job.space, job.activity, r.apps ?? [], job.dryRun);
             } else if ((r.apps ?? []).length > 0 || job.focus) {
                 Compositor.openSpace(job.space, job.activity, r.apps ?? [], r.notes ?? [], job.focus);
             }
@@ -496,13 +606,21 @@ Singleton {
         function onSpaceOpened(r) {
             root.reportNotes(r.space, r.notes ?? []);
         }
+        function onSpaceClosed(r) {
+            if (!r.dryRun) {
+                root.forgetOpened(r.space);
+                root.reportNotes(r.space, r.notes ?? []);
+            }
+            root.closeReport(r);
+        }
     }
 
     // `startup: login`: opened once the Activities exist, without switching.
     function loginSpin() {
-        if (!byActivity || !enabled || !loaded || !libraryLoaded || persist.loginDone)
+        if (!byActivity || !enabled || !loaded || !libraryLoaded || !sessionReady || persist.loginDone)
             return;
         persist.loginDone = true;
+        saveOpened();
         for (const s of spaces)
             if (s.startup === "login" && !opened(s.id))
                 spin(s, false);
@@ -742,7 +860,8 @@ Singleton {
                 // Its windows are already open there: activating it again
                 // this session shouldn't start them twice.
                 markOpened(r.id);
-                write(["patch", r.id, JSON.stringify({ activity: act })], done);
+                // Made for this Activity: not a niri Space (§4.2).
+                write(["patch", r.id, JSON.stringify({ activity: act, niri: false })], done);
             } else if (done)
                 done(r);
         });
@@ -770,6 +889,7 @@ Singleton {
             name: s.name,
             icon: s.icon,
             activity: activity,
+            niri: false,
             displays: {}
         }, done);
     }
@@ -797,6 +917,7 @@ Singleton {
                     root.templates = v.templates ?? [];
                     root.libraryLoaded = true;
                     root.loginSpin();
+                    root.preview();
                     quiet.restart();
                 } catch (e) {
                     console.warn(`Spaces: can't read the space list: ${e}`);
@@ -911,7 +1032,8 @@ Singleton {
                         displays: s.displays,
                         activity: root.activityOf[s.id] ?? null,
                         key: s.key ?? null,
-                        linked: root.byActivity ? s.linked : null
+                        linked: root.byActivity ? s.linked : null,
+                        apps: root.byActivity ? (root.appsBySpace[s.id]?.apps ?? []).map(a => ({ app: a.app, role: a.role, display: a.display ?? null })) : null
                     })));
         }
         function active(): string {
@@ -923,6 +1045,11 @@ Singleton {
         // Open a space: activate it and start its missing apps (P3).
         function open(space: string): void {
             root.open(space);
+        }
+        // Close a space's apps (KWin: its Activity's windows that are its
+        // apps; niri: `loft-niri space close`). The space itself stays.
+        function close(space: string): void {
+            root.close(space, false);
         }
         // New Space from Current Desktop, named `name`.
         function capture(name: string): void {

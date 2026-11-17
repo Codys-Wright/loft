@@ -1030,7 +1030,7 @@ fn space_cmd(
                     json!({
                         "id": s.id, "name": s.name, "icon": s.icon, "order": s.order,
                         "position": pos, "template": s.template, "archived": s.archived,
-                        "startup": s.startup,
+                        "startup": s.startup, "niri": s.niri,
                         "displays": displays, "doc": s.doc,
                     })
                 })

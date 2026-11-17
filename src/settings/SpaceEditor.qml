@@ -122,7 +122,9 @@ ColumnLayout {
     }
     Text {
         Layout.fillWidth: true
-        text: "What the space shows on each display, by role (where the display sits, not its connector). “Keep” leaves a display alone when the space activates, so a chat on the side stays visible."
+        // KWin: no workspaces (an Activity spans every display); a role only
+        // says where the space's apps open.
+        text: Spaces.byActivity ? "Which display each of this Activity's apps opens on, by role (where the display sits, not its connector). “Apps” gives a role its own apps (Save This Activity's Apps fills them in); “Keep” gives it none. Windows have no columns under KWin, so the apps' order and widths only matter under niri." : "What the space shows on each display, by role (where the display sits, not its connector). “Keep” leaves a display alone when the space activates, so a chat on the side stays visible."
         color: Theme.subtext
         font.family: Theme.fontUi
         font.pixelSize: 11
@@ -185,8 +187,9 @@ ColumnLayout {
                     elide: Text.ElideRight
                 }
             }
+            // niri's workspace name (none under KWin).
             SettingsTextField {
-                visible: roleRow.bound
+                visible: roleRow.bound && !Spaces.byActivity
                 implicitWidth: 150
                 text: roleRow.raw?.workspace ?? ""
                 placeholder: roleRow.ws || "workspace"
@@ -197,7 +200,7 @@ ColumnLayout {
                 }
             }
             SettingsSegmented {
-                options: [{ value: "keep", label: "Keep" }, { value: "own", label: "Workspace" }]
+                options: [{ value: "keep", label: "Keep" }, { value: "own", label: Spaces.byActivity ? "Apps" : "Workspace" }]
                 current: roleRow.bound ? "own" : "keep"
                 onActivated: v => {
                     if ((v === "own") === roleRow.bound)

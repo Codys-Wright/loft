@@ -117,6 +117,11 @@ pub struct Space {
     pub target: Target,
     pub startup: String,
     pub archived: bool,
+    /// A niri Space. false: only Loft settings for a KDE Activity
+    /// (docs/KWIN.md §4.2), which niri leaves out of its Spaces (Mod+N,
+    /// the switcher, spaces.kdl): `"niri": false`, or an `activity` link
+    /// that binds no workspace (nothing niri could show).
+    pub niri: bool,
     /// The whole resolved document (dock, bar, menubar, focus, theme,
     /// facets, wallpapers … for the shell).
     pub doc: Value,
@@ -391,6 +396,14 @@ fn parse_space(doc: Value, base: &str) -> Result<Space> {
     };
     let startup = enum_field("startup", &["first-activate", "login", "never"])?
         .unwrap_or_else(|| "first-activate".into());
+    let linked = str_field(&doc, "activity").is_some_and(|a| !a.is_empty());
+    let niri = match doc.get("niri") {
+        None | Some(Value::Null) => {
+            !linked || displays.values().any(|b| matches!(b, Binding::Bound(_)))
+        }
+        Some(Value::Bool(b)) => *b,
+        Some(v) => bail!("space `{id}`: niri must be true or false, got {v}"),
+    };
     Ok(Space {
         name: str_field(&doc, "name").unwrap_or(&id).to_string(),
         icon: str_field(&doc, "icon").unwrap_or("").to_string(),
@@ -404,6 +417,7 @@ fn parse_space(doc: Value, base: &str) -> Result<Space> {
         fold,
         target,
         startup,
+        niri,
         id,
         doc,
         source: None,
@@ -613,9 +627,10 @@ impl Catalog {
         self.spaces = keep;
     }
 
-    /// The spaces Mod+1…9 and the switcher cycle through, in order.
+    /// The spaces Mod+1…9 and the switcher cycle through, in order (niri's:
+    /// not archived, not KDE-only).
     pub fn active(&self) -> Vec<&Space> {
-        self.spaces.iter().filter(|s| !s.archived).collect()
+        self.spaces.iter().filter(|s| !s.archived && s.niri).collect()
     }
 
     /// By id, or by 1-based position among the active spaces.
@@ -673,6 +688,40 @@ pub mod tests {
             main_ws,
             ["main", "music", "video", "comms/main", "gaming", "task"]
         );
+    }
+
+    #[test]
+    fn kde_only_documents_stay_out_of_niri() {
+        let dir = std::env::temp_dir().join(format!("loft-niri-kde-only-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let docs = [
+            // A niri Space linked to an Activity by name: still niri's.
+            json!({"kind": "space", "id": "music", "name": "Music", "activity": "Music",
+                   "displays": {"main": {}}}),
+            // Settings made for an Activity (no workspace bound): KDE-only.
+            json!({"kind": "space", "id": "coding", "name": "Coding",
+                   "activity": "{c0d1}", "displays": {}}),
+            // Captured under KWin: binds roles, but says it's KDE-only.
+            json!({"kind": "space", "id": "edit", "name": "Editing", "activity": "{ed}",
+                   "niri": false, "displays": {"main": {"apps": [{"id": "kate"}]}}}),
+            json!({"kind": "space", "id": "plain", "name": "Plain", "displays": {"main": {}}}),
+        ];
+        for d in &docs {
+            std::fs::write(dir.join(format!("{}.json", d["id"].as_str().unwrap())), d.to_string())
+                .unwrap();
+        }
+        let cat = Catalog::load(Some(&dir), &env());
+        assert!(cat.problems.is_empty(), "{:?}", cat.problems);
+        let ids: Vec<_> = cat.active().iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, ["music", "plain"]);
+        // Still in the catalog (KWin finds them by id).
+        assert!(!cat.find("coding").unwrap().niri);
+        assert!(!cat.find("edit").unwrap().niri);
+        assert_eq!(cat.find("2").unwrap().id, "plain");
+        let bad = json!({"kind": "space", "id": "x", "name": "X", "niri": "no", "displays": {}});
+        assert!(instantiate(&bad, None, &env()).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

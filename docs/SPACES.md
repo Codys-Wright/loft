@@ -725,7 +725,17 @@ loft-niri space capture … --displays JSON --windows JSON   # capture KWin's wi
 ```
 
 loft-kwin's `openSpace` finds the apps' windows in the Space's Activity, moves them to
-their roles' displays and starts the missing ones there.
+their roles' displays and starts the missing ones there; `closeSpace` (Settings' **Close
+Apps…**, `qs ipc call spaces close <id>`) closes the windows of the Activity matched to the
+apps, never the Activity. Which Spaces were opened is kept per login session in
+`<state>/kwin-spaces.json`, so a shell restart doesn't open them again.
+
+A document made only for an Activity is **not a niri Space**: `"niri": false` (written by
+Settings under KWin for New settings and Save This Activity's Apps), or an `activity` link
+that binds no workspace. loft-niri leaves it out of `active()` (⌘N, the switcher, binds),
+`space list` marks it `"niri": false`, and niri's Settings → Spaces lists it under "Only
+for KDE Activities" with **Use as a Space Here**. A niri Space linked to an Activity (by
+name or id) stays a niri Space. See [KWIN.md §4.2](KWIN.md#42-spaces--your-kde-activities).
 
 The `loft space …` Python commands above (and the Spotlight provider) are not written
 yet; Settings → Spaces & Windows → Spaces and the shell use `loft-niri` directly. Writes refuse any change

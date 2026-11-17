@@ -87,6 +87,9 @@ Singleton {
     // openSpace's report: { space, activity, apps: [{ app, display, window,
     // spawn }], notes }.
     signal spaceOpened(var report)
+    // closeSpace's report: { space, activity, dryRun, windows: [{ app,
+    // window, app_id, title }], notes }.
+    signal spaceClosed(var report)
     property string outputKey: ""
     property string layoutKey: ""
 
@@ -171,6 +174,8 @@ Singleton {
             activitiesLoaded = true;
         } else if (msg.SpaceOpened) {
             spaceOpened(msg.SpaceOpened);
+        } else if (msg.SpaceClosed) {
+            spaceClosed(msg.SpaceClosed);
         } else if (msg.WindowActionsMenuRequested) {
             const e = msg.WindowActionsMenuRequested;
             const w = windows.find(x => x.kwin_uuid === e.window);
@@ -340,6 +345,12 @@ Singleton {
     // (crates/loft-kwin/src/spinup.rs). focus: switch to the Activity first.
     function openSpace(space, activity, apps, notes, focus) {
         send({ cmd: "openSpace", space: space, activity: activity, apps: apps, notes: notes ?? [], focus: focus === true });
+    }
+
+    // Close the windows of a space's Activity that are its apps (the same
+    // matching as openSpace); dryRun: only report which.
+    function closeSpace(space, activity, apps, dryRun) {
+        send({ cmd: "closeSpace", space: space, activity: activity, apps: apps, dryRun: dryRun === true });
     }
 
     // Put a window on these activities ([] = all); follow: switch there too.
