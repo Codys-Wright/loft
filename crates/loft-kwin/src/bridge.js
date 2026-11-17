@@ -346,6 +346,14 @@ function apply(c) {
     case "titleBar":
         titleBar(c);
         return;
+    case "windowMenu":
+        // KWin's Window Operations Menu key (Alt+F3, loft-keys.js): Loft's
+        // window menu for the active window, under its green bead.
+        if (w)
+            menuEvent(w, beadAnchor(w), "tileMenu");
+        else
+            workspace.slotWindowOperations();
+        return;
     case "refresh":
         push();
         return;
@@ -385,10 +393,22 @@ function titleBar(c) {
         w.fullScreen = !w.fullScreen;
         return;
     }
+    menuEvent(w, { x: c.x, y: c.y }, c.action);
+}
+
+// Under the green bead of Loft's decoration (kdecoration/tahoe.h: 14 px
+// beads 23 px apart, the first 13 px in, centred in a 40 px bar), where a
+// held green opens the menu; a window without a title bar: near its corner.
+function beadAnchor(w) {
+    return w.noBorder ? { x: 16, y: 16 } : { x: 13 + 2 * 23, y: 27 };
+}
+
+// Ask the shell for Loft's window menu at a frame-local point.
+function menuEvent(w, at, kind) {
     // The menu's anchor, output-local like niri's WindowActionsMenuRequested.
     const f = w.frameGeometry;
-    const gx = f.x + c.x;
-    const gy = f.y + c.y;
+    const gx = f.x + at.x;
+    const gy = f.y + at.y;
     const s = workspace.screenAt({ x: gx, y: gy }) || w.output;
     const g = s ? s.geometry : { x: 0, y: 0 };
     callDBus(SVC, PATH, IFACE, "Event", JSON.stringify({
@@ -397,7 +417,7 @@ function titleBar(c) {
             output: s ? s.name : "",
             x: gx - g.x,
             y: gy - g.y,
-            kind: c.action
+            kind: kind
         }
     }));
 }

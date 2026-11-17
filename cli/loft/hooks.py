@@ -179,9 +179,17 @@ def qt(ctx) -> None:
     # ~/.config/loft/qt.json. Running Qt apps pick it up when restarted.
     from . import qtapps
 
+    from . import qtglobal
+
     try:
         qtapps.sync(ctx.state_dir)
     except OSError:
+        pass
+    # Global mode (qtglobal.py), while applied: the new scheme's keys into
+    # kdeglobals, and a style change notice so running apps re-skin.
+    try:
+        qtglobal.follow_theme(ctx.state_dir)
+    except (OSError, RuntimeError):
         pass
 
 

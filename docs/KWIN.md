@@ -415,6 +415,29 @@ on `QT_PLUGIN_PATH`.
     name's owner means the shell runs. (loft-kwin now exits right after SIGTERM: tokio's
     blocking stdin thread used to keep it alive without its bus name, so the shell never
     restarted it.)
+  - **Alt+F3** (KWin's "Window Operations Menu", or whatever key it has) opens Loft's
+    window menu for the active window, under its green bead: `loft-keys.js` (§4.5)
+    registers `loft-window-menu` on that key, and `claim` moves it to the key KWin's
+    action has (the record keeps the original when a restart claims again) and takes it
+    off KWin's action; `release` gives it back. The callback asks the bus whether
+    `dev.loft.KWinBridge` has an owner: yes → `loft-kwin`'s `Command
+    {"cmd":"windowMenu"}` → the bridge's `windowMenu` sends the same
+    `WindowActionsMenuRequested` as a held green (anchor: frame + (59, 27), the green
+    bead's lower left; (16, 16) for a window without a title bar); no → KWin's own menu
+    (`workspace.slotWindowOperations()`). With no active window the bridge shows KWin's.
+    A bind of the user's own on Alt+F3 (Settings → Keyboard Shortcuts) keeps the key.
+    Tested nested (KWin 6.8.2, `loft-input key alt+F3`, the branch's loft-kwin): Loft's
+    menu opened under KWrite's green bead; with that loft-kwin killed, KWin's own menu at
+    once; `claim` took "Window Menu" (KWin's friendly name) and `release` gave Alt+F3
+    back, kglobalshortcutsrc's line as before.
+  - **Other ways KWin's menu still opens:** a Wayland client's
+    `xdg_toplevel.show_window_menu` (GTK / libadwaita header bars on right-click,
+    Chromium's CSD) and X11's `_GTK_SHOW_WINDOW_MENU` / `_NET_WM` window-menu requests go
+    straight to KWin's `UserActionsMenu`; a KWin script can't intercept them (no signal),
+    so they keep KWin's menu (with the global Qt style, §4.13, in Loft's look after a
+    re-login). KWin's `[MouseBindings]` defaults put no window menu on Alt+click
+    (Alt+right-drag resizes), and the Window Operations button (`M`) isn't in Loft's
+    button order. Loft has no task manager.
   - **Option**: KWin builds decoration hover events without modifiers (`input.cpp`
     `DecorationEventFilter`; presses do carry them) and a key alone sends the decoration
     nothing. KWin's `InputRedirection` (a child of the application object) has
@@ -516,11 +539,12 @@ on `QT_PLUGIN_PATH`.
    one wins (seen: Meta+I opened System Settings instead of the Island). So Loft
    takes its keys off every other action that has them (`setForeignShortcutKeys`),
    recording what they had in `<state>/kwin-shortcuts-taken.json`. With stock
-   Plasma that is 14 actions: KWin's Walk Through Windows (Meta+Tab), Close Window
+   Plasma that is 15 actions: KWin's Walk Through Windows (Meta+Tab), Close Window
    (Alt+F4), Switch One Desktop ← → ↑ ↓ (Meta+Ctrl+arrows), Switch Window ← →
    (Meta+Alt+←/→), Present Windows (Meta+F10), Activate Window Demanding
    Attention (Meta+Ctrl+A), System Settings (Meta+I), Emoji Selector (Meta+.),
-   Spectacle region recording (Meta+Shift+R).
+   Spectacle region recording (Meta+Shift+R), and KWin's Window Operations Menu (Alt+F3,
+which Loft's window menu takes, §4.4).
 4. **unload**: unload the script, `unregister` every name in `names`, give the
    recorded keys back (`release`). kglobalshortcutsrc ends up as it was before
    (checked by diffing it in a nested session). If the session ended without a
@@ -996,6 +1020,91 @@ kcminputrc entries) and a D-Bus test against a fake `InputDeviceManager` + mouse
 socket pair (`devices_over_dbus`: listing, `GetAll`, `Properties.Set`). Needs a check on
 real hardware.
 
+### 4.13 One Qt style for every app (global mode)
+
+**Off by default.** `programs.loft.qt.global = true` (needs `programs.loft.qt.enable`,
+which installs Kvantum), or **Settings → Appearance → Theme all Qt apps**, which
+wins once used (`loft qt global on|off`, kept in `<state>/qt-global`). Without it,
+Loft themes only the apps `programs.loft.qt.apps` names (Dolphin, `cli/loft/qtapps.py`).
+
+With it, while Loft is the shell, every Qt / KDE app (KWin's own menus and dialogs,
+kdialog, file dialogs, plasma's leftovers, plain Qt apps under Plasma's platform
+theme) gets Loft's Kvantum theme and KDE color scheme, both rendered from the current
+Loft theme by the `qt` unit (`cli/loft/qtglobal.py`):
+
+| File | Key | Value |
+|---|---|---|
+| `~/.config/kdeglobals` | `[KDE] widgetStyle` | `kvantum`, or `kvantum-dark` when the scheme's window background is dark |
+| | `[General] ColorScheme` | `Loft` |
+| | `[General] ColorSchemeHash` | sha1 of `Loft.colors` (as System Settings writes it) |
+| | every key of `[Colors:Window]`, `[Colors:View]`, `[Colors:Button]`, `[Colors:Selection]`, `[Colors:Tooltip]`, `[Colors:Complementary]`, `[Colors:Header]` (and `[Colors:Header][Inactive]` when the scheme has it), `[ColorEffects:Disabled]`, `[ColorEffects:Inactive]`, `[WM]` | the rendered `Loft.colors`' values, copied the way `plasma-apply-colorscheme` copies a scheme |
+| `~/.config/Kvantum/kvantum.kvconfig` | `[General] theme` | `Loft` |
+
+plus the links `qt sync` makes anyway (`~/.config/Kvantum/Loft/`, `~/.local/share/color-schemes/Loft.colors`
+→ `<state>/current/…`). Nothing else: fonts, icons, `[KDE] contrast`, `AccentColor`, per-app
+rc files and Kvantum's `[Applications]` stay as they are.
+
+**Lifecycle.** `loft qt global start` (`ExecStartPre` of KWin's drop-in on a Loft login,
+`ExecStartPost` of `loft-plasma-shell`, and of `loft-shell` under niri) applies when the
+switch is on; `loft qt global stop`
+(`ExecStopPost` of both, and `ExecStartPre` of plasmashell's drop-in and of KWin's on a
+plain "Plasma" login, for a session that ended without a stop job) puts everything back. `loft-plasma use plasma` stops Loft's
+unit, so the stop job reverts. The switch applies / reverts at once while the shell
+runs (`$XDG_RUNTIME_DIR/loft/qt-global-session` marks that). A theme change re-applies
+through the `qt` hook while applied.
+
+**Record and revert** (`<state>/qt-global.prev`, JSON): per key the user's own value
+(`null` = not in the user's file; KConfig's cascade is not consulted, so a value from
+`/etc/xdg` or `kdedefaults` is never copied into the user's file) and the value Loft
+wrote. `revert` gives a key back only while it still holds Loft's value (a choice made in
+System Settings meanwhile wins) and deletes keys that weren't there, then removes the
+record. A re-apply keeps the recorded originals; a key somebody else changed since Loft
+wrote it (e.g. a login script that ran after Loft's apply) is recorded afresh, so that
+value is what comes back. `loft qt global status [--json]` shows the switch, the session,
+whether it's applied and the current values.
+
+**Notifications.** After writing, Loft sends what `kwriteconfig6 --notify` and the colors KCM
+send: `org.kde.kconfig.notify.ConfigChanged` on `/kdeglobals` (the groups and keys it
+changed) and `org.kde.KGlobalSettings.notifyChange` palette (0) and style (2) on
+`/KGlobalSettings` (busctl, on the session bus).
+
+**Live or at re-login:**
+
+| What | When it shows |
+|---|---|
+| running Qt / KDE apps (Plasma's platform theme: kwrite, kate, file dialogs, context menus) | **live**: the style is re-created and the palette re-read on the notification (seen nested: kwrite switched from Breeze to Loft's Kvantum, and from tokyonight to latte, without a restart). A live switch can leave a toolbar's overflow arrows or a menu's corners half-drawn until the app restarts |
+| apps started afterwards | at start |
+| **KWin's own menus and dialogs** (the window-operations menu, its More Actions dialogs) | **at KWin's start only** (not live, seen nested). So on a Loft login KWin's drop-in applies global mode *before* KWin starts (`ExecStartPre`, when `loft-plasma check loft`); seen nested: KWin started with the keys in place drew its menu in Loft's latte Kvantum theme. Turning the switch on or off, or a live `loft-plasma use plasma|loft`, reaches KWin's menus at the next login |
+| a theme change | live in running apps (the `qt` hook re-applies and notifies); KWin's menus keep the old theme until the next login |
+
+Glass under KWin: Loft's Kvantum theme draws translucent windows. niri blurs them by
+window rule; under KWin the theme now sets `blurring=true`, so Kvantum asks KWin for its
+blur (KWindowEffects; Kvantum 1.1.8 links KF6WindowSystem). Without it, the windows of
+every app were see-through and unblurred in global mode (seen nested: Kate's file
+dialog over KWrite). niri has no `org_kde_kwin_blur`, so this changes nothing there.
+
+**Under niri** the same keys are written while `loft-shell` runs. KDE apps read
+`kdeglobals`' style and colors when they start (KStyleManager / KColorScheme without a
+KDE platform theme), so KDE apps follow; plain Qt apps follow only the niri session's own
+platform theme (`QT_QPA_PLATFORMTHEME` / `QT_STYLE_OVERRIDE`, set at login, which Loft
+doesn't change). Nothing is live there: restart the app.
+
+**For the fleet's MacTahoe module** (`mactahoe-apply` writes `kdeglobals [KDE]
+widgetStyle=kvantum-dark` and a MacTahoe Kvantum theme at login): when `loft-plasma check
+loft` succeeds and `loft qt global status --json` says `"enabled": true`, skip
+`kdeglobals [KDE] widgetStyle`, `[General] ColorScheme`, `[General] ColorSchemeHash`, the
+colour groups in the table, and `Kvantum/kvantum.kvconfig [General] theme`. If it writes
+them anyway after Loft's apply, Loft's record takes those values as the ones to restore,
+and the next theme change (or `loft qt global apply`) puts Loft's back.
+
+**Global mode tested** nested (KWin 6.8.2, scratch HOME; `loft qt global start|on|off|stop`
+run by hand where the units would): a BreezeClassic baseline (`plasma-apply-colorscheme`,
+`widgetStyle=Breeze`, Kvantum `theme=KvArc`); `on` → 109 kdeglobals keys + Kvantum's
+theme, a running KWrite (and its context menu) re-skinned live; tokyonight → latte through
+the `qt` hook re-skinned it again (`kvantum-dark` → `kvantum`); `stop`, and the Settings
+switch off: Kvantum's file byte for byte as before and kdeglobals as before except the
+`[KFileDialog Settings]` Kate's dialog wrote itself; the record gone.
+
 ## 5. One Plasma session, two shells: switching and backing out
 
 Requirements: both shells work in the same Plasma session, never run at once, can be
@@ -1044,6 +1153,8 @@ when Loft stops:
 | Loft's shortcuts (`loft-keys.js`, §4.5) and the keys taken from other shortcuts | `loft-plasma-shortcuts unload` (`ExecStopPost` of loft-plasma-shell): script unloaded, Loft's actions unregistered, taken keys given back from `<state>/kwin-shortcuts-taken.json` (plasmashell's start does the last part too) |
 | the tile-while-dragging modifier (`[Windows] TileWhileMovingModifier`, §4.6) | `loft-kwin-tile-modifier apply` / `revert`, recorded in `<state>/kwin-tile-modifier.prev` like the decoration. Only set with `programs.loft.plasma.kwinPackage` |
 | KWin's popup fade (`fadingpopups`: 150 ms in, 600 ms out on every popup, so Loft's menus seemed to grow out of a corner) | `loft-kwin` unloads it at start (runtime only, nothing written to kwinrc) and loads it again on exit; the effects it took are noted in `$XDG_RUNTIME_DIR/loft/kwin-effects-off`, so a restart after a crash still gives them back, and an effect the user had off stays off |
+| the global Qt style (`programs.loft.qt.global`, §4.13): kdeglobals `[KDE] widgetStyle`, `[General] ColorScheme` / `ColorSchemeHash`, the `[Colors:*]` / `[ColorEffects:*]` / `[WM]` keys of Loft's scheme; Kvantum's `[General] theme` | `loft qt global start` (`ExecStartPost`, only when on) records the user's values in `<state>/qt-global.prev`; `loft qt global stop` (`ExecStopPost`, and plasmashell's `ExecStartPre`) puts back every key still Loft's and deletes the ones that weren't set, with KConfig's change notification so running apps follow |
+| Alt+F3 (KWin's Window Operations Menu, §4.4) | taken by Loft's `loft-window-menu` shortcut through the same claim / release as the others |
 | any other kwinrc key Loft needs (blur strength, effects) | the same record / revert list. Nothing outside it is touched |
 | the lock screen | `PLASMA_DEFAULT_SHELL` only in KWin's environment, and only when the login is Loft's (`loft-plasma lock-env`, §4.3). Lock and unlock stay Plasma's either way |
 | activities created for Spaces (`<state>/kwin-activities.json`) | kept (harmless). `loft spaces prune` removes them and renames the adopted one back |

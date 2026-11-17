@@ -107,3 +107,109 @@ class Render(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Global(unittest.TestCase):
+    """Global mode (qtglobal.py): kdeglobals + Kvantum's theme, recorded and reverted."""
+
+    SCHEME = (
+        "[General]\nColorScheme=Loft\nName=Loft\n\n[KDE]\ncontrast=4\n\n"
+        "[Colors:Window]\nBackgroundNormal=30,30,46\nForegroundNormal=205,214,244\n\n"
+        "[Colors:Header][Inactive]\nBackgroundNormal=24,24,37\n\n"
+        "[ColorEffects:Disabled]\nColor=30,30,46\n\n[WM]\nactiveBackground=30,30,46\n"
+    )
+    USER = (
+        "[General]\nColorScheme=MacTahoeDark\nfixed=Inter,10\n\n"
+        "[KDE]\nwidgetStyle=kvantum-dark\nSingleClick=false\n\n"
+        "[Colors:Window]\nBackgroundNormal=1,2,3\nDecorationFocus=9,9,9\n"
+    )
+
+    def setUp(self):
+        from loft import qtglobal
+
+        self.g = qtglobal
+        self.tmp = Path(tempfile.mkdtemp())
+        self.cfg, self.data, self.state = self.tmp / "config", self.tmp / "data", self.tmp / "state"
+        env = {"XDG_CONFIG_HOME": str(self.cfg), "XDG_DATA_HOME": str(self.data), "XDG_RUNTIME_DIR": str(self.tmp / "run"),
+               "LOFT_QT_GLOBAL_NO_NOTIFY": "1"}
+        p = mock.patch.dict(os.environ, env)
+        p.start()
+        self.addCleanup(p.stop)
+        (self.state / "current").mkdir(parents=True)
+        (self.state / "current" / "kde.colors").write_text(self.SCHEME)
+        self.cfg.mkdir()
+        (self.cfg / "kdeglobals").write_text(self.USER)
+        (self.cfg / "Kvantum").mkdir()
+        (self.cfg / "Kvantum" / "kvantum.kvconfig").write_text("[General]\ntheme=MacTahoeDark\n\n[Applications]\nLoft=dolphin\n")
+
+    def kg(self, group, key):
+        return qtapps.ini_get((self.cfg / "kdeglobals").read_text(), group, key)
+
+    def test_apply_then_revert_restores_the_files(self):
+        before_kg = (self.cfg / "kdeglobals").read_text()
+        before_kv = (self.cfg / "Kvantum" / "kvantum.kvconfig").read_text()
+        self.g.apply(self.state)
+        self.assertEqual(self.kg("KDE", "widgetStyle"), "kvantum-dark")  # a dark scheme
+        self.assertEqual(self.kg("General", "ColorScheme"), "Loft")
+        self.assertEqual(self.kg("Colors:Window", "BackgroundNormal"), "30,30,46")
+        self.assertEqual(self.kg("Colors:Window", "DecorationFocus"), "9,9,9")  # not in the scheme: kept
+        self.assertEqual(self.kg("Colors:Header][Inactive", "BackgroundNormal"), "24,24,37")
+        self.assertEqual(self.kg("WM", "activeBackground"), "30,30,46")
+        self.assertIsNone(self.kg("KDE", "contrast"))  # only colour groups are copied
+        self.assertEqual(self.kg("General", "fixed"), "Inter,10")
+        kv = (self.cfg / "Kvantum" / "kvantum.kvconfig").read_text()
+        self.assertEqual(qtapps.ini_get(kv, "General", "theme"), "Loft")
+        self.assertEqual(os.readlink(self.data / "color-schemes" / "Loft.colors"), str(self.state / "current" / "kde.colors"))
+        self.g.revert(self.state)
+        self.assertEqual((self.cfg / "kdeglobals").read_text(), before_kg)
+        self.assertEqual((self.cfg / "Kvantum" / "kvantum.kvconfig").read_text(), before_kv)
+        self.assertFalse((self.state / "qt-global.prev").exists())
+
+    def test_reapply_keeps_originals_and_a_choice_made_meanwhile_wins(self):
+        self.g.apply(self.state)
+        light = self.SCHEME.replace("30,30,46", "250,250,250")
+        (self.state / "current" / "kde.colors").write_text(light)
+        self.g.apply(self.state)  # a theme change
+        self.assertEqual(self.kg("KDE", "widgetStyle"), "kvantum")
+        self.assertEqual(self.kg("Colors:Window", "BackgroundNormal"), "250,250,250")
+        # System Settings picks another style while Loft runs: revert keeps it.
+        p = self.cfg / "kdeglobals"
+        p.write_text(qtapps.ini_set(p.read_text(), "KDE", "widgetStyle", "Breeze"))
+        self.g.revert(self.state)
+        self.assertEqual(self.kg("KDE", "widgetStyle"), "Breeze")
+        self.assertEqual(self.kg("Colors:Window", "BackgroundNormal"), "1,2,3")
+        self.assertEqual(self.kg("General", "ColorScheme"), "MacTahoeDark")
+        self.assertIsNone(self.kg("Colors:Header][Inactive", "BackgroundNormal"))
+        self.assertNotIn("[WM]", p.read_text())
+
+    def test_no_user_files(self):
+        (self.cfg / "kdeglobals").unlink()
+        (self.cfg / "Kvantum" / "kvantum.kvconfig").unlink()
+        self.g.apply(self.state)
+        self.g.revert(self.state)
+        self.assertEqual((self.cfg / "kdeglobals").read_text(), "")
+        self.assertEqual((self.cfg / "Kvantum" / "kvantum.kvconfig").read_text(), "")
+
+    def test_switch_and_session(self):
+        self.assertFalse(self.g.enabled(self.state))
+        self.assertEqual(self.g.start(self.state), [])  # off: nothing applied
+        self.g.set_choice(self.state, True)  # the shell runs: applies now
+        self.assertEqual(self.kg("General", "ColorScheme"), "Loft")
+        (self.state / "current" / "kde.colors").write_text(self.SCHEME.replace("30,30,46", "250,250,250"))
+        self.g.follow_theme(self.state)
+        self.assertEqual(self.kg("KDE", "widgetStyle"), "kvantum")
+        self.g.stop(self.state)
+        self.assertEqual(self.kg("General", "ColorScheme"), "MacTahoeDark")
+        self.assertEqual(self.g.follow_theme(self.state), [])  # shell down: the hook leaves it alone
+        self.assertTrue(self.g.enabled(self.state))
+        self.g.start(self.state)
+        self.assertEqual(self.kg("General", "ColorScheme"), "Loft")
+        self.g.set_choice(self.state, False)
+        self.assertEqual(self.kg("General", "ColorScheme"), "MacTahoeDark")
+
+    def test_ini_delete(self):
+        t = "[A]\na=1\n\n[B]\nx=1\n\n[C]\nc=1\n"
+        self.assertEqual(self.g.ini_delete(t, "B", "x"), "[A]\na=1\n\n[C]\nc=1\n")
+        self.assertEqual(self.g.ini_delete(t, "C", "c"), "[A]\na=1\n\n[B]\nx=1\n")
+        self.assertEqual(self.g.ini_delete("[A]\na=1\nb=2\n", "A", "a"), "[A]\nb=2\n")
+        self.assertEqual(self.g.ini_delete(t, "B", "nope"), t)

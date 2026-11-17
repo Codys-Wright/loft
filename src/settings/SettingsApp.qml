@@ -225,6 +225,9 @@ Scope {
 
                     Card {
                         visible: root.section === "appearance"
+                        // The "Theme all Qt apps" row reads it (qt.json may appear later).
+                        onVisibleChanged: if (visible)
+                            QtStyle.refresh()
 
                         Row_ {
                             label: "Reduce transparency"
@@ -301,6 +304,19 @@ Scope {
                                 current: Theme.dark ? "dark" : "light"
                                 enabled: ThemeManager.hasModes && !ThemeManager.applying
                                 onActivated: v => ThemeManager.setMode(v)
+                            }
+                        }
+
+                        // Global Qt style (programs.loft.qt.global, services/QtStyle.qml).
+                        Row_ {
+                            visible: QtStyle.configured
+                            label: "Theme all Qt apps"
+                            hint: QtStyle.error || (QtStyle.enabled ? "Every Qt / KDE app in Loft's style and colors while Loft runs; KWin's own menus after a re-login" : "Only the apps Loft themes by name (Dolphin)")
+                            hintColor: QtStyle.error !== "" ? Theme.urgent : Theme.subtext
+                            Switch_ {
+                                checked: QtStyle.enabled
+                                enabled: !QtStyle.busy
+                                onToggled: on => QtStyle.setEnabled(on)
                             }
                         }
 
