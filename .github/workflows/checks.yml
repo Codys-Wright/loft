@@ -1,5 +1,6 @@
-# `nix flake check` on every push to main and every PR: nix/checks.nix is the
-# whole gate. It already covers the Rust crates: loft-niri, loft-appmenu,
+# `nix flake check` on every push to main, and by hand (Actions → Checks →
+# Run workflow, or `gh workflow run checks.yml --ref <branch>`); not on pull
+# requests (too slow for every PR). nix/checks.nix is the whole gate. It already covers the Rust crates: loft-niri, loft-appmenu,
 # loft-sleep and loft-input are buildRustPackage derivations that run their
 # `cargo test` in checkPhase, each with a `-clippy` sibling (-D warnings).
 #
@@ -12,7 +13,6 @@ name: Checks
 on:
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -20,7 +20,7 @@ permissions:
 
 concurrency:
   group: checks-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   flake-check:
