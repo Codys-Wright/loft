@@ -8,7 +8,9 @@
 //   - actions: the script long-polls dev.loft.KWinBridge.NextCommands(),
 //     which loft-kwin answers when the shell sent something (or empty after
 //     a while), applies them, and polls again.
-// docs/KWIN.md §3.
+//   - overview: KWin has no signal for an effect starting, so a timer asks
+//     `workspace.isEffectActive` (in-process, cheap) and pushes on a change.
+// docs/KWIN.md §3, §4.8.
 
 const SVC = "dev.loft.KWinBridge";
 const PATH = "/Bridge";
@@ -58,8 +60,21 @@ function snapshot() {
         active_screen: workspace.activeScreen ? workspace.activeScreen.name : "",
         active_window: tracked(active) ? "" + active.internalId : "",
         activities: workspace.activities || [],
-        current_activity: workspace.currentActivity || ""
+        current_activity: workspace.currentActivity || "",
+        overview: overviewActive()
     };
+}
+
+// KWin's Overview (its Grid View too, the same effect) or Present Windows
+// (windowview): what niri's overview is to the shell.
+const overviewEffects = ["overview", "windowview"];
+
+function overviewActive() {
+    try {
+        return overviewEffects.some(e => workspace.isEffectActive(e));
+    } catch (e) {
+        return false; // a KWin without isEffectActive (< 6.0)
+    }
 }
 
 function push() {
@@ -116,6 +131,18 @@ workspace.desktopsChanged.connect(() => {
     push();
 });
 
+let overviewWas = overviewActive();
+const overviewTimer = new QTimer();
+overviewTimer.interval = 100;
+overviewTimer.timeout.connect(() => {
+    const now = overviewActive();
+    if (now !== overviewWas) {
+        overviewWas = now;
+        push();
+    }
+});
+overviewTimer.start();
+
 // ── Actions ──────────────────────────────────────────────────────────────
 function windowById(uuid) {
     return workspace.windowList().find(w => ("" + w.internalId) === uuid) || null;
@@ -146,8 +173,10 @@ function setGeometry(w, x, y, width, height) {
         print("loft-bridge: geometry " + JSON.stringify(rect(w.frameGeometry)) + " asked " + JSON.stringify([x, y, width, height]));
 }
 
+// A command without a window acts on the active one (Spotlight's window
+// commands, `loft-kwin send '{"cmd":"toggleMaximize"}'`).
 function apply(c) {
-    const w = c.window ? windowById(c.window) : null;
+    const w = c.window ? windowById(c.window) : (tracked(workspace.activeWindow) ? workspace.activeWindow : null);
     switch (c.cmd) {
     case "focusWindow":
         if (!w)
@@ -190,6 +219,36 @@ function apply(c) {
         const s = screenByName(c.output);
         if (w && s)
             workspace.sendClientToScreen(w, s);
+        return;
+    }
+    case "moveToNextOutput": {
+        // The next screen in KWin's order, wrapping (niri's monitor-next).
+        const all = workspace.screens;
+        if (w && all.length > 1)
+            workspace.sendClientToScreen(w, all[(all.indexOf(w.output) + 1) % all.length]);
+        return;
+    }
+    case "moveToDesktopRelative": {
+        // niri's move-window-to-workspace-down/up: no wrapping, follows it.
+        const all = workspace.desktops;
+        const here = w && !w.onAllDesktops && w.desktops.length > 0 ? w.desktops[0] : workspace.currentDesktop;
+        const d = all[all.indexOf(here) + (c.delta > 0 ? 1 : -1)];
+        if (!w || !d)
+            return;
+        w.desktops = [d];
+        if (c.focus !== false) {
+            workspace.currentDesktop = d;
+            workspace.activeWindow = w;
+        }
+        return;
+    }
+    case "focusOutput": {
+        // The topmost window on that screen (on this desktop) takes focus.
+        const s = screenByName(c.output);
+        const top = s ? workspace.stackingOrder.filter(x => tracked(x) && !x.minimized && x.output === s
+            && (x.onAllDesktops || x.desktops.indexOf(workspace.currentDesktop) >= 0)).pop() : null;
+        if (top)
+            workspace.activeWindow = top;
         return;
     }
     case "setMinimized":

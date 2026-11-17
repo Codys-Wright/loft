@@ -502,6 +502,7 @@
             self'.packages.loft-walker
             self'.packages.loft-elephant
             self'.packages.loft # script commands (Toggle Dark Mode)
+            self'.packages.loft-kwin # window commands under KDE (`loft-kwin send`)
             pkgs.libnotify # script commands: banners (notify-send)
             pkgs.glib # Empty Trash (gio trash)
             pkgs.wl-clipboard # calculator / scripts: copy

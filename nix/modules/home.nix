@@ -930,6 +930,9 @@
           # The lock screen's shell package, also for hosts without Loft's
           # NixOS module (which installs it system-wide).
           sp.loft-plasma-lockscreen
+          # `loft-kwin send|state|shot` for `loft mcp` and terminals (the
+          # shell and Spotlight have it on their own PATH).
+          sp.loft-kwin
         ]
         ++ lib.optional cfg.qt.enable cfg.qt.kvantumPackage
         ++ lib.optional (cfg.qt.enable && cfg.qt.dolphinLauncher) dolphinLauncher;

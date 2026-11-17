@@ -22,8 +22,10 @@ Singleton {
     readonly property var windows: Object.values(windowMap).sort((a, b) => a.id - b.id)
     readonly property var focusedWindow: windows.find(w => w.is_focused) ?? null
     readonly property var focusedWorkspace: workspaces.find(w => w.is_focused) ?? null
-    // KWin's Overview effect has no state to read; the toggle still works.
-    readonly property bool overviewOpen: false
+    // KWin's Overview / Grid View / Present Windows effect is running
+    // (loft-bridge asks KWin, docs/KWIN.md §4.8): wallpapers and the bar
+    // react as they do to niri's overview.
+    property bool overviewOpen: false
     property var keyboardLayouts: ({ names: [], current_idx: 0 })
     property var activities: []
     property string currentActivity: ""
@@ -111,6 +113,7 @@ Singleton {
             activities = s.activities ?? [];
             displays = s.outputs ?? [];
             currentActivity = s.current_activity ?? "";
+            overviewOpen = s.overview_open === true;
             available = true;
             const key = (s.outputs ?? []).map(o => o.name).sort().join(",");
             if (key !== outputKey) {
@@ -301,6 +304,7 @@ Singleton {
             if (running)
                 return;
             root.available = false;
+            root.overviewOpen = false;
             // Crashed, or KWin wasn't ready yet: come back.
             if (root.wanted)
                 restart.start();

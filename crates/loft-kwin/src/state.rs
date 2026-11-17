@@ -33,6 +33,9 @@ pub struct Snapshot {
     pub activities: Vec<String>,
     #[serde(default)]
     pub current_activity: String,
+    /// KWin's Overview / Grid View / Present Windows effect is running.
+    #[serde(default)]
+    pub overview: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -279,6 +282,7 @@ impl Model {
             })).collect::<Vec<_>>(),
             "activities": snap.activities,
             "current_activity": snap.current_activity,
+            "overview_open": snap.overview,
         })
     }
 }
@@ -435,5 +439,18 @@ mod tests {
         let s = m.update(&snap(two, "b"), Duration::from_secs(30));
         let b = s["windows"].as_array().unwrap().iter().find(|w| w["kwin_uuid"] == "b").unwrap().clone();
         assert_eq!(b["focus_timestamp"]["secs"], 20);
+    }
+
+    #[test]
+    fn overview_state_passes_through() {
+        let mut m = Model::new();
+        let closed = m.update(&snap(vec![], ""), Duration::from_secs(1));
+        assert_eq!(closed["overview_open"], false);
+        let mut open = snap(vec![], "");
+        open.overview = true;
+        assert_eq!(m.update(&open, Duration::from_secs(2))["overview_open"], true);
+        // An older script that doesn't send it: closed.
+        let old: Snapshot = serde_json::from_str(r#"{"windows": [], "desktops": []}"#).unwrap();
+        assert_eq!(m.update(&old, Duration::from_secs(3))["overview_open"], false);
     }
 }

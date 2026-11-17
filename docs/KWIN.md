@@ -186,7 +186,7 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 | keybinds (loft-niri → niri KDL binds) | kglobalaccel, **done** (§4.5): `loft-keys.js`, a KWin script of `registerShortcut`s generated from shell-binds + Settings → Keyboard Shortcuts, loaded while Loft's shell runs (§5) |
 | window rules (loft-niri window_rules.rs) | applied by loft-bridge.js at `windowAdded` while Loft runs, not written to `kwinrulesrc` (§5) |
 | outputs / Displays page | `kscreen-doctor` (or KScreen D-Bus). Identities from its JSON |
-| overview (`toggle-overview`) | KWin's Overview effect |
+| overview (`toggle-overview`) | KWin's Overview effect; its state reaches the shell as `overviewOpen` (§4.8) |
 | lock screen (`WlSessionLock`) | Plasma's locker with **Loft's lock design** (§4.3) |
 | Spaces (named niri workspaces per output) | **KDE Activities** (§4.2) |
 | idle (swayidle on niri.service) | PowerDevil (Plasma's own idle and DPMS) |
@@ -578,6 +578,74 @@ selection run `KWin.screenshotArgv()` instead of grim, and `Compositor.screensho
 wlr-screencopy; KWin records through the ScreenCast portal or `zkde_screencast`), and
 window thumbnails (step 11, the same `shot window`).
 
+### 4.8 Window commands, `loft mcp` and the overview under KWin
+
+**Done.** Spotlight's window commands, `loft mcp`'s window tools and `Compositor.overviewOpen`
+work under KWin, through one route: the shell's `loft-kwin` daemon.
+
+- **`loft-kwin send JSON`** hands one command to the running daemon over its D-Bus method
+  `dev.loft.KWinBridge.Command` (on `/Bridge`), the same as a line on its stdin. The
+  daemon runs it over KWin's D-Bus API (`toggleOverview`, `setDesktopName`, `switchLayout`)
+  or queues it for `bridge.js`. **Without a `window`, the script acts on the active
+  window.** New script commands: `moveToNextOutput` (the next screen in KWin's order,
+  wrapping, like niri's `move-window-to-monitor-next`), `moveToDesktopRelative {delta,
+  focus}` (no wrapping; follows the window unless `focus: false`), `focusOutput {output}`
+  (activates the topmost window there).
+- **`loft-kwin state`** prints the daemon's last state (`dev.loft.KWinBridge.State`): the
+  same niri-shaped JSON the shell gets, with `kwin_uuid` on windows and `kwin_desktop`
+  on workspaces.
+- loft-kwin is on the PATH of the shell and Spotlight (`loft-launcher`), and in
+  `home.packages` with `programs.loft.plasma.enable` (for `loft mcp` and terminals).
+
+**Spotlight** (`launcher/elephant-commands/builtin.go`). Each command's shell line picks
+niri or KWin when it runs (`$NIRI_SOCKET`, like Log Out):
+
+| Command | niri | KWin |
+|---|---|---|
+| Maximize Window | `maximize-column` | `toggleMaximize` (KWin's maximize) |
+| Fullscreen Window | `fullscreen-window` | `toggleFullscreen` |
+| Center Window | `center-column` | `center` (in the output's work area) |
+| Move Window to Next Display | `move-window-to-monitor-next` | `moveToNextOutput` |
+| Move Window to Next Workspace | `move-window-to-workspace-down` | `moveToDesktopRelative` +1, follows |
+| Close Window | `close-window` | `closeWindow` |
+| Overview | `toggle-overview` | `toggleOverview` (kglobalaccel `kwin/Overview`) |
+| Keyboard Shortcuts | `show-hotkey-overlay` | Loft's Settings → Keyboard Shortcuts (KDE has no overlay) |
+| Turn Off Displays | `power-off-monitors` | `kscreen-doctor --dpms off` (any input wakes them) |
+| Toggle Floating, Expand to Available Width, Cycle Window Width | niri | **hidden** (no tiling or columns; the menus hide Float the same way) |
+
+**`loft mcp`** (`cli/loft/mcptools.py`) picks the backend as `Compositor.qml` does
+(`$LOFT_COMPOSITOR`, else niri with `$NIRI_SOCKET`, else KWin when `XDG_CURRENT_DESKTOP` has
+KDE). Under KWin: windows, workspaces and outputs come from `loft-kwin state` (outputs carry
+no modes or scale); focus / close / move to workspace or display / fullscreen / maximize /
+center / focus workspace / focus output / overview go through `loft-kwin send` with the
+window's `kwin_uuid`; `toggle_overview open|close` checks `overview_open` first (KWin's
+Overview only toggles); `launch` and `spotlight_open` start the program themselves
+(detached, the server's environment); screenshots are `loft-kwin shot screen|window`
+(a window shot includes its title bar, on screen or not). `set_window_floating`,
+`maximize_column` and `set_column_width` answer with an error saying they're niri-only.
+
+**Overview state.** KWin has no signal for an effect starting or stopping, and its D-Bus
+`activeEffects` property has no change signal either. So `bridge.js` runs a 100 ms
+`QTimer` that calls `workspace.isEffectActive()` (in-process, a lookup in the loaded
+effects) for `overview` (Overview and Grid View, one effect in 6.8) and `windowview`
+(Present Windows), and pushes a snapshot only when that changes. loft-kwin passes it on
+as `overview_open`, `KWin.qml` sets `overviewOpen` from it, so the wallpapers, fullscreen
+chrome, previews and the dock's "Show All Windows" react as under niri. However the
+overview opens (shortcut, hot corner, gesture, Loft), the shell sees it within ~0.1 s.
+
+**Tested** in a nested KWin 6.8.2 (§6, two outputs, two desktops, kwrite): every command
+through `loft-kwin send` and Spotlight's exact shell lines (with `NIRI_SOCKET` unset), each
+checked in `loft-kwin state` (maximized / fullscreen flags, geometry, output, desktop,
+the window gone after close); overview via Loft, kglobalaccel `Overview`, `Grid View` and
+`Expose`, each showing up in the shell's `Compositor.overviewOpen` (`wswallpapers stats`)
+and going back to false; the MCP tools from `mcptools` against the session (a real window
+screenshot); `kscreen-doctor --dpms off` sends `org_kde_kwin_dpms.set(Off)` for both
+outputs, KWin's `kscreen` effect stayed active (and Overview refused to open) until pointer
+input woke them.
+
+Found while testing, not fixed here: `Displays.fullscreenOn` skips floating windows, and
+under KWin every window floats, so FullscreenChrome never sees a fullscreen window there.
+
 ## 5. One Plasma session, two shells: switching and backing out
 
 Requirements: both shells work in the same Plasma session, never run at once, can be
@@ -707,7 +775,8 @@ What it took:
    crash fallback, `loft-kwin-decoration apply/revert`.
 7. ✅ Decoration plugin (§4.4): `dev.loft.decoration`, `loft-kwin-decoration apply|revert`.
 8. ✅ Lock screen shell package (§4.3).
-9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). Display settings, recording.
+9. ✅ Keybinds (§4.5). ✅ Capture through ScreenShot2 (§4.7). ✅ Spotlight's window
+   commands, `loft mcp` and the overview state (§4.8). Display settings, recording.
 10. Spaces on Activities (§4.2).
 11. Window thumbnails through ScreenShot2.
 

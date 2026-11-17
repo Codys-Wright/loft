@@ -11,6 +11,11 @@
 //!   (applied by the script) or `setDesktopName` / `switchLayout` /
 //!   `toggleOverview` (done here over KWin's D-Bus API). EOF ends the daemon.
 //! - `loft-kwin shot …`: a screenshot through KWin's ScreenShot2 (src/shot.rs).
+//! - `loft-kwin send JSON`: one command to the running daemon, over its
+//!   `Command` D-Bus method (as if the shell wrote it on stdin). Without a
+//!   `window` the script acts on the active window (Spotlight's commands).
+//! - `loft-kwin state`: the daemon's last `State` (the same JSON the shell
+//!   gets), over its `State` method (`loft mcp` reads windows from it).
 
 mod shot;
 mod state;
@@ -69,6 +74,10 @@ impl Queue {
 
 struct Bridge {
     snapshots: mpsc::UnboundedSender<String>,
+    /// Commands from other processes (`loft-kwin send`), handled like stdin's.
+    commands: mpsc::UnboundedSender<Value>,
+    /// The last state emitted, as JSON ("" until the first snapshot).
+    state: Arc<Mutex<String>>,
     queue: Arc<Queue>,
 }
 
@@ -84,6 +93,52 @@ impl Bridge {
     async fn next_commands(&self) -> String {
         self.queue.take(POLL).await
     }
+
+    /// One command, as on stdin (`{"cmd": …}`); `loft-kwin send`.
+    async fn command(&self, json: String) -> zbus::fdo::Result<()> {
+        let cmd = parse_command(&json).map_err(zbus::fdo::Error::InvalidArgs)?;
+        self.commands
+            .send(cmd)
+            .map_err(|_| zbus::fdo::Error::Failed("loft-kwin is shutting down".into()))
+    }
+
+    /// The shell's current state (niri-shaped windows, workspaces, outputs,
+    /// overview_open), as JSON; `loft-kwin state`.
+    async fn state(&self) -> zbus::fdo::Result<String> {
+        let s = self.state.lock().unwrap().clone();
+        if s.is_empty() {
+            return Err(zbus::fdo::Error::Failed("no state from KWin yet".into()));
+        }
+        Ok(s)
+    }
+}
+
+/// A command line: a JSON object with a string `cmd`.
+fn parse_command(json: &str) -> Result<Value, String> {
+    let v: Value = serde_json::from_str(json).map_err(|e| format!("bad JSON: {e}"))?;
+    if !v["cmd"].is_string() {
+        return Err(format!("not a command (no \"cmd\"): {json}"));
+    }
+    Ok(v)
+}
+
+/// Talk to the running daemon (`send` / `state`): its bus name, not KWin's.
+async fn client(args: &[String]) -> Result<()> {
+    let conn = Connection::session().await.context("the session bus")?;
+    let p = Proxy::new(&conn, BUS_NAME, "/Bridge", BUS_NAME).await?;
+    let not_running = || format!("{BUS_NAME} isn't on the session bus (is Loft's shell running under KWin?)");
+    match args {
+        [verb, json] if verb == "send" => {
+            parse_command(json).map_err(anyhow::Error::msg)?;
+            let () = p.call("Command", &(json.as_str(),)).await.with_context(not_running)?;
+        }
+        [verb] if verb == "state" => {
+            let s: String = p.call("State", &()).await.with_context(not_running)?;
+            println!("{s}");
+        }
+        _ => anyhow::bail!("usage: loft-kwin send JSON | loft-kwin state"),
+    }
+    Ok(())
 }
 
 fn emit(v: &Value) {
@@ -162,6 +217,15 @@ async fn direct(conn: &Connection, cmd: &Value) -> Result<bool> {
     }
 }
 
+/// A command from stdin or `Command`: KWin's D-Bus API, else the script.
+async fn dispatch(conn: &Connection, queue: &Queue, cmd: Value) {
+    match direct(conn, &cmd).await {
+        Ok(true) => {}
+        Ok(false) => queue.push(cmd),
+        Err(e) => eprintln!("loft-kwin: {}: {e:#}", cmd["cmd"]),
+    }
+}
+
 async fn keyboard(conn: &Connection) -> Result<Proxy<'static>> {
     Ok(Proxy::new(conn, "org.kde.keyboard", "/Layouts", "org.kde.KeyboardLayouts").await?)
 }
@@ -200,22 +264,33 @@ async fn main() -> Result<()> {
     if args.first().is_some_and(|a| a == "shot") {
         return shot::run(&shot::parse(&args[1..])?).await;
     }
+    if args.first().is_some_and(|a| a == "send" || a == "state") {
+        return client(&args).await;
+    }
     if args.first().is_some_and(|a| a == "--help" || a == "-h") {
         println!(
             "loft-kwin — Loft's KWin backend daemon\n\n\
              Loads the loft-bridge KWin script and relays: stdout {{\"State\"}} /\n\
              {{\"KeyboardLayouts\"}} / {{\"Error\"}} lines, stdin one command per line\n\
-             ({{\"cmd\":\"focusWindow\",\"window\":\"{{uuid}}\"}}, …). docs/KWIN.md."
+             ({{\"cmd\":\"focusWindow\",\"window\":\"{{uuid}}\"}}, …). docs/KWIN.md.\n\n\
+             loft-kwin send JSON   one command to the running daemon (no window: the active one)\n\
+             loft-kwin state       the running daemon's state, as JSON\n\
+             loft-kwin shot …      a screenshot through KWin's ScreenShot2"
         );
         return Ok(());
     }
 
     let (snapshots_tx, mut snapshots) = mpsc::unbounded_channel::<String>();
+    let (commands_tx, mut commands) = mpsc::unbounded_channel::<Value>();
+    let state = Arc::new(Mutex::new(String::new()));
     let queue = Arc::new(Queue::default());
 
     let conn = match zbus::connection::Builder::session()?
         .name(BUS_NAME)?
-        .serve_at("/Bridge", Bridge { snapshots: snapshots_tx, queue: queue.clone() })?
+        .serve_at(
+            "/Bridge",
+            Bridge { snapshots: snapshots_tx, commands: commands_tx, state: state.clone(), queue: queue.clone() },
+        )?
         .build()
         .await
     {
@@ -248,7 +323,11 @@ async fn main() -> Result<()> {
         tokio::select! {
             Some(json) = snapshots.recv() => {
                 match serde_json::from_str::<state::Snapshot>(&json) {
-                    Ok(snap) => emit(&json!({ "State": model.update(&snap, now()) })),
+                    Ok(snap) => {
+                        let s = model.update(&snap, now());
+                        *state.lock().unwrap() = s.to_string();
+                        emit(&json!({ "State": s }));
+                    }
                     Err(e) => eprintln!("loft-kwin: bad snapshot: {e}"),
                 }
             }
@@ -259,14 +338,11 @@ async fn main() -> Result<()> {
                     continue;
                 }
                 match serde_json::from_str::<Value>(line) {
-                    Ok(cmd) => match direct(&conn, &cmd).await {
-                        Ok(true) => {}
-                        Ok(false) => queue.push(cmd),
-                        Err(e) => eprintln!("loft-kwin: {}: {e:#}", cmd["cmd"]),
-                    },
+                    Ok(cmd) => dispatch(&conn, &queue, cmd).await,
                     Err(e) => eprintln!("loft-kwin: bad command {line:?}: {e}"),
                 }
             }
+            Some(cmd) = commands.recv() => dispatch(&conn, &queue, cmd).await,
             _ = term.recv() => break,
             _ = tokio::signal::ctrl_c() => break,
         }
@@ -274,4 +350,17 @@ async fn main() -> Result<()> {
 
     unload_script(&conn).await;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn commands_need_a_cmd() {
+        assert_eq!(parse_command(r#"{"cmd":"toggleMaximize"}"#).unwrap()["cmd"], "toggleMaximize");
+        assert!(parse_command(r#"{"window":"x"}"#).unwrap_err().contains("no \"cmd\""));
+        assert!(parse_command(r#"{"cmd":1}"#).is_err());
+        assert!(parse_command("nope").unwrap_err().starts_with("bad JSON"));
+    }
 }

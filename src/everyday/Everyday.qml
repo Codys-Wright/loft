@@ -70,6 +70,8 @@ Scope {
     // ── IPC ──────────────────────────────────────────────────────────────
     // The ⌘Q bind (niri/shell-binds.kdl.in). Always answers, so the bind's
     // `|| niri msg action close-window` fallback only runs without a shell.
+    // Under KWin the same bind is a kglobalaccel shortcut whose fallback is
+    // KWin's own "Window Close" (cli/loft/kwinkeys.py), so no niri call here.
     IpcHandler {
         target: "quit"
 
