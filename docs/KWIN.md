@@ -199,13 +199,12 @@ desktop / display, fullscreen, maximize, keep-above ("Float").
 
 **Off under KWin** (hidden with `Compositor.capabilities`): scrolling-column ops
 (consume/expel, center visible; Maximize Column, preset widths and center column are
-KWin keys instead, §4.5), niri's motion
-and shape settings (KWin has its own animations), the niri sections of Settings
-(keybinds-as-KDL, window-rule KDL preview), and workspace-layer wallpapers. Columns are
-niri's by nature, so Settings hides their controls under KWin rather than showing dead
-ones: Spaces & Windows → **Layout & Motion** is greyed out on the overview ("KWin's own
-under Plasma: System Settings → Window Management") and, if reached anyway, shows only
-that note; Window Rules has no **Column width**; a Space's editor has no workspace names
+KWin keys instead, §4.5), niri's layout and shape settings (gaps, columns, struts), the
+niri sections of Settings (keybinds-as-KDL, window-rule KDL preview), and workspace-layer
+wallpapers. Columns are niri's by nature, so Settings hides their controls under KWin
+rather than showing dead ones: Spaces & Windows → **Layout & Motion** shows KWin's
+animation speed and effects instead of niri's gaps, columns, struts and motion (§4.21);
+Window Rules has no **Column width**; a Space's editor has no workspace names
 (a role is Keep / Apps), and its apps' column order and widths (kept in the document,
 used under niri) aren't offered.
 
@@ -2062,6 +2061,63 @@ tried); PowerDevil restarting under a held inhibition (restarting it outside the
 script would put it on the real system bus); the units' `ExecStopPost` / `ExecStartPre`
 in a real Plasma login (run by hand in the nested session instead); battery profiles
 (no UPower on the stub bus: PowerDevil loads `AC`).
+
+### 4.21 Settings → Layout & Motion: KWin's animation speed and effects
+
+**Done.** Under niri the page is niri's layout and motion (`NiriSettings`). Under KWin it
+is KDE's Animations page and the part of Desktop Effects people change, so System
+Settings isn't needed for them. Loft records nothing; it writes KDE's own settings:
+
+```
+LayoutPage ──▶ KdeMotion.qml ──▶ loft-kwin motion [set JSON]   (crates/loft-kwin/src/motion.rs)
+                                   ├─ speed:   kdeglobals [KDE] AnimationDurationFactor (--notify)
+                                   │           + KGlobalSettings notifyChange(3, 0), as kcm_animations
+                                   └─ effects: kwinrc [Plugins] <id>Enabled (--notify)
+                                               + org.kde.KWin /Effects loadEffect / unloadEffect
+```
+
+- **Speed.** One slider with KDE's seven steps (kcm_animations' `valueMapping`):
+  Slowest 4, Slow 2, Relaxed 1.5, Normal 1, Quick 0.75, Fast 0.5, Instant 0. KWin's
+  `Options` watch `AnimationDurationFactor` with a KConfigWatcher (kwin 6.8.2
+  `options.cpp`) and reconfigure every effect, so a `kwriteconfig6 --notify` write
+  takes at once. At Instant the animation rows are disabled, as on KDE's page.
+- **Effects.** Writing `[Plugins]` alone does nothing until KWin starts again: KWin
+  reads it at start and on a reconfigure, which loads effects but never unloads one.
+  So `motion set` writes the key and then loads or unloads the effect over `/Effects`,
+  which is live. As KDE's KCMs do, a value equal to the effect's default removes the key
+  (blur, whose default KWin decides at runtime, is always written).
+- **Choices.** KWin's exclusive groups (`X-KWin-Exclusive-Category`, or `exclusiveGroup`
+  in a C++ effect's metadata) are a segmented choice with None: Open and close (Scale,
+  Glide, Fade), Minimize (Squash, Magic lamp), Switching desktops (Slide, Fade), Show
+  desktop (Aperture, Eye on screen), Magnifier (Zoom, Lens). Maximize and Full screen
+  have one effect each and are switches. Picking one unloads the others of its group
+  first, so two never run at once.
+- **Switches.** Wobbly windows, Fall apart, Sheet, Sliding popups, Slide back, Dim
+  inactive windows, Translucency, Blur (it also draws background contrast; there is no
+  separate contrast effect in 6.8), Grey out frozen apps, Launch feedback, Cube (only
+  with the kwin-effects-cube add-on), Overview and Present windows, Shake to find the
+  pointer, Track mouse, Show mouse clicks. Only effects in `listOfEffects` that
+  `areEffectsSupported` says KWin can run are shown. Effect settings (slide duration,
+  wobbliness, dim strength) stay in System Settings.
+- **`fadingpopups` is Loft's.** loft-kwin unloads it while Loft runs and loads it again
+  on exit (`EFFECTS_OFF`, the note in `$XDG_RUNTIME_DIR/loft/kwin-effects-off`), so the
+  page doesn't offer it, `motion set` refuses it, and a line under Effects says so.
+- `loft-kwin motion` prints `{ok, speed, steps, choices: [{id, label, hint, section,
+  options: [{id, label, on, default, loaded}], current, default}], toggles: [{id, label,
+  hint, section, on, default, loaded}]}`. `on` is what kwinrc says (or the default),
+  `loaded` what KWin runs now. `motion set '{"speed": 0.5, "choices": {"minimize":
+  "magiclamp"}, "effects": {"wobblywindows": true}}'` applies a batch and prints the new
+  state. Unknown groups, effects or values are errors before anything is written.
+
+Tested in a nested session (KWin 6.8.2): from the page, Glide, Magic lamp, Wobbly windows,
+Dim inactive and Magnifier → None turned up in the session's kwinrc and in
+`isEffectLoaded` at once (and the others of each group unloaded); going back to Scale and
+Squash removed the keys. Speed: Fast, Slow and Instant wrote kdeglobals, and the effects'
+durations in KWin's `supportInformation` followed live (Sliding popups' 200 ms became 100
+at Fast, 400 at Slow), also for the first write of a fresh HOME with no kdeglobals.
+`fadingpopups` stayed unloaded throughout. Not tested on real hardware, nor with the
+Settings page open while System Settings changes the same keys (the page reads them again
+each time it's shown).
 
 ## 5. One Plasma session, two shells: switching and backing out
 
