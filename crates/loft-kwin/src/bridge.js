@@ -342,6 +342,7 @@ function apply(c) {
                 workspace.activeWindow = w;
             }
         }
+        return;
     case "titleBar":
         titleBar(c);
         return;

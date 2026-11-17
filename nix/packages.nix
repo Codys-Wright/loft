@@ -677,6 +677,8 @@
             "loft-kwin"
           ];
           # Display identities spell the EDID vendor out like niri does.
+          # `loft-kwin displays` runs kscreen-doctor: the system's (it
+          # matches the running KWin) when on PATH, else libkscreen's.
           # `loft-kwin record` (src/record.rs) runs gst-launch-1.0 on KWin's
           # PipeWire screencast node: pipewiresrc (pipewire), videorate /
           # videoconvert / videoscale (base), x264enc (ugly), mp4mux /
@@ -699,15 +701,9 @@
               wrapProgram $out/bin/loft-kwin --set-default LOFT_PNP_IDS ${pkgs.hwdata}/share/hwdata/pnp.ids \
                 --prefix PATH : ${lib.getBin gst.gstreamer}/bin \
                 --set GST_PLUGIN_SYSTEM_PATH_1_0 ${plugins} \
-                --unset GST_PLUGIN_PATH --unset GST_PLUGIN_PATH_1_0
+                --unset GST_PLUGIN_PATH --unset GST_PLUGIN_PATH_1_0 \
+                --suffix PATH : ${pkgs.kdePackages.libkscreen}/bin
             '';
-          # `loft-kwin displays` runs kscreen-doctor: the system's (it
-          # matches the running KWin) when on PATH, else this one.
-          nativeBuildInputs = [ pkgs.makeWrapper ];
-          postInstall = ''
-            wrapProgram $out/bin/loft-kwin --set-default LOFT_PNP_IDS ${pkgs.hwdata}/share/hwdata/pnp.ids \
-              --suffix PATH : ${pkgs.kdePackages.libkscreen}/bin
-          '';
           meta.mainProgram = "loft-kwin";
         };
 

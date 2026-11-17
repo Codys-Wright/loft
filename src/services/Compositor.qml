@@ -39,11 +39,10 @@ Singleton {
     readonly property var impl: backend === "kwin" ? KWin : Niri
 
     // What the backend can do: { columns, floating, minimize, overview,
-    // windowScreenshot, windowThumbnails, workspaceNames, perOutputWorkspaces,
-    // titleBarEvents, configReload, serverDecorations }. Menus hide what's off;
+    // windowScreenshot, windowThumbnails, windowRecording, workspaceNames,
+    // perOutputWorkspaces, titleBarEvents, configReload, serverDecorations,
+    // spaces }. Menus hide what's off;
     // windowThumbnails = window stills from the compositor (KWinThumbs);
-    // windowScreenshot, workspaceNames, perOutputWorkspaces, titleBarEvents,
-    // configReload, serverDecorations, spaces }. Menus hide what's off;
     // serverDecorations = the compositor gives the shell's own windows a
     // title bar, so they don't draw traffic lights; spaces = Spaces work
     // (niri: named workspaces via loft-niri; KWin: one Activity per Space).
