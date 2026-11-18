@@ -1331,6 +1331,13 @@
             Unit.StartLimitIntervalSec = 60;
             Unit.StartLimitBurst = 3;
             Unit.OnFailure = [ "loft-plasma-fallback.service" ];
+            # A single crash only restarts the shell. Without `direct`, every
+            # crash passes through "failed", OnFailure fires on the first one,
+            # and the fallback stops the pending restart: one crash (a tray
+            # icon on resume, 2026-11-18 on electric) was enough to leave
+            # plain Plasma. `direct` skips that state, so OnFailure waits until
+            # the start limit is hit.
+            Service.RestartMode = "direct";
           }
         );
         # A Loft shortcut's command (see plasmaKeyRun). Instances are per
