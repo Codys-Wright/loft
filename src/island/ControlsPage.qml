@@ -21,7 +21,7 @@ Item {
     function on(id) {
         switch (id) {
         case "focus":
-            return Panels.doNotDisturb;
+            return NotificationConfig.dndActive;
         case "micMute":
             return Sound.micsMuted;
         }
@@ -31,7 +31,7 @@ Item {
     function status(id) {
         switch (id) {
         case "focus":
-            return Panels.doNotDisturb ? "On" : "Off";
+            return NotificationConfig.dndScheduled ? "Scheduled" : NotificationConfig.dndActive ? "On" : "Off";
         case "micMute":
             return Sound.micsMuted ? "Muted" : Sound.recording ? "In use" : "On";
         }

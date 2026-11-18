@@ -1,11 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell.Io
 import qs.components
 import qs.services
 
-// Settings → Everyday: Keep Awake rules, Sleep (Bluetooth off), Cleaning
-// Mode, Quit on close, Quit protection, Arrange and mouse notes. Each card
+// Settings → Everyday: Cleaning Mode, Quit on close, Quit protection,
+// Arrange and mouse notes (Keep Awake and Sleep: LockSleepPage). Each card
 // shows while its module is on (Settings → Features). Values:
 // services/EverydayConfig.qml.
 ColumnLayout {
@@ -22,121 +21,18 @@ ColumnLayout {
         font.pixelSize: 12
     }
 
-    // ── Keep Awake
+    // Keep Awake and Sleep moved to Settings → Lock & Sleep.
     SettingsCard {
         visible: Features.on("keepAwake")
-
         PageHeader {
-            title: "Keep Awake"
-        }
-        Note {
-            text: KeepAwake.kde ? (KWin.keepAwake.error ? `${KWin.keepAwake.error}. ` : "") + `Now: ${KeepAwake.status}. While awake, PowerDevil neither dims nor turns the displays off, Plasma's locker doesn't lock on idle and the system doesn't sleep on idle (a PowerDevil inhibition, listed in Plasma's battery applet as Loft's). Closing the lid does what PowerDevil's lid setting says.` : (KeepAwake.inhibitError ? `systemd-logind refused the inhibitor (${KeepAwake.inhibitError}); idle is still inhibited through Wayland. ` : "") + `Now: ${KeepAwake.status}. While awake the screen doesn't blank or lock on idle (an idle inhibitor, which niri passes to swayidle and friends) and, with the option below, the system doesn't suspend (a systemd-logind inhibitor).`
-        }
-
-        SettingsRow {
-            label: "The toggle keeps awake"
-            hint: "Control Center / menu bar click; the menu has more durations"
-            SettingsSegmented {
-                options: [{ value: 0, label: "Until off" }, { value: 15, label: "15 min" }, { value: 60, label: "1 h" }, { value: 120, label: "2 h" }]
-                current: page.cfg.keepAwake.defaultMinutes
-                onActivated: v => page.cfg.keepAwake.defaultMinutes = v
-            }
-        }
-        SettingsRow {
-            // Under KWin, PowerDevil's inhibition always holds off idle sleep.
-            visible: !KeepAwake.kde
-            label: "Also block suspend"
-            hint: "systemd-inhibit --what=idle:sleep while awake"
-            SettingsSwitch {
-                checked: page.cfg.keepAwake.blockSleep
-                onToggled: on => page.cfg.keepAwake.blockSleep = on
-            }
-        }
-        SettingsRow {
-            visible: KeepAwake.hasBattery && !KeepAwake.kde
-            label: "Stay awake with the lid closed"
-            hint: "While awake, closing the lid doesn't suspend (logind handle-lid-switch inhibitor)"
-            SettingsSwitch {
-                checked: page.cfg.keepAwake.lidClosed
-                onToggled: on => page.cfg.keepAwake.lidClosed = on
-            }
-        }
-        SettingsRow {
-            label: "While on power"
-            hint: KeepAwake.hasBattery ? (KeepAwake.onAC ? "On power now" : "On battery now") : "No battery: always on power"
-            SettingsSwitch {
-                checked: page.cfg.keepAwake.onAC
-                onToggled: on => page.cfg.keepAwake.onAC = on
-            }
-        }
-        SettingsRow {
-            label: "While an external display is connected"
-            hint: KeepAwake.externalScreens.length > 0 ? `Connected: ${KeepAwake.externalScreens.map(s => s.name).join(", ")}` : "None connected (eDP / LVDS / DSI panels are internal)"
-            SettingsSwitch {
-                checked: page.cfg.keepAwake.externalDisplay
-                onToggled: on => page.cfg.keepAwake.externalDisplay = on
-            }
-        }
-        SettingsRow {
-            label: "While these apps have a window open"
-        }
-        AppIdList {
-            apps: Array.from(page.cfg.keepAwake.apps)
-            emptyText: "No apps — e.g. a video player or a presentation app"
-            onChanged: l => page.cfg.keepAwake.apps = l
-        }
-    }
-
-    // ── Sleep (the loft-sleep user service does the work)
-    SettingsCard {
-        id: sleepCard
-
-        // `loft-sleep status`: { enabled, remembered, adapters: [{ path, powered }] }
-        property var status: null
-        property bool serviceActive: false
-        readonly property var adapters: status?.adapters ?? []
-
-        function refresh() {
-            sleepStatus.running = true;
-            sleepUnit.running = true;
-        }
-        Component.onCompleted: refresh()
-        onVisibleChanged: if (visible)
-            refresh()
-
-        Process {
-            id: sleepStatus
-            command: ["loft-sleep", "status"]
-            stdout: StdioCollector {
-                onStreamFinished: {
-                    try {
-                        sleepCard.status = JSON.parse(text);
-                    } catch (e) {
-                        sleepCard.status = null;
-                    }
-                }
-            }
-        }
-        // Read-only: is the user service there and running?
-        Process {
-            id: sleepUnit
-            command: ["systemctl", "--user", "is-active", "--quiet", "loft-sleep.service"]
-            onExited: code => sleepCard.serviceActive = code === 0
-        }
-
-        PageHeader {
-            title: "Sleep"
-        }
-        SettingsRow {
-            label: "Turn Bluetooth off during sleep"
-            hint: sleepCard.adapters.length === 0 ? "No Bluetooth adapter found" : sleepCard.adapters.map(a => `${a.path.replace(/^.*\//, "")}: ${a.powered ? "on" : "off"}`).join(" · ") + " — back on after the wake if it was on"
-            SettingsSwitch {
-                checked: page.cfg.sleep.bluetoothOff
-                onToggled: on => page.cfg.sleep.bluetoothOff = on
+            title: "Keep Awake & Sleep"
+            SettingsButton {
+                text: "Lock & Sleep…"
+                onClicked: Panels.openSettings("locksleep", "keepawake")
             }
         }
         Note {
-            text: (sleepCard.serviceActive ? "" : "The loft-sleep service isn't running, so this has no effect yet (programs.loft.sleepWatcher in home-manager starts it). ") + "Before the system suspends or hibernates, every Bluetooth adapter that's on is switched off, so headphones and mice don't wake it or drain; after the wake the same adapters are switched back on. Adapters that were off stay off. A user service listens for logind's PrepareForSleep (no root) and holds a short sleep delay so the adapters are off first."
+            text: `Keep Awake (now: ${KeepAwake.status.toLowerCase()}) and Bluetooth during sleep are in Settings → Lock & Sleep.`
         }
     }
 

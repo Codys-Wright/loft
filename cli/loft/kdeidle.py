@@ -3,7 +3,7 @@
 Under niri, swayidle does Loft's idle (lock, displays off; programs.loft.idle).
 Under KWin, idle is Plasma's: kscreenlocker (inside KWin) locks, PowerDevil
 turns the displays off and suspends. So while Loft is the shell of a Plasma
-session, Loft's settings (Settings → Lock Screen → When Idle, else
+session, Loft's settings (Settings → Lock & Sleep, else
 programs.loft.idle, else the defaults below) are written into their config:
 
   ~/.config/kscreenlockerrc

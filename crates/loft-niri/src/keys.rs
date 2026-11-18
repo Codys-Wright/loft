@@ -236,6 +236,15 @@ pub static KEYS: &[KeyDef] = &[
         Kind::Flag,
         "Disable while typing"
     ),
+    // Settings → Lock & Sleep → Power button: niri stops suspending on the
+    // power key itself, so the shell's XF86PowerOff bind gets it.
+    key!(
+        "input.disable-power-key-handling",
+        ["input", "disable-power-key-handling"],
+        None,
+        Kind::Flag,
+        "Let Loft handle the power key"
+    ),
     key!(
         "layout.gaps",
         ["layout", "gaps"],

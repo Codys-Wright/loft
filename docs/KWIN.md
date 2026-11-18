@@ -2047,11 +2047,15 @@ Loft doesn't replace them. While Loft is the shell, **Loft's settings are what t
 use**, and KDE's own values come back when Plasma runs without Loft.
 
 Before this, Loft had no idle settings in the shell at all, only the two Nix options.
-Loft has no screensaver of its own (nothing shows after N minutes under niri), so there
-is nothing to start on idle under KWin.
+Loft's own dim and screen saver (Settings → Lock & Sleep, `src/lock/ScreenSaver.qml`)
+are Wayland idle notifications in the shell, so they run under KWin as under niri.
 
-**The settings** (`Settings.idle` in shell.json; Settings → Appearance → Lock Screen →
-**When Idle**, `src/services/Idle.qml`): `lockAfter`, `screenOffAfter`, `suspendAfter`
+**The settings** (since Settings → **Lock & Sleep**: the times live in
+`overrides/lock-sleep.json`, `LockSleepConfig.qml`, on power and on battery; the shell
+passes the current power source's values to `loft idle apply --settings` and mirrors them
+into `Settings.idle`, so the layers below still describe what `loft idle` reads without
+`--settings`. Before that: `Settings.idle` in shell.json; Settings → Appearance → Lock
+Screen → When Idle, `src/services/Idle.qml`): `lockAfter`, `screenOffAfter`, `suspendAfter`
 (seconds, 0 = never), `lockGrace` (seconds), `lockOnResume`. -1 means "not set here".
 Layers, last wins: Loft's defaults (300 / 600 / never / 5 s / on), `programs.loft.idle`
 (the home-manager module writes `~/.config/loft/idle.json`, null = never), Settings. One

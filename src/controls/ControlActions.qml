@@ -54,7 +54,7 @@ Singleton {
             Sound.setMicsMuted(!Sound.micsMuted);
             break;
         case "focus":
-            Panels.doNotDisturb = !Panels.doNotDisturb;
+            NotificationConfig.toggleDnd();
             break;
         case "wifi":
             Networking.wifiEnabled = !Networking.wifiEnabled;

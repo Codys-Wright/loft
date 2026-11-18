@@ -68,6 +68,15 @@ Scope {
         function lockscreen(): void {
             root.show("lockscreen");
         }
+        function screensaver(): void {
+            root.show("screensaver");
+        }
+        function locksleep(): void {
+            root.show("locksleep");
+        }
+        function notifications(): void {
+            root.show("notifications");
+        }
         function capture(): void {
             root.show("capture");
         }
@@ -130,16 +139,45 @@ Scope {
             WindowRules.refresh();
         }
     }
-    onOpenChanged: refreshNiri()
+    onOpenChanged: {
+        refreshNiri();
+        scrollToAnchor();
+    }
     onCurrentChanged: {
         refreshNiri();
         // A new page starts at its top (a search hit scrolls after this).
         content.contentY = 0;
+        scrollToAnchor();
     }
 
     function show(section) {
-        Panels.settingsSection = section;
-        Panels.settingsOpen = true;
+        Panels.openSettings(section, "");
+    }
+
+    // Panels.settingsAnchor (Panels.openSettings(page, anchor)): pages link
+    // to a card on another page by its objectName; scroll there and flash
+    // it, like a search hit.
+    function scrollToAnchor() {
+        const name = Panels.settingsAnchor;
+        if (!open || name === "")
+            return;
+        Panels.settingsAnchor = "";
+        const slot = Array.from(pages.children).find(c => c.page === current);
+        const found = slot ? findNamed(slot, name) : null;
+        if (!found)
+            return;
+        target = found;
+        scrollTimer.restart();
+    }
+    function findNamed(item, name) {
+        for (const c of item.children ?? []) {
+            if (c.objectName === name)
+                return c;
+            const inner = findNamed(c, name);
+            if (inner)
+                return inner;
+        }
+        return null;
     }
 
     function back() {
@@ -433,6 +471,12 @@ Scope {
                             Layout.fillWidth: true
                         }
                     }
+                    PageSlot {
+                        page: "screensaver"
+                        ScreenSaverPage {
+                            Layout.fillWidth: true
+                        }
+                    }
 
                     PageSlot {
                         page: "menubar"
@@ -492,6 +536,20 @@ Scope {
                     PageSlot {
                         page: "displays"
                         DisplaysPage {
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    PageSlot {
+                        page: "locksleep"
+                        LockSleepPage {
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    PageSlot {
+                        page: "notifications"
+                        NotificationSettingsPage {
                             Layout.fillWidth: true
                         }
                     }

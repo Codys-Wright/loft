@@ -51,6 +51,8 @@
 
       lockCmd = "${lib.getExe pkgs.quickshell} ipc --path ${shellSrc} call lock lock";
 
+      idleSecs = v: if v == null then "never" else toString v;
+
       # The theme + wallpaper library (cli/loft/library.py); "none" = off.
       library = if cfg.library != null then cfg.library else "none";
 
@@ -58,6 +60,10 @@
         "LOFT_STATE_DIR=${stateDir}"
         "LOFT_SHELL_SRC=${shellSrc}"
         "LOFT_LIBRARY=${library}"
+        # Defaults for Settings → Lock & Sleep (LockSleepConfig.qml) until
+        # they are changed there.
+        "LOFT_IDLE_LOCK_AFTER=${idleSecs cfg.idle.lockAfter}"
+        "LOFT_IDLE_SCREEN_OFF_AFTER=${idleSecs cfg.idle.screenOffAfter}"
       ]
       ++ lib.optional (cfg.devSource != null) "LOFT_LAUNCHER_DIR=${cfg.devSource}/launcher"
       # The `spotify` reload hook and Settings → Appearance → Spotify (nix/modules/spotify.nix).
@@ -561,8 +567,7 @@
             wallpaper slides with it on a switch and shows behind it in the
             overview: ~/.config/loft/niri.kdl then includes the
             `place-within-workspace` layer rule (which a stock niri would
-            reject) and the shell turns the feature on. Also used for
-            `niri msg` in the idle timeouts. On a NixOS host that imports
+            reject) and the shell turns the feature on. On a NixOS host that imports
             Loft's NixOS module, the default is the system's
             `programs.niri.package` instead.
           '';
@@ -649,20 +654,22 @@
             type = lib.types.nullOr lib.types.ints.positive;
             default = 300;
             description = ''
-              Lock the session after this many idle seconds (null: never).
-              Always locks before sleep. Under niri, swayidle's timeout; in a
-              Plasma (Loft) session, the default for Settings → Lock Screen →
-              When Idle, written into kscreenlockerrc while Loft runs.
+              Default for Settings → Lock & Sleep: lock the session after
+              this many idle seconds (null: never); a change made in Settings
+              wins. Always locks before sleep. Under niri the shell's idle
+              timeline does it (src/services/Idle.qml); in a Plasma (Loft)
+              session it is written into kscreenlockerrc while Loft runs.
             '';
           };
           screenOffAfter = lib.mkOption {
             type = lib.types.nullOr lib.types.ints.positive;
             default = 600;
             description = ''
-              Turn the monitors off after this many idle seconds (null:
-              never). Under niri, swayidle's timeout; in a Plasma (Loft)
-              session, the default for Settings → Lock Screen → When Idle,
-              written into powerdevilrc while Loft runs.
+              Default for Settings → Lock & Sleep: turn the monitors off
+              after this many idle seconds (null: never); a change made in
+              Settings wins. Under niri the shell's idle timeline does it; in
+              a Plasma (Loft) session it is written into powerdevilrc while
+              Loft runs.
             '';
           };
         };
@@ -1207,28 +1214,21 @@
         '';
 
         # programs.loft.idle for a Plasma (Loft) session: the shell writes it
-        # (or Settings → Lock Screen → When Idle, which wins) into KDE's
+        # (or Settings → Lock & Sleep, which wins) into KDE's
         # kscreenlockerrc / powerdevilrc (docs/KWIN.md §4.20). null = never.
         xdg.configFile."loft/idle.json".text = builtins.toJSON {
           inherit (cfg.idle) lockAfter screenOffAfter;
         };
 
-        # Idle: lock through the shell (its WlSessionLock) and blank the screens.
-        # Only under niri (systemdTarget): a Plasma session has no niri.service,
-        # and its idle is PowerDevil's and kscreenlocker's.
+        # Idle under niri: the shell runs the timeline itself (dim, screen
+        # saver, lock, display off, sleep: src/services/Idle.qml, Settings →
+        # Lock & Sleep) so it changes live. swayidle only locks through the
+        # shell (its WlSessionLock) before sleep and on logind's Lock signal.
+        # Only under niri (systemdTarget): a Plasma session has no
+        # niri.service, and its idle is PowerDevil's and kscreenlocker's.
         services.swayidle = {
           enable = true;
-          # Its lock and blanking go through Loft and niri.
           systemdTarget = lib.mkDefault "niri.service";
-          timeouts =
-            lib.optional (cfg.idle.lockAfter != null) {
-              timeout = cfg.idle.lockAfter;
-              command = lockCmd;
-            }
-            ++ lib.optional (cfg.idle.screenOffAfter != null) {
-              timeout = cfg.idle.screenOffAfter;
-              command = "${lib.getExe cfg.niriPackage} msg action power-off-monitors";
-            };
           events.before-sleep = lockCmd;
           # logind's Lock signal (`loginctl lock-session`): how tetherd's away
           # lock (Settings → Phone) and other session tools reach the shell.

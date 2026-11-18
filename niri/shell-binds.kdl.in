@@ -96,6 +96,9 @@ binds {
     Mod+Ctrl+S hotkey-overlay-title="Space Switcher" { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "switcher"; }
     Super+Ctrl+S hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "spaces" "switcher"; }
     // END parity
+    // The power key, once Settings → Lock & Sleep takes it over (niri's own
+    // handling, which suspends, is turned off then and wins otherwise).
+    XF86PowerOff allow-when-locked=true allow-inhibiting=false hotkey-overlay-title=null { spawn "timeout" "-k" "1" "5" @IPC@ "idle" "powerKey"; }
 }
 
 // ⌥Tab: niri's recent-windows switcher, one live preview per window. ⌘`
@@ -114,4 +117,11 @@ recent-windows {
         Mod+grave         { next-window     filter="app-id"; }
         Mod+Shift+grave   { previous-window filter="app-id"; }
     }
+}
+
+// The lid (Settings → Lock & Sleep). The shell acts only when it took the
+// lid over from systemd-logind; otherwise these do nothing.
+switch-events {
+    lid-close { spawn "timeout" "-k" "1" "5" @IPC@ "idle" "lidClosed"; }
+    lid-open { spawn "timeout" "-k" "1" "5" @IPC@ "idle" "lidOpened"; }
 }

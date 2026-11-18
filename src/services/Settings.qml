@@ -31,7 +31,8 @@ Singleton {
     // { items: [{ id, shown }] } in menu order; absent = the default menu.
     property alias desktopMenu: settings.desktopMenu
     readonly property alias lock: settings.lock
-    // When idle (Settings → Lock Screen; services/Idle.qml).
+    // When idle: the lock's grace and lock before sleep (Settings → Lock &
+    // Sleep, KWin). The times mirror LockSleepConfig (services/Idle.qml).
     readonly property alias idle: settings.idle
     // Per-theme choices, keyed by theme name (Vibes.qml reads and writes
     // them): { "<theme>": { wallpaper, rotate, perWorkspace, lockDesign,
@@ -211,9 +212,10 @@ Singleton {
                 property string design: ""
             }
             // When idle: seconds, 0 = never, -1 = programs.loft.idle (else
-            // Loft's default). Under niri swayidle does these with the Nix
-            // values; under KWin Idle.qml writes them into kscreenlockerrc /
-            // powerdevilrc (cli/loft/kdeidle.py, docs/KWIN.md §4.20).
+            // Loft's default). The times are a mirror of Settings → Lock &
+            // Sleep (LockSleepConfig) for the current power source; under
+            // KWin Idle.qml writes them into kscreenlockerrc / powerdevilrc
+            // (cli/loft/kdeidle.py, docs/KWIN.md §4.20).
             property JsonObject idle: JsonObject {
                 property int lockAfter: -1
                 property int screenOffAfter: -1
