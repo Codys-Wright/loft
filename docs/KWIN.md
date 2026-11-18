@@ -1,12 +1,13 @@
 # Loft on KWin: running the shell in a Plasma session
 
-Status: **plan**. Step 1 (this doc), step 2 (the `Compositor` seam, §2) and step 7 (the decoration, §4.4) are done.
-The KWin backend itself is not written yet. The niri session is unchanged and stays
-the default.
+Status: **Loft's platform.** On 2026-11-18 Cody decided Loft runs on KDE Plasma only:
+the niri session is abandoned (it still builds, gets no new work). Every step in §7 is
+done, and the fleet's desktops (THEBATTLESHIP, electric) run this session. New features
+are designed and tested for KWin first (`loft-dev --compositor kwin`, §6); a niri-only
+path that breaks is reported, not fixed by default.
 
 Goal: a KDE Plasma session (KWin as compositor, plus the KDE services) where Loft's
-bar, dock, launcher and switcher replace plasmashell. Hosts that run niri, and Cody
-until this is ready, keep the niri session.
+bar, dock, launcher and switcher replace plasmashell.
 
 ### Decisions (Cody, 2026-11-15)
 

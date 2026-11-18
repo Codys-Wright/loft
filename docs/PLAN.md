@@ -1,6 +1,8 @@
 # Loft — Plan
 
-> **Status:** draft for discussion (2026-10-13).
+> **Status:** draft for discussion (2026-10-13). **Superseded on the platform:** since
+> 2026-11-18 Loft runs on KDE Plasma (KWin) only and niri is abandoned; see
+> [KWIN.md](KWIN.md). The niri parts below are history.
 >
 > **Loft** is a desktop for creative work, music production and
 > programming: niri + our own Quickshell shell, a macOS-inspired Liquid Glass
