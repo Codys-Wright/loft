@@ -13,6 +13,10 @@ import Quickshell.Io
 // island and any menu opened from it. Other displays are unaffected; the
 // overview shows everything as usual.
 //
+// KWin draws no title bar on a fullscreen window, so there the revealed bar
+// brings the window's title strip down with it (Bar.qml): the traffic
+// lights (close, minimize, green = leave full screen) and the title.
+//
 // While the island is away, an incoming call and notification banners still
 // drop down from the top edge; volume / brightness changes show in the pill
 // at the bottom of the screen (Osd.qml) instead.

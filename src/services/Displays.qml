@@ -159,17 +159,30 @@ Singleton {
         // KWin has no tiling: every window counts as floating there, so the
         // column test below never matches. Its windows say fullscreen outright.
         if (Compositor.backend === "kwin")
-            return Compositor.windows.some(w => {
-                const acts = w.kwin_activities ?? [];
-                const here = acts.length === 0 || acts.includes(KWin.currentActivity);
-                return w.workspace_id === ws.id && w.is_fullscreen === true && !w.is_minimized && here;
-            });
+            return fullscreenWindowOn(screen) !== null;
         return Compositor.windows.some(w => {
             const size = w.layout?.tile_size;
             if (w.workspace_id !== ws.id || w.is_floating || !size || size[0] < screen.width - 1 || size[1] < screen.height - 1)
                 return false;
             return column === undefined || w.layout?.pos_in_scrolling_layout?.[0] === column;
         });
+    }
+
+    // KWin: the fullscreen window on the display's current desktop and
+    // Activity (the focused one first), or null. The bar's title strip acts
+    // on it (Bar.qml).
+    function fullscreenWindowOn(screen) {
+        if (!screen || Compositor.backend !== "kwin")
+            return null;
+        const ws = Compositor.workspaces.find(w => w.output === screen.name && w.is_active);
+        if (!ws)
+            return null;
+        const all = Compositor.windows.filter(w => {
+            const acts = w.kwin_activities ?? [];
+            const here = acts.length === 0 || acts.includes(KWin.currentActivity);
+            return w.workspace_id === ws.id && w.is_fullscreen === true && !w.is_minimized && here;
+        });
+        return all.find(w => w.is_focused) ?? all[0] ?? null;
     }
 
     readonly property bool mainFullscreen: fullscreenOn(mainScreen)

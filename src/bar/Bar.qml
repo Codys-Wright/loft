@@ -38,7 +38,9 @@ PanelWindow {
         left: true
         right: true
     }
-    implicitHeight: barHeight
+    // Over a KWin fullscreen window the surface also holds the window's title
+    // strip (below), so it doesn't resize when the bar comes down.
+    implicitHeight: barHeight + (titleWindow ? titleHeight : 0)
     exclusiveZone: barHeight
     color: "transparent"
 
@@ -50,6 +52,11 @@ PanelWindow {
     readonly property bool hides: FullscreenChrome.barHidesOn(screenName)
     readonly property bool revealed: FullscreenChrome.revealedOn(screenName)
     readonly property bool concealed: FullscreenChrome.barConcealedOn(screenName)
+    // KWin draws no title bar on a fullscreen window, so a revealed bar
+    // brings one down under it, as macOS does: the traffic lights (green
+    // leaves full screen) and the title. niri-loft has its own.
+    readonly property var titleWindow: hides ? Displays.fullscreenWindowOn(modelData) : null
+    readonly property int titleHeight: 28
     // A bar menu (or a status item's panel), the Control Center or the Sound
     // mixer open here.
     readonly property bool menuHere: (MenuState.open && MenuState.screen === screenName) || (Panels.controlCenterOpen && Panels.controlCenterScreen === screenName) || (Sound.mixerOpen && Sound.mixerScreen === screenName)
@@ -128,7 +135,7 @@ PanelWindow {
             left: parent.left
             right: parent.right
         }
-        height: root.concealed ? 1 : root.barHeight
+        height: root.concealed ? 1 : root.barHeight + (root.titleWindow ? root.titleHeight : 0)
     }
 
     // Is the pointer on the bar (inside the input mask)? On the window's
@@ -161,6 +168,72 @@ PanelWindow {
         shadowBlur: 0.5
         shadowVerticalOffset: 1
         shadowHorizontalOffset: 0
+    }
+
+    // The fullscreen window's title bar, under the revealed bar (KWin).
+    Item {
+        id: fsTitle
+        anchors {
+            left: parent.left
+            right: parent.right
+        }
+        height: root.titleHeight
+        readonly property var win: root.titleWindow
+        y: root.concealed && !Motion.reduce ? -root.titleHeight : root.barHeight
+        opacity: root.concealed && Motion.reduce ? 0 : 1
+        visible: win !== null && opacity > 0 && y > -root.titleHeight
+
+        Behavior on y {
+            enabled: !Motion.reduce
+            NumberAnimation {
+                duration: Motion.ms(220)
+                easing.type: Easing.OutCubic
+            }
+        }
+        Behavior on opacity {
+            enabled: Motion.reduce
+            NumberAnimation {
+                duration: Motion.ms(160)
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.surface
+
+            Rectangle {
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    bottom: parent.bottom
+                }
+                height: 1
+                color: Theme.glassBorder
+            }
+        }
+
+        TrafficLights {
+            anchors {
+                left: parent.left
+                leftMargin: 12
+                verticalCenter: parent.verticalCenter
+            }
+            canHide: Compositor.capabilities.minimize === true
+            onClose: Compositor.closeWindow(fsTitle.win.id)
+            onHide: Compositor.setMinimized(fsTitle.win.id, true)
+            onFullscreen: Compositor.toggleFullscreen(fsTitle.win.id)
+        }
+
+        Text {
+            anchors.centerIn: parent
+            width: Math.min(implicitWidth, parent.width - 240)
+            elide: Text.ElideRight
+            text: fsTitle.win?.title ?? ""
+            color: Theme.text
+            font.family: Theme.fontUi
+            font.pixelSize: 13
+            font.weight: Font.DemiBold
+        }
     }
 
     // Everything the bar draws, slid up out of sight while it's away (Reduce
