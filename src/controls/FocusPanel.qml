@@ -20,10 +20,10 @@ ColumnLayout {
 
     PanelRow {
         text: "Do Not Disturb"
-        detail: Panels.doNotDisturb ? "Notifications are kept quiet" : ""
+        detail: NotificationConfig.dndScheduled ? `Scheduled until ${NotificationConfig.schedule.to}` : NotificationConfig.dndActive ? "Notifications are kept quiet" : ""
         glyph: "󰂛"
-        glyphActive: Panels.doNotDisturb
-        onClicked: Panels.doNotDisturb = !Panels.doNotDisturb
+        glyphActive: NotificationConfig.dndActive
+        onClicked: NotificationConfig.toggleDnd()
     }
 
     PanelRow {
@@ -44,7 +44,7 @@ ColumnLayout {
             glyph: "󰔟"
             onClicked: {
                 FocusTimer.startFor(modelData);
-                Panels.doNotDisturb = true;
+                NotificationConfig.setDnd(true);
             }
         }
     }

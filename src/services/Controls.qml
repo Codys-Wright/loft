@@ -137,7 +137,7 @@ Singleton {
         case "bluetooth":
             return btConnected.length > 0;
         case "focus":
-            return Panels.doNotDisturb || FocusTimer.active;
+            return NotificationConfig.dndActive || FocusTimer.active;
         case "nowPlaying":
             return player?.isPlaying ?? false;
         case "phone":
@@ -413,7 +413,7 @@ Singleton {
         case "bluetooth":
             return !btAdapter ? "Unavailable" : !btAdapter.enabled ? "Off" : btConnected.length === 1 ? btConnected[0].name : btConnected.length > 1 ? `${btConnected.length} devices` : "On";
         case "focus":
-            return FocusTimer.active ? FocusTimer.format(FocusTimer.remaining) : Panels.doNotDisturb ? "Do Not Disturb" : "Off";
+            return FocusTimer.active ? FocusTimer.format(FocusTimer.remaining) : NotificationConfig.dndScheduled ? "Scheduled" : NotificationConfig.dndActive ? "Do Not Disturb" : "Off";
         case "caffeine":
             return KeepAwake.status;
         case "nightLight":

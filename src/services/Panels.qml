@@ -15,6 +15,14 @@ Singleton {
     property alias wallpaperPickerOpen: persist.wallpaperPickerOpen
     property alias settingsOpen: persist.settingsOpen
     property alias settingsSection: persist.settingsSection
+    // A card to scroll to once the page shows (its objectName); cleared
+    // after the scroll. Pages link to each other with openSettings().
+    property string settingsAnchor: ""
+    function openSettings(section, anchor) {
+        settingsAnchor = anchor ?? "";
+        settingsSection = section;
+        settingsOpen = true;
+    }
     property alias doNotDisturb: persist.doNotDisturb
     // Inhibit idle (screen blank / lock) — applied by the bar's IdleInhibitor.
     property alias caffeine: persist.caffeine
@@ -90,7 +98,7 @@ Singleton {
         }
         // Spotlight's Do Not Disturb command.
         function toggleDnd(): void {
-            root.doNotDisturb = !root.doNotDisturb;
+            NotificationConfig.toggleDnd();
         }
         function edit(): void {
             if (!root.controlCenterOpen)

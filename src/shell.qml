@@ -146,6 +146,12 @@ ShellRoot {
 
     Lock {}
 
+    // Idle dimming and the screen saver (services/Idle.qml).
+    Variants {
+        model: Quickshell.screens
+        ScreenSaver {}
+    }
+
     LazyLoader {
         active: Features.on("systemMonitor")
         SystemMonitor {}

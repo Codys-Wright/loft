@@ -67,6 +67,6 @@ ColumnLayout {
     PanelSeparator {}
     PanelRow {
         text: "Keep Awake Settings…"
-        onClicked: root.openSettings("everyday")
+        onClicked: root.openSettings("locksleep")
     }
 }

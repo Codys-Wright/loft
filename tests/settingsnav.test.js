@@ -23,12 +23,13 @@ assert.strictEqual(nav.topOf("appearance"), "appearance");
 assert.strictEqual(nav.resolve("Keyboard"), "input");
 assert.strictEqual(nav.resolve("nope"), "");
 
-// Sidebar: each top-level page exactly once, sub-pages never; 10–14 entries.
+// Sidebar: each top-level page exactly once, sub-pages never; 10–15 entries
+// (15 since Lock & Sleep and Notifications).
 const listed = nav.groups.flat();
 assert.strictEqual(new Set(listed).size, listed.length, "a sidebar entry is listed twice");
 const top = nav.allIds().filter(id => !nav.parentOf(id));
 assert.deepStrictEqual([...listed].sort(), [...top].sort(), "sidebar ≠ the top-level pages");
-assert.ok(listed.length >= 10 && listed.length <= 14, `${listed.length} sidebar entries`);
+assert.ok(listed.length >= 10 && listed.length <= 15, `${listed.length} sidebar entries`);
 
 // Parents and children agree; one level deep.
 for (const id of nav.allIds()) {

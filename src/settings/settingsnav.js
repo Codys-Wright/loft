@@ -23,15 +23,18 @@ var pages = {
     system: { label: "Monitor & Alerts", icon: "󰍛", badge: "gray", parent: "general", summary: "System Monitor, menu bar readouts, alerts", keywords: ["system", "cpu", "memory", "temperature", "readouts", "alerts"] },
 
     // ── Desktop ─────────────────────────────────────────────────────────
-    appearance: { label: "Appearance", icon: "󰏘", badge: "graphite", children: ["wallpaper", "lockscreen"], keywords: ["theme", "dark", "light", "glass", "transparency", "blur", "colors", "spotify"] },
+    appearance: { label: "Appearance", icon: "󰏘", badge: "graphite", children: ["wallpaper", "lockscreen", "screensaver"], keywords: ["theme", "dark", "light", "glass", "transparency", "blur", "colors", "spotify"] },
     wallpaper: { label: "Wallpaper", icon: "󰸉", badge: "cyan", parent: "appearance", summary: "Collection, per display and workspace, video", keywords: ["background", "video wallpaper", "rotate"] },
-    lockscreen: { label: "Lock Screen", icon: "󰌾", badge: "indigo", parent: "appearance", summary: "The lock screen's design, and when idle locks, turns displays off and sleeps", keywords: ["lock", "lock screen settings", "idle", "screen off", "displays off", "sleep", "suspend", "timeout", "grace"] },
+    lockscreen: { label: "Lock Screen", icon: "󰌾", badge: "indigo", parent: "appearance", summary: "The lock screen's design", keywords: ["lock", "lock screen settings", "lock design", "login"] },
+    screensaver: { label: "Screen Saver", icon: "󰍹", badge: "cyan", parent: "appearance", summary: "Clock, drift or black, and what it shows", keywords: ["screensaver", "screen saver", "clock", "idle"] },
     menubar: { label: "Menu Bar", icon: "󰍜", badge: "graphite", keywords: ["bar", "status bar", "top bar", "controls", "control center", "global menu", "system menu", "app menu"] },
     desktop: { label: "Desktop & Dock", icon: "󱂬", badge: "blue", children: ["dock", "island", "desktopmenu", "quickpanel"], keywords: ["desktop", "taskbar"] },
     dock: { label: "Dock", icon: "󱂬", badge: "blue", parent: "desktop", feature: "dock", summary: "Apps, size, magnification, folders", keywords: ["taskbar", "magnification", "autohide"] },
     island: { label: "Dynamic Island", icon: "󰟜", badge: "purple", parent: "desktop", feature: "island", summary: "Now playing, live activities, notifications", keywords: ["island", "notch"] },
     desktopmenu: { label: "Desktop Menu", icon: "󰍝", badge: "blue", parent: "desktop", feature: "desktopMenu", summary: "Right-click the wallpaper", keywords: ["right click menu", "context menu"] },
     quickpanel: { label: "Quick Panel", icon: "󰕮", badge: "orange", parent: "desktop", feature: "quickPanel", summary: "⌃⌘V: tools, clipboard and snippets at the pointer", keywords: ["palette"] },
+    locksleep: { label: "Lock & Sleep", icon: "󰒲", badge: "indigo", keywords: ["lock and sleep", "screen saver", "idle", "dim", "display off", "screen off", "displays off", "timeout", "auto lock", "grace", "suspend", "sleep", "hibernate", "hybrid sleep", "power", "power button", "battery", "lid", "keep awake", "caffeine", "bluetooth"] },
+    notifications: { label: "Notifications", icon: "󰂚", badge: "red", keywords: ["do not disturb", "dnd", "banners", "alerts", "focus", "schedule"] },
     displays: { label: "Displays", icon: "󰍹", badge: "teal", keywords: ["monitors", "resolution", "scale", "arrangement", "refresh rate"] },
     windows: { label: "Spaces & Windows", icon: "󰖲", badge: "indigo", children: ["spaces", "layout", "windowrules"], keywords: ["windows", "workspaces", "tiling"] },
     spaces: { label: "Spaces", icon: "󰕰", badge: "indigo", parent: "windows", feature: "spaces", summary: "Functional desktops across every display", keywords: ["workspaces", "desktops", "activities"] },
@@ -43,7 +46,7 @@ var pages = {
     sound: { label: "Sound", icon: "󰕾", badge: "pink", keywords: ["audio", "volume", "output", "input", "microphone"] },
     capture: { label: "Capture", icon: "󰹑", badge: "orange", feature: "capture", keywords: ["screenshots", "recording", "screen recording"] },
     clipboard: { label: "Clipboard & Files", icon: "󰨸", badge: "yellow", keywords: ["clipboard settings", "shelf", "history"] },
-    everyday: { label: "Everyday", icon: "󰅶", badge: "orange", keywords: ["keep awake", "caffeine", "cleaning mode", "quit protection", "sleep"] },
+    everyday: { label: "Everyday", icon: "󰅶", badge: "orange", keywords: ["cleaning mode", "quit protection", "quit on close", "arrange"] },
     phone: { label: "Phone", icon: "󰄜", badge: "green", feature: "phone", keywords: ["iphone", "tether", "pair phone", "messages settings"] },
 
     // ── Keyboard ────────────────────────────────────────────────────────
@@ -57,6 +60,7 @@ var pages = {
 var groups = [
     ["general"],
     ["appearance", "menubar", "desktop", "displays", "windows"],
+    ["locksleep", "notifications"],
     ["spotlight", "sound", "capture", "clipboard", "everyday", "phone"],
     ["input"]
 ];
@@ -69,6 +73,10 @@ var aliases = {
     remaps: "keyremaps",
     theme: "appearance",
     lock: "lockscreen",
+    sleep: "locksleep",
+    power: "locksleep",
+    idle: "locksleep",
+    dnd: "notifications",
     monitor: "system",
     dockdesktop: "desktop",
     rules: "windowrules"

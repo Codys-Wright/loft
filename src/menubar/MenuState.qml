@@ -659,6 +659,9 @@ Singleton {
         }
         items.push(sep("sys-s4"));
         items.push({ key: "sys-sleep", label: "Sleep", enabled: true, run: () => root.askSleep() });
+        // Settings → Lock & Sleep → "Hibernate in the menu".
+        if (LockSleepConfig.showHibernate && Idle.can.CanHibernate === "yes")
+            items.push({ key: "sys-hibernate", label: "Hibernate", enabled: true, run: () => root.askHibernate() });
         items.push({ key: "sys-restart", label: "Restart…", enabled: true, run: () => root.askPower("restart") });
         items.push({ key: "sys-shutdown", label: "Shut Down…", enabled: true, run: () => root.askPower("shutdown") });
         items.push(sep("sys-s5"));
@@ -694,9 +697,11 @@ Singleton {
     }
 
     // Sleep doesn't ask on macOS; here only where it may not wake (NVIDIA).
+    // It sleeps the way Settings → Lock & Sleep says (Idle.sleepNow: suspend,
+    // hibernate, …; only logged in test sessions).
     function askSleep() {
-        if (!SystemInfo.nvidia) {
-            systemCommand("sleep");
+        if (!SystemInfo.nvidia || LockSleepConfig.sleepMode === "hibernate") {
+            Idle.sleepNow("menu");
             return;
         }
         ask(systemScreen(), {
@@ -704,8 +709,20 @@ Singleton {
             text: "This computer has an NVIDIA GPU and may not wake from sleep.",
             button: "Sleep",
             icon: "󰒲",
-            run: () => root.systemCommand("sleep")
+            run: () => Idle.sleepNow("menu")
         });
+    }
+
+    function askHibernate() {
+        Idle.sleepNow("menu", "hibernate");
+    }
+
+    // The power key set to "Ask" (Settings → Lock & Sleep).
+    Connections {
+        target: Idle
+        function onPowerDialogRequested() {
+            root.askPower("shutdown");
+        }
     }
 
     // Log Out: let the shell write what it has pending first (Scratchpad's

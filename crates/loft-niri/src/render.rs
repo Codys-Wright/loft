@@ -80,11 +80,13 @@ pub fn render_settings(ov: &Overrides, base: Option<&ConfigTree>) -> Vec<Node> {
                     node.children.push(c);
                 }
             }
-            None => {
-                if let Some(n) = def.to_node(def.unit.last().unwrap(), &v) {
-                    *node = n;
+            None => match def.to_node(def.unit.last().unwrap(), &v) {
+                Some(n) => *node = n,
+                // A false flag: leave the node out entirely.
+                None => {
+                    units.remove(pos);
                 }
-            }
+            },
         }
     }
 
@@ -340,6 +342,15 @@ mod tests {
 
     fn ov(v: Value) -> Overrides {
         Overrides(v.as_object().unwrap().clone())
+    }
+
+    #[test]
+    fn a_false_top_level_flag_is_left_out() {
+        let on = render_settings(&ov(json!({ "input": { "disable-power-key-handling": true } })), None);
+        let text = crate::kdl_out::write_doc(&on);
+        assert!(text.contains("input {") && text.contains("disable-power-key-handling"), "{text}");
+        let off = render_settings(&ov(json!({ "input": { "disable-power-key-handling": false } })), None);
+        assert!(off.is_empty(), "{}", crate::kdl_out::write_doc(&off));
     }
 
     #[test]

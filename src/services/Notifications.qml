@@ -59,10 +59,12 @@ Singleton {
     // confirmations, transient ones and niri's "Screenshot captured" (niri
     // only notifies after encoding the PNG, a couple of seconds after the
     // shutter), and for every banner while more are waiting.
+    // Settings → Notifications sets the normal length (NotificationConfig).
     function duration(n) {
+        const base = Math.max(1, NotificationConfig.bannerSeconds) * 1000;
         if (!n)
-            return 3000;
-        return queue.length > 1 || n.transient === true || n.appName === "niri" ? 1500 : 3000;
+            return base;
+        return queue.length > 1 || n.transient === true || n.appName === "niri" ? Math.min(1500, base) : base;
     }
 
     function enqueue(n) {
@@ -150,11 +152,25 @@ Singleton {
     }
 
     function show(n) {
-        // Critical notifications break through Do Not Disturb, and so do
-        // the apps a space's Focus allows (Spaces.dndAllow, SPACES §5).
-        if (Panels.doNotDisturb && n.urgency !== NotificationUrgency.Critical && !Spaces.dndAllow.some(a => a.toLowerCase() === String(n.appName ?? "").toLowerCase()))
+        // Do Not Disturb, by hand or scheduled (NotificationConfig).
+        // Critical notifications break through it (unless turned off in
+        // Settings → Notifications), and so do the apps a space's Focus
+        // allows (Spaces.dndAllow, SPACES §5).
+        const critical = n.urgency === NotificationUrgency.Critical && NotificationConfig.allowCritical;
+        if (NotificationConfig.dndActive && !critical && !Spaces.dndAllow.some(a => a.toLowerCase() === String(n.appName ?? "").toLowerCase()))
             return;
         enqueue(n);
+    }
+
+    // Settings → Notifications per-app rules: false = dropped (not even
+    // in the history), "history" = kept without a banner, true = shown.
+    function admit(n) {
+        const app = appLabel(n);
+        NotificationConfig.noteSeen(app, n.appIcon ?? "");
+        const r = NotificationConfig.rule(app);
+        if (!r.allow)
+            return false;
+        return r.banners ? true : "history";
     }
 
     NotificationServer {
@@ -175,6 +191,11 @@ Singleton {
                 n.tracked = true;
                 return;
             }
+            const admitted = root.admit(n);
+            if (admitted === false) {
+                n.dismiss();
+                return;
+            }
             if (root.isPhone(n) && Features.on("phone")) {
                 // Settings → Phone → Notifications off: the phone's are dropped.
                 if (!PhoneConfig.notifications) {
@@ -186,11 +207,13 @@ Singleton {
                 // the socket: keep tetherd's copy in the history only.
                 if (root.phoneApp(n) === "Messages" && Phone.up && PhoneConfig.messages)
                     return;
-                root.show(n);
+                if (admitted === true)
+                    root.show(n);
                 return;
             }
             n.tracked = true;
-            root.show(n);
+            if (admitted === true)
+                root.show(n);
         }
     }
 
@@ -215,6 +238,16 @@ Singleton {
         // Banners waiting (tests).
         function pending(): int {
             return root.queue.length;
+        }
+
+        // Do Not Disturb: off | on | scheduled | skipped (scheduled hours,
+        // turned off by hand until they end).
+        function dnd(): string {
+            const c = NotificationConfig;
+            return c.dndScheduled ? "scheduled" : c.dndActive ? "on" : c.scheduledNow && c.scheduleSkipped ? "skipped" : "off";
+        }
+        function toggleDnd(): void {
+            NotificationConfig.toggleDnd();
         }
     }
 }
