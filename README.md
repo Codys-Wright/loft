@@ -2,32 +2,35 @@
 
 [![Checks](https://github.com/Codys-Wright/loft/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/Codys-Wright/loft/actions/workflows/checks.yml)
 
-(Formerly studio-linux.) A desktop for creative work, music production and programming: [niri](https://github.com/niri-wm/niri)
-plus our own [Quickshell](https://quickshell.org) shell, with a macOS-inspired Liquid Glass design language
-that is fully themeable at runtime.
+(Formerly studio-linux.) A desktop for creative work, music production and programming: our own
+[Quickshell](https://quickshell.org) shell in a **KDE Plasma** session, with a macOS-inspired Liquid Glass
+design language that is fully themeable at runtime. KWin is the compositor and KDE's services stay
+(power, lock, displays, shortcuts, Activities); Loft replaces plasmashell with its bar, dock, Spotlight,
+Control Center and Settings, and hands the session back to plasmashell cleanly
+([docs/KWIN.md](docs/KWIN.md)).
 
-```sh
-nix run github:Codys-Wright/loft              # try it: opens as a nested niri window
-```
+> **Platform: KDE Plasma only (since 2026-11-18).** Loft started on [niri](https://github.com/niri-wm/niri),
+> and the niri session still builds, but it's abandoned: no new features, fixes or docs. Build and test for
+> KDE (`--compositor kwin`). Sections below that talk about niri describe that legacy session.
+
+To use it: Loft's NixOS module (`nixosModules.default`) adds a **"Loft"** login session to SDDM next to
+plain "Plasma"; `loft-plasma use loft|plasma` switches a running Plasma session between the two shells.
 
 ## Develop
 
 ```sh
-nix run .#dev                       # nested niri window running ./src, ./niri, ./themes — hot reload on save
+loft dev live                       # in a "Loft" Plasma session: run this checkout's shell + launcher in place
+                                    #   of the installed ones, QML hot reload on save (`loft dev live stop` hands back)
+nix run .#dev -- --session NAME --compositor kwin   # a headless, nested KDE session for tests (docs/TESTING.md)
                                     #   (`loft dev …` is the same as `loft-dev …`)
-nix run .#dev -- --output DP-1      # inside KDE: fullscreen on that monitor (default: the rightmost)
-nix run .#loft -- --dev theme list
-nix run .#loft -- --dev theme apply latte     # recolors the running session live (checkout templates/themes)
-nix run .#shot -- out.png           # screenshot the dev session (--grid, --zoom, --window …)
+LOFT_SESSION=NAME nix run .#loft -- --dev theme apply latte   # recolor that session live (checkout templates/themes)
+nix run .#shot -- --session NAME --grid out.png                # screenshot it (--zoom, --output, --mark …)
 ```
 
-Inside the nested session Mod is Alt (Super in a real session): Mod+Return terminal,
-Mod+O overview, Mod+Shift+E quit.
-
-Testing (agents included): `nix run .#dev -- --session NAME` starts an isolated, headless test
+Testing (agents included): `nix run .#dev -- --session NAME --compositor kwin` starts an isolated, headless test
 session (own bus, runtime dir and state; offscreen, software-rendered, exact size);
 `nix run .#shot -- --session NAME --grid` screenshots it with a coordinate grid, and
-`nix run .#input -- --session NAME click X Y` / `type` / `drag` / `bind mod+space` drives it.
+`nix run .#input -- --session NAME click X Y` / `type` / `drag` / `key super+space` drives it.
 See [docs/TESTING.md](docs/TESTING.md) and the `skills/loft-drive` agent skill.
 
 ### Upgrading from studio-linux
@@ -44,6 +47,9 @@ reads `STUDIO_*` when the `LOFT_*` variable is unset, lock format `studio` is re
 `loft`, and the library's `.studio-library.json` becomes `.loft-library.json` on the next sort.
 
 ## Designing live
+
+> Legacy (niri): this section describes the niri dev window. On KDE, use `loft dev live` or a
+> `--compositor kwin` test session (above).
 
 `nix run .#dev` runs the whole desktop from this checkout in a nested niri window — inside
 KDE it goes fullscreen and borderless on the rightmost monitor (`--output NAME` picks one,
@@ -389,7 +395,10 @@ printf '{"cmd":"focus","pid":%s}\n' "$(pidof kate)" | loft-appmenu     # → {"m
 To try it from inside another desktop (KDE has its own registrar on your session bus),
 run the nested session on a private bus: `dbus-run-session -- nix run .#dev`.
 
-## niri settings
+## niri settings (legacy)
+
+> The niri session is abandoned (see the top). Under KDE, displays, input and shortcuts are in
+> Settings → Displays / Keyboard & Mouse, backed by KScreen, kxkbrc and kglobalaccel (docs/KWIN.md §4.5, §4.11, §4.12).
 
 Loft Settings has Displays, Keyboard & Mouse, Layout & Motion and Keyboard Shortcuts
 pages, backed by `loft-niri` (`crates/loft-niri`). Your own niri KDL is never edited:

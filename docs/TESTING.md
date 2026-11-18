@@ -1,7 +1,11 @@
 # Testing the desktop: sessions you can see and drive
 
 Loft ships three tools for testing the desktop by looking at it and using it,
-whether you're an agent or a person:
+whether you're an agent or a person.
+
+> **Test in KDE sessions** (`--compositor kwin`, [below](#kde-sessions---compositor-kwin)): Loft
+> runs on KDE Plasma only since 2026-11-18. Without the flag `loft-dev` still starts the legacy niri
+> session; the niri-specific parts here (niri keybinds, `--window` / `--layer` shots) apply to it only.
 
 | Tool | What it does |
 |---|---|
